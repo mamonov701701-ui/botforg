@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "✅ Backend Tests",
+      "type": "shell",
+      "command": "pytest -v tests"
+    },
+    {
+      "label": "🧪 Frontend E2E",
+      "type": "shell",
+      "command": "npx playwright test"
+    }
+  ]
+} 
