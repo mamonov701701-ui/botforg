@@ -7,6 +7,7 @@ import Pricing from './pages/Pricing';
 import Templates from './pages/Templates';
 import Features from './pages/Features';
 import Account from './pages/Account';
+import Editor from './pages/Editor';
 import NotFound from './pages/NotFound';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
         <Route path="login" element={<Login />} />
         <Route path="pricing" element={<Pricing />} />
         <Route path="templates" element={<Templates />} />
+        <Route path="editor/:id" element={<Editor />} />
         <Route path="features" element={<Features />} />
         <Route path="account" element={<Account />} />
         <Route path="*" element={<NotFound />} />
