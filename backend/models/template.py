@@ -22,5 +22,5 @@ class Template(Base):
     ratings = relationship("Rating", back_populates="template", cascade="all, delete")
     comments = relationship("Comment", back_populates="template", cascade="all, delete")
     purchases = relationship("Purchase", back_populates="template", cascade="all, delete")
-    payments = relationship("Payment", back_populates="template", cascade="all, delete")
+
     tags = relationship("Tag", secondary=template_tags, back_populates="templates")
