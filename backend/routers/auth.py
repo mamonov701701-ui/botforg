@@ -3,10 +3,14 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from database import get_db
 from models.user import User, ROLES
+from models.token_blacklist import TokenBlacklist
 from schemas.auth import Token, UserRegister
-from security import verify_password, create_access_token, get_password_hash
-from config import SECRET_KEY
+from security import verify_password, create_access_token, get_password_hash, verify_token
+from config import SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES
+from datetime import datetime, timedelta
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/register", response_model=Token)
@@ -14,33 +18,48 @@ def register(user_in: UserRegister, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
+    
     role = user_in.role or "user"
     if role not in ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
+    
     hashed_password = get_password_hash(user_in.password)
     user = User(email=user_in.email, name=user_in.name, hashed_password=hashed_password, role=role)
     db.add(user)
     db.commit()
-    print("✅ После коммита, id пользователя:", user.id)
     db.refresh(user)
-    print("🧩 User in session:", user.email, user.hashed_password)
-    print("🔐 Зарегистрирован пользователь:")
-    print("Email:", user.email)
-    print("Хеш пароля:", user.hashed_password)
+    
+    logger.info(f"New user registered: {user.email}")
     token = create_access_token({"sub": str(user.id)})
     return {"access_token": token, "token_type": "bearer"}
 
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == form_data.username).first()
-    print("🔑 Попытка логина:")
-    print("Email (username):", form_data.username)
-    print("Пароль (введённый):", form_data.password)
-    print("Пользователь в базе:", user.email if user else "Не найден")
-    print("Хеш в базе:", user.hashed_password if user else "Нет данных")
+    
     if not user or not verify_password(form_data.password, user.hashed_password):
-        print("✅ Результат сверки пароля:", False)
+        logger.warning(f"Failed login attempt for email: {form_data.username}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    print("✅ Результат сверки пароля:", True)
+    
+    logger.info(f"Successful login: {user.email}")
     token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer"} 
+    return {"access_token": token, "token_type": "bearer"}
+
+@router.post("/logout")
+def logout(token: str = Depends(OAuth2PasswordRequestForm), db: Session = Depends(get_db)):
+    """Отзыв токена - добавляем в blacklist"""
+    payload = verify_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    # Добавляем токен в blacklist
+    blacklisted_token = TokenBlacklist(
+        token=token,
+        user_id=int(payload["sub"]),
+        expires_at=datetime.fromtimestamp(payload["exp"])
+    )
+    db.add(blacklisted_token)
+    db.commit()
+    
+    logger.info(f"Token blacklisted for user: {payload['sub']}")
+    return {"detail": "Successfully logged out"} 

@@ -1,7 +1,8 @@
 from sqlalchemy import Column, Integer, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from backend.database import Base
+from database import Base
+
 
 class Rating(Base):
     __tablename__ = "ratings"

@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import relationship
+
 from datetime import datetime
 from typing import Optional
 from models.team import TeamMember
@@ -25,4 +26,6 @@ class User(Base):
     payments = relationship("Payment", back_populates="user", cascade="all, delete")
     owned_teams = relationship("TeamMember", back_populates="owner", foreign_keys="[TeamMember.owner_id]")
     member_in_teams = relationship("TeamMember", back_populates="user", foreign_keys="[TeamMember.user_id]")
-    bots = relationship('BotInstance', back_populates='user', cascade='all, delete') 
+    bots = relationship('Bot', back_populates='user', cascade='all, delete')
+    bot_instances = relationship('BotInstance', back_populates='user', cascade='all, delete')
+    user_templates = relationship('UserTemplate', back_populates='owner', cascade='all, delete') 

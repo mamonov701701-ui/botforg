@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, ForeignKey
 from sqlalchemy.orm import relationship
-from backend.database import Base
+from database import Base
 
 class UserBonusAccount(Base):
     __tablename__ = 'user_bonus_accounts'

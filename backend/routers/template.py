@@ -21,6 +21,23 @@ def get_db():
     finally:
         db.close()
 
+@router.get("/templates/", response_model=List[TemplateOut])
+async def list_all_templates(db: Session = Depends(get_db)):
+    templates = db.query(Template).all()
+    return templates
+
+@router.post("/templates/", response_model=TemplateOut, status_code=status.HTTP_201_CREATED)
+async def create_template_v2(
+    template: TemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    db_template = Template(**template.model_dump(), user_id=current_user.id)
+    db.add(db_template)
+    db.commit()
+    db.refresh(db_template)
+    return db_template
+
 @router.get("/templates", response_model=TemplateListOut)
 def get_templates(
     category: Optional[str] = None,
@@ -49,22 +66,20 @@ def get_templates(
 
 @router.post("/templates", response_model=TemplateOut)
 def create_template(template: TemplateCreate, db: Session = Depends(get_db), current_user: UserModel = Depends(require_role(["owner", "admin", "manager", "user"]))) :
-    db_template = Template(**template.dict(), user_id=current_user.id)
+    db_template = Template(**template.model_dump(), user_id=current_user.id)
     db.add(db_template)
     db.commit()
     db.refresh(db_template)
     return db_template
 
-@router.delete("/templates/{id}", response_model=dict)
-def delete_template(id: int, db: Session = Depends(get_db), current_user: UserModel = Depends(require_role(["owner", "admin", "manager_template"]))) :
-    template = db.query(Template).filter(Template.id == id).first()
-    if not template:
+@router.delete("/templates/{template_id}")
+def delete_template(template_id: int, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
+    tpl = db.query(Template).filter(Template.id == template_id, Template.user_id == current_user.id).first()
+    if not tpl:
         raise HTTPException(status_code=404, detail="Template not found")
-    if template.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="You are not the owner of this template")
-    db.delete(template)
+    db.delete(tpl)
     db.commit()
-    return {"detail": "Template deleted"}
+    return {"status": "deleted"}
 
 @router.patch('/templates/{id}/publish')
 def publish_template(id: int, data: dict = Body(...), db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
@@ -84,14 +99,23 @@ def publish_template(id: int, data: dict = Body(...), db: Session = Depends(get_
         'updated_at': tpl.updated_at
     }
 
-@router.patch("/templates/{id}")
-def update_template(id: int, template_update: TemplateUpdate, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
-    tpl = db.query(Template).filter(Template.id == id, Template.user_id == current_user.id).first()
-    if not tpl:
+@router.patch("/templates/{id}", response_model=TemplateOut)
+async def update_template(id: int, template_update: TemplateUpdate, db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
+    tpl = db.query(Template).filter(Template.id == id).first()
+    if tpl is None:
         raise HTTPException(status_code=404, detail="Template not found")
-    update_data = template_update.dict(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(tpl, key, value)
+
+    allowed_roles = {"owner", "admin", "manager_template"}
+    user_roles = set(current_user.roles or [])
+    if tpl.user_id != current_user.id and user_roles.isdisjoint(allowed_roles):
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    update_data = template_update.model_dump(exclude_unset=True)
+    # Обновляем только разрешенные поля
+    for field_name in ("name", "description"):
+        if field_name in update_data:
+            setattr(tpl, field_name, update_data[field_name])
+
     db.commit()
     db.refresh(tpl)
     return tpl
@@ -207,9 +231,44 @@ def get_my_templates(
     items = query.offset(offset).limit(limit).all()
     return {"total": total, "items": items}
 
-@router.get("/templates/{id}")
-def get_template(id: int, db: Session = Depends(get_db)):
+@router.get("/templates/{id}", response_model=TemplateOut)
+async def get_template(id: int, db: Session = Depends(get_db)):
     tpl = db.query(Template).filter(Template.id == id).first()
-    if not tpl:
+    if tpl is None:
         raise HTTPException(status_code=404, detail="Template not found")
     return tpl
+    @router.put("/templates/{id}", response_model=TemplateOut)
+    async def update_template(
+        id: int,
+        template_update: TemplateUpdate,
+        db: Session = Depends(get_db),
+        current_user: UserModel = Depends(get_current_user)
+    ):
+        tpl = db.query(Template).filter(Template.id == id).first()
+        if not tpl:
+            raise HTTPException(status_code=404, detail="Template not found")
+        # Только владелец шаблона или админ/менеджер шаблонов может редактировать
+        if tpl.user_id != current_user.id and not set(current_user.roles or []).intersection({"owner", "admin", "manager_template"}):
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+        for field, value in template_update.dict(exclude_unset=True).items():
+            setattr(tpl, field, value)
+        tpl.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(tpl)
+        return tpl
+
+    @router.delete("/templates/{id}", status_code=status.HTTP_204_NO_CONTENT)
+    async def delete_template(
+        id: int,
+        db: Session = Depends(get_db),
+        current_user: UserModel = Depends(get_current_user)
+    ):
+        tpl = db.query(Template).filter(Template.id == id).first()
+        if not tpl:
+            raise HTTPException(status_code=404, detail="Template not found")
+        # Только владелец шаблона или админ/менеджер шаблонов может удалять
+        if tpl.user_id != current_user.id and not set(current_user.roles or []).intersection({"owner", "admin", "manager_template"}):
+            raise HTTPException(status_code=403, detail="Not enough permissions")
+        db.delete(tpl)
+        db.commit()
+        return

@@ -1,20 +1,30 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, DateTime, Enum
 from sqlalchemy.orm import relationship
+from database import Base
+import enum
 from datetime import datetime
-from backend.database import Base
+
+class PaymentStatus(str, enum.Enum):
+    pending = "pending"
+    success = "success"
+    failed = "failed"
+
+class PaymentType(str, enum.Enum):
+    purchase = "purchase"
+    subscription = "subscription"
+    messages = "messages"
 
 class Payment(Base):
-    __tablename__ = 'payments'
+    __tablename__ = "payments"
+
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
-    bot_id = Column(Integer, ForeignKey('bot_instances.id'), nullable=True)
-    template_id = Column(Integer, ForeignKey('templates.id'), nullable=True)
-    amount = Column(Integer, nullable=False)
-    currency = Column(String, default='RUB')
-    status = Column(String, default='pending')
-    reference = Column(String, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    currency = Column(String(10), default="RUB")
+    status = Column(Enum(PaymentStatus), default=PaymentStatus.pending)
+    type = Column(Enum(PaymentType), nullable=False)
+    telegram_payment_charge_id = Column(String(100), nullable=True)
+    payload = Column(String(100), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship('User', back_populates='payments')
-    bot = relationship('BotInstance')
-    template = relationship('Template') 
+    user = relationship("User", back_populates="payments") 

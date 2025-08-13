@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, JSON
 from sqlalchemy.orm import relationship
+
 from datetime import datetime
 from typing import Optional
 from models.tag import template_tags

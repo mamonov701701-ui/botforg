@@ -1,12 +1,19 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, constr, validator
 from typing import Optional, List
 from datetime import datetime
+import re
 
 class TemplateCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    category: str
+    name: constr(min_length=1, max_length=200)
+    description: Optional[constr(max_length=1000)] = None
+    category: constr(min_length=1, max_length=50)
     is_public: bool = True
+    
+    @validator('name', 'description')
+    def validate_no_html(cls, v):
+        if v and re.search(r'<[^>]*>', v):
+            raise ValueError('HTML tags are not allowed')
+        return v
 
 class TemplateOut(BaseModel):
     id: int
@@ -17,14 +24,19 @@ class TemplateOut(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class TemplateUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    category: Optional[str] = None
+    name: Optional[constr(min_length=1, max_length=200)] = None
+    description: Optional[constr(max_length=1000)] = None
+    category: Optional[constr(min_length=1, max_length=50)] = None
     is_public: Optional[bool] = None
-    created_at: Optional[datetime] = None
+    
+    @validator('name', 'description')
+    def validate_no_html(cls, v):
+        if v and re.search(r'<[^>]*>', v):
+            raise ValueError('HTML tags are not allowed')
+        return v
 
 class TemplateListOut(BaseModel):
     total: int
