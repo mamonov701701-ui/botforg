@@ -4,7 +4,7 @@ from backend.database import SessionLocal
 from backend.models.payment import Payment
 from backend.models.purchase import Purchase
 from backend.models.template import Template
-from models.user import User
+from backend.models.user import User
 from typing import Dict
 
 webhook_router = APIRouter()

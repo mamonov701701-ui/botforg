@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
-from database import get_db
-from models.bot_template import BotTemplate
-from models.bot import Bot
-from models.user_template import UserTemplate
-from models.user import User as UserModel
-from schemas.bot_template import BotTemplateCreate, BotTemplateOut, BotTemplateUpdate, BotTemplateListOut
+from backend.database import get_db
+from backend.models.bot_template import BotTemplate
+from backend.models.bot import Bot
+from backend.models.user_template import UserTemplate
+from backend.models.user import User as UserModel
+from backend.schemas.bot_template import BotTemplateCreate, BotTemplateOut, BotTemplateUpdate, BotTemplateListOut
 from dependencies.auth import get_current_user
 from datetime import datetime
 

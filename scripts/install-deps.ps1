@@ -41,3 +41,4 @@ Write-Host ""
 Write-Host "Или запускать проект:" -ForegroundColor Cyan
 Write-Host "  .\scripts\start-dev.ps1" -ForegroundColor White
 
+

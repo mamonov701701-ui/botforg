@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
-from database import get_db
-from models.billing import BillingRecord, UserQuota
-from models.user import User as UserModel
-from schemas.billing import BillingCreate, BillingOut, BillingListOut, UserQuotaOut, UserQuotaUpdate
+from backend.database import get_db
+from backend.models.billing import BillingRecord, UserQuota
+from backend.models.user import User as UserModel
+from backend.schemas.billing import BillingCreate, BillingOut, BillingListOut, UserQuotaOut, UserQuotaUpdate
 from dependencies.auth import get_current_user
 from datetime import datetime
 from decimal import Decimal

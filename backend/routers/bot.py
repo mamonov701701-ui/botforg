@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 import requests
 import logging
-from database import get_db
-from models.bot import Bot
-from models.user import User as UserModel
-from schemas.bot import BotCreate, BotOut, BotUpdate, BotListOut
+from backend.database import get_db
+from backend.models.bot import Bot
+from backend.models.user import User as UserModel
+from backend.schemas.bot import BotCreate, BotOut, BotUpdate, BotListOut
 from dependencies.auth import get_current_user
 from datetime import datetime
 

@@ -2,21 +2,21 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, asc, or_
 from typing import List, Optional
-from database import SessionLocal
-from models.template import Template
-from models.rating import Rating
-from models.purchase import Purchase
-from models.tag import Tag
-from schemas.marketplace import MarketplaceTemplateOut, MarketplaceTemplateDetailOut
-from schemas.tag import TagOut
-from schemas.comment import CommentOut
+from backend.database import SessionLocal
+from backend.models.template import Template
+from backend.models.rating import Rating
+from backend.models.purchase import Purchase
+from backend.models.tag import Tag
+from backend.schemas.marketplace import MarketplaceTemplateOut, MarketplaceTemplateDetailOut
+from backend.schemas.tag import TagOut
+from backend.schemas.comment import CommentOut
 from dependencies.auth import get_current_user
-from models.comment import Comment
-from models.user import User
-from models.payment import Payment
-from models.referral import Referral
+from backend.models.comment import Comment
+from backend.models.user import User
+from backend.models.payment import Payment
+from backend.models.referral import Referral
 from sqlalchemy import or_, and_
-from models.bonus_account import UserBonusAccount
+from backend.models.bonus_account import UserBonusAccount
 
 router = APIRouter()
 

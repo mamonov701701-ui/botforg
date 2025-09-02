@@ -5,7 +5,7 @@ from backend.database import SessionLocal
 from backend.models.comment import Comment
 from backend.schemas.comment import CommentCreate, CommentOut
 from backend.dependencies.auth import get_current_user
-from models.user import User as UserModel
+from backend.models.user import User as UserModel
 
 router = APIRouter()
 

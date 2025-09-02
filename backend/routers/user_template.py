@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 import logging
-from database import get_db
-from models.user_template import UserTemplate
-from models.user import User as UserModel
-from models.template import Template
-from schemas.user_template import UserTemplateCreate, UserTemplateOut, UserTemplateUpdate, UserTemplateListOut
+from backend.database import get_db
+from backend.models.user_template import UserTemplate
+from backend.models.user import User as UserModel
+from backend.models.template import Template
+from backend.schemas.user_template import UserTemplateCreate, UserTemplateOut, UserTemplateUpdate, UserTemplateListOut
 from dependencies.auth import get_current_user
 from datetime import datetime
 

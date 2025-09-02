@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 from backend.database import SessionLocal
-from models.bot import BotInstance
+from backend.models.bot import BotInstance
 from backend.models.bot_user_state import BotUserState
-from models.template import Template
+from backend.models.template import Template
 import requests
 from datetime import datetime
 from backend.models.payment import Payment

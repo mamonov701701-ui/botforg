@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logging
-from database import get_db
-from models.message import Message
-from models.bot import Bot
-from models.user import User as UserModel
-from models.billing import BillingRecord, UserQuota
-from schemas.message import MessageCreate, MessageOut, MessageUpdate, MessageListOut
+from backend.database import get_db
+from backend.models.message import Message
+from backend.models.bot import Bot
+from backend.models.user import User as UserModel
+from backend.models.billing import BillingRecord, UserQuota
+from backend.schemas.message import MessageCreate, MessageOut, MessageUpdate, MessageListOut
 from dependencies.auth import get_current_user
 from datetime import datetime
 from typing import Optional

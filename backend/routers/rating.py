@@ -5,8 +5,8 @@ from typing import List
 from backend.database import SessionLocal
 from backend.models.rating import Rating
 from backend.models.template import Template
-from models.user import User
-from models.user import User as UserModel
+from backend.models.user import User
+from backend.models.user import User as UserModel
 from backend.schemas.rating import RatingCreate, RatingOut
 from backend.dependencies.auth import get_current_user
 

@@ -53,3 +53,4 @@ def test_app_structure():
     
     print("✅ Структура приложения корректна")
 
+

@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from models.review import Review
-from schemas.review import ReviewCreate, ReviewOut
-from database import get_db
+from backend.models.review import Review
+from backend.schemas.review import ReviewCreate, ReviewOut
+from backend.database import get_db
 from dependencies.auth import get_current_user
-from models.user import User as UserModel
+from backend.models.user import User as UserModel
 from sqlalchemy import func
 
 router = APIRouter()

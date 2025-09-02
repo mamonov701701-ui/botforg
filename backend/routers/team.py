@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from backend.database import SessionLocal
 from backend.models.team import TeamMember
-from models.user import User
+from backend.models.user import User
 from backend.schemas.team import TeamMemberCreate, TeamMemberOut
 from backend.dependencies.auth import get_current_user
 from backend.dependencies.roles import require_role

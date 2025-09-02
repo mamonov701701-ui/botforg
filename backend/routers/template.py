@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from sqlalchemy import asc, desc, func
-from database import SessionLocal, get_db
-from models.template import Template
-from models.rating import Rating
-from schemas.template import TemplateCreate, TemplateOut, TemplateUpdate, TemplateListOut, TemplateWithRatingOut, TemplateWithRatingListOut
+from backend.database import SessionLocal, get_db
+from backend.models.template import Template
+from backend.models.rating import Rating
+from backend.schemas.template import TemplateCreate, TemplateOut, TemplateUpdate, TemplateListOut, TemplateWithRatingOut, TemplateWithRatingListOut
 from dependencies.auth import get_current_user
-from models.user import User as UserModel
+from backend.models.user import User as UserModel
 from dependencies.roles import require_role
 from fastapi import status
 from datetime import datetime

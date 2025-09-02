@@ -5,7 +5,7 @@ from backend.database import SessionLocal
 from backend.models.purchase import Purchase
 from backend.schemas.purchase import PurchaseCreate, PurchaseOut
 from backend.dependencies.auth import get_current_user
-from models.user import User as UserModel
+from backend.models.user import User as UserModel
 
 router = APIRouter()
 

@@ -6,7 +6,7 @@ from typing import Optional, List
 from backend.database import SessionLocal
 from backend.models.payment import Payment
 from backend.models.template import Template
-from models.user import User
+from backend.models.user import User
 from backend.schemas.template import TemplateOut
 from backend.schemas.user import UserOut
 from backend.dependencies.auth import get_current_user

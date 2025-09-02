@@ -52,3 +52,4 @@ python -m pytest -v tests/test_simple.py
 - `.vscode/settings.json` - настройки VS Code
 - `.vscode/tasks.json` - задачи для запуска тестов
 
+

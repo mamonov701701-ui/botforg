@@ -13,3 +13,4 @@ start "BotForg Frontend" cmd /k "cd /d %ROOT%\frontend && if exist package-lock.
 echo Запущено: backend (http://127.0.0.1:8000) и frontend (http://localhost:5173)
 pause
 
+

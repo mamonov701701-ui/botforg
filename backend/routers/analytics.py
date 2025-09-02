@@ -5,7 +5,7 @@ from backend.models.template import Template
 from backend.models.payment import Payment
 from backend.models.bot_user_state import BotUserState
 from backend.dependencies.auth import get_current_user
-from models.user import User as UserModel
+from backend.models.user import User as UserModel
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
