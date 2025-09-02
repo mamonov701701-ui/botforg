@@ -1,10 +1,11 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from database import Base
+from backend.database import Base
 
 class Bot(Base):
     __tablename__ = 'bots'
+    __table_args__ = {'extend_existing': True}
     
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey('users.id'), nullable=False)
@@ -13,6 +14,7 @@ class Bot(Base):
     token = Column(String, nullable=False)
     webhook_url = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    content = Column(JSON, nullable=True)  # Для хранения графа бота
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -21,6 +23,7 @@ class Bot(Base):
 # Оставляем старую модель для совместимости
 class BotInstance(Base):
     __tablename__ = 'bot_instances'
+    __table_args__ = {'extend_existing': True}
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     token = Column(String, nullable=False)

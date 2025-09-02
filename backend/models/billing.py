@@ -2,10 +2,11 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, N
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from decimal import Decimal
-from database import Base
+from backend.database import Base
 
 class BillingRecord(Base):
     __tablename__ = "billing_records"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
@@ -25,6 +26,7 @@ class BillingRecord(Base):
 
 class UserQuota(Base):
     __tablename__ = "user_quotas"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True)

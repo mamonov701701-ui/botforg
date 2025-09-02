@@ -2,14 +2,51 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "✅ Backend Tests",
+      "label": "Tests: Pytest (venv)",
       "type": "shell",
-      "command": "pytest -v tests"
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-NoExit",
+          "-Command",
+          "& { cd ${workspaceFolder}; ${workspaceFolder}\\venv\\Scripts\\Activate.ps1; $env:PYTHONPATH='${workspaceFolder}'; python -m pytest -v tests }"
+        ]
+      },
+      "problemMatcher": []
     },
     {
-      "label": "🧪 Frontend E2E",
+      "label": "Backend: FastAPI (uvicorn --reload)",
       "type": "shell",
-      "command": "npx playwright test"
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-NoExit",
+          "-Command",
+          "& { cd ${workspaceFolder}\\backend; ${workspaceFolder}\\venv\\Scripts\\Activate.ps1; if (-not (Get-Command uvicorn -ErrorAction SilentlyContinue)) { pip install uvicorn fastapi }; uvicorn main:app --reload }"
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Vite dev",
+      "type": "shell",
+      "windows": {
+        "command": "powershell",
+        "args": [
+          "-NoExit",
+          "-Command",
+          "& { cd ${workspaceFolder}\\frontend; if (Test-Path package-lock.json) { npm ci } else { npm install }; npm run dev -- --host }"
+        ]
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Dev: All (Backend + Frontend)",
+      "dependsOn": [
+        "Backend: FastAPI (uvicorn --reload)",
+        "Frontend: Vite dev"
+      ],
+      "dependsOrder": "parallel"
     }
   ]
 } 

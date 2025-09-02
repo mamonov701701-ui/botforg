@@ -9,6 +9,7 @@ import Features from './pages/Features';
 import Account from './pages/Account';
 import Editor from './pages/Editor';
 import NotFound from './pages/NotFound';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
   return (
@@ -18,7 +19,7 @@ function App() {
         <Route path="login" element={<Login />} />
         <Route path="pricing" element={<Pricing />} />
         <Route path="templates" element={<Templates />} />
-        <Route path="editor/:id" element={<Editor />} />
+        <Route path="editor/:id" element={<ErrorBoundary><Editor /></ErrorBoundary>} />
         <Route path="features" element={<Features />} />
         <Route path="account" element={<Account />} />
         <Route path="*" element={<NotFound />} />

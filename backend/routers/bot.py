@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Dict, Any
 import requests
 import logging
 from database import get_db
@@ -202,3 +202,85 @@ async def delete_bot(
     
     logger.info(f"Bot deactivated: {bot.username} by user {current_user.email}")
     return {"status": "deactivated", "message": "Bot has been deactivated"} 
+
+@router.get("/{bot_id}/graph")
+async def get_bot_graph(
+    bot_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Получение графа бота (узлы и связи)"""
+    
+    # Проверяем, что бот существует и принадлежит пользователю
+    bot = db.query(Bot).filter(
+        Bot.id == bot_id,
+        Bot.owner_id == current_user.id
+    ).first()
+    
+    if not bot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bot not found"
+        )
+    
+    # Возвращаем граф из content или дефолтные данные
+    graph_data = bot.content if hasattr(bot, 'content') and bot.content else {
+        "nodes": [
+            {"id": "1", "type": "input", "data": {"label": "Начало"}, "position": {"x": 250, "y": 5}},
+            {"id": "2", "data": {"label": "Шаг 1"}, "position": {"x": 100, "y": 100}},
+            {"id": "3", "data": {"label": "Шаг 2"}, "position": {"x": 400, "y": 100}}
+        ],
+        "edges": [
+            {"id": "e1-2", "source": "1", "target": "2"},
+            {"id": "e2-3", "source": "2", "target": "3"}
+        ]
+    }
+    
+    return graph_data
+
+@router.patch("/{bot_id}/graph")
+async def update_bot_graph(
+    bot_id: int,
+    graph_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user)
+):
+    """Обновление графа бота (узлы и связи)"""
+    
+    # Проверяем, что бот существует и принадлежит пользователю
+    bot = db.query(Bot).filter(
+        Bot.id == bot_id,
+        Bot.owner_id == current_user.id
+    ).first()
+    
+    if not bot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bot not found"
+        )
+    
+    # Валидируем структуру данных
+    if not isinstance(graph_data, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid graph data format"
+        )
+    
+    if "nodes" not in graph_data or "edges" not in graph_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Graph data must contain 'nodes' and 'edges'"
+        )
+    
+    # Сохраняем граф в content
+    if hasattr(bot, 'content'):
+        bot.content = graph_data
+    else:
+        # Если поле content не существует, сохраняем в другое поле или создаем его
+        bot.content = graph_data
+    
+    bot.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(bot)
+    
+    return {"message": "Graph updated successfully", "bot_id": bot_id} 

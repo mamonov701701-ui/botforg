@@ -5,7 +5,7 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   server: {
-    historyApiFallback: true,
+    host: true,
   },
   resolve: {
     alias: {

@@ -3,14 +3,15 @@ from sqlalchemy.orm import relationship
 
 from datetime import datetime
 from typing import Optional
-from models.team import TeamMember
-from models.bot import BotInstance
-from database import Base
+from backend.models.team import TeamMember
+from backend.models.bot import BotInstance
+from backend.database import Base
 
 ROLES = ["owner", "admin", "manager", "developer", "support", "observer", "user"]
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, nullable=False)

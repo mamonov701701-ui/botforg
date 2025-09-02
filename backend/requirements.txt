@@ -1,9 +1,12 @@
+# Runtime dependencies
 fastapi
 uvicorn
 sqlalchemy
 pydantic
+pydantic-settings
 passlib[bcrypt]
 python-jose
 httpx
 requests
-pytest 
+starlette
+anyio 

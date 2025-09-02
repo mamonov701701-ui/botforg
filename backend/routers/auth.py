@@ -1,17 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from database import get_db
-from models.user import User, ROLES
-from models.token_blacklist import TokenBlacklist
-from schemas.auth import Token, UserRegister
-from security import verify_password, create_access_token, get_password_hash, verify_token
-from config import SECRET_KEY, ACCESS_TOKEN_EXPIRE_MINUTES
+from backend.database import get_db
+from backend.models.user import User, ROLES
+from backend.models.token_blacklist import TokenBlacklist
+from backend.schemas.auth import Token, UserRegister
+from backend.security import verify_password, create_access_token, get_password_hash, verify_token
+from backend.settings import settings
 from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 @router.post("/register", response_model=Token)
 def register(user_in: UserRegister, db: Session = Depends(get_db)):
@@ -46,7 +47,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     return {"access_token": token, "token_type": "bearer"}
 
 @router.post("/logout")
-def logout(token: str = Depends(OAuth2PasswordRequestForm), db: Session = Depends(get_db)):
+def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Отзыв токена - добавляем в blacklist"""
     payload = verify_token(token)
     if not payload:

@@ -3,11 +3,12 @@ from sqlalchemy.orm import relationship
 
 from datetime import datetime
 from typing import Optional
-from models.tag import template_tags
-from database import Base
+from backend.models.tag import template_tags
+from backend.database import Base
 
 class Template(Base):
     __tablename__ = "templates"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
@@ -24,3 +25,5 @@ class Template(Base):
     purchases = relationship("Purchase", back_populates="template", cascade="all, delete")
 
     tags = relationship("Tag", secondary=template_tags, back_populates="templates")
+    nodes = relationship("Node", back_populates="template", cascade="all, delete")
+    edges = relationship("Edge", back_populates="template", cascade="all, delete")

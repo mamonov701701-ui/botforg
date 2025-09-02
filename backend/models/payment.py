@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, DateTime, Enum
 from sqlalchemy.orm import relationship
-from database import Base
+from backend.database import Base
 import enum
 from datetime import datetime
 
@@ -16,6 +16,7 @@ class PaymentType(str, enum.Enum):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

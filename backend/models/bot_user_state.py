@@ -1,10 +1,11 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from database import Base
+from backend.database import Base
 
 class BotUserState(Base):
     __tablename__ = 'bot_user_states'
+    __table_args__ = {'extend_existing': True}
     id = Column(Integer, primary_key=True, index=True)
     telegram_user_id = Column(String, index=True, nullable=False)
     bot_id = Column(Integer, ForeignKey('bot_instances.id'), nullable=False)

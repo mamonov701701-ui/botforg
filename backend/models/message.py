@@ -1,10 +1,11 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from database import Base
+from backend.database import Base
 
 class Message(Base):
     __tablename__ = 'messages'
+    __table_args__ = {'extend_existing': True}
     
     id = Column(Integer, primary_key=True, index=True)
     bot_id = Column(Integer, ForeignKey('bots.id', ondelete='CASCADE'), nullable=False)

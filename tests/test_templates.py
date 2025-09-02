@@ -1,17 +1,7 @@
-import os
-import sys
 import uuid
 import pytest
 from fastapi.testclient import TestClient
-
-# Ensure we can import the FastAPI app from backend/main.py
-CURRENT_DIR = os.path.dirname(__file__)
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
-BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
-if BACKEND_DIR not in sys.path:
-    sys.path.append(BACKEND_DIR)
-
-from main import app  # noqa: E402
+from backend.main import app
 
 
 def register_and_get_token(client: TestClient) -> str:
