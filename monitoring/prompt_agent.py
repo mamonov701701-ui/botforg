@@ -200,6 +200,7 @@ STATE_PATH = TASKS_DIR / "offset.txt"
 
 ALLOWED_CMDS = [
     "npm run dev -- --host",
+    "npm --prefix frontend run dev -- --host",
     "pytest -q",
     "pytest",
     "python -m monitoring.screenshot_agent",
