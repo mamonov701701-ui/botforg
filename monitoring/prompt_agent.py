@@ -40,6 +40,36 @@ import atexit
 atexit.register(clear_lock)
 # --- end guard ---
 
+def restart_self():
+    """
+    Мягкий перезапуск агента:
+    - снимает lock-файл
+    - поднимает новый процесс в фоне
+    - аварийно завершает текущий процесс
+    """
+    try:
+        # снять возможный lock
+        try:
+            (Path("monitoring") / "prompt_agent.lock").unlink(missing_ok=True)
+        except Exception:
+            pass
+
+        # запустить новый процесс агента в фоне (скрыто)
+        subprocess.Popen(
+            [sys.executable, "-m", "monitoring.prompt_agent"],
+            creationflags=0x00000008  # CREATE_NO_WINDOW
+        )
+
+        # дать новому процессу стартануть и выйти старому
+        time.sleep(0.5)
+        os._exit(0)
+    except Exception as e:
+        try:
+            send_msg(f"/restart_me error: {e}")
+        except Exception:
+            pass
+        raise
+
 # Переменные для анти-спама
 last_err_type = None
 last_err_ts = 0
@@ -461,33 +491,27 @@ def handle_text(text: str):
             send_msg(f"/ps error: {e}")
         return
 
-    # мягкий перезапуск без дублей
     if text == "/restart_me":
         try:
-            import sys, os, subprocess, time
-            from pathlib import Path
-            # снять возможный lock
+            send_msg("Перезапуск агента инициирован ✅")
+            # снять возможный lock-файл
+            lock_path = Path("monitoring") / "prompt_agent.lock"
             try:
-                (Path("monitoring")/"prompt_agent.lock").unlink(missing_ok=True)
+                if lock_path.exists():
+                    lock_path.unlink()
             except Exception:
                 pass
-            # запустить новый процесс агента в фоне
-            subprocess.Popen([sys.executable, "-m", "monitoring.prompt_agent"], creationflags=0x00000008)
-            send_msg("Перезапуск агента инициирован ✅")
+
+            # запустить новый процесс агента
+            subprocess.Popen(
+                [sys.executable, "-m", "monitoring.prompt_agent"],
+                creationflags=0x08000000  # CREATE_NO_WINDOW
+            )
+
             time.sleep(0.5)
             os._exit(0)
         except Exception as e:
             send_msg(f"/restart_me error: {e}")
-        return
-        send_msg("♻️ Перезапуск агента…")
-        try:
-            # снимаем lock и мьютекс, затем перезапуск себя
-            try:
-                if LOCK_FILE.exists(): LOCK_FILE.unlink()
-            except: pass
-            os.execv(sys.executable, [sys.executable, "-m", "monitoring.prompt_agent"])
-        except Exception as e:
-            send_msg(f"Не удалось перезапустить: {e}")
         return
 
     if text == "/frontend_restart":
@@ -583,6 +607,7 @@ def handle_text(text: str):
             _sp.Popen([_sys.executable, "-m", "monitoring.prompt_agent"], creationflags=0x00000008)
             send_msg("Перезапуск агента инициирован ✅")
             _time.sleep(0.5)
+            _import os as _os
             _os._exit(0)
         except Exception as e:
             send_msg(f"/reload_agent error: {e}")
