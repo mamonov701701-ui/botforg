@@ -463,6 +463,22 @@ def handle_text(text: str):
 
     # мягкий перезапуск без дублей
     if text == "/restart_me":
+        try:
+            import sys, os, subprocess, time
+            from pathlib import Path
+            # снять возможный lock
+            try:
+                (Path("monitoring")/"prompt_agent.lock").unlink(missing_ok=True)
+            except Exception:
+                pass
+            # запустить новый процесс агента в фоне
+            subprocess.Popen([sys.executable, "-m", "monitoring.prompt_agent"], creationflags=0x00000008)
+            send_msg("Перезапуск агента инициирован ✅")
+            time.sleep(0.5)
+            os._exit(0)
+        except Exception as e:
+            send_msg(f"/restart_me error: {e}")
+        return
         send_msg("♻️ Перезапуск агента…")
         try:
             # снимаем lock и мьютекс, затем перезапуск себя
