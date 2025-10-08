@@ -6,7 +6,9 @@
     "build:css": "postcss src/styles/tailwind.css -o src/output.css",
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint src --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "eslint src --ext .js,.jsx,.ts,.tsx --fix"
   },
   "type": "module",
   "keywords": [],
@@ -29,13 +31,18 @@
     "reactflow": "^11.11.4"
   },
   "devDependencies": {
+    "@eslint/js": "^9.35.0",
     "@types/node": "^24.1.0",
-    "@types/react": "^19.1.8",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@typescript-eslint/eslint-plugin": "^8.43.0",
+    "@typescript-eslint/parser": "^8.43.0",
     "autoprefixer": "^10.4.21",
+    "eslint": "^9.35.0",
     "postcss": "^8.5.6",
     "postcss-cli": "^11.0.1",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.2",
     "vite": "^7.1.2"
   }
 }

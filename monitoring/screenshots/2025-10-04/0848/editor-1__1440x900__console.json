@@ -1,0 +1,82 @@
+[
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 732,
+      "columnNumber": 8
+    },
+    "ts": 1759556938.2387288
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 826,
+      "columnNumber": 11
+    },
+    "ts": 1759556938.3007326
+  },
+  {
+    "type": "info",
+    "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=37d1598c",
+      "lineNumber": 17992,
+      "columnNumber": 53
+    },
+    "ts": 1759556938.456744
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 732,
+      "columnNumber": 8
+    },
+    "ts": 1759556944.4024947
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 826,
+      "columnNumber": 11
+    },
+    "ts": 1759556944.444499
+  },
+  {
+    "type": "info",
+    "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=37d1598c",
+      "lineNumber": 17992,
+      "columnNumber": 53
+    },
+    "ts": 1759556944.4515
+  },
+  {
+    "type": "warning",
+    "text": "[React Flow]: It looks like you've created a new nodeTypes or edgeTypes object. If this wasn't on purpose please define the nodeTypes/edgeTypes outside of the component or memoize them. Help: https://reactflow.dev/error#002",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/reactflow.js?v=37d1598c",
+      "lineNumber": 3688,
+      "columnNumber": 12
+    },
+    "ts": 1759556944.5695078
+  },
+  {
+    "type": "warning",
+    "text": "[React Flow]: It looks like you've created a new nodeTypes or edgeTypes object. If this wasn't on purpose please define the nodeTypes/edgeTypes outside of the component or memoize them. Help: https://reactflow.dev/error#002",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/reactflow.js?v=37d1598c",
+      "lineNumber": 3688,
+      "columnNumber": 12
+    },
+    "ts": 1759556944.5705068
+  }
+]

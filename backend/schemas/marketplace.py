@@ -1,7 +1,10 @@
+from typing import List, Optional
+
 from pydantic import BaseModel
-from typing import Optional, List
-from backend.schemas.tag import TagOut
+
 from backend.schemas.comment import CommentOut
+from backend.schemas.tag import TagOut
+
 
 class MarketplaceTemplateOut(BaseModel):
     id: int
@@ -13,6 +16,7 @@ class MarketplaceTemplateOut(BaseModel):
     price: int
     is_purchased: bool
 
+
 class MarketplaceTemplateDetailOut(BaseModel):
     id: int
     name: str
@@ -23,4 +27,4 @@ class MarketplaceTemplateDetailOut(BaseModel):
     comments: List[CommentOut]
     rating_count: int
     price: int
-    is_purchased: bool 
+    is_purchased: bool

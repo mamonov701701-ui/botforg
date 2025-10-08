@@ -1,17 +1,18 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
-import NodePanel from '@/components/NodePanel';
-import FlowEditor from '@/components/FlowEditor';
-import NodeSettings from '@/components/NodeSettings';
-import PreviewPanel from '@/components/PreviewPanel';
-import { getTemplateContent, saveTemplateContent, publishTemplate } from '@/api/templates';
-import { FlowNode, FlowEdge } from '@/types/flow';
-import { validateFlow, FlowValidationError } from '@/utils/validateFlow';
+import NodePanel from '../../components/NodePanel';
+import FlowEditor from '../../components/FlowEditor';
+import NodeSettings from '../../components/NodeSettings';
+import PreviewPanel from '../../components/PreviewPanel';
+import { getTemplateContent, saveTemplateContent, publishTemplate } from '../../api/templates';
+import { FlowNode, FlowEdge } from '../../types/flow';
+import { validateFlow, FlowValidationError } from '../../utils/validateFlow';
 import Link from 'next/link';
 
 const EditTemplatePage: React.FC = () => {
   const router = useRouter();
   const { id } = router.query;
+  const idStr = Array.isArray(id) ? id[0] : id;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [initialNodes, setInitialNodes] = useState<FlowNode[]>([]);
@@ -31,20 +32,44 @@ const EditTemplatePage: React.FC = () => {
   const [pubToast, setPubToast] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!idStr) return;
     setLoading(true);
-    getTemplateContent(id)
+    getTemplateContent(idStr)
       .then((tpl) => {
         let content = tpl.content || {};
-        setInitialNodes(content.nodes || []);
-        setInitialEdges(content.edges || []);
-        setNodes(content.nodes || []);
-        setEdges(content.edges || []);
+        const nodesIn = Array.isArray(content.nodes) ? content.nodes as FlowNode[] : [];
+        const edgesIn = Array.isArray(content.edges) ? content.edges as FlowEdge[] : [];
+
+        let nextNodes = [...nodesIn];
+        // Ensure/start node exists and placed top-left
+        let startIndex = nextNodes.findIndex((n: any) => n.type === 'start');
+        if (startIndex === -1) {
+          nextNodes.unshift({
+            id: `start_${Date.now()}`,
+            type: 'start' as any,
+            position: { x: 50, y: 50 },
+            data: { type: 'start' as any, label: 'Начало' },
+          });
+        } else {
+          const s = nextNodes[startIndex];
+          const nearCenter = !s.position || (Math.abs((s.position.x ?? 0)) < 150 && Math.abs((s.position.y ?? 0)) < 150);
+          if (nearCenter) {
+            nextNodes[startIndex] = { ...s, position: { x: 50, y: 50 } };
+          }
+          if (!s.data?.label) {
+            nextNodes[startIndex] = { ...nextNodes[startIndex], data: { ...s.data, label: 'Начало' } } as any;
+          }
+        }
+
+        setInitialNodes(nextNodes);
+        setInitialEdges(edgesIn);
+        setNodes(nextNodes);
+        setEdges(edgesIn);
         setIsPublic(tpl.is_public);
       })
       .catch(() => setError('Ошибка загрузки шаблона'))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [idStr]);
 
   // Защита от потери изменений
   useEffect(() => {
@@ -64,18 +89,18 @@ const EditTemplatePage: React.FC = () => {
 
   // Автосохранение
   useEffect(() => {
-    if (!id) return;
+    if (!idStr) return;
     if (!isDirty) return;
     const timer = setInterval(async () => {
       try {
-        await saveTemplateContent(id!, { nodes, edges });
+        await saveTemplateContent(idStr!, { nodes, edges });
         setInitialNodes(nodes);
         setInitialEdges(edges);
         setLastAutoSave(new Date());
       } catch {}
     }, 30000);
     return () => clearInterval(timer);
-  }, [id, nodes, edges, isDirty]);
+  }, [idStr, nodes, edges, isDirty]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -94,7 +119,7 @@ const EditTemplatePage: React.FC = () => {
       return;
     }
     try {
-      await saveTemplateContent(id!, { nodes, edges });
+      await saveTemplateContent(idStr!, { nodes, edges });
       setInitialNodes(nodes);
       setInitialEdges(edges);
       setSaveStatus('success');
@@ -121,7 +146,7 @@ const EditTemplatePage: React.FC = () => {
     setPublishing(true);
     setPubToast(null);
     try {
-      await publishTemplate(id!, val);
+      await publishTemplate(idStr!, val);
       setIsPublic(val);
       setPubToast(val ? 'Шаблон опубликован!' : 'Публикация снята');
     } catch {

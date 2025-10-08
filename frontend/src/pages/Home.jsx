@@ -9,10 +9,7 @@ import {
 
 export default function Home() {
   return (
-    <div
-      className="min-h-screen bg-no-repeat bg-cover bg-center bg-fixed font-sans"
-      style={{ backgroundImage: 'url("/bg/background.png")' }}
-    >
+    <div className="min-h-screen font-sans">
       {/* Hero-блок */}
       <section className="max-w-screen-xl mx-auto px-4 py-16 flex flex-col items-center justify-center">
         <div className="bg-white/10 rounded-xl p-10 w-full flex flex-col items-center justify-center text-center text-white">

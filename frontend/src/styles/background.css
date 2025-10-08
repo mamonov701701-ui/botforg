@@ -1,0 +1,10 @@
+/* Фон «схема» для ВСЕХ страниц (лежит под header/main/footer) */
+.bg-circuit {
+  background-image: url('/bg/background.png');
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center top;
+  background-attachment: fixed;
+}
+
+

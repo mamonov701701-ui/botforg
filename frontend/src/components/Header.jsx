@@ -18,7 +18,11 @@ export default function Header({ openAuthModal }) {
         <a href="#templates" className="text-white hover:underline">Шаблоны</a>
         <a href="#features" className="text-white hover:underline">Возможности</a>
         <a href="#pricing" className="text-white hover:underline">Тарифы</a>
-        <button onClick={openAuthModal} className="text-white hover:underline bg-transparent border-0 p-0 m-0 cursor-pointer">Вход</button>
+        {openAuthModal ? (
+          <button onClick={openAuthModal} className="text-white hover:underline bg-transparent border-0 p-0 m-0 cursor-pointer">Вход</button>
+        ) : (
+          <Link to="/login" className="text-white hover:underline">Вход</Link>
+        )}
         <Link to="/editor/1" className="bg-yellow-400 text-black font-semibold py-2 px-5 rounded hover:bg-yellow-300 transition ml-4">Редактор</Link>
       </nav>
     </header>

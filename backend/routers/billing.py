@@ -1,65 +1,75 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 import logging
-from backend.database import get_db
-from backend.models.billing import BillingRecord, UserQuota
-from backend.models.user import User as UserModel
-from backend.schemas.billing import BillingCreate, BillingOut, BillingListOut, UserQuotaOut, UserQuotaUpdate
-from dependencies.auth import get_current_user
 from datetime import datetime
 from decimal import Decimal
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from backend.database import get_db
+from backend.dependencies.auth import get_current_user
+from backend.models.billing import BillingRecord, UserQuota
+from backend.models.user import User as UserModel
+from backend.schemas.billing import (
+    BillingCreate,
+    BillingListOut,
+    BillingOut,
+    UserQuotaOut,
+    UserQuotaUpdate,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
 @router.get("/", response_model=BillingListOut)
 async def get_billing_records(
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)
 ):
     """Получение списка записей биллинга пользователя"""
-    
-    billing_records = db.query(BillingRecord).filter(
-        BillingRecord.user_id == current_user.id
-    ).order_by(BillingRecord.created_at.desc()).all()
-    
+
+    billing_records = (
+        db.query(BillingRecord)
+        .filter(BillingRecord.user_id == current_user.id)
+        .order_by(BillingRecord.created_at.desc())
+        .all()
+    )
+
     return {"total": len(billing_records), "items": billing_records}
+
 
 @router.get("/summary", response_model=UserQuotaOut)
 async def get_summary(
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)
 ):
     """Получение сводки по квотам пользователя"""
-    
-    user_quota = db.query(UserQuota).filter(
-        UserQuota.user_id == current_user.id
-    ).first()
-    
+
+    user_quota = (
+        db.query(UserQuota).filter(UserQuota.user_id == current_user.id).first()
+    )
+
     if not user_quota:
         # Создаем квоту по умолчанию, если её нет
         user_quota = UserQuota(
-            user_id=current_user.id,
-            monthly_limit=1000,
-            used_messages=0
+            user_id=current_user.id, monthly_limit=1000, used_messages=0
         )
         db.add(user_quota)
         db.commit()
         db.refresh(user_quota)
-    
+
     return user_quota
+
 
 @router.post("/message", response_model=BillingOut)
 async def register_message_billing(
     billing_data: BillingCreate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: UserModel = Depends(get_current_user),
 ):
     """Регистрация биллинга для сообщения"""
-    
+
     # Проверка не нужна, так как мы используем current_user.id
     pass
-    
+
     # Создаем запись биллинга
     db_billing = BillingRecord(
         user_id=current_user.id,  # Используем ID текущего пользователя
@@ -67,47 +77,48 @@ async def register_message_billing(
         action=billing_data.action,
         direction=billing_data.direction,
         is_paid=billing_data.is_paid,
-        price=billing_data.price
+        price=billing_data.price,
     )
-    
+
     db.add(db_billing)
     db.commit()
     db.refresh(db_billing)
-    
-    logger.info(f"Billing record created: {billing_data.action} for user {current_user.email}")
+
+    logger.info(
+        f"Billing record created: {billing_data.action} for user {current_user.email}"
+    )
     return db_billing
+
 
 @router.patch("/quota", response_model=UserQuotaOut)
 async def update_user_quota(
     quota_update: UserQuotaUpdate,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user)
+    current_user: UserModel = Depends(get_current_user),
 ):
     """Обновление квоты пользователя"""
-    
-    user_quota = db.query(UserQuota).filter(
-        UserQuota.user_id == current_user.id
-    ).first()
-    
+
+    user_quota = (
+        db.query(UserQuota).filter(UserQuota.user_id == current_user.id).first()
+    )
+
     if not user_quota:
         # Создаем квоту по умолчанию, если её нет
         user_quota = UserQuota(
-            user_id=current_user.id,
-            monthly_limit=1000,
-            used_messages=0
+            user_id=current_user.id, monthly_limit=1000, used_messages=0
         )
         db.add(user_quota)
         db.commit()
         db.refresh(user_quota)
-    
+
     # Обновляем только указанные поля
     update_data = quota_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(user_quota, field, value)
-    
+
     user_quota.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(user_quota)
-    
+
     logger.info(f"User quota updated for user {current_user.email}")
     return user_quota

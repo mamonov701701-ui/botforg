@@ -1,9 +1,12 @@
-from pydantic import BaseModel
 from datetime import datetime
+
+from pydantic import BaseModel
+
 
 class PurchaseCreate(BaseModel):
     template_id: int
     price: int
+
 
 class PurchaseOut(BaseModel):
     id: int
@@ -13,4 +16,4 @@ class PurchaseOut(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True 
+        orm_mode = True

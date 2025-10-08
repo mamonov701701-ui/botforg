@@ -1,9 +1,12 @@
-from pydantic import BaseModel
 from datetime import datetime
+
+from pydantic import BaseModel
+
 
 class TeamMemberCreate(BaseModel):
     user_id: int
     role: str
+
 
 class TeamMemberOut(BaseModel):
     id: int
@@ -13,4 +16,4 @@ class TeamMemberOut(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True 
+        orm_mode = True

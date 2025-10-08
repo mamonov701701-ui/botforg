@@ -1,0 +1,10 @@
+/* QA overlay (включается классом body.qa-on) */
+@keyframes qaPulse{0%{opacity:.15}50%{opacity:.35}100%{opacity:.15}}
+body.qa-on *{outline:1px dashed rgba(255,0,0,.35);outline-offset:0}
+body.qa-on .qa-grid{position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(to right,rgba(0,0,0,.06) 1px,transparent 1px),linear-gradient(to bottom,rgba(0,0,0,.06) 1px,transparent 1px);background-size:8px 8px,8px 8px;z-index:2147483646}
+body.qa-on .qa-watermark{position:fixed;left:8px;bottom:8px;z-index:2147483647;font:12px/1.2 ui-monospace,Menlo,Consolas,monospace;color:#fff;background:rgba(0,0,0,.55);padding:6px 8px;border-radius:6px;animation:qaPulse 2s infinite}
+/* Пометки проблемных областей */
+body.qa-on img:not([alt]){outline:2px solid rgba(255,165,0,.9)}
+body.qa-on [role='button'], body.qa-on button{min-height:36px}
+/* Контейнеры: подсветка переполнений */
+body.qa-on *{overflow:overlay}

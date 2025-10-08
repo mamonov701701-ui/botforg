@@ -1,0 +1,213 @@
+{
+  "base_url": "http://localhost:5173",
+  "output": "monitoring\\screenshots\\2025-10-07\\1546",
+  "viewports": [
+    {
+      "viewport": "1440x900",
+      "pages": [
+        {
+          "name": "home",
+          "url": "http://localhost:5173/",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/\nCall log:\nnavigating to \"http://localhost:5173/\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        },
+        {
+          "name": "editor-1",
+          "url": "http://localhost:5173/editor/1",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/editor/1\nCall log:\nnavigating to \"http://localhost:5173/editor/1\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        },
+        {
+          "name": "templates",
+          "url": "http://localhost:5173/templates",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/templates\nCall log:\nnavigating to \"http://localhost:5173/templates\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        },
+        {
+          "name": "features",
+          "url": "http://localhost:5173/features",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/features\nCall log:\nnavigating to \"http://localhost:5173/features\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        },
+        {
+          "name": "login",
+          "url": "http://localhost:5173/login",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/login\nCall log:\nnavigating to \"http://localhost:5173/login\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        }
+      ],
+      "request_failed": [
+        {
+          "url": "http://localhost:5173/",
+          "failure": null,
+          "ts": 1759841194.9625208
+        },
+        {
+          "url": "http://localhost:5173/editor/1",
+          "failure": null,
+          "ts": 1759841195.245704
+        },
+        {
+          "url": "http://localhost:5173/templates",
+          "failure": null,
+          "ts": 1759841197.3286955
+        },
+        {
+          "url": "http://localhost:5173/features",
+          "failure": null,
+          "ts": 1759841197.6107173
+        },
+        {
+          "url": "http://localhost:5173/login",
+          "failure": null,
+          "ts": 1759841199.6955402
+        }
+      ],
+      "has_errors": true
+    },
+    {
+      "viewport": "1920x1080",
+      "pages": [
+        {
+          "name": "home",
+          "url": "http://localhost:5173/",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/\nCall log:\nnavigating to \"http://localhost:5173/\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        },
+        {
+          "name": "editor-1",
+          "url": "http://localhost:5173/editor/1",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/editor/1\nCall log:\nnavigating to \"http://localhost:5173/editor/1\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        },
+        {
+          "name": "templates",
+          "url": "http://localhost:5173/templates",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/templates\nCall log:\nnavigating to \"http://localhost:5173/templates\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        },
+        {
+          "name": "features",
+          "url": "http://localhost:5173/features",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/features\nCall log:\nnavigating to \"http://localhost:5173/features\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        },
+        {
+          "name": "login",
+          "url": "http://localhost:5173/login",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5173/login\nCall log:\nnavigating to \"http://localhost:5173/login\", waiting until \"networkidle\"\n"
+          ],
+          "console": {
+            "error": 0,
+            "warning": 0,
+            "info": 0,
+            "other": 0
+          }
+        }
+      ],
+      "request_failed": [
+        {
+          "url": "http://localhost:5173/",
+          "failure": null,
+          "ts": 1759841202.4049816
+        },
+        {
+          "url": "http://localhost:5173/editor/1",
+          "failure": null,
+          "ts": 1759841202.6680193
+        },
+        {
+          "url": "http://localhost:5173/templates",
+          "failure": null,
+          "ts": 1759841204.7726436
+        },
+        {
+          "url": "http://localhost:5173/features",
+          "failure": null,
+          "ts": 1759841205.0586648
+        },
+        {
+          "url": "http://localhost:5173/login",
+          "failure": null,
+          "ts": 1759841207.218848
+        }
+      ],
+      "has_errors": true
+    }
+  ],
+  "has_errors": true
+}

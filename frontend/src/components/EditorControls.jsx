@@ -33,6 +33,7 @@ const EditorControls = ({
 
   return (
     <div
+      className="editor-controls"
       style={{
         position: 'absolute',
         top: '20px',
@@ -41,12 +42,8 @@ const EditorControls = ({
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
         padding: '12px',
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-        backdropFilter: 'blur(8px)',
-        border: '1px solid rgba(0, 0, 0, 0.1)'
+        pointerEvents: 'auto' // Убеждаемся, что панель управления не блокирует события
       }}
     >
       {/* Кнопка добавления блока */}
@@ -64,15 +61,26 @@ const EditorControls = ({
           transition: 'all 0.2s ease',
           display: 'flex',
           alignItems: 'center',
-          gap: '6px'
+          gap: '6px',
+          boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)'
         }}
         onMouseEnter={(e) => {
           e.target.style.backgroundColor = '#2563eb';
           e.target.style.transform = 'translateY(-1px)';
+          e.target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
         }}
         onMouseLeave={(e) => {
           e.target.style.backgroundColor = '#3b82f6';
           e.target.style.transform = 'translateY(0)';
+          e.target.style.boxShadow = '0 2px 4px rgba(59, 130, 246, 0.3)';
+        }}
+        onMouseDown={(e) => {
+          e.target.style.transform = 'translateY(0)';
+          e.target.style.boxShadow = '0 1px 2px rgba(59, 130, 246, 0.3)';
+        }}
+        onMouseUp={(e) => {
+          e.target.style.transform = 'translateY(-1px)';
+          e.target.style.boxShadow = '0 4px 8px rgba(59, 130, 246, 0.4)';
         }}
         title="Добавить новый блок"
       >
@@ -96,18 +104,33 @@ const EditorControls = ({
           display: 'flex',
           alignItems: 'center',
           gap: '6px',
-          opacity: saving ? 0.6 : 1
+          opacity: saving ? 0.6 : 1,
+          boxShadow: saving ? 'none' : '0 2px 4px rgba(16, 185, 129, 0.3)'
         }}
         onMouseEnter={(e) => {
           if (!saving) {
             e.target.style.backgroundColor = '#059669';
             e.target.style.transform = 'translateY(-1px)';
+            e.target.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.4)';
           }
         }}
         onMouseLeave={(e) => {
           if (!saving) {
             e.target.style.backgroundColor = '#10b981';
             e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 2px 4px rgba(16, 185, 129, 0.3)';
+          }
+        }}
+        onMouseDown={(e) => {
+          if (!saving) {
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 1px 2px rgba(16, 185, 129, 0.3)';
+          }
+        }}
+        onMouseUp={(e) => {
+          if (!saving) {
+            e.target.style.transform = 'translateY(-1px)';
+            e.target.style.boxShadow = '0 4px 8px rgba(16, 185, 129, 0.4)';
           }
         }}
         title="Сохранить схему"
@@ -130,15 +153,26 @@ const EditorControls = ({
           transition: 'all 0.2s ease',
           display: 'flex',
           alignItems: 'center',
-          gap: '6px'
+          gap: '6px',
+          boxShadow: '0 2px 4px rgba(139, 92, 246, 0.3)'
         }}
         onMouseEnter={(e) => {
           e.target.style.backgroundColor = '#7c3aed';
           e.target.style.transform = 'translateY(-1px)';
+          e.target.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
         }}
         onMouseLeave={(e) => {
           e.target.style.backgroundColor = '#8b5cf6';
           e.target.style.transform = 'translateY(0)';
+          e.target.style.boxShadow = '0 2px 4px rgba(139, 92, 246, 0.3)';
+        }}
+        onMouseDown={(e) => {
+          e.target.style.transform = 'translateY(0)';
+          e.target.style.boxShadow = '0 1px 2px rgba(139, 92, 246, 0.3)';
+        }}
+        onMouseUp={(e) => {
+          e.target.style.transform = 'translateY(-1px)';
+          e.target.style.boxShadow = '0 4px 8px rgba(139, 92, 246, 0.4)';
         }}
         title="Экспортировать схему в JSON"
       >
@@ -160,15 +194,26 @@ const EditorControls = ({
           transition: 'all 0.2s ease',
           display: 'flex',
           alignItems: 'center',
-          gap: '6px'
+          gap: '6px',
+          boxShadow: '0 2px 4px rgba(245, 158, 11, 0.3)'
         }}
         onMouseEnter={(e) => {
           e.target.style.backgroundColor = '#d97706';
           e.target.style.transform = 'translateY(-1px)';
+          e.target.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
         }}
         onMouseLeave={(e) => {
           e.target.style.backgroundColor = '#f59e0b';
           e.target.style.transform = 'translateY(0)';
+          e.target.style.boxShadow = '0 2px 4px rgba(245, 158, 11, 0.3)';
+        }}
+        onMouseDown={(e) => {
+          e.target.style.transform = 'translateY(0)';
+          e.target.style.boxShadow = '0 1px 2px rgba(245, 158, 11, 0.3)';
+        }}
+        onMouseUp={(e) => {
+          e.target.style.transform = 'translateY(-1px)';
+          e.target.style.boxShadow = '0 4px 8px rgba(245, 158, 11, 0.4)';
         }}
         title="Импортировать схему из JSON"
       >

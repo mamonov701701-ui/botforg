@@ -1,13 +1,16 @@
-from fastapi import APIRouter, Depends, Request, HTTPException
+from typing import Dict
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+
 from backend.database import SessionLocal
 from backend.models.payment import Payment
 from backend.models.purchase import Purchase
 from backend.models.template import Template
 from backend.models.user import User
-from typing import Dict
 
 webhook_router = APIRouter()
+
 
 def get_db():
     db = SessionLocal()
@@ -15,6 +18,7 @@ def get_db():
         yield db
     finally:
         db.close()
+
 
 @webhook_router.post("/telegram")
 async def handle_telegram_webhook(update: Dict, db: Session = Depends(get_db)):
@@ -28,10 +32,24 @@ async def handle_telegram_webhook(update: Dict, db: Session = Depends(get_db)):
     payment.status = "success"
     db.commit()
     # Создать покупку, если не создана
-    if not db.query(Purchase).filter(Purchase.user_id == payment.user_id, Purchase.template_id == payment.template_id).first():
-        db.add(Purchase(user_id=payment.user_id, template_id=payment.template_id, price=payment.amount))
+    if (
+        not db.query(Purchase)
+        .filter(
+            Purchase.user_id == payment.user_id,
+            Purchase.template_id == payment.template_id,
+        )
+        .first()
+    ):
+        db.add(
+            Purchase(
+                user_id=payment.user_id,
+                template_id=payment.template_id,
+                price=payment.amount,
+            )
+        )
         db.commit()
     return {"ok": True}
+
 
 @webhook_router.post("/yookassa")
 async def handle_yookassa_webhook(request: Request, db: Session = Depends(get_db)):
@@ -44,10 +62,24 @@ async def handle_yookassa_webhook(request: Request, db: Session = Depends(get_db
         if payment and payment.status != "success":
             payment.status = "success"
             db.commit()
-            if not db.query(Purchase).filter(Purchase.user_id == payment.user_id, Purchase.template_id == payment.template_id).first():
-                db.add(Purchase(user_id=payment.user_id, template_id=payment.template_id, price=payment.amount))
+            if (
+                not db.query(Purchase)
+                .filter(
+                    Purchase.user_id == payment.user_id,
+                    Purchase.template_id == payment.template_id,
+                )
+                .first()
+            ):
+                db.add(
+                    Purchase(
+                        user_id=payment.user_id,
+                        template_id=payment.template_id,
+                        price=payment.amount,
+                    )
+                )
                 db.commit()
     return {"ok": True}
+
 
 @webhook_router.post("/stripe")
 async def handle_stripe_webhook(request: Request, db: Session = Depends(get_db)):
@@ -61,10 +93,24 @@ async def handle_stripe_webhook(request: Request, db: Session = Depends(get_db))
         if payment and payment.status != "success":
             payment.status = "success"
             db.commit()
-            if not db.query(Purchase).filter(Purchase.user_id == payment.user_id, Purchase.template_id == payment.template_id).first():
-                db.add(Purchase(user_id=payment.user_id, template_id=payment.template_id, price=payment.amount))
+            if (
+                not db.query(Purchase)
+                .filter(
+                    Purchase.user_id == payment.user_id,
+                    Purchase.template_id == payment.template_id,
+                )
+                .first()
+            ):
+                db.add(
+                    Purchase(
+                        user_id=payment.user_id,
+                        template_id=payment.template_id,
+                        price=payment.amount,
+                    )
+                )
                 db.commit()
     return {"ok": True}
+
 
 @webhook_router.post("/cloudpayments")
 async def handle_cloudpayments_webhook(request: Request, db: Session = Depends(get_db)):
@@ -75,7 +121,20 @@ async def handle_cloudpayments_webhook(request: Request, db: Session = Depends(g
         if payment and payment.status != "success":
             payment.status = "success"
             db.commit()
-            if not db.query(Purchase).filter(Purchase.user_id == payment.user_id, Purchase.template_id == payment.template_id).first():
-                db.add(Purchase(user_id=payment.user_id, template_id=payment.template_id, price=payment.amount))
+            if (
+                not db.query(Purchase)
+                .filter(
+                    Purchase.user_id == payment.user_id,
+                    Purchase.template_id == payment.template_id,
+                )
+                .first()
+            ):
+                db.add(
+                    Purchase(
+                        user_id=payment.user_id,
+                        template_id=payment.template_id,
+                        price=payment.amount,
+                    )
+                )
                 db.commit()
-    return {"Result": 0} 
+    return {"Result": 0}

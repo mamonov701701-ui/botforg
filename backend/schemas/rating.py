@@ -1,9 +1,12 @@
-from pydantic import BaseModel
 from datetime import datetime
+
+from pydantic import BaseModel
+
 
 class RatingCreate(BaseModel):
     template_id: int
     score: int
+
 
 class RatingOut(BaseModel):
     id: int
@@ -13,4 +16,4 @@ class RatingOut(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True 
+        orm_mode = True

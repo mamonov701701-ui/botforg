@@ -1,0 +1,38 @@
+html, body, #root { height: 100%; }
+.site-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.site-header, .site-footer {
+  flex: 0 0 auto;
+  z-index: 20;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.site-main { flex: 1 1 auto; min-height: 0; }
+.page-content-slot { height: 100%; }
+
+/* УБИТЬ любую анимацию/подложку в шапке */
+.site-header::before,
+.site-header::after,
+.site-header canvas,
+.site-header svg,
+.site-header [class*="line"],
+.site-header [class*="spark"],
+.site-header [data-animated],
+.site-header [style*="animation"],
+.site-header [style*="transition"] {
+  animation: none !important;
+  transition: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ТОЛЬКО БЛОК РЕДАКТОРА: тёмно-синий фон (без картинки страницы) */
+.editor-surface {
+  background: #0b1b2a;
+}
+
+
+

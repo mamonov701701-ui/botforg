@@ -1,0 +1,90 @@
+{
+  "baseline": "monitoring\\baseline",
+  "current": "monitoring\\screenshots\\2025-10-04\\0848",
+  "items": [
+    {
+      "file": "editor-1__1440x900.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "editor-1__1920x1080.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "features__1440x900.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "features__1440x900__full.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "features__1920x1080.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "features__1920x1080__full.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "home__1440x900.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "home__1440x900__full.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "home__1920x1080.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "home__1920x1080__full.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "login__1440x900.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "login__1920x1080.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "templates__1440x900.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    },
+    {
+      "file": "templates__1920x1080.png",
+      "score": 0.0,
+      "threshold": 0.015,
+      "status": "ok"
+    }
+  ]
+}

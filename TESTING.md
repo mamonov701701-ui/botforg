@@ -53,3 +53,31 @@ python -m pytest -v tests/test_simple.py
 - `.vscode/tasks.json` - задачи для запуска тестов
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -30,3 +30,31 @@ Write-Host "Или через VS Code:" -ForegroundColor Cyan
 Write-Host "  Terminal → Run Task… → Tests: Pytest (venv)" -ForegroundColor White
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,6 +1,8 @@
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel
+
 
 class NodeBase(BaseModel):
     node_id: str
@@ -9,14 +11,17 @@ class NodeBase(BaseModel):
     position_y: int
     data: Optional[Dict[str, Any]] = None
 
+
 class NodeCreate(NodeBase):
     template_id: int
+
 
 class NodeUpdate(BaseModel):
     type: Optional[str] = None
     position_x: Optional[int] = None
     position_y: Optional[int] = None
     data: Optional[Dict[str, Any]] = None
+
 
 class NodeRead(NodeBase):
     id: int
@@ -27,6 +32,7 @@ class NodeRead(NodeBase):
     class Config:
         from_attributes = True
 
+
 class EdgeBase(BaseModel):
     edge_id: str
     source: str
@@ -35,8 +41,10 @@ class EdgeBase(BaseModel):
     label: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
 
+
 class EdgeCreate(EdgeBase):
     template_id: int
+
 
 class EdgeUpdate(BaseModel):
     source: Optional[str] = None
@@ -44,6 +52,7 @@ class EdgeUpdate(BaseModel):
     type: Optional[str] = None
     label: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
+
 
 class EdgeRead(EdgeBase):
     id: int
@@ -54,13 +63,12 @@ class EdgeRead(EdgeBase):
     class Config:
         from_attributes = True
 
+
 class EditorState(BaseModel):
     nodes: list[NodeRead]
     edges: list[EdgeRead]
 
+
 class EditorStateCreate(BaseModel):
     nodes: list[NodeCreate]
     edges: list[EdgeCreate]
-
-
-

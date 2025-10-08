@@ -41,3 +41,31 @@ def test_backend_app_structure():
     print("✅ Структура backend приложения корректна")
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

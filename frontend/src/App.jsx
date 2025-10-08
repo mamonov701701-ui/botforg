@@ -1,31 +1,8 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
-import Layout from './components/Layout';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Pricing from './pages/Pricing';
-import Templates from './pages/Templates';
-import Features from './pages/Features';
-import Account from './pages/Account';
-import Editor from './pages/Editor';
-import NotFound from './pages/NotFound';
-import ErrorBoundary from './components/ErrorBoundary';
+// Deprecated: routes moved to main.jsx under SiteLayout
+// Keeping file to avoid import breakages if referenced elsewhere
+import React from 'react';
 
-function App() {
-  return (
-    <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={<Home />} />
-        <Route path="login" element={<Login />} />
-        <Route path="pricing" element={<Pricing />} />
-        <Route path="templates" element={<Templates />} />
-        <Route path="editor/:id" element={<ErrorBoundary><Editor /></ErrorBoundary>} />
-        <Route path="features" element={<Features />} />
-        <Route path="account" element={<Account />} />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
-  );
-}
+function App() { return null; }
 
 export default App; 

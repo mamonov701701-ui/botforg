@@ -1,0 +1,96 @@
+{
+  "base_url": "http://localhost:5174",
+  "output": "monitoring\\screenshots\\2025-10-04\\0824",
+  "viewports": [
+    {
+      "viewport": "1440x900",
+      "pages": [
+        {
+          "name": "home",
+          "url": "http://localhost:5174/",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/\nCall log:\nnavigating to \"http://localhost:5174/\", waiting until \"networkidle\"\n"
+          ]
+        },
+        {
+          "name": "editor-1",
+          "url": "http://localhost:5174/editor/1",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/editor/1\nCall log:\nnavigating to \"http://localhost:5174/editor/1\", waiting until \"networkidle\"\n"
+          ]
+        },
+        {
+          "name": "templates",
+          "url": "http://localhost:5174/templates",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/templates\nCall log:\nnavigating to \"http://localhost:5174/templates\", waiting until \"networkidle\"\n"
+          ]
+        },
+        {
+          "name": "features",
+          "url": "http://localhost:5174/features",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/features\nCall log:\nnavigating to \"http://localhost:5174/features\", waiting until \"networkidle\"\n"
+          ]
+        },
+        {
+          "name": "login",
+          "url": "http://localhost:5174/login",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/login\nCall log:\nnavigating to \"http://localhost:5174/login\", waiting until \"networkidle\"\n"
+          ]
+        }
+      ]
+    },
+    {
+      "viewport": "1920x1080",
+      "pages": [
+        {
+          "name": "home",
+          "url": "http://localhost:5174/",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/\nCall log:\nnavigating to \"http://localhost:5174/\", waiting until \"networkidle\"\n"
+          ]
+        },
+        {
+          "name": "editor-1",
+          "url": "http://localhost:5174/editor/1",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/editor/1\nCall log:\nnavigating to \"http://localhost:5174/editor/1\", waiting until \"networkidle\"\n"
+          ]
+        },
+        {
+          "name": "templates",
+          "url": "http://localhost:5174/templates",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/templates\nCall log:\nnavigating to \"http://localhost:5174/templates\", waiting until \"networkidle\"\n"
+          ]
+        },
+        {
+          "name": "features",
+          "url": "http://localhost:5174/features",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/features\nCall log:\nnavigating to \"http://localhost:5174/features\", waiting until \"networkidle\"\n"
+          ]
+        },
+        {
+          "name": "login",
+          "url": "http://localhost:5174/login",
+          "status": null,
+          "errors": [
+            "Page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:5174/login\nCall log:\nnavigating to \"http://localhost:5174/login\", waiting until \"networkidle\"\n"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,10 +1,13 @@
-from pydantic import BaseModel, Field
-from typing import Optional
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, Field
+
 
 class ReviewCreate(BaseModel):
     rating: int = Field(..., ge=1, le=5)
     text: Optional[str] = None
+
 
 class ReviewOut(BaseModel):
     id: int
@@ -15,4 +18,4 @@ class ReviewOut(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True 
+        orm_mode = True

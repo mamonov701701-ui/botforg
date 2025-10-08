@@ -1,8 +1,9 @@
 import os
 import sys
 import uuid
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import patch, Mock
 from fastapi.testclient import TestClient
 
 # Ensure we can import the FastAPI app from backend/main.py
@@ -30,7 +31,7 @@ def register_and_get_token(client: TestClient) -> str:
     return f"Bearer {token}"
 
 
-@patch('requests.get')
+@patch("requests.get")
 def test_connect_valid_bot(mock_get):
     """Test connecting a valid bot with mocked Telegram API"""
     unique_id = uuid.uuid4().hex[:8]
@@ -46,8 +47,8 @@ def test_connect_valid_bot(mock_get):
             "username": f"test_bot_{unique_id}",
             "can_join_groups": True,
             "can_read_all_group_messages": False,
-            "supports_inline_queries": False
-        }
+            "supports_inline_queries": False,
+        },
     }
     mock_get.return_value = mock_response
 
@@ -58,10 +59,12 @@ def test_connect_valid_bot(mock_get):
         "title": "Test Bot",
         "username": f"test_bot_{unique_id}",
         "token": f"123456789:ABCdefGHIjklMNOpqrsTUVwxyz_{unique_id}",
-        "webhook_url": "https://example.com/webhook"
+        "webhook_url": "https://example.com/webhook",
     }
 
-    res = client.post("/bots/connect", json=bot_data, headers={"Authorization": auth_header})
+    res = client.post(
+        "/bots/connect", json=bot_data, headers={"Authorization": auth_header}
+    )
     assert res.status_code == 201
     data = res.json()
     assert data["title"] == "Test Bot"
@@ -70,7 +73,7 @@ def test_connect_valid_bot(mock_get):
     assert "token" not in data  # Token should not be returned
 
 
-@patch('requests.get')
+@patch("requests.get")
 def test_reject_invalid_token(mock_get):
     """Test rejecting invalid bot token"""
     # Mock failed Telegram API response
@@ -79,7 +82,7 @@ def test_reject_invalid_token(mock_get):
     mock_response.json.return_value = {
         "ok": False,
         "error_code": 401,
-        "description": "Unauthorized"
+        "description": "Unauthorized",
     }
     mock_get.return_value = mock_response
 
@@ -90,10 +93,12 @@ def test_reject_invalid_token(mock_get):
         "title": "Invalid Bot",
         "username": "invalid_bot",
         "token": "123456789:invalid_token_format",
-        "webhook_url": "https://example.com/webhook"
+        "webhook_url": "https://example.com/webhook",
     }
 
-    res = client.post("/bots/connect", json=bot_data, headers={"Authorization": auth_header})
+    res = client.post(
+        "/bots/connect", json=bot_data, headers={"Authorization": auth_header}
+    )
     assert res.status_code == 400
     assert "Invalid Telegram bot token" in res.json()["detail"]
 
@@ -101,18 +106,18 @@ def test_reject_invalid_token(mock_get):
 def test_connect_bot_requires_auth():
     """Test that connecting a bot requires authentication"""
     client = TestClient(app)
-    
+
     bot_data = {
         "title": "Test Bot",
         "username": "test_bot",
-        "token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+        "token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
     }
 
     res = client.post("/bots/connect", json=bot_data)
     assert res.status_code == 401
 
 
-@patch('requests.get')
+@patch("requests.get")
 def test_username_mismatch(mock_get):
     """Test rejecting bot when username doesn't match Telegram API"""
     # Mock successful Telegram API response with different username
@@ -127,8 +132,8 @@ def test_username_mismatch(mock_get):
             "username": "real_bot",  # Different from provided username
             "can_join_groups": True,
             "can_read_all_group_messages": False,
-            "supports_inline_queries": False
-        }
+            "supports_inline_queries": False,
+        },
     }
     mock_get.return_value = mock_response
 
@@ -138,15 +143,17 @@ def test_username_mismatch(mock_get):
     bot_data = {
         "title": "Test Bot",
         "username": "test_bot",  # Different from API response
-        "token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+        "token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
     }
 
-    res = client.post("/bots/connect", json=bot_data, headers={"Authorization": auth_header})
+    res = client.post(
+        "/bots/connect", json=bot_data, headers={"Authorization": auth_header}
+    )
     assert res.status_code == 400
     assert "Username mismatch" in res.json()["detail"]
 
 
-@patch('requests.get')
+@patch("requests.get")
 def test_get_bots_list(mock_get):
     """Test getting list of user's bots"""
     unique_id = uuid.uuid4().hex[:8]
@@ -162,8 +169,8 @@ def test_get_bots_list(mock_get):
             "username": f"test_bot_{unique_id}",
             "can_join_groups": True,
             "can_read_all_group_messages": False,
-            "supports_inline_queries": False
-        }
+            "supports_inline_queries": False,
+        },
     }
     mock_get.return_value = mock_response
 
@@ -174,9 +181,11 @@ def test_get_bots_list(mock_get):
     bot_data = {
         "title": "Test Bot",
         "username": f"test_bot_{unique_id}",
-        "token": f"123456789:ABCdefGHIjklMNOpqrsTUVwxyz_{unique_id}"
+        "token": f"123456789:ABCdefGHIjklMNOpqrsTUVwxyz_{unique_id}",
     }
-    res_create = client.post("/bots/connect", json=bot_data, headers={"Authorization": auth_header})
+    res_create = client.post(
+        "/bots/connect", json=bot_data, headers={"Authorization": auth_header}
+    )
     assert res_create.status_code == 201
 
     # Get bots list
@@ -196,7 +205,7 @@ def test_get_bots_requires_auth():
     assert res.status_code == 401
 
 
-@patch('requests.get')
+@patch("requests.get")
 def test_patch_bot(mock_get):
     """Test updating bot title and is_active"""
     unique_id = uuid.uuid4().hex[:8]
@@ -212,8 +221,8 @@ def test_patch_bot(mock_get):
             "username": f"test_bot_{unique_id}",
             "can_join_groups": True,
             "can_read_all_group_messages": False,
-            "supports_inline_queries": False
-        }
+            "supports_inline_queries": False,
+        },
     }
     mock_get.return_value = mock_response
 
@@ -224,26 +233,27 @@ def test_patch_bot(mock_get):
     bot_data = {
         "title": "Original Title",
         "username": f"test_bot_{unique_id}",
-        "token": f"123456789:ABCdefGHIjklMNOpqrsTUVwxyz_{unique_id}"
+        "token": f"123456789:ABCdefGHIjklMNOpqrsTUVwxyz_{unique_id}",
     }
-    res_create = client.post("/bots/connect", json=bot_data, headers={"Authorization": auth_header})
+    res_create = client.post(
+        "/bots/connect", json=bot_data, headers={"Authorization": auth_header}
+    )
     assert res_create.status_code == 201
     bot_id = res_create.json()["id"]
 
     # Update bot
-    update_data = {
-        "title": "Updated Title",
-        "is_active": False
-    }
-    res_update = client.patch(f"/bots/{bot_id}", json=update_data, headers={"Authorization": auth_header})
+    update_data = {"title": "Updated Title", "is_active": False}
+    res_update = client.patch(
+        f"/bots/{bot_id}", json=update_data, headers={"Authorization": auth_header}
+    )
     assert res_update.status_code == 200
     data = res_update.json()
     assert data["title"] == "Updated Title"
     assert data["is_active"] is False
 
 
-@patch('requests.get')
-@patch('requests.post')
+@patch("requests.get")
+@patch("requests.post")
 def test_delete_bot(mock_post, mock_get):
     """Test deactivating a bot (soft delete)"""
     unique_id = uuid.uuid4().hex[:8]
@@ -259,8 +269,8 @@ def test_delete_bot(mock_post, mock_get):
             "username": f"test_bot_{unique_id}",
             "can_join_groups": True,
             "can_read_all_group_messages": False,
-            "supports_inline_queries": False
-        }
+            "supports_inline_queries": False,
+        },
     }
     mock_get.return_value = mock_get_response
 
@@ -278,14 +288,18 @@ def test_delete_bot(mock_post, mock_get):
         "title": "Test Bot",
         "username": f"test_bot_{unique_id}",
         "token": f"123456789:ABCdefGHIjklMNOpqrsTUVwxyz_{unique_id}",
-        "webhook_url": "https://example.com/webhook"
+        "webhook_url": "https://example.com/webhook",
     }
-    res_create = client.post("/bots/connect", json=bot_data, headers={"Authorization": auth_header})
+    res_create = client.post(
+        "/bots/connect", json=bot_data, headers={"Authorization": auth_header}
+    )
     assert res_create.status_code == 201
     bot_id = res_create.json()["id"]
 
     # Delete (deactivate) bot
-    res_delete = client.delete(f"/bots/{bot_id}", headers={"Authorization": auth_header})
+    res_delete = client.delete(
+        f"/bots/{bot_id}", headers={"Authorization": auth_header}
+    )
     assert res_delete.status_code == 200
     data = res_delete.json()
     assert data["status"] == "deactivated"
@@ -312,7 +326,9 @@ def test_update_nonexistent_bot():
     auth_header = register_and_get_token(client)
 
     update_data = {"title": "New Title"}
-    res = client.patch("/bots/999999", json=update_data, headers={"Authorization": auth_header})
+    res = client.patch(
+        "/bots/999999", json=update_data, headers={"Authorization": auth_header}
+    )
     assert res.status_code == 404
     assert "Bot not found" in res.json()["detail"]
 

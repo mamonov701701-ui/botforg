@@ -7,8 +7,12 @@ import {
   Settings, 
   Target,
   Package,
-  Play
+  Play,
+  Globe,
+  CheckCircle
 } from 'lucide-react';
+import { BRAND_AMBER } from '../ui/tokens';
+import { TYPE_BORDER } from '../editor/types/colors';
 
 const getBlockIcon = (type) => {
   const icons = {
@@ -16,24 +20,15 @@ const getBlockIcon = (type) => {
     message: <MessageSquare className="w-6 h-6 text-blue-600" />,
     action: <Zap className="w-6 h-6 text-green-600" />,
     condition: <HelpCircle className="w-6 h-6 text-purple-600" />,
-    process: <Settings className="w-6 h-6 text-purple-600" />,
-    decision: <Target className="w-6 h-6 text-red-600" />,
+    api: <Globe className="w-6 h-6 text-orange-600" />,
+    end: <CheckCircle className="w-6 h-6 text-green-600" />,
     default: <Package className="w-6 h-6 text-gray-600" />
   };
   return icons[type] || icons.default;
 };
 
 const getBlockBorderColor = (type) => {
-  const colors = {
-    start: '#374151',
-    message: '#3b82f6',
-    action: '#10b981',
-    condition: '#8b5cf6',
-    process: '#8b5cf6',
-    decision: '#ef4444',
-    default: '#6b7280'
-  };
-  return colors[type] || colors.default;
+  return TYPE_BORDER[type] || TYPE_BORDER.default;
 };
 
 const CustomBlock = ({ data, id, selected }) => {
@@ -63,45 +58,52 @@ const CustomBlock = ({ data, id, selected }) => {
       minWidth: '200px',
       minHeight: '120px',
       padding: '16px',
-      borderRadius: '16px',
-      border: `3px solid ${borderColor}`,
-      backgroundColor: 'white',
+      borderRadius: '12px', // Единое скругление
+      border: `2px solid ${borderColor}`, // Тонкая рамка по умолчанию
+      backgroundColor: 'white', // Белый фон
       transition: 'all 0.2s ease',
       transform: selected ? 'scale(1.02)' : 'scale(1)',
+      // Убираем все внешние тени и подложки
+      boxShadow: 'none',
+      position: 'relative',
+      zIndex: 1,
     };
 
     if (selected) {
       return {
         ...baseStyles,
-        boxShadow: `0 8px 25px rgba(0, 0, 0, 0.15), 0 0 0 2px ${borderColor}40`,
-        border: `4px solid ${borderColor}`,
+        border: `3px solid ${borderColor}`, // Толще рамка при выделении
+        // Только акцент рамки, никаких внешних подложек
+        boxShadow: 'none',
       };
     }
 
-    return {
-      ...baseStyles,
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
-    };
+    return baseStyles;
   };
 
   const handleMouseEnter = (e) => {
     if (!selected) {
       e.target.style.transform = 'scale(1.02)';
-      e.target.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.12)';
+      // Убираем внешние тени при hover
+      e.target.style.boxShadow = 'none';
     }
   };
 
   const handleMouseLeave = (e) => {
     if (!selected) {
       e.target.style.transform = 'scale(1)';
-      e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
+      // Убираем внешние тени при leave
+      e.target.style.boxShadow = 'none';
     }
   };
 
   return (
     <div
       className="relative"
-      style={getBlockStyles()}
+      style={{
+        ...getBlockStyles(),
+        pointerEvents: 'auto' // Убеждаемся, что блок не блокирует события
+      }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -109,11 +111,21 @@ const CustomBlock = ({ data, id, selected }) => {
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 border-2 border-white shadow-md"
+        id="t"
+        isConnectable={true}
         style={{
-          background: borderColor,
-          top: '-6px'
+          width: '16px',
+          height: '16px',
+          border: `2px solid ${BRAND_AMBER}`,
+          background: '#fff',
+          borderRadius: '50%',
+          top: '-8px',
+          pointerEvents: 'auto',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+          zIndex: 2,
+          transition: 'all 0.2s ease'
         }}
+        title="Точка подключения (вход)"
       />
 
       {/* Основное содержимое блока */}
@@ -153,11 +165,21 @@ const CustomBlock = ({ data, id, selected }) => {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="w-3 h-3 border-2 border-white shadow-md"
+        id="b"
+        isConnectable={true}
         style={{
-          background: borderColor,
-          bottom: '-6px'
+          width: '16px',
+          height: '16px',
+          border: `2px solid ${BRAND_AMBER}`,
+          background: '#fff',
+          borderRadius: '50%',
+          bottom: '-8px',
+          pointerEvents: 'auto',
+          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+          zIndex: 2,
+          transition: 'all 0.2s ease'
         }}
+        title="Точка подключения (выход)"
       />
     </div>
   );

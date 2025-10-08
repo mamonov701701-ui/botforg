@@ -1,12 +1,43 @@
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+
 from backend.database import Base, engine
-from backend.models import user, template, bot, review, comment, rating, purchase, payment, tag, bonus_account, referral, team, bot_user_state, token_blacklist, user_template, bot_template, message, billing
-from backend.routers import auth, template as templates, bot as bot_router, review as review_router, user_template as user_template_router, bot_template as bot_template_router, message as message_router, billing as billing_router, payment as payment_router, editor as editor_router
 from backend.middleware.security import SecurityMiddleware
+from backend.models import (
+    billing,
+    bonus_account,
+    bot,
+    bot_template,
+    bot_user_state,
+    comment,
+    message,
+    payment,
+    purchase,
+    rating,
+    referral,
+    review,
+    tag,
+    team,
+    template,
+    token_blacklist,
+    user,
+    user_template,
+)
+from backend.routers import auth
+from backend.routers import billing as billing_router
+from backend.routers import bot as bot_router
+from backend.routers import bot_template as bot_template_router
+from backend.routers import editor as editor_router
+from backend.routers import message as message_router
+from backend.routers import payment as payment_router
+from backend.routers import review as review_router
+from backend.routers import template as templates
+from backend.routers import user_template as user_template_router
 from backend.settings import settings
 
 app = FastAPI()
@@ -36,6 +67,19 @@ app.include_router(billing_router.router, prefix="/billing")
 app.include_router(payment_router.router)
 app.include_router(editor_router.router)
 
+
 @app.get("/health")
 def health_check():
+    return {"status": "ok"}
+
+
+# Главная: редирект на Swagger
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")
+
+
+# Healthcheck для быстрой проверки живости
+@app.get("/healthz", tags=["system"])
+def healthz():
     return {"status": "ok"}

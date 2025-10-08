@@ -1,0 +1,14 @@
+[2025-10-07 15:45:44] agent started; quiet mode ON
+[2025-10-07 15:46:20] agent started; quiet mode ON
+[2025-10-07 15:46:20] loop error: cannot import name 'shutil' from 'pathlib' (C:\Users\mamon\AppData\Local\Programs\Python\Python312\Lib\pathlib.py)
+[2025-10-07 15:46:50] loop error: cannot access local variable 'ALERTS_ON' where it is not associated with a value
+[2025-10-07 15:58:12] agent started; quiet mode ON
+[2025-10-07 15:58:49] loop error: cannot access local variable 'ALERTS_ON' where it is not associated with a value
+[2025-10-08 11:56:07] agent started; quiet mode ON
+[2025-10-08 11:57:31] loop error: cannot access local variable 'ALERTS_ON' where it is not associated with a value
+[2025-10-08 12:26:07] agent started; quiet mode ON
+[2025-10-08 12:29:38] agent started; quiet mode ON
+[2025-10-08 12:40:19] loop error: cannot access local variable 'ALERTS_ON' where it is not associated with a value
+[2025-10-08 12:46:13] agent started; quiet mode ON
+[2025-10-08 12:49:53] agent started; quiet mode ON
+[2025-10-08 13:05:39] agent started; quiet mode ON

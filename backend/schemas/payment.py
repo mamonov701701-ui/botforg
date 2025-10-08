@@ -1,24 +1,29 @@
-from pydantic import BaseModel, constr
+from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 from typing import Optional
-from decimal import Decimal
-from datetime import datetime
+
+from pydantic import BaseModel, constr
+
 
 class PaymentStatus(str, Enum):
     pending = "pending"
     success = "success"
     failed = "failed"
 
+
 class PaymentType(str, Enum):
     purchase = "purchase"
     subscription = "subscription"
     messages = "messages"
+
 
 class PaymentCreate(BaseModel):
     amount: Decimal
     currency: constr(min_length=1, max_length=10) = "RUB"
     type: PaymentType
     payload: constr(min_length=1, max_length=100)
+
 
 class PaymentOut(BaseModel):
     id: int
@@ -32,4 +37,4 @@ class PaymentOut(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True 
+        from_attributes = True

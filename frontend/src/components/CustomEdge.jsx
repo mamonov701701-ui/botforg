@@ -2,6 +2,7 @@ import { getSmoothStepPath } from 'reactflow';
 import { useState } from 'react';
 import React from 'react';
 import { Trash2 } from 'lucide-react';
+import { BRAND_AMBER, DANGER_RED } from '../ui/tokens';
 
 const CustomEdge = ({
   id,
@@ -22,7 +23,7 @@ const CustomEdge = ({
 
   // Определяем цвета и стили
   const isHighlighted = selected;
-  const strokeColor = isHighlighted ? '#FF0000' : '#FFA500'; // Ярко-оранжевый по умолчанию, красный при выделении
+  const strokeColor = BRAND_AMBER; // BRAND_AMBER для всех стрелок
   const strokeWidth = 3; // Фиксированная толщина 3 пикселя
 
   const handleEdgeClick = (e) => {
@@ -48,7 +49,7 @@ const CustomEdge = ({
   };
 
   return (
-    <g>
+    <g style={{ pointerEvents: 'auto' }}>
       <path
         d={path}
         fill="none"
@@ -61,16 +62,17 @@ const CustomEdge = ({
         onMouseLeave={handleMouseLeave}
         markerEnd={{
           type: 'arrowclosed',
-          color: strokeColor,
-          width: 20,
-          height: 20,
-          strokeWidth: 2
+          color: BRAND_AMBER,
+          width: 12,
+          height: 12,
+          strokeWidth: 3
         }}
         style={{
           ...style,
           cursor: 'pointer',
           transition: 'stroke 0.2s ease, stroke-width 0.2s ease',
-          filter: isHighlighted ? 'drop-shadow(0 0 6px rgba(255, 0, 0, 0.4))' : 'none'
+          filter: isHighlighted ? 'drop-shadow(0 0 6px rgba(255, 0, 0, 0.4))' : 'none',
+          pointerEvents: 'auto' // Убеждаемся, что edge реагирует на события
         }}
       />
       
@@ -88,14 +90,23 @@ const CustomEdge = ({
           }}
         >
           <div
-            className="edge-trash-icon w-8 h-8 bg-red-500 rounded-full shadow-lg flex items-center justify-center cursor-pointer hover:bg-red-600 border-2 border-white"
+            className="edge-remove-btn w-8 h-8 bg-red-500 rounded-full shadow-lg flex items-center justify-center cursor-pointer hover:bg-red-600 active:bg-red-700 border-2 border-white"
             onClick={handleDelete}
             style={{
               transition: 'all 0.2s ease',
               zIndex: 1001,
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)'
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              cursor: 'pointer'
             }}
-            title="Удалить соединение"
+            title="Удалить связь"
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = DANGER_RED;
+              e.target.style.transform = 'scale(1.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = '#ef4444';
+              e.target.style.transform = 'scale(1)';
+            }}
           >
             <Trash2 className="w-4 h-4 text-white" />
           </div>

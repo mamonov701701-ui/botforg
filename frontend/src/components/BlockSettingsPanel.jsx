@@ -7,8 +7,12 @@ import {
   Target,
   Package,
   Trash2,
-  Play
+  Play,
+  Globe,
+  CheckCircle
 } from 'lucide-react';
+import { TypeHints } from '@/editor/panel/TypeHints';
+
 
 // CSS стили для выпадающего меню
 const selectStyles = `
@@ -350,14 +354,25 @@ const BlockSettingsPanel = ({
               '--block-color': blockColor
             }}
           >
-            <option value="start">Начало</option>
+            <option value="start">Старт</option>
             <option value="message">Сообщение</option>
             <option value="action">Действие</option>
             <option value="condition">Условие</option>
-            <option value="process">Процесс</option>
-            <option value="decision">Решение</option>
-            <option value="default">По умолчанию</option>
+            <option value="api">Запрос к API</option>
+            <option value="end">Завершение</option>
           </select>
+        </div>
+
+        {/* Описание типа блока */}
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{
+            padding: '12px',
+            backgroundColor: 'rgba(255,255,255,0.03)',
+            borderRadius: '6px',
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            <TypeHints type={blockSettings.type} />
+          </div>
         </div>
 
         {/* Параметры */}

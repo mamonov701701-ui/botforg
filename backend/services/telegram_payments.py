@@ -1,5 +1,6 @@
 from config import TELEGRAM_PAYMENT_PROVIDER_TOKEN
 
+
 def create_telegram_invoice(template, user, price_in_cents: int) -> dict:
     """
     Возвращает данные для отправки счета пользователю в Telegram.
@@ -16,4 +17,4 @@ def create_telegram_invoice(template, user, price_in_cents: int) -> dict:
         "photo_width": 512,
         "photo_height": 512,
         "need_email": True,
-    } 
+    }
