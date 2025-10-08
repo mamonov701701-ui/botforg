@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "dev": "vite", 
     "build:css": "postcss src/styles/tailwind.css -o src/output.css",
     "dev": "vite",
     "build": "vite build",
