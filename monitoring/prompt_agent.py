@@ -556,7 +556,23 @@ def handle_text(text: str):
             send_msg("Логов пока нет")
         return
 
-    send_msg("Неизвестная команда. Напиши /help")
+    if text == "/reload_agent":
+        try:
+            import sys as _sys, os as _os, subprocess as _sp, time as _time
+            from pathlib import Path as _P
+            try:
+                (_P("monitorинг")/"prompt_agent.lock").unlink(missing_ok=True)
+            except Exception:
+                pass
+            _sp.Popen([_sys.executable, "-m", "monitoring.prompt_agent"], creationflags=0x00000008)
+            send_msg("Перезапуск агента инициирован ✅")
+            _time.sleep(0.5)
+            _os._exit(0)
+        except Exception as e:
+            send_msg(f"/reload_agent error: {e}")
+            return
+
+        send_msg("Неизвестная команда. Напиши /help")
 
 def process_tasks():
     tasks = iterate_queue()
