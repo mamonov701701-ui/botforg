@@ -143,7 +143,7 @@ def test_username_mismatch(mock_get):
     bot_data = {
         "title": "Test Bot",
         "username": "test_bot",  # Different from API response
-        "token": "123456789:ABCdefGHIjklMNOpqrsTUVwxyz",
+        "token": "987654321:XYZabcDEFghijklMNOpqrsTUVwxyz",  # Unique token
     }
 
     res = client.post(

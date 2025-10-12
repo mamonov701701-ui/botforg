@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
@@ -130,7 +130,7 @@ def publish_template(
     if is_public is None:
         raise HTTPException(status_code=400, detail="is_public required")
     tpl.is_public = bool(is_public)
-    tpl.updated_at = datetime.utcnow()
+    tpl.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(tpl)
     return {"id": tpl.id, "is_public": tpl.is_public, "updated_at": tpl.updated_at}
@@ -315,7 +315,7 @@ async def get_template(id: int, db: Session = Depends(get_db)):
             raise HTTPException(status_code=403, detail="Not enough permissions")
         for field, value in template_update.dict(exclude_unset=True).items():
             setattr(tpl, field, value)
-        tpl.updated_at = datetime.utcnow()
+        tpl.updated_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(tpl)
         return tpl

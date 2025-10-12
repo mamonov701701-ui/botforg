@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -133,7 +133,7 @@ async def update_user_template(
     for field, value in update_data.items():
         setattr(user_template, field, value)
 
-    user_template.updated_at = datetime.utcnow()
+    user_template.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(user_template)
 
@@ -166,7 +166,7 @@ async def delete_user_template(
 
     # Soft delete - деактивируем шаблон
     user_template.is_active = False
-    user_template.updated_at = datetime.utcnow()
+    user_template.updated_at = datetime.now(timezone.utc)
     db.commit()
 
     logger.info(

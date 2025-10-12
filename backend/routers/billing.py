@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -116,7 +116,7 @@ async def update_user_quota(
     for field, value in update_data.items():
         setattr(user_quota, field, value)
 
-    user_quota.updated_at = datetime.utcnow()
+    user_quota.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(user_quota)
 

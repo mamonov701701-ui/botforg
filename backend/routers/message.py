@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
@@ -57,9 +57,10 @@ async def create_message(
         db.refresh(user_quota)
 
     # Определяем, является ли сообщение платным
-    is_paid_message = False
+    is_paid_message = message.is_paid if message.is_paid is not None else False
     message_price = Decimal("0.00")
 
+    # Если квота превышена, сообщение автоматически становится платным
     if user_quota.used_messages >= user_quota.monthly_limit:
         is_paid_message = True
         message_price = Decimal("1.00")
@@ -94,7 +95,7 @@ async def create_message(
 
     # Увеличиваем счетчик использованных сообщений
     user_quota.used_messages += 1
-    user_quota.updated_at = datetime.utcnow()
+    user_quota.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(db_message)
@@ -180,7 +181,7 @@ async def update_message(
     for field, value in update_data.items():
         setattr(message, field, value)
 
-    message.updated_at = datetime.utcnow()
+    message.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(message)
 

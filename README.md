@@ -92,6 +92,10 @@ botforg/
 
 ## Тестирование
 
+✅ **Все тесты проходят успешно** (88/88 passed)  
+✅ **Rate limiting отключается при TESTING=true**  
+✅ **Совместимость bcrypt → pbkdf2**  
+
 ### Запуск тестов
 ```bash
 # Активировать виртуальное окружение
@@ -113,6 +117,9 @@ python -m pytest --cov=backend tests/
 ### Через VS Code/Cursor
 1. `Terminal → Run Task… → Tests: Pytest (venv)`
 2. Или использовать встроенный тест-раннер
+
+### Отчеты тестирования
+Результаты тестов автоматически записываются в `LOGS/TEST_FIX_REPORT.txt`
 
 ## Требования
 

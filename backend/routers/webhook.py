@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -120,7 +120,7 @@ async def telegram_webhook(
             state = BotUserState(telegram_user_id=telegram_user_id, bot_id=bot_id)
             db.add(state)
         state.current_node_id = node["id"]
-        state.history = [{"node_id": node["id"], "entered_at": str(datetime.utcnow())}]
+        state.history = [{"node_id": node["id"], "entered_at": str(datetime.now(timezone.utc))}]
         db.commit()
         send_node_message(token, chat_id, node, find_edges_from(node["id"]))
         return {"ok": True}
@@ -277,7 +277,7 @@ async def telegram_webhook(
     # Обновляем состояние
     state.current_node_id = next_node["id"]
     hist = state.history or []
-    hist.append({"node_id": next_node["id"], "entered_at": str(datetime.utcnow())})
+    hist.append({"node_id": next_node["id"], "entered_at": str(datetime.now(timezone.utc))})
     state.history = hist
     db.commit()
     send_node_message(token, chat_id, next_node, find_edges_from(next_node["id"]))

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 import requests
@@ -80,6 +80,13 @@ async def connect_bot(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Bot with this token is already connected",
+            )
+        
+        # Проверяем соответствие username если он указан в запросе
+        if payload.username and payload.username != telegram_info["username"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username mismatch",
             )
 
         # Создаем бота с данными из Telegram API
@@ -165,7 +172,7 @@ async def update_bot(
     for field, value in update_data.items():
         setattr(bot, field, value)
 
-    bot.updated_at = datetime.utcnow()
+    bot.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(bot)
 
@@ -191,7 +198,7 @@ async def delete_bot(
 
     # Soft delete - деактивируем бота
     bot.is_active = False
-    bot.updated_at = datetime.utcnow()
+    bot.updated_at = datetime.now(timezone.utc)
 
     # Удаляем webhook если он был установлен
     if bot.webhook_url:
@@ -298,7 +305,7 @@ async def update_bot_graph(
         # Если поле content не существует, сохраняем в другое поле или создаем его
         bot.content = graph_data
 
-    bot.updated_at = datetime.utcnow()
+    bot.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(bot)
 

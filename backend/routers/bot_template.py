@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -68,7 +68,7 @@ async def create_bot_template(
 
     if existing_active:
         existing_active.is_active = False
-        existing_active.updated_at = datetime.utcnow()
+        existing_active.updated_at = datetime.now(timezone.utc)
         logger.info(
             f"Deactivated existing bot template binding for bot {bot_template.bot_id}"
         )
@@ -153,7 +153,7 @@ async def update_bot_template(
     for field, value in update_data.items():
         setattr(bot_template, field, value)
 
-    bot_template.updated_at = datetime.utcnow()
+    bot_template.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(bot_template)
 
@@ -186,7 +186,7 @@ async def delete_bot_template(
 
     # Soft delete - деактивируем привязку
     bot_template.is_active = False
-    bot_template.updated_at = datetime.utcnow()
+    bot_template.updated_at = datetime.now(timezone.utc)
     db.commit()
 
     logger.info(

@@ -1,5 +1,7 @@
+import os
 from typing import Optional
 
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -29,9 +31,13 @@ class Settings(BaseSettings):
     CLOUDPAYMENTS_SUCCESS_URL: Optional[str] = None
     CLOUDPAYMENTS_FAIL_URL: Optional[str] = None
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # Testing mode
+    TESTING: bool = os.getenv("TESTING", "false").lower() == "true"
+
+    model_config = ConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
 
 
 settings = Settings()

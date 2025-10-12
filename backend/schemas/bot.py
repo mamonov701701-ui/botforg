@@ -11,6 +11,7 @@ class BotConnectRequest(BaseModel):
     webhook_url: Optional[AnyUrl] = None
     bot_id: Optional[int] = None
     template_id: Optional[int] = None
+    username: Optional[str] = None
 
 
 class BotBase(BaseModel):

@@ -24,16 +24,6 @@ function CustomNode({ data }: any) {
   );
 }
 
-export default function EditorV2Shell() {
-  return (
-    <div style={{ width: '100%', height: '100%' }}>
-      <ReactFlowProvider>
-        <InnerEditor />
-      </ReactFlowProvider>
-    </div>
-  );
-}
-
 function InnerEditor() {
   // banner removed to avoid conflict with site header
 
@@ -89,7 +79,7 @@ function InnerEditor() {
     e.preventDefault();
     const type = e.dataTransfer.getData('application/reactflow');
     if (!type) return;
-    const bounds = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const bounds = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const pos = rf.project({ x: e.clientX - bounds.left, y: e.clientY - bounds.top });
     const spec = NODE_SPECS.find(s => s.type === type);
     setNodes((ns) => ns.concat({
@@ -140,12 +130,12 @@ function InnerEditor() {
           onSave={() => { /* placeholder */ }}
           onExport={() => {
             const data = JSON.stringify({ nodes, edges }, null, 2);
-            const blob = new Blob([data], { type: 'application/json' });
+            const blob = new globalThis.Blob([data], { type: 'application/json' });
             const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
+            a.href = globalThis.URL.createObjectURL(blob);
             a.download = 'flow.json';
             a.click();
-            URL.revokeObjectURL(a.href);
+            globalThis.URL.revokeObjectURL(a.href);
           }}
           onImport={() => { /* placeholder */ }}
           onError={() => { /* placeholder */ }}
@@ -180,6 +170,16 @@ function InnerEditor() {
           onDelete={handleDeleteNode}
         />
       </aside>
+    </div>
+  );
+}
+
+export default function EditorV2Shell() {
+  return (
+    <div style={{ width: '100%', height: '100%' }}>
+      <ReactFlowProvider>
+        <InnerEditor />
+      </ReactFlowProvider>
     </div>
   );
 }

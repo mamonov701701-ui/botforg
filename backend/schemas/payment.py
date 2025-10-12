@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, constr
+from pydantic import BaseModel, ConfigDict, constr, field_validator
 
 
 class PaymentStatus(str, Enum):
@@ -24,6 +24,13 @@ class PaymentCreate(BaseModel):
     type: PaymentType
     payload: constr(min_length=1, max_length=100)
 
+    @field_validator("amount")
+    @classmethod
+    def validate_amount(cls, v):
+        if v <= 0:
+            raise ValueError("Amount must be positive")
+        return v
+
 
 class PaymentOut(BaseModel):
     id: int
@@ -36,5 +43,4 @@ class PaymentOut(BaseModel):
     payload: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
