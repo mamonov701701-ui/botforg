@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --header-h: 88px;
+  --footer-h: 0px;
+}
+
 body, html, #root {
   margin: 0;
   padding: 0;

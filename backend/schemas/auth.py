@@ -6,15 +6,18 @@ from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 
 class RegisterIn(BaseModel):
-    name: str
+    name: Optional[str] = None
     email: EmailStr
     password: str
+    role: Optional[str] = "user"
 
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("name")
     @classmethod
-    def _strip_name(cls, v: str) -> str:
+    def _strip_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         v = v.strip()
         if len(v) < 2:
             raise ValueError("name too short")

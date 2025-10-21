@@ -29,9 +29,10 @@ def register(user_in: RegisterIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="user exists")
 
     user = User(
-        name=user_in.name,
+        name=user_in.name or "User",
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
+        role=user_in.role or "user",
     )
     db.add(user)
     db.commit()

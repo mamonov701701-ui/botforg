@@ -1,28 +1,39 @@
-html, body, #root { height: 100%; }
+html, body, #root { 
+  height: 100%; 
+  overflow: hidden;
+}
 .site-shell {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
-.site-header, .site-footer {
+.site-header {
+  position: relative;
   flex: 0 0 auto;
-  z-index: 20;
+  z-index: 100;
   background: transparent !important;
   box-shadow: none !important;
 }
-.site-main { flex: 1 1 auto; min-height: 0; }
-.page-content-slot { height: 100%; }
+.site-footer {
+  flex: 0 0 auto;
+  z-index: 10;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.site-main { 
+  flex: 1 1 auto; 
+  min-height: 0;
+  overflow: hidden;
+}
+.page-content-slot { 
+  height: 100%;
+  overflow: hidden;
+}
 
-/* УБИТЬ любую анимацию/подложку в шапке */
+/* УБИТЬ любую анимацию/подложку в шапке (но НЕ меню) */
 .site-header::before,
-.site-header::after,
-.site-header canvas,
-.site-header svg,
-.site-header [class*="line"],
-.site-header [class*="spark"],
-.site-header [data-animated],
-.site-header [style*="animation"],
-.site-header [style*="transition"] {
+.site-header::after {
   animation: none !important;
   transition: none !important;
   opacity: 0 !important;
@@ -32,6 +43,8 @@ html, body, #root { height: 100%; }
 /* ТОЛЬКО БЛОК РЕДАКТОРА: тёмно-синий фон (без картинки страницы) */
 .editor-surface {
   background: #0b1b2a;
+  position: relative;
+  z-index: 1;
 }
 
 

@@ -16,11 +16,14 @@ class User(Base):
     __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, nullable=False)
+    email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=True)
+    avatar = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)  # NULL for OAuth-only users
+    password_hash = Column(String, nullable=True)  # Alias for OAuth compatibility
     role = Column(String, default="user", nullable=False)
+    email_verified_at = Column(DateTime, nullable=True)
 
     templates = relationship("Template", back_populates="user", cascade="all, delete")
     ratings = relationship("Rating", back_populates="user", cascade="all, delete")
@@ -40,3 +43,4 @@ class User(Base):
     user_templates = relationship(
         "UserTemplate", back_populates="owner", cascade="all, delete"
     )
+    accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")

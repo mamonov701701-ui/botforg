@@ -1,20 +1,28 @@
 import React from 'react';
 
 type Props = {
-  onAddBlock: () => void;
-  onSave: () => void;
   onExport: () => void;
   onImport: () => void;
-  onError: () => void;
+  onValidate: () => void;
 };
 
-export default function Toolbar({ onAddBlock, onSave, onExport, onImport, onError }: Props) {
-  const Btn = ({ label, color, onClick }: { label: string; color: string; onClick: () => void }) => (
+export default function Toolbar({ onExport, onImport, onValidate }: Props) {
+  const Btn = ({ 
+    label, 
+    icon, 
+    color, 
+    onClick 
+  }: { 
+    label: string; 
+    icon: string; 
+    color: string; 
+    onClick: () => void 
+  }) => (
     <button
       onClick={onClick}
       style={{
-        width: 110,
-        padding: '10px 12px',
+        width: 140,
+        padding: '12px 16px',
         borderRadius: 8,
         marginBottom: 10,
         background: color,
@@ -22,34 +30,35 @@ export default function Toolbar({ onAddBlock, onSave, onExport, onImport, onErro
         fontWeight: 700,
         border: 'none',
         cursor: 'pointer',
-        boxShadow: '0 4px 10px rgba(0,0,0,.15)'
+        boxShadow: '0 4px 10px rgba(0,0,0,.15)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        justifyContent: 'center'
       }}
     >
-      {label}
+      <span style={{ fontSize: 18 }}>{icon}</span>
+      <span>{label}</span>
     </button>
   );
+  
   return (
-    <div
-      style={{
-        position: 'sticky',
-        top: 16,
-        left: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        width: 130,
-        padding: 8,
-        background: 'rgba(11,27,42,.85)',
-        color: '#e2e8f0',
-        borderRadius: 10
-      }}
-    >
-      <Btn label="Добавить блок" color="#60a5fa" onClick={onAddBlock} />
-      <Btn label="Сохранить" color="#34d399" onClick={onSave} />
-      <Btn label="Экспорт" color="#a78bfa" onClick={onExport} />
-      <Btn label="Импорт" color="#f59e0b" onClick={onImport} />
-      <Btn label="Ошибка" color="#f87171" onClick={onError} />
+    <div style={{
+      position: 'sticky',
+      top: 16,
+      left: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      width: 160,
+      padding: 12,
+      background: 'rgba(11,27,42,.90)',
+      color: '#e2e8f0',
+      borderRadius: 10
+    }}>
+      <Btn label="Сохранить" icon="💾" color="#22c55e" onClick={onExport} />
+      <Btn label="Загрузить" icon="📂" color="#3b82f6" onClick={onImport} />
+      <Btn label="Проверить" icon="✓" color="#FFD24C" onClick={onValidate} />
     </div>
   );
 }
-
 

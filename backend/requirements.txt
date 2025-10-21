@@ -5,10 +5,11 @@ sqlalchemy
 pydantic[email]
 pydantic-settings
 passlib[bcrypt]
-python-jose
+python-jose[cryptography]
 python-multipart
 httpx
 requests
 starlette
 anyio
-bcrypt 
+bcrypt
+authlib 

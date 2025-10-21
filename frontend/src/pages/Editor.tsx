@@ -89,6 +89,7 @@ function EditorFlow() {
           {
             ...params,
             type: 'amber',
+            animated: true,
             data: { onDelete: onDeleteEdge },
             style: { stroke: BRAND_AMBER, strokeWidth: 3 },
             markerEnd: { type: MarkerType.ArrowClosed, color: BRAND_AMBER },
@@ -191,10 +192,12 @@ function EditorFlow() {
         
         // Режим соединения
         connectionMode={ConnectionMode.Loose}
+        connectOnClick={true}
         
         // Настройки рёбер по умолчанию
         defaultEdgeOptions={{
           type: 'amber',
+          animated: true,
           style: { stroke: BRAND_AMBER, strokeWidth: 3 },
           markerEnd: { type: MarkerType.ArrowClosed, color: BRAND_AMBER },
         }}

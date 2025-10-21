@@ -62,11 +62,9 @@ export default function Home() {
             </button>
           </div>
           <div className="flex-1 flex justify-center">
-            <img
-              src="/img/editor-preview.png"
-              alt="Демо редактора"
-              className="mx-auto rounded-2xl shadow-2xl w-full max-w-2xl"
-            />
+            <div className="mx-auto rounded-2xl shadow-2xl w-full max-w-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center" style={{ height: '400px' }}>
+              <span className="text-white text-2xl">Демо редактора</span>
+            </div>
           </div>
         </div>
       </section>

@@ -7,6 +7,23 @@ export default defineConfig({
   server: {
     host: true,
     historyApiFallback: true,
+    proxy: {
+      '/blocks': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        credentials: 'include'
+      },
+      '/auth': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        credentials: 'include'
+      },
+      '/me': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        credentials: 'include'
+      }
+    },
   },
   resolve: {
     alias: {
