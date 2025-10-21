@@ -7,12 +7,33 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # JWT settings
-    SECRET_KEY: str = "your_secret_key_here_change_in_production"
+    SECRET_KEY: str  # REQUIRED: Must be set in environment (min 32 chars)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # OAuth JWT settings (for session cookies)
+    JWT_SECRET: str  # REQUIRED: Must be set in environment (min 32 chars, different from SECRET_KEY)
+    SESSION_SECRET: str = ""  # Optional: Separate session secret (recommended)
+    ENVIRONMENT: str = "development"
+
+    # OAuth providers
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    YANDEX_CLIENT_ID: str = ""
+    YANDEX_CLIENT_SECRET: str = ""
+    MAILRU_CLIENT_ID: str = ""
+    MAILRU_CLIENT_SECRET: str = ""
+
     # CORS settings
     FRONTEND_ORIGIN: str = "http://localhost:5173"
+    FRONTEND_URL: str = "http://localhost:5173"
+    
+    # Email/Password Auth
+    REQUIRE_EMAIL_VERIFICATION: bool = True
+    SMTP_HOST: str = ""
+    SMTP_USER: str = ""
+    SMTP_PASS: str = ""
+    EMAIL_FROM: str = "BotForg <noreply@botforg.app>"
 
     # Database
     DATABASE_URL: str = "sqlite:///./botforg.db"
