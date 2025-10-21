@@ -110,7 +110,8 @@ class InputValidationMiddleware(BaseHTTPMiddleware):
                     return JSONResponse(
                         status_code=400, content={"detail": "Invalid request data"}
                     )
-            except:
+            except Exception:
+                # Silently continue if body parsing fails (e.g., not JSON)
                 pass
 
         return await call_next(request)

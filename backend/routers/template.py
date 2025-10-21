@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
-from backend.database import SessionLocal, get_db
+from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.dependencies.roles import require_role
 from backend.models.rating import Rating
@@ -21,14 +21,6 @@ from backend.schemas.template import (
 )
 
 router = APIRouter()
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @router.get("/templates/", response_model=List[TemplateOut])
