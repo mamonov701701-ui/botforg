@@ -1,0 +1,17 @@
+########################################
+__pycache__/
+*.pyc
+*.log
+.venv/
+venv/
+backend/venv/
+node_modules/
+frontend/dist/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.cache/
+botforg.db
+########################################
+

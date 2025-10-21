@@ -1,2 +1,39 @@
-node_modules
-node_modules
+########################################
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.sqlite3
+*.db
+.env
+.env.*
+.venv/
+venv/
+backend/venv/
+botforg.db
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+*.tsbuildinfo
+
+# Build / Misc
+dist/
+build/
+coverage/
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Alembic
+backend/migrations/versions/__pycache__/
+########################################
