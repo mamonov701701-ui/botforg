@@ -1,0 +1,198 @@
+/* Брендовый холст редактора с скроллами */
+.editor-shell {
+  position: relative;
+  height: calc(100vh - 120px);
+  background: #0A1B3D; /* BRAND_DARK */
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  padding: 12px;
+  z-index: 0;
+}
+
+.editor-scroll {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.editor-canvas {
+  position: relative;
+  min-width: 1800px;
+  min-height: 1200px;
+  height: 100%;
+}
+
+/* сам ReactFlow должен иметь высоту от родителя */
+.react-flow__container{
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* чтобы ничего не перекрывало коннекторы */
+.editor-shell, .editor-scroll, .editor-canvas{
+  pointer-events: auto;
+}
+
+/* аккуратные полосы прокрутки */
+.editor-scroll::-webkit-scrollbar { 
+  height: 10px; 
+  width: 10px; 
+}
+
+.editor-scroll::-webkit-scrollbar-thumb { 
+  background: rgba(255,255,255,.2); 
+  border-radius: 8px; 
+}
+
+.editor-canvas .react-flow {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+/* Улучшенные Handle */
+.react-flow__handle {
+  width: 16px !important;
+  height: 16px !important;
+  border: 2px solid #FFB300 !important;
+  background: #fff !important;
+  z-index: 2 !important;
+  border-radius: 50% !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.2s ease !important;
+  pointer-events: auto !important;
+}
+
+.react-flow__handle:hover {
+  transform: scale(1.2) !important;
+  box-shadow: 0 4px 12px rgba(255, 179, 0, 0.5) !important;
+  border-color: #FFB300 !important;
+  background: #FFB300 !important;
+}
+
+.react-flow__handle.react-flow__handle-connecting {
+  background: #FFB300 !important;
+  border-color: #FFB300 !important;
+  box-shadow: 0 0 0 4px rgba(255, 179, 0, 0.3) !important;
+}
+
+/* Улучшенные стрелки */
+.react-flow__edge-path {
+  stroke: #FFB300 !important;
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2)) !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: #FFB300 !important;
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 8px rgba(255, 179, 0, 0.6)) !important;
+}
+
+/* Маркеры стрелок */
+.react-flow__arrowhead {
+  fill: #FFB300 !important;
+  stroke: #FFB300 !important;
+  stroke-width: 2 !important;
+}
+
+/* Улучшенный фон */
+.react-flow__background {
+  background-color: transparent !important;
+}
+
+.react-flow__background .react-flow__background-pattern {
+  stroke: rgba(255, 255, 255, 0.1) !important;
+  stroke-width: 1 !important;
+}
+
+/* Контролы */
+.react-flow__controls {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.react-flow__controls-button {
+  background: transparent !important;
+  border: none !important;
+  color: #374151 !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-flow__controls-button:hover {
+  background: rgba(59, 130, 246, 0.1) !important;
+  color: #3b82f6 !important;
+}
+
+/* Миникарта */
+.react-flow__minimap {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* Узлы */
+.react-flow__node {
+  pointer-events: auto !important;
+}
+
+.react-flow__node.selected {
+  filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.4)) !important;
+}
+
+/* Панель управления */
+.editor-controls {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(8px) !important;
+  pointer-events: auto !important;
+}
+
+/* Красное удаление ребер */
+.edge-remove-btn {
+  opacity: .85; 
+  transform: translate(-50%, -50%);
+  background: rgba(0,0,0,.5);
+  border-radius: 8px;
+  transition: .15s ease;
+}
+
+.edge-remove-btn:hover,
+.edge-remove-btn:focus {
+  background: #FF3B30; /* DANGER_RED */
+  color: #fff;
+}
+
+/* Анимации */
+@keyframes pulse-amber {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 179, 0, 0);
+  }
+}
+
+.react-flow__handle.react-flow__handle-connecting {
+  animation: pulse-amber 1.5s infinite;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .editor-canvas {
+    padding: 16px;
+    border-radius: 12px;
+  }
+  
+  .react-flow__handle {
+    width: 10px !important;
+    height: 10px !important;
+  }
+}

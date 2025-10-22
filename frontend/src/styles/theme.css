@@ -1,0 +1,29 @@
+:root {
+  /* Backgrounds */
+  --bg: #0B0F14;
+  --surface: #11161D;
+  --card: #161C24;
+  
+  /* Text */
+  --text: #E6EAF2;
+  --text-muted: #9AA4B2;
+  
+  /* Borders */
+  --border: #232B36;
+  
+  /* Accent */
+  --accent: #FFD24C;
+  --accent-hover: #FFC107;
+  
+  /* Status */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --info: #3B82F6;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}
+

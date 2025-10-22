@@ -1,0 +1,142 @@
+[
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 732,
+      "columnNumber": 8
+    },
+    "ts": 1759556964.398971
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 826,
+      "columnNumber": 11
+    },
+    "ts": 1759556964.455974
+  },
+  {
+    "type": "info",
+    "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=37d1598c",
+      "lineNumber": 17992,
+      "columnNumber": 53
+    },
+    "ts": 1759556964.5839832
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 732,
+      "columnNumber": 8
+    },
+    "ts": 1759556971.9347236
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 826,
+      "columnNumber": 11
+    },
+    "ts": 1759556971.9817266
+  },
+  {
+    "type": "info",
+    "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=37d1598c",
+      "lineNumber": 17992,
+      "columnNumber": 53
+    },
+    "ts": 1759556971.9917278
+  },
+  {
+    "type": "warning",
+    "text": "[React Flow]: It looks like you've created a new nodeTypes or edgeTypes object. If this wasn't on purpose please define the nodeTypes/edgeTypes outside of the component or memoize them. Help: https://reactflow.dev/error#002",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/reactflow.js?v=37d1598c",
+      "lineNumber": 3688,
+      "columnNumber": 12
+    },
+    "ts": 1759556972.1287389
+  },
+  {
+    "type": "warning",
+    "text": "[React Flow]: It looks like you've created a new nodeTypes or edgeTypes object. If this wasn't on purpose please define the nodeTypes/edgeTypes outside of the component or memoize them. Help: https://reactflow.dev/error#002",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/reactflow.js?v=37d1598c",
+      "lineNumber": 3688,
+      "columnNumber": 12
+    },
+    "ts": 1759556972.1297386
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 732,
+      "columnNumber": 8
+    },
+    "ts": 1759556975.575399
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 826,
+      "columnNumber": 11
+    },
+    "ts": 1759556975.640404
+  },
+  {
+    "type": "info",
+    "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=37d1598c",
+      "lineNumber": 17992,
+      "columnNumber": 53
+    },
+    "ts": 1759556975.6414027
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connecting...",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 732,
+      "columnNumber": 8
+    },
+    "ts": 1759556980.1623611
+  },
+  {
+    "type": "debug",
+    "text": "[vite] connected.",
+    "location": {
+      "url": "http://localhost:5173/@vite/client",
+      "lineNumber": 826,
+      "columnNumber": 11
+    },
+    "ts": 1759556980.2003624
+  },
+  {
+    "type": "info",
+    "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
+    "location": {
+      "url": "http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=37d1598c",
+      "lineNumber": 17992,
+      "columnNumber": 53
+    },
+    "ts": 1759556980.2033632
+  }
+]

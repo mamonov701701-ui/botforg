@@ -1,0 +1,76 @@
+{
+  "base_url": "http://localhost:5173",
+  "output": "monitoring\\screenshots\\2025-10-04\\0848",
+  "viewports": [
+    {
+      "viewport": "1440x900",
+      "pages": [
+        {
+          "name": "home",
+          "url": "http://localhost:5173/",
+          "status": 200,
+          "errors": []
+        },
+        {
+          "name": "editor-1",
+          "url": "http://localhost:5173/editor/1",
+          "status": 200,
+          "errors": []
+        },
+        {
+          "name": "templates",
+          "url": "http://localhost:5173/templates",
+          "status": 200,
+          "errors": []
+        },
+        {
+          "name": "features",
+          "url": "http://localhost:5173/features",
+          "status": 200,
+          "errors": []
+        },
+        {
+          "name": "login",
+          "url": "http://localhost:5173/login",
+          "status": 200,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "viewport": "1920x1080",
+      "pages": [
+        {
+          "name": "home",
+          "url": "http://localhost:5173/",
+          "status": 200,
+          "errors": []
+        },
+        {
+          "name": "editor-1",
+          "url": "http://localhost:5173/editor/1",
+          "status": 200,
+          "errors": []
+        },
+        {
+          "name": "templates",
+          "url": "http://localhost:5173/templates",
+          "status": 200,
+          "errors": []
+        },
+        {
+          "name": "features",
+          "url": "http://localhost:5173/features",
+          "status": 200,
+          "errors": []
+        },
+        {
+          "name": "login",
+          "url": "http://localhost:5173/login",
+          "status": 200,
+          "errors": []
+        }
+      ]
+    }
+  ]
+}

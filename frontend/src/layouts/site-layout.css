@@ -1,0 +1,51 @@
+html, body, #root { 
+  height: 100%; 
+  overflow: hidden;
+}
+.site-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.site-header {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 100;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.site-footer {
+  flex: 0 0 auto;
+  z-index: 10;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.site-main { 
+  flex: 1 1 auto; 
+  min-height: 0;
+  overflow: hidden;
+}
+.page-content-slot { 
+  height: 100%;
+  overflow: hidden;
+}
+
+/* УБИТЬ любую анимацию/подложку в шапке (но НЕ меню) */
+.site-header::before,
+.site-header::after {
+  animation: none !important;
+  transition: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* ТОЛЬКО БЛОК РЕДАКТОРА: тёмно-синий фон (без картинки страницы) */
+.editor-surface {
+  background: #0b1b2a;
+  position: relative;
+  z-index: 1;
+}
+
+
+

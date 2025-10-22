@@ -1,0 +1,34 @@
+{
+  "extends": [
+    "eslint:recommended",
+    "@typescript-eslint/recommended"
+  ],
+  "parser": "@typescript-eslint/parser",
+  "plugins": ["@typescript-eslint"],
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "env": {
+    "browser": true,
+    "es2020": true,
+    "node": true
+  },
+  "rules": {
+    "no-use-before-define": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.jsx", "**/*.js"],
+      "rules": {
+        "@typescript-eslint/ban-ts-comment": "error",
+        "@typescript-eslint/no-inferrable-types": "error",
+        "@typescript-eslint/consistent-type-assertions": "off"
+      }
+    }
+  ]
+}
+

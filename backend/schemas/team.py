@@ -1,0 +1,18 @@
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
+
+
+class TeamMemberCreate(BaseModel):
+    user_id: int
+    role: str
+
+
+class TeamMemberOut(BaseModel):
+    id: int
+    user_id: int
+    owner_id: int
+    role: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

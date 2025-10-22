@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "skipLibCheck": true,
+    "strict": true,
+    "baseUrl": ".",
+    "paths": { 
+      "@/*": ["src/*", "components/*", "pages/*", "api/*", "types/*", "utils/*"]
+    }
+  },
+  "include": ["src", "components", "pages", "api", "types", "utils"]
+}
+
