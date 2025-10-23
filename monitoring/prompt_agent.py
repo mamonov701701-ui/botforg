@@ -1,173 +1,130 @@
-import os, sys, time, json, requests, subprocess, psutil
+import json
+import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 
-TG_TOKEN = os.getenv("TG_BOT_TOKEN", "")
-TG_CHAT  = os.getenv("TG_CHAT_ID", "")
-BASE_URL = os.getenv("BOTFORG_BASE_URL", "http://localhost:5173")
+ROOT = Path(__file__).resolve().parents[1]
 
-ROOT = Path("monitoring")
-LOCK = ROOT / "prompt_agent.lock"
-STATE = ROOT / "offset.txt"
 
-ALLOWED_CMDS = [
-    "npm --prefix frontend run dev -- --host",
-    "npm run dev -- --host",
-    "pytest -q",
-    "pytest",
-    "python -m monitoring.screenshot_agent",
-    "python -m monitoring.visual_diff",
-    "python -m monitoring.autoheal",
-    "python -m monitoring.scheduler --once",
-    "uvicorn backend.main:app --reload --port 8000",
-]
-
-def send_msg(text: str):
-    if not TG_TOKEN or not TG_CHAT: return
+def run_ps(cmd: str, timeout=600):
+    """Запустить PowerShell-команду и вернуть (rc, out, err)."""
+    proc = subprocess.Popen(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", cmd],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=ROOT,
+    )
     try:
-        requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                      json={"chat_id": TG_CHAT, "text": text[:4000]}, timeout=30)
-    except Exception:
-        pass
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return 124, b"", b"TIMEOUT"
+    return (
+        proc.returncode,
+        out.decode(errors="ignore"),
+        err.decode(errors="ignore"),
+    )
 
-def send_doc(path: Path, caption=""):
-    if not TG_TOKEN or not TG_CHAT: return
-    try:
-        with path.open("rb") as f:
-            requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendDocument",
-                          data={"chat_id": TG_CHAT, "caption": caption},
-                          files={"document": (path.name, f)}, timeout=120)
-    except Exception:
-        pass
 
-def long_poll(offset=None):
-    params = {"timeout": 60}
-    if offset: params["offset"] = offset
-    r = requests.get(f"https://api.telegram.org/bot{TG_TOKEN}/getUpdates",
-                     params=params, timeout=90)
-    r.raise_for_status()
-    return r.json().get("result", [])
+def handle_status(payload):
+    cmd = """
+    git rev-parse --abbrev-ref HEAD;
+    git status -s;
+    """
+    rc, out, err = run_ps(cmd)
+    return {"rc": rc, "stdout": out, "stderr": err}
 
-def is_listening(port:int)->bool:
-    for p in psutil.process_iter(attrs=["connections"]):
-        for c in p.info.get("connections", []):
-            try:
-                if c.laddr and c.laddr.port == port: return True
-            except Exception: pass
-    return False
 
-HELP = (
-    "/help — справка\n"
-    "/status — статус портов\n"
-    "/run <cmd> — выполнить из белого списка\n"
-    "/task {json} — write/replace\n"
-    "/restart_me — перезапустить агента (без ошибок)\n"
-)
+def handle_backend_start(payload):
+    # быстрый старт бекенда через uvicorn (порт 8000)
+    cmd = r"""
+    cd backend;
+    if (Test-Path .venv) { . .\.venv\Scripts\Activate.ps1 } elseif (Test-Path venv) { . .\venv\Scripts\Activate.ps1 }
+    pip install -r requirements.txt;
+    Start-Process -WindowStyle Hidden powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','cd backend; if (Test-Path .venv) { . .\.venv\Scripts\Activate.ps1 } elseif (Test-Path venv) { . .\venv\Scripts\Activate.ps1 }; uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload' | Out-Null;
+    "backend: started on http://localhost:8000"
+    """
+    rc, out, err = run_ps(cmd, timeout=120)
+    return {"rc": rc, "stdout": out, "stderr": err}
 
-def handle_text(text: str):
-    text = (text or "").strip()
 
-    if text in ("/start","/help"):
-        send_msg(HELP); return
+def handle_frontend_start(payload):
+    # vite dev (порт 5173)
+    cmd = r"""
+    cd frontend;
+    if (Test-Path package-lock.json) { npm ci } else { npm install }
+    Start-Process -WindowStyle Hidden powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','cd frontend; npm run dev -- --host' | Out-Null;
+    "frontend: started on http://localhost:5173"
+    """
+    rc, out, err = run_ps(cmd, timeout=240)
+    return {"rc": rc, "stdout": out, "stderr": err}
 
-    if text == "/status":
-        f = "✅" if is_listening(5173) else "❌"
-        b = "✅" if is_listening(8000) else "❌"
-        send_msg(f"Status:\nFrontend(5173): {f}\nBackend(8000): {b}\nURL: {BASE_URL}")
-        return
 
-    if text.startswith("/run "):
-        cmd = text[len("/run "):].strip()
-        if cmd not in ALLOWED_CMDS:
-            send_msg(f"Command not allowed: {cmd}")
-            return
-        try:
-            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            out, err = p.communicate(timeout=180)
-            send_msg(f"/run → {cmd}\ncode={p.returncode}\nstdout:\n{(out or '')[:900]}\nstderr:\n{(err or '')[:900]}")
-        except subprocess.TimeoutExpired:
-            send_msg(f"/run → {cmd}\ncode=124\nTimeout")
-        return
+def handle_tests(payload):
+    cmd = r"""
+    cd backend;
+    if (Test-Path .venv) { . .\.venv\Scripts\Activate.ps1 } elseif (Test-Path venv) { . .\venv\Scripts\Activate.ps1 }
+    pytest -q
+    """
+    rc, out, err = run_ps(cmd, timeout=1200)
+    return {"rc": rc, "stdout": out, "stderr": err}
 
-    if text.startswith("/task "):
-        payload = text[len("/task "):].strip()
-        try:
-            t = json.loads(payload)
-            act = t.get("action"); path = Path(t.get("path",""))
-            if act == "write":
-                content = t.get("content","")
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(content, encoding="utf-8")
-                send_msg(f"task:write → OK\n{path}")
-            elif act == "replace":
-                if not path.exists():
-                    send_msg(f"task:replace → файл не найден: {path}"); return
-                src = path.read_text(encoding="utf-8")
-                new = src.replace(t.get("find",""), t.get("replace",""))
-                path.write_text(new, encoding="utf-8")
-                send_msg(f"task:replace → OK\n{path}")
-            else:
-                send_msg(f"unknown task action: {act}")
-        except Exception as e:
-            send_msg(f"/task error: {e}")
-        return
 
-    if text == "/restart_me":
-        # Стабильный перезапуск: запускаем новый процесс и выходим через sys.exit
-        try:
-            try:
-                if LOCK.exists(): LOCK.unlink()
-            except Exception: pass
-            subprocess.Popen([sys.executable, "-m", "monitoring.prompt_agent"],
-                             creationflags=0x08000000)  # CREATE_NO_WINDOW
-            send_msg("Перезапуск агента инициирован ✅")
-            time.sleep(0.5)
-            sys.exit(0)
-        except Exception as e:
-            send_msg(f"/restart_me error: {e}")
-        return
+def handle_typecheck(payload):
+    cmd = r"""
+    cd frontend;
+    npm run typecheck
+    """
+    rc, out, err = run_ps(cmd, timeout=1200)
+    return {"rc": rc, "stdout": out, "stderr": err}
 
-    send_msg("Неизвестная команда. Напиши /help")
 
-def main():
-    # single-instance lock
-    try:
-        if LOCK.exists():
-            try:
-                old = int(LOCK.read_text().strip())
-                if old and psutil.pid_exists(old):
-                    print(f"[agent] already running: {old}")
-                    return
-            except Exception: pass
-        LOCK.write_text(str(os.getpid()))
-    except Exception: pass
+def handle_build(payload):
+    cmd = r"""
+    cd frontend;
+    npm run build
+    """
+    rc, out, err = run_ps(cmd, timeout=1800)
+    return {"rc": rc, "stdout": out, "stderr": err}
 
-    if not TG_TOKEN or not TG_CHAT:
-        print("TG_BOT_TOKEN/TG_CHAT_ID not set"); return
 
-    send_msg("Агент запущен ✅ /help")
-    offset = 0
-    if STATE.exists():
-        try: offset = int(STATE.read_text())
-        except Exception: offset = 0
+def handle_preview_urls(payload):
+    # печатаем известные локальные адреса
+    return {
+        "rc": 0,
+        "stdout": "backend: http://localhost:8000\nfrontend: http://localhost:5173",
+        "stderr": "",
+    }
 
-    while True:
-        try:
-            updates = long_poll(offset)
-            for u in updates:
-                offset = max(offset, u["update_id"]+1)
-                STATE.write_text(str(offset))
-                msg = u.get("message") or u.get("edited_message") or {}
-                chat = msg.get("chat",{})
-                if str(chat.get("id")) != str(TG_CHAT): continue
-                txt = (msg.get("text") or "").strip()
-                if txt: handle_text(txt)
-        except Exception as e:
-            try: send_msg(f"Loop error: {e}")
-            except Exception: pass
-            time.sleep(2)
 
+TASK_HANDLERS = {
+    "status": handle_status,
+    "backend_start": handle_backend_start,
+    "frontend_start": handle_frontend_start,
+    "tests": handle_tests,
+    "typecheck": handle_typecheck,
+    "build": handle_build,
+    "preview_urls": handle_preview_urls,
+}
+
+
+def handle_task(task_json: str):
+    data = json.loads(task_json)
+    action = data.get("action")
+    payload = data.get("payload", {})
+    if action not in TASK_HANDLERS:
+        return {
+            "rc": 2,
+            "stdout": "",
+            "stderr": f"unknown task action: {action}",
+        }
+    return TASK_HANDLERS[action](payload)
+
+
+# Для совместимости: если запускают как скрипт с JSON в argv[1]
 if __name__ == "__main__":
-    try:
-        ROOT.mkdir(parents=True, exist_ok=True)
-    except Exception: pass
-    main()
+    js = sys.argv[1] if len(sys.argv) > 1 else "{}"
+    res = handle_task(js)
+    print(json.dumps(res, ensure_ascii=False))
