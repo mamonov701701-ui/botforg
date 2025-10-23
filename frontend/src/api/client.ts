@@ -89,4 +89,13 @@ export const del = (path: string, options?: RequestInit) => {
   return request(path, { ...options, method: 'DELETE' });
 };
 
+// Default export for compatibility
+const api = {
+  get,
+  post,
+  put,
+  delete: del,
+};
+
+export default api;
 

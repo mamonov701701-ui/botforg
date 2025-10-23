@@ -49,11 +49,11 @@ export default function TemplatePreviewPage() {
   const handlePurchase = async () => {
     setPurchasing(true);
     try {
-      const params = useBonus ? { params: { use_bonus: 1 } } : {};
-      const res = await api.post(`/marketplace/template/${id}/purchase`, {}, params);
+      const body = useBonus ? { use_bonus: 1 } : {};
+      const res = await api.post(`/marketplace/template/${id}/purchase`, body);
       setTpl({ ...tpl, purchased: true });
-      setUsedBonus(res.data.used_bonus || 0);
-      setPaidReal(res.data.paid_real || 0);
+      setUsedBonus(res.used_bonus || 0);
+      setPaidReal(res.paid_real || 0);
     } catch {
       setError('Ошибка покупки');
     } finally {

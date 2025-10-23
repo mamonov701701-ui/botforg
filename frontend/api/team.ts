@@ -1,14 +1,20 @@
-import api from './client';
+import api from '@/api/client';
 
-export const getTeam = async () => {
-  const res = await api.get('/team');
-  return res.data;
-};
+interface TeamMember {
+  id: string;
+  email: string;
+  role: string;
+  [key: string]: any;
+}
 
-export const updateUserRole = async (userId: number, role: string) => {
-  await api.put(`/users/${userId}/role`, { role });
-};
+export async function getTeam(): Promise<TeamMember[]> {
+  return api.get('/team');
+}
 
-export const removeTeamMember = async (userId: number) => {
-  await api.delete(`/team/${userId}`);
-}; 
+export async function updateUserRole(userId: string | number, role: string): Promise<any> {
+  return api.put(`/team/${userId}/role`, { role });
+}
+
+export async function removeTeamMember(userId: string | number): Promise<void> {
+  return api.delete(`/team/${userId}`);
+}

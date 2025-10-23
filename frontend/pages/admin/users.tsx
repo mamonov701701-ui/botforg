@@ -53,7 +53,7 @@ export default function AdminUsersPage() {
             className="border rounded px-2 py-1 text-xs"
           >
             <option value="">Все роли</option>
-            {ROLES.filter(r => r !== 'owner').map(role => (
+            {ROLES.filter((r) => r !== 'owner').map((role) => (
               <option key={role} value={role}>{role}</option>
             ))}
           </select>
@@ -94,7 +94,7 @@ export default function AdminUsersPage() {
                     onChange={e => handleRoleChange(u.id, e.target.value)}
                     className="border px-2 py-1 text-xs"
                   >
-                    {ROLES.filter(r => r !== 'owner').map(role => (
+                    {ROLES.filter((r) => r !== 'owner').map((role) => (
                       <option key={role} value={role}>{role}</option>
                     ))}
                   </select>

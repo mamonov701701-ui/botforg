@@ -1,11 +1,35 @@
-import api from './client';
+import api from '@/api/client';
 
-export const getMyPayments = async (params = {}) => {
-  const res = await api.get('/my-payments', { params });
-  return res.data;
-};
+export async function getMyPayments(params?: any): Promise<any> {
+  let url = '/payments/my';
+  if (params) {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, String(value));
+      }
+    });
+    const queryString = queryParams.toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+  }
+  return api.get(url);
+}
 
-export const getMySales = async (params = {}) => {
-  const res = await api.get('/my-sales', { params });
-  return res.data;
-}; 
+export async function getMySales(params?: any): Promise<any> {
+  let url = '/payments/sales';
+  if (params) {
+    const queryParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        queryParams.append(key, String(value));
+      }
+    });
+    const queryString = queryParams.toString();
+    if (queryString) {
+      url += `?${queryString}`;
+    }
+  }
+  return api.get(url);
+}

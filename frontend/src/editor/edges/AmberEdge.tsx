@@ -1,8 +1,9 @@
 import { memo, useState } from 'react';
-import { BaseEdge, EdgeLabelRenderer, getBezierPath } from 'reactflow';
+import { BaseEdge, EdgeLabelRenderer, getBezierPath, EdgeProps } from 'reactflow';
+import type { BaseEdgeData } from '@/types/editor';
 
 // Кастомное янтарное ребро: hover-подсветка + кнопка удаления
-export default memo(function AmberEdge(props: any) {
+export default memo(function AmberEdge(props: EdgeProps<BaseEdgeData>) {
   const [edgePath, labelX, labelY] = getBezierPath(props);
   const [hover, setHover] = useState(false);
 
@@ -15,8 +16,6 @@ export default memo(function AmberEdge(props: any) {
         path={edgePath}
         style={{ ...props.style, stroke, strokeWidth: 3 }}
         markerEnd={props.markerEnd}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
       />
       <EdgeLabelRenderer>
         <button

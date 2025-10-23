@@ -6,7 +6,7 @@ import NodeSettings from '../../components/NodeSettings';
 import PreviewPanel from '../../components/PreviewPanel';
 import { getTemplateContent, saveTemplateContent, publishTemplate } from '../../api/templates';
 import { FlowNode, FlowEdge } from '../../types/flow';
-import { validateFlow, FlowValidationError } from '../../utils/validateFlow';
+import { validateFlow } from '../../utils/validateFlow';
 import Link from 'next/link';
 
 const EditTemplatePage: React.FC = () => {
@@ -35,7 +35,7 @@ const EditTemplatePage: React.FC = () => {
     if (!idStr) return;
     setLoading(true);
     getTemplateContent(idStr)
-      .then((tpl) => {
+      .then((tpl: any) => {
         let content = tpl.content || {};
         const nodesIn = Array.isArray(content.nodes) ? content.nodes as FlowNode[] : [];
         const edgesIn = Array.isArray(content.edges) ? content.edges as FlowEdge[] : [];
@@ -108,13 +108,9 @@ const EditTemplatePage: React.FC = () => {
     setToast(null);
     setErrorIds({nodes: [], edges: []});
     const validation = validateFlow(nodes, edges);
-    if (validation.length) {
+    if (!validation.valid) {
       setSaveStatus('error');
-      setToast(validation[0].message);
-      setErrorIds({
-        nodes: validation.filter(e => e.type === 'node').map(e => e.id),
-        edges: validation.filter(e => e.type === 'edge').map(e => e.id),
-      });
+      setToast(validation.errors[0] || 'Validation failed');
       setSaving(false);
       return;
     }
@@ -146,7 +142,7 @@ const EditTemplatePage: React.FC = () => {
     setPublishing(true);
     setPubToast(null);
     try {
-      await publishTemplate(idStr!, val);
+      await publishTemplate(idStr!, { is_public: val });
       setIsPublic(val);
       setPubToast(val ? 'Шаблон опубликован!' : 'Публикация снята');
     } catch {
@@ -232,7 +228,7 @@ const EditTemplatePage: React.FC = () => {
           <div className="absolute top-2 right-2 w-72 bg-white border rounded shadow-lg z-10">
             <NodeSettings
               node={selectedNode}
-              onUpdateNode={handleUpdateNode}
+              onUpdate={handleUpdateNode}
             />
           </div>
         </div>

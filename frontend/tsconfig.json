@@ -9,9 +9,17 @@
     "strict": true,
     "baseUrl": ".",
     "paths": { 
-      "@/*": ["src/*", "components/*", "pages/*", "api/*", "types/*", "utils/*"]
+      "@/*": ["./src/*"],
+      "@/api/*": ["./api/*", "./src/api/*"],
+      "@/components/*": ["./components/*", "./src/components/*"],
+      "@/pages/*": ["./pages/*", "./src/pages/*"],
+      "@/types/*": ["./types/*", "./src/types/*"],
+      "@/utils/*": ["./utils/*", "./src/utils/*"],
+      "@/hooks/*": ["./hooks/*", "./src/hooks/*"],
+      "@/constants/*": ["./constants/*", "./src/constants/*"],
+      "@/context/*": ["./context/*", "./src/context/*"]
     }
   },
-  "include": ["src", "components", "pages", "api", "types", "utils"]
+  "include": ["src", "components", "pages", "api", "types", "utils", "hooks", "constants", "context"]
 }
 

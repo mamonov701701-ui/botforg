@@ -41,8 +41,8 @@ export default function ImportTemplatePage() {
       }
       // Доп. валидация
       const validation = validateFlow(data.nodes, data.edges);
-      if (validation.length) {
-        setError('Ошибка в шаблоне: ' + validation[0].message);
+      if (!validation.valid) {
+        setError('Ошибка в шаблоне: ' + (validation.errors[0] || 'Validation failed'));
         return;
       }
       setJson(data);

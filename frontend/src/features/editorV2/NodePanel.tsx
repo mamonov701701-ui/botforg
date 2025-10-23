@@ -11,7 +11,7 @@ const NodePanel: React.FC<Props> = ({ onDragStart }) => {
       {CATEGORY_ORDER.map((cat) => (
         <div key={cat} style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.6, marginBottom: 8 }}>{cat}</div>
-          {(NODE_SPECS.filter(s => s.category === cat)).map(spec => (
+          {(NODE_SPECS.filter((s) => s.category === cat)).map((spec) => (
             <div
               key={spec.type}
               draggable

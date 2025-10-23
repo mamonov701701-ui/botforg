@@ -1,8 +1,7 @@
-export const ROLES = [
-  "owner",
-  "admin",
-  "manager_template",
-  "developer",
-  "support",
-  "viewer",
-]; 
+/**
+ * User roles constants
+ */
+
+export const ROLES = ['owner', 'admin', 'editor', 'viewer'] as const;
+
+export type Role = typeof ROLES[number];

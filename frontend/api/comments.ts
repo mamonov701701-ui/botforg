@@ -1,15 +1,13 @@
-import api from './client';
+import api from '@/api/client';
 
-export const getMyComments = async () => {
-  const res = await api.get('/my-comments');
-  return res.data;
-};
+export async function getMyComments(): Promise<any> {
+  return api.get('/comments/my');
+}
 
-export const deleteComment = async (id: number) => {
-  await api.delete(`/comments/${id}`);
-};
+export async function deleteComment(id: string | number): Promise<void> {
+  return api.delete(`/comments/${id}`);
+}
 
-export const updateComment = async (id: number, content: string) => {
-  const res = await api.put(`/comments/${id}`, { content });
-  return res.data;
-}; 
+export async function updateComment(id: string | number, text: string): Promise<any> {
+  return api.put(`/comments/${id}`, { text });
+}

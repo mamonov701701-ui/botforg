@@ -16,12 +16,18 @@ export default function TemplatesMarketplace() {
 
   const load = () => {
     setLoading(true);
-    api.get('/marketplace/templates', {
-      params: { search, category, price, sort, page, page_size: pageSize },
-    })
-      .then(res => {
-        setItems(res.data.items);
-        setTotal(res.data.total);
+    const queryParams = new URLSearchParams();
+    if (search) queryParams.append('search', search);
+    if (category) queryParams.append('category', category);
+    if (price) queryParams.append('price', price);
+    if (sort) queryParams.append('sort', sort);
+    queryParams.append('page', page.toString());
+    queryParams.append('page_size', pageSize.toString());
+    
+    api.get(`/marketplace/templates?${queryParams.toString()}`)
+      .then((res: any) => {
+        setItems(res.items);
+        setTotal(res.total);
       })
       .catch(() => setError('Ошибка загрузки'))
       .finally(() => setLoading(false));

@@ -7,12 +7,12 @@ import Link from 'next/link';
 export default function MyTemplatesPage() {
   const { user, loading } = useRequireAuth();
   const { user: authUser } = useAuth();
-  const [templates, setTemplates] = useState([]);
+  const [templates, setTemplates] = useState<any[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getMyTemplates().then((data) => setTemplates(data.items || data)).catch(() => setError("Ошибка загрузки шаблонов")).finally(() => setLoadingTemplates(false));
+    getMyTemplates().then((data: any) => setTemplates(data.items || data)).catch(() => setError("Ошибка загрузки шаблонов")).finally(() => setLoadingTemplates(false));
   }, []);
 
   const handleDelete = async (id: number) => {

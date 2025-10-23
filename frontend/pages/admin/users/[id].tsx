@@ -30,7 +30,7 @@ export default function AdminUserEditPage() {
     setLoadingUser(true);
     setError('');
     getUser(id)
-      .then((u) => {
+      .then((u: any) => {
         setUser(u);
         setRole(u.role);
       })

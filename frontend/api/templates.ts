@@ -1,45 +1,37 @@
-import api from './client';
+import api from '@/api/client';
 
-export const getMyTemplates = async (params = {}) => {
-  const res = await api.get('/my-templates', { params });
-  return res.data;
-};
+interface Template {
+  id: string;
+  name: string;
+  is_public: boolean;
+  [key: string]: any;
+}
 
-export const deleteTemplate = async (id: number) => {
-  await api.delete(`/templates/${id}`);
-};
+interface TemplatesResponse {
+  items: Template[];
+  total: number;
+}
 
-export const publishTemplate = async (id: number | string, is_public: boolean) => {
-  const res = await api.patch(`/templates/${id}/publish`, { is_public });
-  return res.data;
-};
+export async function getMyTemplates(): Promise<TemplatesResponse> {
+  return api.get('/templates/my');
+}
 
-export const createTemplate = async (data: any) => {
-  const res = await api.post('/templates', data);
-  return res.data;
-};
+export async function createTemplate(data: Partial<Template>): Promise<Template> {
+  return api.post('/templates', data);
+}
 
-export const getTemplateById = async (id: number) => {
-  const res = await api.get(`/templates/${id}`);
-  return res.data;
-};
+export async function deleteTemplate(id: string | number): Promise<void> {
+  return api.delete(`/templates/${id}`);
+}
 
-export const updateTemplate = async (id: number, data: any) => {
-  const res = await api.put(`/templates/${id}`, data);
-  return res.data;
-};
+export async function publishTemplate(id: string | number, data?: any): Promise<Template> {
+  return api.post(`/templates/${id}/publish`, data || {});
+}
 
-export const updateTemplateTags = async (id: number, tagIds: number[]) => {
-  const res = await api.post(`/templates/${id}/tags`, tagIds);
-  return res.data;
-};
+export async function getTemplateContent(id: string | number): Promise<any> {
+  return api.get(`/templates/${id}/content`);
+}
 
-export const getTemplateContent = async (id: number | string) => {
-  const res = await api.get(`/templates/${id}`);
-  return res.data;
-};
-
-export const saveTemplateContent = async (id: number | string, content: any) => {
-  const res = await api.post(`/templates/${id}/save`, { content });
-  return res.data;
-}; 
+export async function saveTemplateContent(id: string | number, content: any): Promise<any> {
+  return api.put(`/templates/${id}/content`, content);
+}

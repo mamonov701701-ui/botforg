@@ -23,7 +23,15 @@ import { BRAND_AMBER } from '@/ui/tokens';
 import './Editor.css';
 
 // Кастомный компонент для линии соединения
-const CustomConnectionLine = ({ fromX, fromY, toX, toY, connectionLineStyle }: any) => (
+interface ConnectionLineProps {
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  connectionLineStyle?: React.CSSProperties;
+}
+
+const CustomConnectionLine = ({ fromX, fromY, toX, toY, connectionLineStyle }: ConnectionLineProps) => (
   <g>
     <path
       fill="none"
@@ -188,7 +196,6 @@ function EditorFlow() {
         // Настройки зума - убираем огромный zoom
         minZoom={0.3}
         maxZoom={2}
-        defaultZoom={1}
         
         // Режим соединения
         connectionMode={ConnectionMode.Loose}

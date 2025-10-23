@@ -5,7 +5,7 @@ import { ROLES } from '@/constants/roles';
 
 export default function TeamPage() {
   const { user, loading } = useRequireAuth();
-  const [team, setTeam] = useState([]);
+  const [team, setTeam] = useState<any[]>([]);
   const [loadingTeam, setLoadingTeam] = useState(true);
 
   useEffect(() => {
@@ -35,8 +35,8 @@ export default function TeamPage() {
                     value={member.role}
                     onChange={(e) =>
                       updateUserRole(member.id, e.target.value).then(() => {
-                        setTeam((prev) =>
-                          prev.map((m) =>
+                        setTeam((prev: any) =>
+                          prev.map((m: any) =>
                             m.id === member.id ? { ...m, role: e.target.value } : m
                           )
                         );
@@ -53,7 +53,7 @@ export default function TeamPage() {
                   <button
                     onClick={() =>
                       removeTeamMember(member.id).then(() =>
-                        setTeam((prev) => prev.filter((m) => m.id !== member.id))
+                        setTeam((prev: any) => prev.filter((m: any) => m.id !== member.id))
                       )
                     }
                     className="text-red-500 hover:underline text-sm"

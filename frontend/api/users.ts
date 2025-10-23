@@ -1,16 +1,20 @@
-import api from './client';
+import api from '@/api/client';
 
-export const getUser = async (id: number | string) => {
-  const res = await api.get(`/users/${id}`);
-  return res.data;
-};
+interface User {
+  id: string;
+  email: string;
+  role: string;
+  [key: string]: any;
+}
 
-export const updateUserRole = async (id: number | string, role: string) => {
-  const res = await api.put(`/users/${id}/role`, { role });
-  return res.data;
-};
+export async function getUser(id: string | number): Promise<User> {
+  return api.get(`/users/${id}`);
+}
 
-export const deleteUser = async (id: number | string) => {
-  const res = await api.delete(`/users/${id}`);
-  return res.data;
-}; 
+export async function updateUserRole(userId: string | number, role: string): Promise<User> {
+  return api.put(`/users/${userId}/role`, { role });
+}
+
+export async function deleteUser(userId: string | number): Promise<void> {
+  return api.delete(`/users/${userId}`);
+}

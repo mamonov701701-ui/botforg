@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useCallback, useRef } from 'react';
 import ReactFlow, { 
   addEdge, 
   Connection, 
@@ -7,11 +7,12 @@ import ReactFlow, {
   ReactFlowInstance,
   Background,
   BackgroundVariant,
-  useReactFlow,
-  ReactFlowProvider
+  ReactFlowProvider,
+  Edge,
+  NodeProps
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { FlowNode, FlowEdge } from '../types/flow';
+import type { FlowNode, FlowEdge, BaseNodeData } from '@/types/editor';
 
 interface FlowEditorProps {
   nodes: FlowNode[];
@@ -25,7 +26,7 @@ interface FlowEditorProps {
 }
 
 // Кастомный узел
-function CustomNode({ data, selected }: any) {
+function CustomNode({ data, selected }: NodeProps<BaseNodeData>) {
   const label = data?.label ?? 'Блок';
   const isError = data?.isError;
   
@@ -57,11 +58,7 @@ function FlowEditorInner({
   errorNodeIds, 
   errorEdgeIds 
 }: FlowEditorProps) {
-  const handleSetNodes = useCallback((newNodes: FlowNode[]) => {
-    setNodes(newNodes);
-  }, [setNodes]);
   const flowRef = useRef<ReactFlowInstance | null>(null);
-  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 0.25 });
 
   // Добавляем информацию об ошибках к узлам
   const nodesWithErrors = useMemo(() => {
@@ -86,14 +83,18 @@ function FlowEditorInner({
   }), []);
 
   const onConnect = useCallback((params: Connection) => {
-    setEdges((prev) => addEdge({ 
-      ...params, 
+    const newEdge: Edge = {
+      ...params,
+      id: `${params.source}-${params.target}`,
+      source: params.source!,
+      target: params.target!,
       markerEnd: { type: MarkerType.ArrowClosed },
       style: { stroke: '#2f6dff', strokeWidth: 2 }
-    } as any, prev as any) as any);
-  }, [setEdges]);
+    };
+    setEdges(addEdge(newEdge, edges));
+  }, [setEdges, edges]);
 
-  const onNodeClick = useCallback((_: any, node: any) => {
+  const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
     setSelectedNodeId(node.id);
   }, [setSelectedNodeId]);
 
@@ -105,12 +106,10 @@ function FlowEditorInner({
     <div className="h-full w-full">
       <ReactFlow
         ref={flowRef as any}
-        nodes={nodesWithErrors as any}
-        edges={edges as any}
+        nodes={nodesWithErrors}
+        edges={edges}
         nodeTypes={nodeTypes}
-        defaultEdgeOptions={defaultEdgeOptions as any}
-        viewport={viewport as any}
-        onMoveEnd={(_, vp) => setViewport(vp)}
+        defaultEdgeOptions={defaultEdgeOptions}
         fitView={false}
         style={{ width: '100%', height: '100%' }}
         onConnect={onConnect}
@@ -125,7 +124,6 @@ function FlowEditorInner({
         zoomOnScroll={true}
         minZoom={0.1}
         maxZoom={2}
-        defaultZoom={0.25}
       >
         <Background
           variant={BackgroundVariant.Dots}

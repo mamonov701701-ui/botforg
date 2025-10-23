@@ -1,6 +1,9 @@
-import api from './client';
+import api from '@/api/client';
 
-export const getAnalyticsOverview = async (params = {}) => {
-  const res = await api.get('/analytics/overview', { params });
-  return res.data;
-}; 
+export async function getAnalytics(): Promise<any> {
+  return api.get('/analytics');
+}
+
+export async function getTemplateAnalytics(id: string | number): Promise<any> {
+  return api.get(`/analytics/template/${id}`);
+}
