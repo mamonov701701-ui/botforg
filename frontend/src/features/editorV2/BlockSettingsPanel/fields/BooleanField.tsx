@@ -8,7 +8,7 @@ export const BooleanField: React.FC<FieldProps> = ({ field, value, onChange, err
         <input
           type="checkbox"
           checked={value || false}
-          onChange={(e) => onChange(e.target.checked)}
+          onChange={e => onChange(e.target.checked)}
           style={{
             width: 18,
             height: 18,
@@ -23,4 +23,3 @@ export const BooleanField: React.FC<FieldProps> = ({ field, value, onChange, err
     </div>
   );
 };
-

@@ -22,7 +22,8 @@ export default function TemplatePreviewPage() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    api.get(`/marketplace/template/${id}`)
+    api
+      .get(`/marketplace/template/${id}`)
       .then(res => {
         setTpl(res.data);
         // setIsPublic(res.data.is_public); // This line was not in the new_code, so it's removed.
@@ -80,44 +81,68 @@ export default function TemplatePreviewPage() {
       <div className="flex gap-2 mb-4">
         <span className="bg-gray-100 text-xs px-2 py-1 rounded">{tpl.category}</span>
         {tpl.tags.map((tag: string) => (
-          <span key={tag} className="bg-blue-100 text-xs px-2 py-1 rounded">{tag}</span>
+          <span key={tag} className="bg-blue-100 text-xs px-2 py-1 rounded">
+            {tag}
+          </span>
         ))}
       </div>
       <div className="mb-4 flex items-center gap-4">
         <span className="text-yellow-500">★</span>
         <span className="text-xs">{tpl.average_rating || 0}</span>
-        <span className="ml-auto font-bold text-base">{tpl.price ? tpl.price + ' ₽' : 'Бесплатно'}</span>
+        <span className="ml-auto font-bold text-base">
+          {tpl.price ? tpl.price + ' ₽' : 'Бесплатно'}
+        </span>
       </div>
       <div className="mb-6">
         <h2 className="font-semibold mb-2">Блоки шаблона</h2>
         <div className="space-y-2">
           {tpl.price && tpl.price > 0 && !tpl.purchased ? (
-            <div className="text-gray-400 italic">Структура шаблона скрыта. Купите шаблон для просмотра всех блоков.</div>
+            <div className="text-gray-400 italic">
+              Структура шаблона скрыта. Купите шаблон для просмотра всех блоков.
+            </div>
           ) : (
             tpl.blocks.map((block: any, i: number) => (
               <div key={block.id || i} className="border rounded px-3 py-2 bg-gray-50">
-                <b>{block.data.label}</b> <span className="text-xs text-gray-500">[{block.type}]</span>
-                {block.data.config?.description && <div className="text-xs text-gray-600 mt-1">{block.data.config.description}</div>}
+                <b>{block.data.label}</b>{' '}
+                <span className="text-xs text-gray-500">[{block.type}]</span>
+                {block.data.config?.description && (
+                  <div className="text-xs text-gray-600 mt-1">{block.data.config.description}</div>
+                )}
               </div>
             ))
           )}
         </div>
       </div>
-      <TemplateReviews templateId={tpl.id} canReview={tpl.purchased || !tpl.price || tpl.price === 0} />
+      <TemplateReviews
+        templateId={tpl.id}
+        canReview={tpl.purchased || !tpl.price || tpl.price === 0}
+      />
       <div className="flex gap-4 mt-6 items-center">
         {tpl.price && tpl.price > 0 ? (
           tpl.purchased ? (
-            <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded" disabled>Куплено</button>
+            <button className="bg-gray-200 text-gray-700 px-4 py-2 rounded" disabled>
+              Куплено
+            </button>
           ) : (
             <div className="flex flex-col gap-2">
-              <div className="text-sm text-gray-600 mb-1">Доступно бонусов: <b>{bonus} ₽</b></div>
+              <div className="text-sm text-gray-600 mb-1">
+                Доступно бонусов: <b>{bonus} ₽</b>
+              </div>
               <label className="flex items-center gap-2 mb-1">
-                <input type="checkbox" checked={useBonus} onChange={e => setUseBonus(e.target.checked)} /> Использовать бонусы
+                <input
+                  type="checkbox"
+                  checked={useBonus}
+                  onChange={e => setUseBonus(e.target.checked)}
+                />{' '}
+                Использовать бонусы
               </label>
               <div className="text-xs text-gray-500 mb-1">
-                Цена: <b>{tpl.price} ₽</b>{useBonus && (
+                Цена: <b>{tpl.price} ₽</b>
+                {useBonus && (
                   <>
-                    {' '}→ Списано бонусами: <b>{Math.min(bonus, tpl.price)} ₽</b> → К оплате: <b>{Math.max(0, tpl.price - bonus)} ₽</b>
+                    {' '}
+                    → Списано бонусами: <b>{Math.min(bonus, tpl.price)} ₽</b> → К оплате:{' '}
+                    <b>{Math.max(0, tpl.price - bonus)} ₽</b>
                   </>
                 )}
               </div>
@@ -125,9 +150,13 @@ export default function TemplatePreviewPage() {
                 className="bg-green-600 text-white px-4 py-2 rounded"
                 onClick={handlePurchase}
                 disabled={purchasing}
-              >{purchasing ? 'Покупка...' : 'Купить'}</button>
+              >
+                {purchasing ? 'Покупка...' : 'Купить'}
+              </button>
               {usedBonus > 0 && (
-                <div className="text-green-700 text-xs mt-1">Списано бонусами: {usedBonus} ₽, оплачено: {paidReal} ₽</div>
+                <div className="text-green-700 text-xs mt-1">
+                  Списано бонусами: {usedBonus} ₽, оплачено: {paidReal} ₽
+                </div>
               )}
             </div>
           )
@@ -136,16 +165,22 @@ export default function TemplatePreviewPage() {
             className="bg-blue-600 text-white px-4 py-2 rounded"
             onClick={handleCopy}
             disabled={copying}
-          >{copiedId ? 'Скопировано!' : copying ? 'Копирование...' : 'Копировать'}</button>
+          >
+            {copiedId ? 'Скопировано!' : copying ? 'Копирование...' : 'Копировать'}
+          </button>
         )}
         <button
           className="bg-gray-100 text-gray-700 px-4 py-2 rounded border"
           onClick={handleShare}
           title="Поделиться реферальной ссылкой"
-        >🔗 Поделиться</button>
+        >
+          🔗 Поделиться
+        </button>
         {shareToast && <span className="text-green-600 text-sm ml-2">{shareToast}</span>}
-        <Link href="/templates" className="ml-auto text-blue-600 underline">← К витрине</Link>
+        <Link href="/templates" className="ml-auto text-blue-600 underline">
+          ← К витрине
+        </Link>
       </div>
     </div>
   );
-} 
+}

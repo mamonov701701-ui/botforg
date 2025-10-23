@@ -16,7 +16,7 @@ interface Props {
   error?: string;
 }
 
-export const FieldRenderer: React.FC<Props> = (props) => {
+export const FieldRenderer: React.FC<Props> = props => {
   switch (props.field.type) {
     case 'string':
       return <StringField {...props} />;
@@ -38,31 +38,34 @@ export const FieldRenderer: React.FC<Props> = (props) => {
     case 'image':
     case 'file':
       return (
-        <div style={{ 
-          marginBottom: 16, 
-          padding: 12, 
-          background: '#1a1a2e', 
-          borderRadius: 8,
-          opacity: 0.6,
-          fontSize: 13
-        }}>
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            background: '#1a1a2e',
+            borderRadius: 8,
+            opacity: 0.6,
+            fontSize: 13,
+          }}
+        >
           <div style={{ fontWeight: 600, marginBottom: 4 }}>{props.field.label}</div>
           <div>Тип поля "{props.field.type}" скоро будет доступен...</div>
         </div>
       );
     default:
       return (
-        <div style={{ 
-          marginBottom: 16, 
-          padding: 12, 
-          background: '#1a1a2e', 
-          borderRadius: 8,
-          color: '#ef4444',
-          fontSize: 13
-        }}>
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            background: '#1a1a2e',
+            borderRadius: 8,
+            color: '#ef4444',
+            fontSize: 13,
+          }}
+        >
           Неизвестный тип поля: {props.field.type}
         </div>
       );
   }
 };
-

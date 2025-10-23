@@ -38,6 +38,6 @@ export function validateFlow(nodes: FlowNode[], edges: FlowEdge[]): ValidationRe
 
   return {
     valid: errors.length === 0,
-    errors
+    errors,
   };
 }

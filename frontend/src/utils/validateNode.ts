@@ -7,20 +7,16 @@ import { Node } from 'reactflow';
 export function assertNoUserFieldsOutsideSettings(node: Node): void {
   const allowedDataFields = ['blockId', 'title', 'icon', 'color', 'settings'];
   const dataKeys = Object.keys(node.data || {});
-  
+
   const invalidFields = dataKeys.filter(key => !allowedDataFields.includes(key));
-  
+
   if (invalidFields.length > 0) {
-    console.error(
-      `Node ${node.id} has invalid fields outside settings:`,
-      invalidFields,
-      node.data
-    );
+    console.error(`Node ${node.id} has invalid fields outside settings:`, invalidFields, node.data);
     throw new Error(
       `Invalid node structure: fields ${invalidFields.join(', ')} should be in settings`
     );
   }
-  
+
   // Ensure settings exists and is an object
   if (!node.data.settings || typeof node.data.settings !== 'object') {
     throw new Error(`Node ${node.id} missing or invalid settings object`);
@@ -53,4 +49,3 @@ export function debugNodeStructure(node: Node): void {
     style: node.style,
   });
 }
-

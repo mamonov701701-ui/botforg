@@ -9,7 +9,7 @@ export const TextField: React.FC<FieldProps> = ({ field, value, onChange, error 
       </label>
       <textarea
         value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         placeholder={field.label}
         rows={4}
         style={{
@@ -28,4 +28,3 @@ export const TextField: React.FC<FieldProps> = ({ field, value, onChange, error 
     </div>
   );
 };
-

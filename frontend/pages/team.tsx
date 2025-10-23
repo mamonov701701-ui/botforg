@@ -10,7 +10,9 @@ export default function TeamPage() {
 
   useEffect(() => {
     if (user?.role !== 'owner') return;
-    getTeam().then(setTeam).finally(() => setLoadingTeam(false));
+    getTeam()
+      .then(setTeam)
+      .finally(() => setLoadingTeam(false));
   }, [user]);
 
   if (loading || loadingTeam) return <div>Загрузка...</div>;
@@ -27,13 +29,15 @@ export default function TeamPage() {
             <li key={member.id} className="border p-3 rounded">
               <div className="flex justify-between items-center">
                 <div>
-                  <p><strong>{member.name}</strong> ({member.email})</p>
+                  <p>
+                    <strong>{member.name}</strong> ({member.email})
+                  </p>
                   <p className="text-sm text-gray-500">Роль: {member.role}</p>
                 </div>
                 <div className="flex gap-2">
                   <select
                     value={member.role}
-                    onChange={(e) =>
+                    onChange={e =>
                       updateUserRole(member.id, e.target.value).then(() => {
                         setTeam((prev: any) =>
                           prev.map((m: any) =>
@@ -44,7 +48,7 @@ export default function TeamPage() {
                     }
                     className="border px-2 py-1 text-sm"
                   >
-                    {ROLES.filter((r) => r !== 'owner').map((role) => (
+                    {ROLES.filter(r => r !== 'owner').map(role => (
                       <option key={role} value={role}>
                         {role}
                       </option>
@@ -68,4 +72,4 @@ export default function TeamPage() {
       )}
     </div>
   );
-} 
+}

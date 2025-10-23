@@ -16,4 +16,4 @@ test('Login, marketplace, analytics, editor', async ({ page }) => {
 
   await page.goto('/edit-template/1');
   await expect(page.locator('h1')).toContainText('Редактор шаблона');
-}); 
+});

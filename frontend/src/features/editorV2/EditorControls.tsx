@@ -4,9 +4,12 @@ import { PlanType, RoleType } from '../../types/blocks';
 
 const getPlanBadgeColor = (plan: PlanType) => {
   switch (plan) {
-    case 'free': return '#6b7280';
-    case 'pro': return '#3b82f6';
-    case 'enterprise': return '#8b5cf6';
+    case 'free':
+      return '#6b7280';
+    case 'pro':
+      return '#3b82f6';
+    case 'enterprise':
+      return '#8b5cf6';
   }
 };
 
@@ -22,18 +25,18 @@ const EditorControls: React.FC = () => {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 16,
-      padding: '12px 16px',
-      backgroundColor: '#0f1729',
-      borderBottom: '1px solid #1f2937',
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        padding: '12px 16px',
+        backgroundColor: '#0f1729',
+        borderBottom: '1px solid #1f2937',
+      }}
+    >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>
-          Тариф:
-        </label>
+        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>Тариф:</label>
         <select
           value={plan}
           onChange={handlePlanChange}
@@ -54,9 +57,7 @@ const EditorControls: React.FC = () => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>
-          Роль:
-        </label>
+        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>Роль:</label>
         <select
           value={role}
           onChange={handleRoleChange}
@@ -80,13 +81,11 @@ const EditorControls: React.FC = () => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>
-          Поиск:
-        </label>
+        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>Поиск:</label>
         <input
           type="text"
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={e => setSearchQuery(e.target.value)}
           placeholder="Найти блок..."
           style={{
             background: '#1a1a2e',
@@ -101,42 +100,43 @@ const EditorControls: React.FC = () => {
         />
       </div>
 
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: 12,
-        marginLeft: 'auto' 
-      }}>
-        <div style={{
+      <div
+        style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          padding: '6px 12px',
-          background: 'rgba(59, 130, 246, 0.1)',
-          borderRadius: 6,
-          border: '1px solid rgba(59, 130, 246, 0.3)',
-        }}>
+          gap: 12,
+          marginLeft: 'auto',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 12px',
+            background: 'rgba(59, 130, 246, 0.1)',
+            borderRadius: 6,
+            border: '1px solid rgba(59, 130, 246, 0.3)',
+          }}
+        >
           <span style={{ fontSize: 20 }}>👤</span>
           <div style={{ fontSize: 12 }}>
-            <div style={{ 
-              fontWeight: 700, 
-              color: getPlanBadgeColor(plan),
-              textTransform: 'uppercase'
-            }}>
+            <div
+              style={{
+                fontWeight: 700,
+                color: getPlanBadgeColor(plan),
+                textTransform: 'uppercase',
+              }}
+            >
               {plan}
             </div>
-            <div style={{ opacity: 0.7, fontSize: 10, color: '#9ca3af' }}>
-              {role}
-            </div>
+            <div style={{ opacity: 0.7, fontSize: 10, color: '#9ca3af' }}>{role}</div>
           </div>
         </div>
-        <div style={{ color: '#6b7280', fontSize: 12 }}>
-          Блоков: {catalog.length}
-        </div>
+        <div style={{ color: '#6b7280', fontSize: 12 }}>Блоков: {catalog.length}</div>
       </div>
     </div>
   );
 };
 
 export default EditorControls;
-

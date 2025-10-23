@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
 import { Handle, Position } from 'reactflow';
-import { 
-  MessageSquare, 
-  Zap, 
-  HelpCircle, 
-  Settings, 
+import {
+  MessageSquare,
+  Zap,
+  HelpCircle,
+  Settings,
   Target,
   Package,
   Play,
   Globe,
-  CheckCircle
+  CheckCircle,
 } from 'lucide-react';
 import { BRAND_AMBER } from '../ui/tokens';
 import { TYPE_BORDER } from '../editor/types/colors';
 
-const getBlockIcon = (type) => {
+const getBlockIcon = type => {
   const icons = {
     start: <Play className="w-6 h-6 text-gray-800" />,
     message: <MessageSquare className="w-6 h-6 text-blue-600" />,
@@ -22,12 +22,12 @@ const getBlockIcon = (type) => {
     condition: <HelpCircle className="w-6 h-6 text-purple-600" />,
     api: <Globe className="w-6 h-6 text-orange-600" />,
     end: <CheckCircle className="w-6 h-6 text-green-600" />,
-    default: <Package className="w-6 h-6 text-gray-600" />
+    default: <Package className="w-6 h-6 text-gray-600" />,
   };
   return icons[type] || icons.default;
 };
 
-const getBlockBorderColor = (type) => {
+const getBlockBorderColor = type => {
   return TYPE_BORDER[type] || TYPE_BORDER.default;
 };
 
@@ -41,7 +41,7 @@ const CustomBlock = ({ data, id, selected }) => {
     setIsEditing(true);
   };
 
-  const handleLabelChange = (e) => {
+  const handleLabelChange = e => {
     setLabel(e.target.value);
   };
 
@@ -81,7 +81,7 @@ const CustomBlock = ({ data, id, selected }) => {
     return baseStyles;
   };
 
-  const handleMouseEnter = (e) => {
+  const handleMouseEnter = e => {
     if (!selected) {
       e.target.style.transform = 'scale(1.02)';
       // Убираем внешние тени при hover
@@ -89,7 +89,7 @@ const CustomBlock = ({ data, id, selected }) => {
     }
   };
 
-  const handleMouseLeave = (e) => {
+  const handleMouseLeave = e => {
     if (!selected) {
       e.target.style.transform = 'scale(1)';
       // Убираем внешние тени при leave
@@ -102,7 +102,7 @@ const CustomBlock = ({ data, id, selected }) => {
       className="relative"
       style={{
         ...getBlockStyles(),
-        pointerEvents: 'auto' // Убеждаемся, что блок не блокирует события
+        pointerEvents: 'auto', // Убеждаемся, что блок не блокирует события
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -123,7 +123,7 @@ const CustomBlock = ({ data, id, selected }) => {
           pointerEvents: 'auto',
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
           zIndex: 2,
-          transition: 'all 0.2s ease'
+          transition: 'all 0.2s ease',
         }}
         title="Точка подключения (вход)"
       />
@@ -131,9 +131,7 @@ const CustomBlock = ({ data, id, selected }) => {
       {/* Основное содержимое блока */}
       <div className="flex flex-col items-center justify-center gap-3 h-full">
         {/* Иконка типа */}
-        <div className="flex items-center justify-center">
-          {getBlockIcon(blockType)}
-        </div>
+        <div className="flex items-center justify-center">{getBlockIcon(blockType)}</div>
 
         {/* Название блока */}
         <div
@@ -147,7 +145,7 @@ const CustomBlock = ({ data, id, selected }) => {
               value={label}
               onChange={handleLabelChange}
               onBlur={handleLabelBlur}
-              onKeyPress={(e) => {
+              onKeyPress={e => {
                 if (e.key === 'Enter') {
                   handleLabelBlur();
                 }
@@ -177,7 +175,7 @@ const CustomBlock = ({ data, id, selected }) => {
           pointerEvents: 'auto',
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
           zIndex: 2,
-          transition: 'all 0.2s ease'
+          transition: 'all 0.2s ease',
         }}
         title="Точка подключения (выход)"
       />

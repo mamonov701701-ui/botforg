@@ -26,28 +26,22 @@ const ErrorIndicator = ({ error, onDismiss }) => {
         maxWidth: '500px',
         minWidth: '200px',
         cursor: 'pointer',
-        transition: 'all 0.2s ease'
+        transition: 'all 0.2s ease',
       }}
       onClick={() => setIsExpanded(!isExpanded)}
-      onMouseEnter={(e) => {
+      onMouseEnter={e => {
         e.target.style.backgroundColor = '#dc2626';
         e.target.style.transform = 'translateX(-50%) translateY(-2px)';
       }}
-      onMouseLeave={(e) => {
+      onMouseLeave={e => {
         e.target.style.backgroundColor = '#ef4444';
         e.target.style.transform = 'translateX(-50%) translateY(0)';
       }}
     >
       <AlertTriangle className="w-4 h-4" />
-      <span style={{ fontSize: '12px', fontWeight: '500' }}>
-        Ошибка
-      </span>
-      {isExpanded ? (
-        <ChevronUp className="w-4 h-4" />
-      ) : (
-        <ChevronDown className="w-4 h-4" />
-      )}
-      
+      <span style={{ fontSize: '12px', fontWeight: '500' }}>Ошибка</span>
+      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+
       {isExpanded && (
         <div
           style={{
@@ -63,7 +57,7 @@ const ErrorIndicator = ({ error, onDismiss }) => {
             lineHeight: '1.4',
             border: '1px solid #b91c1c',
             borderTop: 'none',
-            marginTop: '1px'
+            marginTop: '1px',
           }}
         >
           {error}
@@ -74,37 +68,3 @@ const ErrorIndicator = ({ error, onDismiss }) => {
 };
 
 export default ErrorIndicator;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

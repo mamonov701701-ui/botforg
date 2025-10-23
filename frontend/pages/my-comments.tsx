@@ -7,20 +7,20 @@ export default function MyCommentsPage() {
   const { user, loading } = useRequireAuth();
   const [comments, setComments] = useState<any[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [editId, setEditId] = useState<number | null>(null);
-  const [editContent, setEditContent] = useState("");
+  const [editContent, setEditContent] = useState('');
   const [editLoading, setEditLoading] = useState(false);
 
   const loadComments = async () => {
     setLoadingComments(true);
-    setError("");
+    setError('');
     try {
       const data = await getMyComments();
       setComments(data);
     } catch {
-      setError("Ошибка загрузки комментариев");
+      setError('Ошибка загрузки комментариев');
     } finally {
       setLoadingComments(false);
     }
@@ -32,9 +32,9 @@ export default function MyCommentsPage() {
   }, []);
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Удалить комментарий?")) return;
+    if (!confirm('Удалить комментарий?')) return;
     await deleteComment(id);
-    setComments((prev) => prev.filter((c) => c.id !== id));
+    setComments(prev => prev.filter(c => c.id !== id));
   };
 
   const handleEdit = (id: number, content: string) => {
@@ -46,11 +46,11 @@ export default function MyCommentsPage() {
     setEditLoading(true);
     try {
       await updateComment(editId!, editContent);
-      setComments((prev) => prev.map((c) => c.id === editId ? { ...c, content: editContent } : c));
+      setComments(prev => prev.map(c => (c.id === editId ? { ...c, content: editContent } : c)));
       setEditId(null);
-      setEditContent("");
+      setEditContent('');
     } catch {
-      alert("Ошибка при сохранении комментария");
+      alert('Ошибка при сохранении комментария');
     } finally {
       setEditLoading(false);
     }
@@ -152,4 +152,4 @@ export default function MyCommentsPage() {
       )}
     </div>
   );
-} 
+}

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # CORS settings
     FRONTEND_ORIGIN: str = "http://localhost:5173"
     FRONTEND_URL: str = "http://localhost:5173"
-    
+
     # Email/Password Auth
     REQUIRE_EMAIL_VERIFICATION: bool = True
     SMTP_HOST: str = ""
@@ -55,10 +55,7 @@ class Settings(BaseSettings):
     # Testing mode
     TESTING: bool = os.getenv("TESTING", "false").lower() == "true"
 
-    model_config = ConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8"
-    )
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
 settings = Settings()

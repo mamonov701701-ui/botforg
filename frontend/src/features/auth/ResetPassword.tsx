@@ -12,7 +12,7 @@ export default function ResetPassword() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (newPassword !== confirmPassword) {
       setMessage('❌ Пароли не совпадают');
       return;
@@ -37,28 +37,33 @@ export default function ResetPassword() {
   };
 
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-      background: 'var(--bg)',
-      color: 'var(--text)'
-    }}>
-      <form onSubmit={handleSubmit} style={{
-        maxWidth: '400px',
-        width: '100%',
-        padding: '24px',
-        background: 'var(--surface)',
-        borderRadius: '12px'
-      }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: 'var(--bg)',
+        color: 'var(--text)',
+      }}
+    >
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          maxWidth: '400px',
+          width: '100%',
+          padding: '24px',
+          background: 'var(--surface)',
+          borderRadius: '12px',
+        }}
+      >
         <h1 style={{ marginBottom: '24px', textAlign: 'center' }}>Сброс пароля</h1>
-        
+
         <input
           type="password"
           placeholder="Новый пароль"
           value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
+          onChange={e => setNewPassword(e.target.value)}
           required
           minLength={8}
           style={{
@@ -68,15 +73,15 @@ export default function ResetPassword() {
             background: 'var(--card)',
             border: '1px solid var(--border)',
             borderRadius: '8px',
-            color: 'var(--text)'
+            color: 'var(--text)',
           }}
         />
-        
+
         <input
           type="password"
           placeholder="Подтвердите пароль"
           value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          onChange={e => setConfirmPassword(e.target.value)}
           required
           minLength={8}
           style={{
@@ -86,10 +91,10 @@ export default function ResetPassword() {
             background: 'var(--card)',
             border: '1px solid var(--border)',
             borderRadius: '8px',
-            color: 'var(--text)'
+            color: 'var(--text)',
           }}
         />
-        
+
         <button
           type="submit"
           disabled={loading}
@@ -102,20 +107,22 @@ export default function ResetPassword() {
             borderRadius: '8px',
             fontSize: '16px',
             fontWeight: 600,
-            cursor: loading ? 'not-allowed' : 'pointer'
+            cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
           {loading ? 'Загрузка...' : 'Изменить пароль'}
         </button>
 
         {message && (
-          <div style={{
-            marginTop: '16px',
-            padding: '12px',
-            background: message.startsWith('✅') ? 'var(--success)' : 'var(--error)',
-            borderRadius: '8px',
-            color: '#fff'
-          }}>
+          <div
+            style={{
+              marginTop: '16px',
+              padding: '12px',
+              background: message.startsWith('✅') ? 'var(--success)' : 'var(--error)',
+              borderRadius: '8px',
+              color: '#fff',
+            }}
+          >
             {message}
           </div>
         )}
@@ -123,4 +130,3 @@ export default function ResetPassword() {
     </div>
   );
 }
-

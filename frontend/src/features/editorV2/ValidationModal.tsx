@@ -10,9 +10,9 @@ interface Props {
 const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const invalidNodes = useValidationStore(state => state.getInvalidNodes());
   const nodes = useEditorStore(state => state.nodes);
-  
+
   if (!isOpen) return null;
-  
+
   const handleNavigateToNode = (nodeId: string) => {
     // Find node and highlight it
     const node = nodes.find(n => n.id === nodeId);
@@ -22,36 +22,42 @@ const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
       // TODO: Use setCenter or fitView from useReactFlow to focus on node
     }
   };
-  
+
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      background: 'rgba(0, 0, 0, 0.7)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 10000
-    }}>
-      <div style={{
-        background: '#1a1a2e',
-        borderRadius: 12,
-        padding: 24,
-        maxWidth: 600,
-        width: '90%',
-        maxHeight: '80vh',
-        overflow: 'auto',
-        border: '2px solid #374151'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 20
-        }}>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'rgba(0, 0, 0, 0.7)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10000,
+      }}
+    >
+      <div
+        style={{
+          background: '#1a1a2e',
+          borderRadius: 12,
+          padding: 24,
+          maxWidth: 600,
+          width: '90%',
+          maxHeight: '80vh',
+          overflow: 'auto',
+          border: '2px solid #374151',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 20,
+          }}
+        >
           <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: 0 }}>
             Проверка сценария
           </h2>
@@ -63,35 +69,37 @@ const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
               color: '#9ca3af',
               fontSize: 24,
               cursor: 'pointer',
-              lineHeight: 1
+              lineHeight: 1,
             }}
           >
             ×
           </button>
         </div>
-        
+
         {invalidNodes.length === 0 ? (
-          <div style={{
-            padding: 40,
-            textAlign: 'center',
-            color: '#22c55e'
-          }}>
+          <div
+            style={{
+              padding: 40,
+              textAlign: 'center',
+              color: '#22c55e',
+            }}
+          >
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-            <div style={{ fontSize: 18, fontWeight: 600 }}>
-              Все узлы настроены правильно
-            </div>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>Все узлы настроены правильно</div>
           </div>
         ) : (
           <>
-            <div style={{
-              color: '#ef4444',
-              marginBottom: 16,
-              fontSize: 14,
-              fontWeight: 600
-            }}>
+            <div
+              style={{
+                color: '#ef4444',
+                marginBottom: 16,
+                fontSize: 14,
+                fontWeight: 600,
+              }}
+            >
               Найдено ошибок: {invalidNodes.length}
             </div>
-            
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {invalidNodes.map(validation => (
                 <div
@@ -100,15 +108,17 @@ const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     background: '#0f1729',
                     border: '1px solid #374151',
                     borderRadius: 8,
-                    padding: 16
+                    padding: 16,
                   }}
                 >
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    marginBottom: 8
-                  }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 8,
+                    }}
+                  >
                     <div style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>
                       {validation.blockTitle || 'Узел'}
                     </div>
@@ -122,26 +132,26 @@ const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
                         padding: '6px 12px',
                         fontSize: 12,
                         cursor: 'pointer',
-                        fontWeight: 600
+                        fontWeight: 600,
                       }}
                     >
                       Перейти
                     </button>
                   </div>
-                  
+
                   <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 8 }}>
                     ID: {validation.nodeId}
                   </div>
-                  
-                  <div style={{ color: '#ef4444', fontSize: 13 }}>
-                    Не заполнены поля:
-                  </div>
-                  <ul style={{
-                    margin: '4px 0 0 20px',
-                    padding: 0,
-                    color: '#f87171',
-                    fontSize: 13
-                  }}>
+
+                  <div style={{ color: '#ef4444', fontSize: 13 }}>Не заполнены поля:</div>
+                  <ul
+                    style={{
+                      margin: '4px 0 0 20px',
+                      padding: 0,
+                      color: '#f87171',
+                      fontSize: 13,
+                    }}
+                  >
                     {validation.missingFields.map((field, idx) => (
                       <li key={`${field}-${idx}`}>{field}</li>
                     ))}
@@ -151,7 +161,7 @@ const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
           </>
         )}
-        
+
         <div style={{ marginTop: 24, textAlign: 'right' }}>
           <button
             onClick={onClose}
@@ -163,7 +173,7 @@ const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
               padding: '10px 20px',
               fontSize: 14,
               fontWeight: 600,
-              cursor: 'pointer'
+              cursor: 'pointer',
             }}
           >
             Закрыть
@@ -175,4 +185,3 @@ const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
 };
 
 export default ValidationModal;
-

@@ -9,6 +9,7 @@ Successfully implemented strict node data model following BotForg specifications
 ### 1. Node Structure (STRICT)
 
 **Before (WRONG):**
+
 ```typescript
 {
   id: `node_${Date.now()}`,  // timestamp ID
@@ -24,6 +25,7 @@ Successfully implemented strict node data model following BotForg specifications
 ```
 
 **After (CORRECT):**
+
 ```typescript
 {
   id: nanoid(),              // ✅ unique ID
@@ -45,6 +47,7 @@ Successfully implemented strict node data model following BotForg specifications
 ## Data Model Rules
 
 ### ✅ Allowed Fields in `node.data`
+
 - `blockId` - Block identifier from catalog
 - `title` - Display title
 - `icon` - Icon name
@@ -52,6 +55,7 @@ Successfully implemented strict node data model following BotForg specifications
 - `settings` - **ALL user configuration (object)**
 
 ### ❌ Forbidden Fields
+
 - `label` - use `title` instead
 - `subtitle` - not in model
 - `type` - use `blockId` instead
@@ -60,6 +64,7 @@ Successfully implemented strict node data model following BotForg specifications
 ## Files Modified
 
 ### 1. **frontend/src/utils/validateNode.ts** (NEW)
+
 Validation helpers to ensure strict compliance:
 
 ```typescript
@@ -69,6 +74,7 @@ debugNodeStructure(node: Node): void
 ```
 
 ### 2. **frontend/src/features/editorV2/EditorV2Shell.tsx**
+
 - ✅ Imported `nanoid`
 - ✅ Imported validation helpers
 - ✅ Updated `CustomNode` to use `blockId` and `title`
@@ -77,21 +83,25 @@ debugNodeStructure(node: Node): void
 - ✅ Updated `handleNodeChange` to work with `title` and `settings`
 
 ### 3. **frontend/src/stores/editorStore.ts**
+
 - ✅ Imported `nanoid`
 - ✅ Fixed initial start node with correct structure
 
 ### 4. **frontend/src/features/editorV2/SettingsPanel.tsx**
+
 - ✅ Updated props: `blockId`, `title` (not `type`, `label`)
 - ✅ Removed type selector (blockId is immutable)
 - ✅ JSON editor works with `settings` object
 - ✅ Added helper text explaining `node.data.settings`
 
 ### 5. **frontend/package.json**
+
 - ✅ Added `nanoid` dependency
 
 ## Visual Representation
 
 ### Node on Canvas
+
 ```
 ┌─────────────────────────┐
 │  🔹 [Title only]        │  ← Visual shows ONLY icon + title
@@ -101,6 +111,7 @@ debugNodeStructure(node: Node): void
 ```
 
 ### Node Data Structure
+
 ```json
 {
   "id": "Xy7_9pqN3",
@@ -125,7 +136,9 @@ debugNodeStructure(node: Node): void
 ## Validation
 
 ### Export Validation
+
 When exporting flow schema:
+
 ```typescript
 if (!validateAllNodes(nodes)) {
   alert('Ошибка: некорректная структура узлов');
@@ -134,7 +147,9 @@ if (!validateAllNodes(nodes)) {
 ```
 
 ### Runtime Validation
+
 Each created node is validated:
+
 ```typescript
 const allowedFields = ['blockId', 'title', 'icon', 'color', 'settings'];
 const invalidFields = dataKeys.filter(k => !allowedFields.includes(k));
@@ -146,6 +161,7 @@ if (invalidFields.length > 0) {
 ## Testing Checklist
 
 ### ✅ Node Creation
+
 - [x] Drag block from library
 - [x] Drop on canvas
 - [x] Node created with `nanoid()` ID
@@ -154,12 +170,14 @@ if (invalidFields.length > 0) {
 - [x] No `label`, `subtitle`, or `type` fields
 
 ### ✅ Visual Display
+
 - [x] Node shows only title
 - [x] No subtitle displayed
 - [x] Border color matches block color
 - [x] Settings not visible on node
 
 ### ✅ Settings Panel
+
 - [x] Shows blockId (read-only)
 - [x] Can edit title
 - [x] Can edit settings JSON
@@ -167,6 +185,7 @@ if (invalidFields.length > 0) {
 - [x] Changes update `node.data.settings`
 
 ### ✅ Export/Import
+
 - [x] Export validates nodes
 - [x] Invalid nodes trigger error
 - [x] Valid nodes export successfully
@@ -175,44 +194,50 @@ if (invalidFields.length > 0) {
 ## Example Flow
 
 ### 1. User Drags Block
+
 ```typescript
 // Library sets drag data
-e.dataTransfer.setData('application/block', JSON.stringify({
-  id: 'message',
-  title: 'Сообщение',
-  icon: 'MessageSquare',
-  color: '#2196F3',
-  // ... other block data
-}));
+e.dataTransfer.setData(
+  'application/block',
+  JSON.stringify({
+    id: 'message',
+    title: 'Сообщение',
+    icon: 'MessageSquare',
+    color: '#2196F3',
+    // ... other block data
+  })
+);
 ```
 
 ### 2. User Drops on Canvas
+
 ```typescript
-const onDrop = (e) => {
+const onDrop = e => {
   const block = JSON.parse(e.dataTransfer.getData('application/block'));
   const newNode = {
-    id: nanoid(),           // ✅ Unique ID
+    id: nanoid(), // ✅ Unique ID
     type: 'default',
     position: screenToFlowPosition({ x: e.clientX, y: e.clientY }),
     data: {
-      blockId: block.id,    // ✅ Correct
-      title: block.title,   // ✅ Correct
+      blockId: block.id, // ✅ Correct
+      title: block.title, // ✅ Correct
       icon: block.icon,
       color: block.color,
-      settings: {}          // ✅ Empty initially
+      settings: {}, // ✅ Empty initially
     },
     style: {
-      borderColor: block.color
-    }
+      borderColor: block.color,
+    },
   };
   setNodes(nds => [...nds, newNode]);
 };
 ```
 
 ### 3. User Edits Settings
+
 ```typescript
 // In SettingsPanel
-onChange({ 
+onChange({
   title: "New Title",
   json: '{"text": "Hello", "parseMode": "Markdown"}'
 });
@@ -233,6 +258,7 @@ onChange({
 ```
 
 ### 4. User Exports
+
 ```typescript
 handleExport() {
   // Validate first
@@ -240,7 +266,7 @@ handleExport() {
     alert('Error: Invalid node structure');
     return;
   }
-  
+
   // Export
   const data = { nodes, edges };
   // ... save to file
@@ -282,21 +308,25 @@ If you have old nodes with `label`, `subtitle`, `type`:
 ## Benefits
 
 ### 1. **Consistency**
+
 - All nodes follow same structure
 - No confusion about field names
 - Easy to validate
 
 ### 2. **Clarity**
+
 - `blockId` clearly indicates block type
 - `title` clearly indicates display name
 - `settings` clearly contains user config
 
 ### 3. **Maintainability**
+
 - Validation catches errors early
 - Structure documented and enforced
 - Easy to extend with new blocks
 
 ### 4. **Separation of Concerns**
+
 - Visual data (title, icon, color) separate from user config
 - User config isolated in `settings`
 - Styling in `style` object
@@ -304,6 +334,7 @@ If you have old nodes with `label`, `subtitle`, `type`:
 ## Debugging
 
 ### Check Node Structure
+
 ```typescript
 import { debugNodeStructure } from '../../utils/validateNode';
 
@@ -327,6 +358,7 @@ debugNodeStructure(node);
 ```
 
 ### Validate Nodes
+
 ```typescript
 import { validateAllNodes } from '../../utils/validateNode';
 
@@ -347,4 +379,3 @@ if (!validateAllNodes(nodes)) {
 ✅ **Debug helpers included**
 
 The implementation now strictly follows the BotForg specification with proper validation and clear separation of concerns.
-

@@ -23,7 +23,7 @@ export function useRequireAuth(): UseRequireAuthResult {
         setLoading(true);
         // Add your auth check logic here
         const isAuthenticated = true; // Placeholder
-        
+
         if (!isAuthenticated) {
           navigate('/login');
         } else {

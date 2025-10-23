@@ -6,12 +6,14 @@ import type { V2Node, V2Edge } from '@/types/editor';
 
 const EditorShell: React.FC = () => {
   const { id } = useParams();
-  const [nodes, setNodes] = useState<V2Node[]>([{
-    id: 'start-1',
-    type: 'start',
-    position: { x: 50, y: 50 },
-    data: { id: 'start-1', type: 'start', label: 'Начало' },
-  }]);
+  const [nodes, setNodes] = useState<V2Node[]>([
+    {
+      id: 'start-1',
+      type: 'start',
+      position: { x: 50, y: 50 },
+      data: { id: 'start-1', type: 'start', label: 'Начало' },
+    },
+  ]);
   const [edges, setEdges] = useState<V2Edge[]>([]);
 
   const editorId = useMemo(() => id ?? '1', [id]);
@@ -24,34 +26,3 @@ const EditorShell: React.FC = () => {
 };
 
 export default EditorShell;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

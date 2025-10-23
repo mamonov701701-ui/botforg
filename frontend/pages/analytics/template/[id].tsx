@@ -18,7 +18,7 @@ function exportToCSV(data: any[], filename: string) {
   if (!data.length) return;
   const csv = [
     Object.keys(data[0]).join(','),
-    ...data.map((row) => Object.values(row).join(',')),
+    ...data.map(row => Object.values(row).join(',')),
   ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = window.URL.createObjectURL(blob);
@@ -40,10 +40,7 @@ export default function TemplateAnalyticsPage() {
   useEffect(() => {
     if (!id) return;
     setLoading(true);
-    Promise.all([
-      api.get(`/analytics/template/${id}`),
-      api.get(`/analytics/stats/${id}`),
-    ])
+    Promise.all([api.get(`/analytics/template/${id}`), api.get(`/analytics/stats/${id}`)])
       .then(([tpl, stats]) => {
         setData(tpl.data);
         setBlockStats(stats.data);
@@ -104,7 +101,9 @@ export default function TemplateAnalyticsPage() {
         <h2 className="text-lg font-semibold mb-2">Топ точек выхода</h2>
         <ul className="list-disc pl-6">
           {data.top_exits.map(([nodeId, count]: [string, number]) => (
-            <li key={nodeId} className="mb-1">{blockStats[nodeId]?.label || nodeId}: <b>{count}</b></li>
+            <li key={nodeId} className="mb-1">
+              {blockStats[nodeId]?.label || nodeId}: <b>{count}</b>
+            </li>
           ))}
         </ul>
       </div>
@@ -113,7 +112,9 @@ export default function TemplateAnalyticsPage() {
         <button
           className="mb-2 bg-blue-600 text-white px-4 py-1 rounded text-xs"
           onClick={() => exportToCSV(data.payments, `payments-template-${id}.csv`)}
-        >Экспорт оплат в CSV</button>
+        >
+          Экспорт оплат в CSV
+        </button>
         <table className="w-full border text-sm">
           <thead>
             <tr className="bg-gray-100">
@@ -139,4 +140,4 @@ export default function TemplateAnalyticsPage() {
       </div>
     </div>
   );
-} 
+}

@@ -7,37 +7,46 @@ Successfully refactored the editor to use strict BotForg node data model with pr
 ## What Was Changed
 
 ### 1. **Installed nanoid** ✅
+
 ```bash
 npm install nanoid
 ```
+
 - Version: ^5.1.6
 - Used for generating unique node IDs
 
 ### 2. **Created Validation Utilities** ✅
+
 File: `frontend/src/utils/validateNode.ts`
 
 Functions:
+
 - `assertNoUserFieldsOutsideSettings(node)` - Validates single node
 - `validateAllNodes(nodes)` - Validates all nodes
 - `debugNodeStructure(node)` - Debug helper
 
 ### 3. **Updated EditorV2Shell** ✅
+
 File: `frontend/src/features/editorV2/EditorV2Shell.tsx`
 
 Changes:
+
 - **CustomNode Component:**
+
   - `data.label` → `data.title` ✅
   - `data.type` → `data.blockId` ✅
   - Removed subtitle display ✅
   - Uses `data.color` for border ✅
 
 - **onDrop Handler:**
+
   - Uses `nanoid()` for IDs ✅
   - Creates nodes with correct structure ✅
   - Adds `style.borderColor` ✅
   - Logs node structure for debugging ✅
 
 - **handleExport:**
+
   - Validates nodes before export ✅
   - Shows error if validation fails ✅
 
@@ -46,9 +55,11 @@ Changes:
   - Updates `settings` from JSON ✅
 
 ### 4. **Updated EditorStore** ✅
+
 File: `frontend/src/stores/editorStore.ts`
 
 Changes:
+
 - Imported `nanoid` ✅
 - Fixed initial start node:
   ```typescript
@@ -66,9 +77,11 @@ Changes:
   ```
 
 ### 5. **Updated SettingsPanel** ✅
+
 File: `frontend/src/features/editorV2/SettingsPanel.tsx`
 
 Changes:
+
 - Props: `blockId`, `title` (not `type`, `label`) ✅
 - Removed type selector ✅
 - Shows blockId as read-only ✅
@@ -78,6 +91,7 @@ Changes:
 ## Node Structure (STRICT)
 
 ### ✅ Correct Structure
+
 ```typescript
 {
   id: nanoid(),              // Unique ID
@@ -97,6 +111,7 @@ Changes:
 ```
 
 ### ❌ Forbidden
+
 - `data.label` (use `data.title`)
 - `data.subtitle` (not in model)
 - `data.type` (use `data.blockId`)
@@ -105,6 +120,7 @@ Changes:
 ## Validation
 
 ### On Export
+
 ```typescript
 if (!validateAllNodes(nodes)) {
   alert('Ошибка: некорректная структура узлов');
@@ -113,6 +129,7 @@ if (!validateAllNodes(nodes)) {
 ```
 
 ### Allowed Fields Check
+
 ```typescript
 const allowedFields = ['blockId', 'title', 'icon', 'color', 'settings'];
 // Throws error if other fields found
@@ -121,6 +138,7 @@ const allowedFields = ['blockId', 'title', 'icon', 'color', 'settings'];
 ## Testing
 
 ### Test Drag-Drop:
+
 1. Start frontend: `cd frontend && npm run dev`
 2. Drag block from library
 3. Drop on canvas
@@ -141,12 +159,14 @@ const allowedFields = ['blockId', 'title', 'icon', 'color', 'settings'];
    ```
 
 ### Test Validation:
+
 1. Create some nodes
 2. Click Export
 3. Should export successfully (nodes valid)
 4. Check exported JSON structure
 
 ### Test Settings:
+
 1. Click on a node
 2. Settings panel shows:
    - ID (unique)
@@ -159,15 +179,18 @@ const allowedFields = ['blockId', 'title', 'icon', 'color', 'settings'];
 ## Files Summary
 
 ### Created:
+
 - ✅ `frontend/src/utils/validateNode.ts`
 
 ### Modified:
+
 - ✅ `frontend/package.json` (added nanoid)
 - ✅ `frontend/src/features/editorV2/EditorV2Shell.tsx`
 - ✅ `frontend/src/stores/editorStore.ts`
 - ✅ `frontend/src/features/editorV2/SettingsPanel.tsx`
 
 ### Documentation:
+
 - ✅ `docs/STRICT_NODE_MODEL.md`
 - ✅ `frontend/STRICT_NODE_MODEL_SUMMARY.md`
 
@@ -202,4 +225,3 @@ The strict node model is now fully implemented. All new nodes created via drag-d
 **Status: ✅ COMPLETE**
 
 All nodes now strictly follow the BotForg data model with proper validation and error handling.
-

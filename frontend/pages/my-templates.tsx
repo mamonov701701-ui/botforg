@@ -9,21 +9,24 @@ export default function MyTemplatesPage() {
   const { user: authUser } = useAuth();
   const [templates, setTemplates] = useState<any[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    getMyTemplates().then((data: any) => setTemplates(data.items || data)).catch(() => setError("Ошибка загрузки шаблонов")).finally(() => setLoadingTemplates(false));
+    getMyTemplates()
+      .then((data: any) => setTemplates(data.items || data))
+      .catch(() => setError('Ошибка загрузки шаблонов'))
+      .finally(() => setLoadingTemplates(false));
   }, []);
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Удалить шаблон?")) return;
+    if (!confirm('Удалить шаблон?')) return;
     await deleteTemplate(id);
-    setTemplates((prev) => prev.filter((t: any) => t.id !== id));
+    setTemplates(prev => prev.filter((t: any) => t.id !== id));
   };
 
   const handlePublish = async (id: number) => {
     await publishTemplate(id);
-    setTemplates((prev) => prev.map((t: any) => t.id === id ? { ...t, is_public: true } : t));
+    setTemplates(prev => prev.map((t: any) => (t.id === id ? { ...t, is_public: true } : t)));
   };
 
   if (loading || loadingTemplates) return <div>Загрузка...</div>;
@@ -42,24 +45,43 @@ export default function MyTemplatesPage() {
               <div>
                 <div className="font-semibold">{t.name}</div>
                 <div className="text-xs text-gray-500">Категория: {t.category}</div>
-                <div className="text-xs text-gray-500">Создан: {new Date(t.created_at).toLocaleDateString()}</div>
+                <div className="text-xs text-gray-500">
+                  Создан: {new Date(t.created_at).toLocaleDateString()}
+                </div>
                 <div className="text-xs mt-1">
-                  Статус: {t.is_public ? <span className="text-green-600">Опубликован</span> : <span className="text-yellow-600">Черновик</span>}
+                  Статус:{' '}
+                  {t.is_public ? (
+                    <span className="text-green-600">Опубликован</span>
+                  ) : (
+                    <span className="text-yellow-600">Черновик</span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2 items-center">
-                {!t.is_public && (user.role === 'owner' || user.role === 'admin' || user.role === 'manager_template') && (
-                  <button
-                    onClick={() => handlePublish(t.id)}
-                    className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
+                {!t.is_public &&
+                  (user.role === 'owner' ||
+                    user.role === 'admin' ||
+                    user.role === 'manager_template') && (
+                    <button
+                      onClick={() => handlePublish(t.id)}
+                      className="px-2 py-1 bg-blue-600 text-white rounded text-xs"
+                    >
+                      Опубликовать
+                    </button>
+                  )}
+                {(user.role === 'owner' ||
+                  user.role === 'admin' ||
+                  user.role === 'manager_template') && (
+                  <Link
+                    href={`/template/edit/${t.id}`}
+                    className="px-2 py-1 bg-gray-200 rounded text-xs"
                   >
-                    Опубликовать
-                  </button>
+                    Редактировать
+                  </Link>
                 )}
-                {(user.role === 'owner' || user.role === 'admin' || user.role === 'manager_template') && (
-                  <Link href={`/template/edit/${t.id}`} className="px-2 py-1 bg-gray-200 rounded text-xs">Редактировать</Link>
-                )}
-                {(user.role === 'owner' || user.role === 'admin' || user.role === 'manager_template') && (
+                {(user.role === 'owner' ||
+                  user.role === 'admin' ||
+                  user.role === 'manager_template') && (
                   <button
                     onClick={() => handleDelete(t.id)}
                     className="px-2 py-1 bg-red-500 text-white rounded text-xs"
@@ -75,4 +97,4 @@ export default function MyTemplatesPage() {
       {/* <button className="mt-6 px-4 py-2 bg-green-600 text-white rounded">Создать шаблон</button> */}
     </div>
   );
-} 
+}

@@ -13,17 +13,22 @@ interface Props {
   onDuplicate: () => void;
 }
 
-export default function BlockSettingsPanel({ selectedNode, onClose, onDelete, onDuplicate }: Props) {
+export default function BlockSettingsPanel({
+  selectedNode,
+  onClose,
+  onDelete,
+  onDuplicate,
+}: Props) {
   const catalog = useEditorStore(state => state.catalog);
   const setNodes = useEditorStore(state => state.setNodes);
   const setValidationResult = useValidationStore(state => state.setValidationResult);
-  
+
   // Find block definition from catalog
-  const block = useMemo(() => 
-    catalog.find(b => b.id === selectedNode.data.blockId),
+  const block = useMemo(
+    () => catalog.find(b => b.id === selectedNode.data.blockId),
     [catalog, selectedNode.data.blockId]
   );
-  
+
   // Validate on mount and when settings change
   useEffect(() => {
     if (block) {
@@ -31,25 +36,27 @@ export default function BlockSettingsPanel({ selectedNode, onClose, onDelete, on
       setValidationResult(selectedNode.id, validation);
     }
   }, [selectedNode, block, setValidationResult]);
-  
+
   // Handle field change - updates node.data.settings
   const handleFieldChange = (fieldName: string, value: any) => {
-    setNodes(nodes => nodes.map(n => 
-      n.id === selectedNode.id 
-        ? { 
-            ...n, 
-            data: { 
-              ...n.data, 
-              settings: { 
-                ...n.data.settings, 
-                [fieldName]: value 
-              } 
-            } 
-          }
-        : n
-    ));
+    setNodes(nodes =>
+      nodes.map(n =>
+        n.id === selectedNode.id
+          ? {
+              ...n,
+              data: {
+                ...n.data,
+                settings: {
+                  ...n.data.settings,
+                  [fieldName]: value,
+                },
+              },
+            }
+          : n
+      )
+    );
   };
-  
+
   // Validate field
   const validateField = (field: BlockConfigField, value: any): string | undefined => {
     if (field.required && (value === null || value === undefined || value === '')) {
@@ -57,7 +64,7 @@ export default function BlockSettingsPanel({ selectedNode, onClose, onDelete, on
     }
     return undefined;
   };
-  
+
   // Handle inspect - logs settings to console
   const handleInspect = () => {
     console.group('🔍 Node Inspection');
@@ -68,18 +75,18 @@ export default function BlockSettingsPanel({ selectedNode, onClose, onDelete, on
     console.log('Full Node:', selectedNode);
     console.groupEnd();
   };
-  
+
   if (!block) {
     return (
-      <div style={{ 
-        height: '100%', 
-        padding: 16, 
-        background: '#0b1b2a', 
-        color: '#e2e8f0' 
-      }}>
-        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 12 }}>
-          ❌ Блок не найден
-        </div>
+      <div
+        style={{
+          height: '100%',
+          padding: 16,
+          background: '#0b1b2a',
+          color: '#e2e8f0',
+        }}
+      >
+        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 12 }}>❌ Блок не найден</div>
         <div style={{ opacity: 0.7, marginBottom: 8 }}>
           ID блока: {selectedNode.data.blockId || 'не указан'}
         </div>
@@ -89,67 +96,67 @@ export default function BlockSettingsPanel({ selectedNode, onClose, onDelete, on
       </div>
     );
   }
-  
+
   return (
-    <div style={{ 
-      height: '100%', 
-      display: 'flex',
-      flexDirection: 'column',
-      background: '#0b1b2a', 
-      color: '#e2e8f0',
-      overflow: 'hidden',
-    }}>
+    <div
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#0b1b2a',
+        color: '#e2e8f0',
+        overflow: 'hidden',
+      }}
+    >
       {/* Header */}
       <div style={{ padding: 16, borderBottom: '1px solid #1f2937' }}>
-        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>
-          {block.title}
-        </div>
-        <div style={{ opacity: 0.7, fontSize: 13, lineHeight: 1.4 }}>
-          {block.description}
-        </div>
-        <div style={{ opacity: 0.5, fontSize: 11, marginTop: 8 }}>
-          ID: {selectedNode.id}
-        </div>
+        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>{block.title}</div>
+        <div style={{ opacity: 0.7, fontSize: 13, lineHeight: 1.4 }}>{block.description}</div>
+        <div style={{ opacity: 0.5, fontSize: 11, marginTop: 8 }}>ID: {selectedNode.id}</div>
       </div>
-      
+
       {/* Form Fields */}
-      <div style={{ 
-        flex: 1, 
-        overflowY: 'auto', 
-        padding: 16 
-      }}>
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: 16,
+        }}
+      >
         {block.configSchema && block.configSchema.length > 0 ? (
           block.configSchema.map(field => (
             <FieldRenderer
               key={field.name}
               field={field}
               value={selectedNode.data.settings?.[field.name] ?? field.default}
-              onChange={(v) => handleFieldChange(field.name, v)}
+              onChange={v => handleFieldChange(field.name, v)}
               error={validateField(field, selectedNode.data.settings?.[field.name])}
             />
           ))
         ) : (
-          <div style={{ 
-            padding: 16, 
-            background: '#1a1a2e', 
-            borderRadius: 8,
-            textAlign: 'center',
-            opacity: 0.6,
-          }}>
-            <div style={{ fontSize: 13 }}>
-              У этого блока нет настраиваемых параметров
-            </div>
+          <div
+            style={{
+              padding: 16,
+              background: '#1a1a2e',
+              borderRadius: 8,
+              textAlign: 'center',
+              opacity: 0.6,
+            }}
+          >
+            <div style={{ fontSize: 13 }}>У этого блока нет настраиваемых параметров</div>
           </div>
         )}
       </div>
-      
+
       {/* Footer Actions */}
-      <div style={{ 
-        padding: 16, 
-        borderTop: '1px solid #1f2937',
-        display: 'flex',
-        gap: 8
-      }}>
+      <div
+        style={{
+          padding: 16,
+          borderTop: '1px solid #1f2937',
+          display: 'flex',
+          gap: 8,
+        }}
+      >
         <button
           onClick={handleInspect}
           style={{
@@ -209,4 +216,3 @@ export default function BlockSettingsPanel({ selectedNode, onClose, onDelete, on
     </div>
   );
 }
-

@@ -1,5 +1,6 @@
-from passlib.context import CryptContext
 import re
+
+from passlib.context import CryptContext
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -31,4 +32,3 @@ def validate_password(password: str) -> tuple[bool, str]:
 def normalize_email(email: str) -> str:
     """Normalize email address (trim and lowercase)"""
     return email.strip().lower()
-

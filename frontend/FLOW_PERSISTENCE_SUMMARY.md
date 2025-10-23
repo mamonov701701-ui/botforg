@@ -9,16 +9,19 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ### 4 New Files Created
 
 1. **`frontend/src/utils/schemaValidation.ts`** - Validation utilities
+
    - `validateNodeSettings()` - Single node validation
    - `validateAllNodesWithSchema()` - Full flow validation
    - `hasValidationErrors()` - Error checker
 
 2. **`frontend/src/stores/validationStore.ts`** - Validation state management
+
    - Map-based storage for O(1) lookups
    - Actions: set, clear, get validation results
    - Getters: hasErrors(), getInvalidNodes()
 
 3. **`frontend/src/features/editorV2/ValidationModal.tsx`** - Validation summary UI
+
    - Lists all invalid nodes
    - Shows missing required fields
    - "Перейти" button for navigation
@@ -32,6 +35,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ### 3 Files Modified
 
 1. **`frontend/src/features/editorV2/EditorV2Shell.tsx`**
+
    - Added validation badge to CustomNode (⚠️ + red border)
    - Integrated ValidationModal and ExportConfirmModal
    - Enhanced export with metadata (plan, role, counts, timestamp)
@@ -39,6 +43,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
    - Auto-validation on nodes change
 
 2. **`frontend/src/features/editorV2/Toolbar.tsx`**
+
    - Updated to 3 buttons: Сохранить, Загрузить, Проверить
    - Added icons: 💾 📂 ✓
    - Clean, modern styling
@@ -51,34 +56,40 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ## Key Features
 
 ### ✅ Schema-based Validation
+
 - Checks all required fields from configSchema
 - Auto-validates on every node change
 - Real-time feedback in UI
 
 ### ✅ Visual Error Badges
+
 - Red border on invalid nodes
 - ⚠️ badge in bottom-right corner (28x28px)
 - Tooltip showing missing fields
 
 ### ✅ Validation Modal
+
 - Shows all invalid nodes
 - Lists missing fields per node
 - "Перейти" button for navigation
 - Success state for valid flows
 
 ### ✅ Safe Export
+
 - Checks validation before download
 - Warning modal if errors exist
 - Option to export anyway
 - Includes metadata (plan, role, counts, timestamp)
 
 ### ✅ Robust Import
+
 - Validates file structure
 - Checks settings exist on all nodes
 - Shows error toasts for invalid files
 - Auto-validates after import
 
 ### ✅ Real-time Validation
+
 - Validates on field changes
 - Instant badge appearance/disappearance
 - No manual trigger needed
@@ -103,6 +114,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ## How It Works
 
 ### Data Flow
+
 ```
 1. User edits node settings
    ↓
@@ -118,6 +130,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ```
 
 ### Export Flow
+
 ```
 1. User clicks "Сохранить"
    ↓
@@ -130,6 +143,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ```
 
 ### Import Flow
+
 ```
 1. User clicks "Загрузить"
    ↓
@@ -147,6 +161,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ## Testing Guide
 
 ### Test 1: Visual Error Badges
+
 ```
 1. Drag "Сообщение" block to canvas
 2. Don't fill required "text" field
@@ -156,6 +171,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ```
 
 ### Test 2: Export with Errors
+
 ```
 1. Create flow with invalid nodes
 2. Click "Сохранить"
@@ -164,6 +180,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ```
 
 ### Test 3: Export Success
+
 ```
 1. Create valid flow
 2. Click "Сохранить"
@@ -173,6 +190,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ```
 
 ### Test 4: Import Valid
+
 ```
 1. Export a flow
 2. Clear canvas
@@ -182,6 +200,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ```
 
 ### Test 5: Import Invalid
+
 ```
 1. Try corrupted JSON
 2. See: Error toast "Файл повреждён"
@@ -194,6 +213,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ```
 
 ### Test 6: Real-time Validation
+
 ```
 1. Select node, open settings panel
 2. Leave required field empty
@@ -207,17 +227,20 @@ Successfully implemented comprehensive flow save/load functionality with automat
 All checks passed ✅:
 
 **Files Created:**
+
 - ✓ schemaValidation.ts
 - ✓ validationStore.ts
 - ✓ ValidationModal.tsx
 - ✓ ExportConfirmModal.tsx
 
 **Files Modified:**
+
 - ✓ EditorV2Shell.tsx
 - ✓ Toolbar.tsx
 - ✓ BlockSettingsPanel/index.tsx
 
 **Integration:**
+
 - ✓ ValidationModal integrated
 - ✓ ExportConfirmModal integrated
 - ✓ Schema validation integrated
@@ -226,6 +249,7 @@ All checks passed ✅:
 - ✓ Error badge in CustomNode
 
 **Quality:**
+
 - ✓ Zero linter errors
 - ✓ Zero TypeScript errors
 - ✓ Full type safety
@@ -234,11 +258,13 @@ All checks passed ✅:
 ## Next Steps
 
 1. **Test in browser:**
+
    ```bash
    cd frontend && npm run dev
    ```
 
 2. **Test scenarios:**
+
    - Create nodes with missing required fields
    - Try exporting with errors
    - Try importing valid/invalid files
@@ -252,16 +278,15 @@ All checks passed ✅:
 
 ## Summary
 
-✅ **4 new files created**  
-✅ **3 files modified**  
-✅ **Schema-based validation** - All required fields checked  
-✅ **Visual feedback** - Error badges and red borders  
-✅ **Validation modal** - Complete error summary  
-✅ **Safe export** - Warnings before saving invalid flows  
-✅ **Robust import** - File validation and error handling  
-✅ **Real-time updates** - Instant validation on changes  
-✅ **Rich metadata** - Export includes plan, role, counts  
-✅ **Zero errors** - Clean linting and compilation  
+✅ **4 new files created**
+✅ **3 files modified**
+✅ **Schema-based validation** - All required fields checked
+✅ **Visual feedback** - Error badges and red borders
+✅ **Validation modal** - Complete error summary
+✅ **Safe export** - Warnings before saving invalid flows
+✅ **Robust import** - File validation and error handling
+✅ **Real-time updates** - Instant validation on changes
+✅ **Rich metadata** - Export includes plan, role, counts
+✅ **Zero errors** - Clean linting and compilation
 
 The flow persistence and validation system is fully implemented and production-ready! 🎉
-

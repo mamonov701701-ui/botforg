@@ -22,7 +22,11 @@ class Message(Base):
     language = Column(String(10), nullable=True)  # 'ru', 'en', etc.
     is_paid = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     # Связи
     bot = relationship("Bot", foreign_keys=[bot_id])

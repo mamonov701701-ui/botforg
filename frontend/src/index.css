@@ -7,7 +7,9 @@
   --footer-h: 0px;
 }
 
-body, html, #root {
+body,
+html,
+#root {
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -15,4 +17,4 @@ body, html, #root {
   color: white;
   font-family: 'Inter', sans-serif;
   overflow-x: hidden;
-} 
+}

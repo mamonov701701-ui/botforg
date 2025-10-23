@@ -11,7 +11,7 @@ interface NodeSettingsProps {
 
 export default function NodeSettings({ node, onUpdate }: NodeSettingsProps) {
   if (!node) return null;
-  
+
   return (
     <div className="node-settings">
       <h3>Node Settings</h3>
@@ -19,7 +19,7 @@ export default function NodeSettings({ node, onUpdate }: NodeSettingsProps) {
         <label>Label:</label>
         <input
           value={node.data?.label || ''}
-          onChange={(e) => onUpdate(node.id, { ...node.data, label: e.target.value })}
+          onChange={e => onUpdate(node.id, { ...node.data, label: e.target.value })}
         />
       </div>
     </div>

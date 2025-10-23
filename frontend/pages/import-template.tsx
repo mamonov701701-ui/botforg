@@ -8,7 +8,7 @@ export default function ImportTemplatePage() {
   const [file, setFile] = useState<File | null>(null);
   const [json, setJson] = useState<any>(null);
   const [error, setError] = useState('');
-  const [preview, setPreview] = useState<{nodes: any[], edges: any[]} | null>(null);
+  const [preview, setPreview] = useState<{ nodes: any[]; edges: any[] } | null>(null);
   const [importing, setImporting] = useState(false);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -80,7 +80,9 @@ export default function ImportTemplatePage() {
             onChange={handleFile}
             className="mb-4"
           />
-          <div className="text-gray-500 text-sm mb-2">Выберите .json файл, экспортированный из редактора</div>
+          <div className="text-gray-500 text-sm mb-2">
+            Выберите .json файл, экспортированный из редактора
+          </div>
           {error && <div className="text-red-600 mb-2">{error}</div>}
         </div>
       )}
@@ -93,14 +95,24 @@ export default function ImportTemplatePage() {
             className="bg-blue-600 text-white px-4 py-2 rounded"
             onClick={handleImport}
             disabled={importing}
-          >{importing ? 'Импорт...' : 'Импортировать'}</button>
+          >
+            {importing ? 'Импорт...' : 'Импортировать'}
+          </button>
           <button
             className="ml-4 px-4 py-2 rounded border"
-            onClick={() => { setStep(1); setPreview(null); setFile(null); setJson(null); setError(''); }}
-          >Назад</button>
+            onClick={() => {
+              setStep(1);
+              setPreview(null);
+              setFile(null);
+              setJson(null);
+              setError('');
+            }}
+          >
+            Назад
+          </button>
           {error && <div className="text-red-600 mt-2">{error}</div>}
         </div>
       )}
     </div>
   );
-} 
+}

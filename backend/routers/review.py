@@ -1,7 +1,3 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
 # 🔧 ВАЖНО: именно так импортируем SessionLocal из нашего проекта
 from backend.database import SessionLocal
 from backend.dependencies.auth import get_current_user
@@ -9,8 +5,12 @@ from backend.models.review import Review
 from backend.models.template import Template
 from backend.models.user import User as UserModel
 from backend.schemas.review import ReviewCreate, ReviewOut
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 router = APIRouter()
+
 
 # Унифицированный Dependency для работы с БД
 def get_db():

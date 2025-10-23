@@ -3,15 +3,7 @@ import { useRouter } from 'next/router';
 import { useRequireAuth } from '@/hooks/useRequireAuth';
 import { getUser, updateUserRole, deleteUser } from '@/api/users';
 
-const ROLES = [
-  'owner',
-  'admin',
-  'manager_template',
-  'developer',
-  'support',
-  'viewer',
-  'user',
-];
+const ROLES = ['owner', 'admin', 'manager_template', 'developer', 'support', 'viewer', 'user'];
 
 export default function AdminUserEditPage() {
   const { user: currentUser, loading } = useRequireAuth();
@@ -78,9 +70,15 @@ export default function AdminUserEditPage() {
   return (
     <div className="max-w-xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">Пользователь #{user.id}</h1>
-      <div className="mb-2"><b>Имя:</b> {user.name || <span className="text-gray-400">—</span>}</div>
-      <div className="mb-2"><b>Email:</b> {user.email}</div>
-      <div className="mb-2"><b>Дата регистрации:</b> {new Date(user.created_at).toLocaleString()}</div>
+      <div className="mb-2">
+        <b>Имя:</b> {user.name || <span className="text-gray-400">—</span>}
+      </div>
+      <div className="mb-2">
+        <b>Email:</b> {user.email}
+      </div>
+      <div className="mb-2">
+        <b>Дата регистрации:</b> {new Date(user.created_at).toLocaleString()}
+      </div>
       <div className="mb-4">
         <b>Роль:</b>{' '}
         <select
@@ -90,7 +88,9 @@ export default function AdminUserEditPage() {
           className="border rounded px-2 py-1 text-sm"
         >
           {ROLES.map(r => (
-            <option key={r} value={r}>{r}</option>
+            <option key={r} value={r}>
+              {r}
+            </option>
           ))}
         </select>
         {isOwner && <span className="ml-2 text-gray-500">(владелец, нельзя изменить)</span>}
@@ -117,4 +117,4 @@ export default function AdminUserEditPage() {
       {error && <div className="text-red-600 mt-4">{error}</div>}
     </div>
   );
-} 
+}

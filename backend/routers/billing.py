@@ -1,9 +1,5 @@
 import logging
 from datetime import datetime, timezone
-from decimal import Decimal
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
@@ -16,6 +12,8 @@ from backend.schemas.billing import (
     UserQuotaOut,
     UserQuotaUpdate,
 )
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

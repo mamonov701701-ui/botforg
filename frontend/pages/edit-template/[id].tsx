@@ -22,9 +22,14 @@ const EditTemplatePage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const isDirty = JSON.stringify(nodes) !== JSON.stringify(initialNodes) || JSON.stringify(edges) !== JSON.stringify(initialEdges);
+  const isDirty =
+    JSON.stringify(nodes) !== JSON.stringify(initialNodes) ||
+    JSON.stringify(edges) !== JSON.stringify(initialEdges);
   const mountedRef = useRef(false);
-  const [errorIds, setErrorIds] = useState<{nodes: string[], edges: string[]}>({nodes: [], edges: []});
+  const [errorIds, setErrorIds] = useState<{ nodes: string[]; edges: string[] }>({
+    nodes: [],
+    edges: [],
+  });
   const [toast, setToast] = useState<string | null>(null);
   const [lastAutoSave, setLastAutoSave] = useState<Date | null>(null);
   const [isPublic, setIsPublic] = useState<boolean | null>(null);
@@ -37,8 +42,8 @@ const EditTemplatePage: React.FC = () => {
     getTemplateContent(idStr)
       .then((tpl: any) => {
         let content = tpl.content || {};
-        const nodesIn = Array.isArray(content.nodes) ? content.nodes as FlowNode[] : [];
-        const edgesIn = Array.isArray(content.edges) ? content.edges as FlowEdge[] : [];
+        const nodesIn = Array.isArray(content.nodes) ? (content.nodes as FlowNode[]) : [];
+        const edgesIn = Array.isArray(content.edges) ? (content.edges as FlowEdge[]) : [];
 
         let nextNodes = [...nodesIn];
         // Ensure/start node exists and placed top-left
@@ -52,12 +57,16 @@ const EditTemplatePage: React.FC = () => {
           });
         } else {
           const s = nextNodes[startIndex];
-          const nearCenter = !s.position || (Math.abs((s.position.x ?? 0)) < 150 && Math.abs((s.position.y ?? 0)) < 150);
+          const nearCenter =
+            !s.position || (Math.abs(s.position.x ?? 0) < 150 && Math.abs(s.position.y ?? 0) < 150);
           if (nearCenter) {
             nextNodes[startIndex] = { ...s, position: { x: 50, y: 50 } };
           }
           if (!s.data?.label) {
-            nextNodes[startIndex] = { ...nextNodes[startIndex], data: { ...s.data, label: 'Начало' } } as any;
+            nextNodes[startIndex] = {
+              ...nextNodes[startIndex],
+              data: { ...s.data, label: 'Начало' },
+            } as any;
           }
         }
 
@@ -106,7 +115,7 @@ const EditTemplatePage: React.FC = () => {
     setSaving(true);
     setSaveStatus(null);
     setToast(null);
-    setErrorIds({nodes: [], edges: []});
+    setErrorIds({ nodes: [], edges: [] });
     const validation = validateFlow(nodes, edges);
     if (!validation.valid) {
       setSaveStatus('error');
@@ -154,13 +163,9 @@ const EditTemplatePage: React.FC = () => {
   };
 
   // Выбор и редактирование блока
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
+  const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
   const handleUpdateNode = (id: string, data: any) => {
-    setNodes(
-      nodes.map((n) =>
-        n.id === id ? { ...n, data: { ...n.data, ...data } } : n
-      )
-    );
+    setNodes(nodes.map(n => (n.id === id ? { ...n, data: { ...n.data, ...data } } : n)));
   };
 
   if (loading) return <div>Загрузка...</div>;
@@ -172,7 +177,9 @@ const EditTemplatePage: React.FC = () => {
         <div className="text-xl font-bold">Редактор шаблона #{id}</div>
         <div className="flex items-center gap-4">
           <button
-            className={`px-4 py-2 rounded text-white ${isDirty ? 'bg-blue-600' : 'bg-gray-400'} disabled:opacity-50`}
+            className={`px-4 py-2 rounded text-white ${
+              isDirty ? 'bg-blue-600' : 'bg-gray-400'
+            } disabled:opacity-50`}
             onClick={handleSave}
             disabled={!isDirty || saving}
             title="Сохранить шаблон (Ctrl+S)"
@@ -183,9 +190,13 @@ const EditTemplatePage: React.FC = () => {
             className="px-4 py-2 rounded bg-green-600 text-white"
             onClick={handleExport}
             title="Экспортировать шаблон в .json"
-          >Экспорт</button>
+          >
+            Экспорт
+          </button>
           {lastAutoSave && (
-            <span className="text-xs text-gray-500">Автосохранено: {lastAutoSave.toLocaleTimeString()}</span>
+            <span className="text-xs text-gray-500">
+              Автосохранено: {lastAutoSave.toLocaleTimeString()}
+            </span>
           )}
         </div>
         {saveStatus === 'success' && <span className="ml-4 text-green-600">Сохранено!</span>}
@@ -202,13 +213,19 @@ const EditTemplatePage: React.FC = () => {
             className={`px-4 py-2 rounded text-white ${isPublic ? 'bg-gray-500' : 'bg-blue-600'}`}
             onClick={() => handlePublish(!isPublic)}
             disabled={publishing}
-            title={isPublic ? 'Снять с публикации. Шаблон исчезнет из витрины.' : 'Опубликовать. Шаблон появится в витрине и будет доступен другим пользователям.'}
+            title={
+              isPublic
+                ? 'Снять с публикации. Шаблон исчезнет из витрины.'
+                : 'Опубликовать. Шаблон появится в витрине и будет доступен другим пользователям.'
+            }
           >
             {isPublic ? '🙈 Снять с публикации' : '📢 Опубликовать'}
           </button>
         )}
         {pubToast && <span className="ml-2 text-green-600 text-sm">{pubToast}</span>}
-        <Link href="/templates" className="ml-auto text-blue-600 underline">← К витрине</Link>
+        <Link href="/templates" className="ml-auto text-blue-600 underline">
+          ← К витрине
+        </Link>
       </div>
       <div className="flex-1 grid grid-cols-12 gap-0 h-0 min-h-0">
         <div className="col-span-2 border-r bg-white min-h-0 overflow-y-auto">
@@ -226,10 +243,7 @@ const EditTemplatePage: React.FC = () => {
             errorEdgeIds={errorIds.edges}
           />
           <div className="absolute top-2 right-2 w-72 bg-white border rounded shadow-lg z-10">
-            <NodeSettings
-              node={selectedNode}
-              onUpdate={handleUpdateNode}
-            />
+            <NodeSettings node={selectedNode} onUpdate={handleUpdateNode} />
           </div>
         </div>
         <div className="col-span-2 border-l bg-white min-h-0 overflow-y-auto">
@@ -241,4 +255,4 @@ const EditTemplatePage: React.FC = () => {
   );
 };
 
-export default EditTemplatePage; 
+export default EditTemplatePage;

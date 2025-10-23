@@ -7,14 +7,14 @@ export default function AdminUsersPage() {
   const { user, loading } = useRequireAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
-  const [error, setError] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-  const [search, setSearch] = useState("");
+  const [error, setError] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     getTeam()
       .then(setUsers)
-      .catch(() => setError("Ошибка загрузки пользователей"))
+      .catch(() => setError('Ошибка загрузки пользователей'))
       .finally(() => setLoadingUsers(false));
   }, []);
 
@@ -23,14 +23,17 @@ export default function AdminUsersPage() {
     return <div className="p-8 text-center text-red-600">Доступ запрещён</div>;
   }
 
-  const filteredUsers = users.filter(u =>
-    (!roleFilter || u.role === roleFilter) &&
-    (!search || u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()))
+  const filteredUsers = users.filter(
+    u =>
+      (!roleFilter || u.role === roleFilter) &&
+      (!search ||
+        u.name?.toLowerCase().includes(search.toLowerCase()) ||
+        u.email?.toLowerCase().includes(search.toLowerCase()))
   );
 
   const handleRoleChange = async (id: number, role: string) => {
     await updateUserRole(id, role);
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, role } : u));
+    setUsers(prev => prev.map(u => (u.id === id ? { ...u, role } : u)));
     alert('Роль обновлена');
   };
 
@@ -53,8 +56,10 @@ export default function AdminUsersPage() {
             className="border rounded px-2 py-1 text-xs"
           >
             <option value="">Все роли</option>
-            {ROLES.filter((r) => r !== 'owner').map((role) => (
-              <option key={role} value={role}>{role}</option>
+            {ROLES.filter(r => r !== 'owner').map(role => (
+              <option key={role} value={role}>
+                {role}
+              </option>
             ))}
           </select>
         </div>
@@ -94,8 +99,10 @@ export default function AdminUsersPage() {
                     onChange={e => handleRoleChange(u.id, e.target.value)}
                     className="border px-2 py-1 text-xs"
                   >
-                    {ROLES.filter((r) => r !== 'owner').map((role) => (
-                      <option key={role} value={role}>{role}</option>
+                    {ROLES.filter(r => r !== 'owner').map(role => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
                     ))}
                   </select>
                 </td>
@@ -115,4 +122,4 @@ export default function AdminUsersPage() {
       )}
     </div>
   );
-} 
+}

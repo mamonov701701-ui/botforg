@@ -20,7 +20,7 @@ export function validateNodeSettings(
       nodeId: node.id,
       isValid: false,
       missingFields: ['Block definition not found'],
-      blockTitle: node.data.title
+      blockTitle: node.data.title,
     };
   }
 
@@ -46,7 +46,7 @@ export function validateNodeSettings(
     nodeId: node.id,
     isValid: missingFields.length === 0,
     missingFields,
-    blockTitle: block.title
+    blockTitle: block.title,
   };
 }
 
@@ -69,4 +69,3 @@ export function validateAllNodesWithSchema(
 export function hasValidationErrors(results: ValidationResult[]): boolean {
   return results.some(r => !r.isValid);
 }
-

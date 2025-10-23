@@ -1,14 +1,13 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.dependencies.roles import require_role
 from backend.models.bonus_account import UserBonusAccount
 from backend.models.user import User
-from backend.schemas.user import UserCreate, UserOut, UserRoleUpdate
+from backend.schemas.user import UserOut, UserRoleUpdate
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

@@ -18,11 +18,19 @@ export default function Header() {
 
   return (
     <header className="w-full bg-white border-b flex items-center px-6 py-3 gap-6">
-      <Link href="/" className="font-bold text-xl text-blue-700">BotForg</Link>
+      <Link href="/" className="font-bold text-xl text-blue-700">
+        BotForg
+      </Link>
       <nav className="flex gap-4 ml-auto items-center">
-        <Link href="/templates" className="text-sm text-gray-700 hover:underline">Маркетплейс</Link>
-        <Link href="/analytics" className="text-sm text-gray-700 hover:underline">Аналитика</Link>
-        <Link href="/referrals" className="text-sm text-gray-700 hover:underline">Рефералы</Link>
+        <Link href="/templates" className="text-sm text-gray-700 hover:underline">
+          Маркетплейс
+        </Link>
+        <Link href="/analytics" className="text-sm text-gray-700 hover:underline">
+          Аналитика
+        </Link>
+        <Link href="/referrals" className="text-sm text-gray-700 hover:underline">
+          Рефералы
+        </Link>
         {bonus !== null && (
           <Link
             href="/referrals"
@@ -32,8 +40,10 @@ export default function Header() {
             <span className="text-lg">💰</span> {bonus} ₽
           </Link>
         )}
-        <Link href="/account" className="ml-4 text-gray-700 hover:underline">Профиль</Link>
+        <Link href="/account" className="ml-4 text-gray-700 hover:underline">
+          Профиль
+        </Link>
       </nav>
     </header>
   );
-} 
+}

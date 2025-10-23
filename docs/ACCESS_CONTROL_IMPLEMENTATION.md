@@ -27,7 +27,9 @@ Access Check:
 ## Files Created
 
 ### 1. **frontend/src/utils/accessControl.ts**
+
 Access control utility functions:
+
 - `canAccessBlock()` - Checks if user can access a block
 - `getAccessDeniedMessage()` - Generates user-friendly error messages
 - `logAccessDenied()` - Logs denied attempts for analytics
@@ -38,13 +40,14 @@ export function canAccessBlock(
   userPlan: PlanType,
   userRole: RoleType
 ): boolean {
-  return block.planAccess.includes(userPlan) 
-      && block.permissions.includes(userRole);
+  return block.planAccess.includes(userPlan) && block.permissions.includes(userRole);
 }
 ```
 
 ### 2. **frontend/src/features/editorV2/ToastContainer.tsx**
+
 Toast notification component:
+
 - Displays toast messages in top-right corner
 - Auto-dismisses after 3 seconds
 - Manual close button
@@ -54,7 +57,9 @@ Toast notification component:
 ## Files Modified
 
 ### 1. **frontend/src/stores/editorStore.ts**
+
 Added toast state management:
+
 - `toasts: Toast[]` - Array of active toasts
 - `showToast(message, type)` - Add new toast
 - `removeToast(id)` - Remove toast by ID
@@ -71,7 +76,9 @@ export interface Toast {
 ```
 
 ### 2. **frontend/src/features/editorV2/EditorControls.tsx**
+
 Added plan/role badge:
+
 - Visual badge showing current plan (color-coded)
 - Shows role below plan
 - Plan colors: Free (gray), Pro (blue), Enterprise (purple)
@@ -79,27 +86,36 @@ Added plan/role badge:
 ```typescript
 const getPlanBadgeColor = (plan: PlanType) => {
   switch (plan) {
-    case 'free': return '#6b7280';
-    case 'pro': return '#3b82f6';
-    case 'enterprise': return '#8b5cf6';
+    case 'free':
+      return '#6b7280';
+    case 'pro':
+      return '#3b82f6';
+    case 'enterprise':
+      return '#8b5cf6';
   }
 };
 ```
 
 ### 3. **frontend/src/features/editorV2/BlockLibrary.tsx**
+
 Added plan badge to header:
+
 - Header shows "Библиотека блоков [PLAN]"
 - Smooth transitions when catalog changes
 
 ### 4. **frontend/src/features/editorV2/EditorV2Shell.tsx**
+
 Integrated access control:
+
 - Import access control utilities
 - Validate block access in onDrop handler
 - Show toast notifications
 - Import and render ToastContainer
 
 ### 5. **frontend/src/features/editorV2/flow.css**
+
 Added toast animation:
+
 ```css
 @keyframes slideIn {
   from {
@@ -116,22 +132,26 @@ Added toast animation:
 ## Features Implemented
 
 ### ✅ Drop Validation
+
 - Validates plan and role before creating node
 - Cancels drop if access denied
 - Shows warning toast with specific message
 
 ### ✅ Toast Notifications
+
 Four toast types with distinct colors and icons:
 
-| Type | Color | Icon | Use Case |
-|------|-------|------|----------|
-| Success | Green (#22c55e) | ✅ | Block added successfully |
-| Warning | Orange (#f59e0b) | ⚠️ | Access denied |
-| Error | Red (#ef4444) | ❌ | System error |
-| Info | Blue (#3b82f6) | ℹ️ | General info |
+| Type    | Color            | Icon | Use Case                 |
+| ------- | ---------------- | ---- | ------------------------ |
+| Success | Green (#22c55e)  | ✅   | Block added successfully |
+| Warning | Orange (#f59e0b) | ⚠️   | Access denied            |
+| Error   | Red (#ef4444)    | ❌   | System error             |
+| Info    | Blue (#3b82f6)   | ℹ️   | General info             |
 
 ### ✅ Visual Badges
+
 **Plan/Role Badge (EditorControls):**
+
 ```
 ┌─────────────┐
 │ 👤 PRO      │
@@ -140,12 +160,15 @@ Four toast types with distinct colors and icons:
 ```
 
 **Library Header:**
+
 ```
 Библиотека блоков [PRO]
 ```
 
 ### ✅ Access Logging
+
 Console logging for denied attempts:
+
 ```
 🚫 Access Denied
 Block: payment - Оплата
@@ -160,6 +183,7 @@ Timestamp: 2025-01-13T...
 ## Access Control Logic
 
 ### Block Access Check
+
 ```typescript
 function canAccessBlock(block, userPlan, userRole) {
   const hasPlanAccess = block.planAccess.includes(userPlan);
@@ -173,16 +197,19 @@ Both conditions must be true for access to be granted.
 ### Access Denied Messages
 
 **Plan Restriction:**
+
 ```
 "Блок \"Оплата\" доступен только в тарифе PRO / ENTERPRISE"
 ```
 
 **Role Restriction:**
+
 ```
 "У вас недостаточно прав для использования блока \"Пользовательский код\""
 ```
 
 **Success:**
+
 ```
 "Блок \"Сообщение\" добавлен"
 ```
@@ -190,6 +217,7 @@ Both conditions must be true for access to be granted.
 ## Testing Guide
 
 ### Scenario 1: Free Plan Restriction
+
 ```
 1. Set plan=free, role=developer in EditorControls
 2. Try to drag "Оплата" block (requires pro/enterprise)
@@ -201,6 +229,7 @@ Both conditions must be true for access to be granted.
 ```
 
 ### Scenario 2: Role Restriction
+
 ```
 1. Set plan=enterprise, role=viewer
 2. Try to drag "Пользовательский код" block (requires developer+)
@@ -212,6 +241,7 @@ Both conditions must be true for access to be granted.
 ```
 
 ### Scenario 3: Success
+
 ```
 1. Set plan=free, role=developer
 2. Drag "Сообщение" block (allowed for free)
@@ -223,6 +253,7 @@ Both conditions must be true for access to be granted.
 ```
 
 ### Scenario 4: Plan Change Updates
+
 ```
 1. Set plan=free
 2. Observe ~8 blocks in library
@@ -236,6 +267,7 @@ Both conditions must be true for access to be granted.
 ```
 
 ### Scenario 5: Toast Auto-Dismiss
+
 ```
 1. Trigger any toast (e.g., drop restricted block)
 2. Wait 3 seconds
@@ -244,6 +276,7 @@ Both conditions must be true for access to be granted.
 ```
 
 ### Scenario 6: Toast Manual Close
+
 ```
 1. Trigger any toast
 2. Click × button
@@ -252,6 +285,7 @@ Both conditions must be true for access to be granted.
 ```
 
 ### Scenario 7: Multiple Toasts
+
 ```
 1. Quickly drop 3 restricted blocks
 2. Expected:
@@ -263,6 +297,7 @@ Both conditions must be true for access to be granted.
 ## Verification Checklist
 
 ### Visual Elements
+
 - [x] Plan/role badge visible in EditorControls
 - [x] Badge shows correct plan with color coding
 - [x] Badge shows current role
@@ -270,12 +305,14 @@ Both conditions must be true for access to be granted.
 - [x] Block count displayed correctly
 
 ### Drop Validation
+
 - [x] Free plan cannot drop pro/enterprise blocks
 - [x] Viewer role cannot drop developer+ blocks
 - [x] Allowed blocks can be dropped normally
 - [x] Drop validation happens before node creation
 
 ### Toast Notifications
+
 - [x] Toast appears on denied drop
 - [x] Toast shows correct message
 - [x] Toast has correct color and icon
@@ -286,6 +323,7 @@ Both conditions must be true for access to be granted.
 - [x] Slide-in animation works
 
 ### Console Logging
+
 - [x] Denied drops logged to console
 - [x] Log includes block ID and title
 - [x] Log shows user plan and role
@@ -294,6 +332,7 @@ Both conditions must be true for access to be granted.
 - [x] Grouped console output
 
 ### Plan/Role Changes
+
 - [x] Changing plan updates catalog
 - [x] Changing role updates catalog
 - [x] Badge updates immediately
@@ -301,6 +340,7 @@ Both conditions must be true for access to be granted.
 - [x] Smooth transitions
 
 ### Technical
+
 - [x] No linter errors
 - [x] No console errors
 - [x] No TypeScript errors
@@ -310,6 +350,7 @@ Both conditions must be true for access to be granted.
 ## Code Examples
 
 ### Using Access Control
+
 ```typescript
 import { canAccessBlock, getAccessDeniedMessage, logAccessDenied } from '../../utils/accessControl';
 
@@ -326,6 +367,7 @@ showToast(`Блок "${block.title}" добавлен`, 'success');
 ```
 
 ### Showing Toast
+
 ```typescript
 // From any component
 const showToast = useEditorStore(state => state.showToast);
@@ -344,6 +386,7 @@ showToast('New feature available', 'info');
 ```
 
 ### Accessing Plan/Role
+
 ```typescript
 // From component
 const { plan, role } = useEditorStore();
@@ -355,6 +398,7 @@ const { plan, role } = useEditorStore.getState();
 ## Future Enhancements
 
 ### Analytics Integration
+
 ```typescript
 // In logAccessDenied:
 analytics.track('block_access_denied', {
@@ -370,6 +414,7 @@ analytics.track('block_access_denied', {
 ```
 
 ### Upgrade Prompts
+
 ```typescript
 // Show upgrade CTA in toast for plan restrictions
 if (!hasPlanAccess) {
@@ -384,6 +429,7 @@ if (!hasPlanAccess) {
 ```
 
 ### Block Preview
+
 ```typescript
 // Allow viewing block details even without access
 if (!canAccessBlock(block, plan, role)) {
@@ -395,16 +441,19 @@ if (!canAccessBlock(block, plan, role)) {
 ## Performance Considerations
 
 ### Toast Management
+
 - Toasts auto-dismiss via setTimeout
 - Maximum 5 toasts shown simultaneously
 - Old toasts removed from array after animation
 
 ### Access Checks
+
 - O(1) complexity for includes() checks
 - No network calls during validation
 - Catalog pre-filtered by backend
 
 ### State Updates
+
 - Zustand provides efficient re-renders
 - Only affected components update
 - No prop drilling required
@@ -412,11 +461,13 @@ if (!canAccessBlock(block, plan, role)) {
 ## Security Notes
 
 ### Client-Side Validation
+
 - Access control is enforced client-side
 - Backend MUST also validate permissions
 - This is UX enhancement, not security boundary
 
 ### Backend Validation Required
+
 ```python
 # Backend must validate before execution
 @router.post("/bot/{bot_id}/execute")
@@ -430,21 +481,20 @@ async def execute_bot(
         block = get_block(node.data.blockId)
         if not can_access_block(block, user.plan, user.role):
             raise HTTPException(403, "Access denied")
-    
+
     # Execute flow
     ...
 ```
 
 ## Summary
 
-✅ **Drop Validation** - Prevents using restricted blocks  
-✅ **Toast Notifications** - Clear feedback on operations  
-✅ **Visual Badges** - Show current plan/role  
-✅ **Access Logging** - Track denied attempts  
-✅ **Smooth Transitions** - Professional UI updates  
-✅ **Type Safety** - Full TypeScript support  
-✅ **Zero Linter Errors** - Clean code  
-✅ **Comprehensive Testing** - All scenarios covered  
+✅ **Drop Validation** - Prevents using restricted blocks
+✅ **Toast Notifications** - Clear feedback on operations
+✅ **Visual Badges** - Show current plan/role
+✅ **Access Logging** - Track denied attempts
+✅ **Smooth Transitions** - Professional UI updates
+✅ **Type Safety** - Full TypeScript support
+✅ **Zero Linter Errors** - Clean code
+✅ **Comprehensive Testing** - All scenarios covered
 
 The access control system is fully functional and ready for production use!
-

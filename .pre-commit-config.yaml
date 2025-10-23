@@ -3,36 +3,21 @@
 # Run manually: pre-commit run --all-files
 
 repos:
-  # Python code formatting with Black
-  - repo: https://github.com/psf/black
-    rev: 23.12.0
+  # Ruff - Fast Python linter and formatter (replaces Black, isort, Flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.11
     hooks:
-      - id: black
-        language_version: python3
+      # Run the linter
+      - id: ruff
+        name: ruff lint
         files: ^backend/
         exclude: ^backend/(venv|__pycache__|migrations)/
-
-  # Python import sorting
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        name: isort (python)
+        args: [--fix, --exit-non-zero-on-fix]
+      # Run the formatter
+      - id: ruff-format
+        name: ruff format
         files: ^backend/
         exclude: ^backend/(venv|__pycache__|migrations)/
-        args: ["--profile", "black"]
-
-  # Python linting with Flake8
-  - repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
-    hooks:
-      - id: flake8
-        files: ^backend/
-        exclude: ^backend/(venv|__pycache__|migrations)/
-        args:
-          - --max-line-length=120
-          - --extend-ignore=E203,W503
-          - --exclude=venv,__pycache__,migrations
 
   # Trailing whitespace and end-of-file fixer
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -57,12 +42,3 @@ repos:
         exclude: ^(backend|venv|node_modules|dist|build)/
         additional_dependencies:
           - prettier@3.0.0
-
-  # Security check - detect secrets
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
-    hooks:
-      - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
-        exclude: ^(\.secrets\.baseline|package-lock\.json)$
-

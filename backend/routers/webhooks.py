@@ -1,13 +1,10 @@
 from typing import Dict
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
-
 from backend.database import SessionLocal
 from backend.models.payment import Payment
 from backend.models.purchase import Purchase
-from backend.models.template import Template
-from backend.models.user import User
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
 
 webhook_router = APIRouter()
 

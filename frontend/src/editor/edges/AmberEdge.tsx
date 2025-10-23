@@ -7,7 +7,7 @@ export default memo(function AmberEdge(props: EdgeProps<BaseEdgeData>) {
   const [edgePath, labelX, labelY] = getBezierPath(props);
   const [hover, setHover] = useState(false);
 
-  const stroke = hover ? '#FFC64A' : (props.style?.stroke || '#FFB300');
+  const stroke = hover ? '#FFC64A' : props.style?.stroke || '#FFB300';
 
   return (
     <>
@@ -43,34 +43,3 @@ export default memo(function AmberEdge(props: EdgeProps<BaseEdgeData>) {
     </>
   );
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

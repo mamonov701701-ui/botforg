@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
-import { 
-  MessageSquare, 
-  Zap, 
-  HelpCircle, 
-  Settings, 
+import {
+  MessageSquare,
+  Zap,
+  HelpCircle,
+  Settings,
   Target,
   Package,
   Trash2,
   Play,
   Globe,
-  CheckCircle
+  CheckCircle,
 } from 'lucide-react';
 import { TypeHints } from '@/editor/panel/TypeHints';
-
 
 // CSS стили для выпадающего меню
 const selectStyles = `
@@ -34,27 +33,27 @@ const selectStyles = `
     background-size: 16px;
     padding-right: 40px;
   }
-  
+
   .block-settings-select:focus {
     border-color: var(--block-color);
   }
-  
+
   .block-settings-select option {
     background-color: #1f2937;
     color: white;
     padding: 8px 12px;
   }
-  
+
   .block-settings-select option:hover {
     background-color: #374151;
   }
-  
+
   .block-settings-select option:checked {
     background-color: #3b82f6;
   }
 `;
 
-const getBlockIcon = (type) => {
+const getBlockIcon = type => {
   const icons = {
     start: <Play className="w-5 h-5 text-gray-800" />,
     message: <MessageSquare className="w-5 h-5 text-blue-500" />,
@@ -62,12 +61,12 @@ const getBlockIcon = (type) => {
     condition: <HelpCircle className="w-5 h-5 text-purple-500" />,
     process: <Settings className="w-5 h-5 text-purple-500" />,
     decision: <Target className="w-5 h-5 text-red-500" />,
-    default: <Package className="w-5 h-5 text-gray-500" />
+    default: <Package className="w-5 h-5 text-gray-500" />,
   };
   return icons[type] || icons.default;
 };
 
-const getBlockColor = (type) => {
+const getBlockColor = type => {
   const colors = {
     start: '#374151',
     message: '#3b82f6',
@@ -75,7 +74,7 @@ const getBlockColor = (type) => {
     condition: '#8b5cf6',
     process: '#8b5cf6',
     decision: '#ef4444',
-    default: '#6b7280'
+    default: '#6b7280',
   };
   return colors[type] || colors.default;
 };
@@ -111,25 +110,29 @@ const DeleteConfirmationModal = ({ isOpen, onConfirm, onCancel }) => {
         }}
       >
         <div style={{ marginBottom: '20px' }}>
-          <h3 style={{
-            margin: 0,
-            fontSize: '18px',
-            fontWeight: '600',
-            color: 'white',
-            marginBottom: '8px'
-          }}>
+          <h3
+            style={{
+              margin: 0,
+              fontSize: '18px',
+              fontWeight: '600',
+              color: 'white',
+              marginBottom: '8px',
+            }}
+          >
             Удалить блок?
           </h3>
-          <p style={{
-            margin: 0,
-            fontSize: '14px',
-            color: 'rgba(255, 255, 255, 0.7)',
-            lineHeight: '1.5'
-          }}>
+          <p
+            style={{
+              margin: 0,
+              fontSize: '14px',
+              color: 'rgba(255, 255, 255, 0.7)',
+              lineHeight: '1.5',
+            }}
+          >
             Действие необратимо. Блок и все связанные с ним соединения будут удалены.
           </p>
         </div>
-        
+
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
           <button
             onClick={onCancel}
@@ -142,13 +145,13 @@ const DeleteConfirmationModal = ({ isOpen, onConfirm, onCancel }) => {
               fontSize: '14px',
               fontWeight: '500',
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
             }}
-            onMouseEnter={(e) => {
+            onMouseEnter={e => {
               e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
               e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
             }}
-            onMouseLeave={(e) => {
+            onMouseLeave={e => {
               e.target.style.backgroundColor = 'transparent';
               e.target.style.borderColor = 'rgba(255, 255, 255, 0.2)';
             }}
@@ -166,10 +169,10 @@ const DeleteConfirmationModal = ({ isOpen, onConfirm, onCancel }) => {
               fontSize: '14px',
               fontWeight: '500',
               cursor: 'pointer',
-              transition: 'opacity 0.2s'
+              transition: 'opacity 0.2s',
             }}
-            onMouseEnter={(e) => e.target.style.opacity = '0.8'}
-            onMouseLeave={(e) => e.target.style.opacity = '1'}
+            onMouseEnter={e => (e.target.style.opacity = '0.8')}
+            onMouseLeave={e => (e.target.style.opacity = '1')}
           >
             Удалить
           </button>
@@ -179,13 +182,13 @@ const DeleteConfirmationModal = ({ isOpen, onConfirm, onCancel }) => {
   );
 };
 
-const BlockSettingsPanel = ({ 
-  selectedBlock, 
-  blockSettings, 
-  onSettingsChange, 
-  onSave, 
+const BlockSettingsPanel = ({
+  selectedBlock,
+  blockSettings,
+  onSettingsChange,
+  onSave,
   onClose,
-  onDeleteBlock
+  onDeleteBlock,
 }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const blockColor = getBlockColor(blockSettings.type);
@@ -223,28 +226,30 @@ const BlockSettingsPanel = ({
           zIndex: 50,
           boxShadow: '-2px 0 10px rgba(0,0,0,0.3)',
           fontFamily: 'system-ui, -apple-system, sans-serif',
-          '--block-color': blockColor
+          '--block-color': blockColor,
         }}
       >
         {/* Заголовок панели */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '24px',
-          paddingBottom: '16px',
-          borderBottom: '1px solid rgba(255,255,255,0.1)'
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '24px',
+            paddingBottom: '16px',
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '24px' }}>
-              {getBlockIcon(blockSettings.type)}
-            </span>
-            <h3 style={{
-              margin: 0,
-              fontSize: '18px',
-              fontWeight: '600',
-              color: 'white'
-            }}>
+            <span style={{ fontSize: '24px' }}>{getBlockIcon(blockSettings.type)}</span>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: '18px',
+                fontWeight: '600',
+                color: 'white',
+              }}
+            >
               Настройки блока
             </h3>
           </div>
@@ -258,10 +263,10 @@ const BlockSettingsPanel = ({
               cursor: 'pointer',
               padding: '4px',
               borderRadius: '4px',
-              transition: 'background-color 0.2s'
+              transition: 'background-color 0.2s',
             }}
-            onMouseEnter={(e) => e.target.style.backgroundColor = 'rgba(255,255,255,0.1)'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+            onMouseEnter={e => (e.target.style.backgroundColor = 'rgba(255,255,255,0.1)')}
+            onMouseLeave={e => (e.target.style.backgroundColor = 'transparent')}
             title="Закрыть"
           >
             ×
@@ -269,34 +274,40 @@ const BlockSettingsPanel = ({
         </div>
 
         {/* Информация о блоке */}
-        <div style={{
-          marginBottom: '24px',
-          padding: '16px',
-          backgroundColor: 'rgba(255,255,255,0.05)',
-          borderRadius: '8px',
-          border: `1px solid ${blockColor}`
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            marginBottom: '12px'
-          }}>
-            <span style={{ fontSize: '24px' }}>
-              {getBlockIcon(blockSettings.type)}
-            </span>
+        <div
+          style={{
+            marginBottom: '24px',
+            padding: '16px',
+            backgroundColor: 'rgba(255,255,255,0.05)',
+            borderRadius: '8px',
+            border: `1px solid ${blockColor}`,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              marginBottom: '12px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>{getBlockIcon(blockSettings.type)}</span>
             <div>
-              <div style={{
-                fontSize: '14px',
-                fontWeight: '500',
-                color: 'rgba(255,255,255,0.8)'
-              }}>
+              <div
+                style={{
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  color: 'rgba(255,255,255,0.8)',
+                }}
+              >
                 ID: {selectedBlock.id}
               </div>
-              <div style={{
-                fontSize: '12px',
-                color: 'rgba(255,255,255,0.6)'
-              }}>
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: 'rgba(255,255,255,0.6)',
+                }}
+              >
                 Тип: {blockSettings.type}
               </div>
             </div>
@@ -305,19 +316,21 @@ const BlockSettingsPanel = ({
 
         {/* Поле названия */}
         <div style={{ marginBottom: '20px' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '8px',
-            fontSize: '14px',
-            fontWeight: '500',
-            color: 'rgba(255,255,255,0.9)'
-          }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: 'rgba(255,255,255,0.9)',
+            }}
+          >
             Название блока
           </label>
           <input
             type="text"
             value={blockSettings.label}
-            onChange={(e) => onSettingsChange({...blockSettings, label: e.target.value})}
+            onChange={e => onSettingsChange({ ...blockSettings, label: e.target.value })}
             style={{
               width: '100%',
               padding: '10px 12px',
@@ -327,31 +340,33 @@ const BlockSettingsPanel = ({
               color: 'white',
               fontSize: '14px',
               outline: 'none',
-              transition: 'border-color 0.2s'
+              transition: 'border-color 0.2s',
             }}
-            onFocus={(e) => e.target.style.borderColor = blockColor}
-            onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.2)'}
+            onFocus={e => (e.target.style.borderColor = blockColor)}
+            onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.2)')}
             placeholder="Введите название блока"
           />
         </div>
 
         {/* Выбор типа */}
         <div style={{ marginBottom: '20px' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '8px',
-            fontSize: '14px',
-            fontWeight: '500',
-            color: 'rgba(255,255,255,0.9)'
-          }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: 'rgba(255,255,255,0.9)',
+            }}
+          >
             Тип блока
           </label>
           <select
             value={blockSettings.type}
-            onChange={(e) => onSettingsChange({...blockSettings, type: e.target.value})}
+            onChange={e => onSettingsChange({ ...blockSettings, type: e.target.value })}
             className="block-settings-select"
             style={{
-              '--block-color': blockColor
+              '--block-color': blockColor,
             }}
           >
             <option value="start">Старт</option>
@@ -365,30 +380,34 @@ const BlockSettingsPanel = ({
 
         {/* Описание типа блока */}
         <div style={{ marginBottom: '20px' }}>
-          <div style={{
-            padding: '12px',
-            backgroundColor: 'rgba(255,255,255,0.03)',
-            borderRadius: '6px',
-            border: '1px solid rgba(255,255,255,0.1)'
-          }}>
+          <div
+            style={{
+              padding: '12px',
+              backgroundColor: 'rgba(255,255,255,0.03)',
+              borderRadius: '6px',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
             <TypeHints type={blockSettings.type} />
           </div>
         </div>
 
         {/* Параметры */}
         <div style={{ marginBottom: '24px' }}>
-          <label style={{
-            display: 'block',
-            marginBottom: '8px',
-            fontSize: '14px',
-            fontWeight: '500',
-            color: 'rgba(255,255,255,0.9)'
-          }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: '500',
+              color: 'rgba(255,255,255,0.9)',
+            }}
+          >
             Параметры (JSON)
           </label>
           <textarea
             value={blockSettings.parameters}
-            onChange={(e) => onSettingsChange({...blockSettings, parameters: e.target.value})}
+            onChange={e => onSettingsChange({ ...blockSettings, parameters: e.target.value })}
             style={{
               width: '100%',
               minHeight: '100px',
@@ -401,10 +420,10 @@ const BlockSettingsPanel = ({
               fontFamily: 'monospace',
               outline: 'none',
               resize: 'vertical',
-              transition: 'border-color 0.2s'
+              transition: 'border-color 0.2s',
             }}
-            onFocus={(e) => e.target.style.borderColor = blockColor}
-            onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.2)'}
+            onFocus={e => (e.target.style.borderColor = blockColor)}
+            onBlur={e => (e.target.style.borderColor = 'rgba(255,255,255,0.2)')}
             placeholder='{"key": "value"}'
           />
         </div>
@@ -424,10 +443,10 @@ const BlockSettingsPanel = ({
               fontSize: '14px',
               fontWeight: '500',
               cursor: 'pointer',
-              transition: 'opacity 0.2s'
+              transition: 'opacity 0.2s',
             }}
-            onMouseEnter={(e) => e.target.style.opacity = '0.8'}
-            onMouseLeave={(e) => e.target.style.opacity = '1'}
+            onMouseEnter={e => (e.target.style.opacity = '0.8')}
+            onMouseLeave={e => (e.target.style.opacity = '1')}
           >
             Сохранить
           </button>
@@ -447,10 +466,10 @@ const BlockSettingsPanel = ({
               transition: 'opacity 0.2s',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px'
+              gap: '6px',
             }}
-            onMouseEnter={(e) => e.target.style.opacity = '0.8'}
-            onMouseLeave={(e) => e.target.style.opacity = '1'}
+            onMouseEnter={e => (e.target.style.opacity = '0.8')}
+            onMouseLeave={e => (e.target.style.opacity = '1')}
             title="Удалить блок"
           >
             <Trash2 className="w-4 h-4" />

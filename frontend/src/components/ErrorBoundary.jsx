@@ -14,22 +14,26 @@ class ErrorBoundary extends React.Component {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
     this.setState({
       error: error,
-      errorInfo: errorInfo
+      errorInfo: errorInfo,
     });
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{
-          padding: '20px',
-          margin: '20px',
-          border: '1px solid #ef4444',
-          borderRadius: '8px',
-          backgroundColor: '#fef2f2',
-          color: '#991b1b'
-        }}>
-          <h2 style={{ color: '#dc2626', marginBottom: '10px' }}>🚨 Произошла ошибка в редакторе</h2>
+        <div
+          style={{
+            padding: '20px',
+            margin: '20px',
+            border: '1px solid #ef4444',
+            borderRadius: '8px',
+            backgroundColor: '#fef2f2',
+            color: '#991b1b',
+          }}
+        >
+          <h2 style={{ color: '#dc2626', marginBottom: '10px' }}>
+            🚨 Произошла ошибка в редакторе
+          </h2>
           <p style={{ marginBottom: '15px' }}>
             К сожалению, произошла непредвиденная ошибка. Попробуйте обновить страницу.
           </p>
@@ -41,7 +45,7 @@ class ErrorBoundary extends React.Component {
               color: 'white',
               border: 'none',
               borderRadius: '4px',
-              cursor: 'pointer'
+              cursor: 'pointer',
             }}
           >
             Обновить страницу
@@ -49,13 +53,15 @@ class ErrorBoundary extends React.Component {
           {process.env.NODE_ENV === 'development' && this.state.error && (
             <details style={{ marginTop: '15px' }}>
               <summary>Детали ошибки (только для разработчиков)</summary>
-              <pre style={{ 
-                backgroundColor: '#f3f4f6', 
-                padding: '10px', 
-                borderRadius: '4px',
-                fontSize: '12px',
-                overflow: 'auto'
-              }}>
+              <pre
+                style={{
+                  backgroundColor: '#f3f4f6',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  overflow: 'auto',
+                }}
+              >
                 {this.state.error && this.state.error.toString()}
                 <br />
                 {this.state.errorInfo.componentStack}
@@ -71,5 +77,3 @@ class ErrorBoundary extends React.Component {
 }
 
 export default ErrorBoundary;
-
-

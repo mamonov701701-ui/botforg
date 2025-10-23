@@ -23,7 +23,7 @@ export function getAccessDeniedMessage(
 ): string {
   const hasPlanAccess = block.planAccess.includes(userPlan);
   const hasRolePermission = block.permissions.includes(userRole);
-  
+
   if (!hasPlanAccess) {
     const requiredPlans = block.planAccess
       .filter(p => p !== 'free')
@@ -31,11 +31,11 @@ export function getAccessDeniedMessage(
       .join(' / ');
     return `Блок "${block.title}" доступен только в тарифе ${requiredPlans}`;
   }
-  
+
   if (!hasRolePermission) {
     return `У вас недостаточно прав для использования блока "${block.title}"`;
   }
-  
+
   return 'Доступ запрещён';
 }
 
@@ -57,8 +57,7 @@ export function logAccessDenied(
   console.log('Action:', action);
   console.log('Timestamp:', new Date().toISOString());
   console.groupEnd();
-  
+
   // Optional: Send to analytics service in the future
   // analytics.track('block_access_denied', { ... });
 }
-

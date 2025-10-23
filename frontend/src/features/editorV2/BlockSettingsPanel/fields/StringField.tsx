@@ -10,7 +10,7 @@ export const StringField: React.FC<FieldProps> = ({ field, value, onChange, erro
       <input
         type="text"
         value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={e => onChange(e.target.value)}
         placeholder={field.label}
         style={{
           width: '100%',
@@ -26,4 +26,3 @@ export const StringField: React.FC<FieldProps> = ({ field, value, onChange, erro
     </div>
   );
 };
-

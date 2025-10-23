@@ -2,9 +2,9 @@
 .editor-shell {
   position: relative;
   height: calc(100vh - 120px);
-  background: #0A1B3D; /* BRAND_DARK */
+  background: #0a1b3d; /* BRAND_DARK */
   border-radius: 16px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
   padding: 12px;
   z-index: 0;
 }
@@ -23,25 +23,27 @@
 }
 
 /* сам ReactFlow должен иметь высоту от родителя */
-.react-flow__container{
+.react-flow__container {
   width: 100% !important;
   height: 100% !important;
 }
 
 /* чтобы ничего не перекрывало коннекторы */
-.editor-shell, .editor-scroll, .editor-canvas{
+.editor-shell,
+.editor-scroll,
+.editor-canvas {
   pointer-events: auto;
 }
 
 /* аккуратные полосы прокрутки */
-.editor-scroll::-webkit-scrollbar { 
-  height: 10px; 
-  width: 10px; 
+.editor-scroll::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
 }
 
-.editor-scroll::-webkit-scrollbar-thumb { 
-  background: rgba(255,255,255,.2); 
-  border-radius: 8px; 
+.editor-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
 }
 
 .editor-canvas .react-flow {
@@ -54,7 +56,7 @@
 .react-flow__handle {
   width: 16px !important;
   height: 16px !important;
-  border: 2px solid #FFB300 !important;
+  border: 2px solid #ffb300 !important;
   background: #fff !important;
   z-index: 2 !important;
   border-radius: 50% !important;
@@ -66,33 +68,33 @@
 .react-flow__handle:hover {
   transform: scale(1.2) !important;
   box-shadow: 0 4px 12px rgba(255, 179, 0, 0.5) !important;
-  border-color: #FFB300 !important;
-  background: #FFB300 !important;
+  border-color: #ffb300 !important;
+  background: #ffb300 !important;
 }
 
 .react-flow__handle.react-flow__handle-connecting {
-  background: #FFB300 !important;
-  border-color: #FFB300 !important;
+  background: #ffb300 !important;
+  border-color: #ffb300 !important;
   box-shadow: 0 0 0 4px rgba(255, 179, 0, 0.3) !important;
 }
 
 /* Улучшенные стрелки */
 .react-flow__edge-path {
-  stroke: #FFB300 !important;
+  stroke: #ffb300 !important;
   stroke-width: 3 !important;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2)) !important;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: #FFB300 !important;
+  stroke: #ffb300 !important;
   stroke-width: 4 !important;
   filter: drop-shadow(0 0 8px rgba(255, 179, 0, 0.6)) !important;
 }
 
 /* Маркеры стрелок */
 .react-flow__arrowhead {
-  fill: #FFB300 !important;
-  stroke: #FFB300 !important;
+  fill: #ffb300 !important;
+  stroke: #ffb300 !important;
   stroke-width: 2 !important;
 }
 
@@ -157,22 +159,23 @@
 
 /* Красное удаление ребер */
 .edge-remove-btn {
-  opacity: .85; 
+  opacity: 0.85;
   transform: translate(-50%, -50%);
-  background: rgba(0,0,0,.5);
+  background: rgba(0, 0, 0, 0.5);
   border-radius: 8px;
-  transition: .15s ease;
+  transition: 0.15s ease;
 }
 
 .edge-remove-btn:hover,
 .edge-remove-btn:focus {
-  background: #FF3B30; /* DANGER_RED */
+  background: #ff3b30; /* DANGER_RED */
   color: #fff;
 }
 
 /* Анимации */
 @keyframes pulse-amber {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(255, 179, 0, 0.4);
   }
   50% {
@@ -190,7 +193,7 @@
     padding: 16px;
     border-radius: 12px;
   }
-  
+
   .react-flow__handle {
     width: 10px !important;
     height: 10px !important;

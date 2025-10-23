@@ -11,18 +11,18 @@ export default defineConfig({
       '/blocks': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        credentials: 'include'
+        credentials: 'include',
       },
       '/auth': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        credentials: 'include'
+        credentials: 'include',
       },
       '/me': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        credentials: 'include'
-      }
+        credentials: 'include',
+      },
     },
   },
   resolve: {
@@ -31,4 +31,4 @@ export default defineConfig({
       '@application': path.resolve(__dirname, './src/application'),
     },
   },
-}); 
+});

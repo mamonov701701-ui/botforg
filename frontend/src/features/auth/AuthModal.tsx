@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom';
 import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useNavigate } from 'react-router-dom';
-import { 
-  getLoginUrl, 
-  loginEmail, 
-  registerEmail, 
+import {
+  getLoginUrl,
+  loginEmail,
+  registerEmail,
   requestPasswordReset,
-  getMe 
+  getMe,
 } from '../../api/auth';
 import { toast } from '../../utils/toast';
 
@@ -20,7 +20,7 @@ export default function AuthModal() {
   const { setUser } = useAuthStore();
   const navigate = useNavigate();
   const modalRef = useRef<HTMLDivElement>(null);
-  
+
   const [tab, setTab] = useState<Tab>('oauth');
   const [emailMode, setEmailMode] = useState<EmailMode>('login');
   const [email, setEmail] = useState('');
@@ -72,7 +72,7 @@ export default function AuthModal() {
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
+
     try {
       if (emailMode === 'register') {
         await registerEmail(email, password, name);
@@ -131,7 +131,7 @@ export default function AuthModal() {
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
-        padding: '20px'
+        padding: '20px',
       }}
       onClick={handleBackdropClick}
       role="dialog"
@@ -148,9 +148,9 @@ export default function AuthModal() {
           padding: '32px',
           position: 'relative',
           maxHeight: '90vh',
-          overflowY: 'auto'
+          overflowY: 'auto',
         }}
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       >
         {/* Close button */}
         <button
@@ -164,27 +164,39 @@ export default function AuthModal() {
             color: 'var(--text-muted)',
             fontSize: '24px',
             cursor: 'pointer',
-            padding: '4px 8px'
+            padding: '4px 8px',
           }}
           aria-label="Закрыть"
         >
           ×
         </button>
 
-        <h2 id="auth-modal-title" style={{ fontSize: '28px', marginBottom: '8px', textAlign: 'center' }}>
+        <h2
+          id="auth-modal-title"
+          style={{ fontSize: '28px', marginBottom: '8px', textAlign: 'center' }}
+        >
           Войдите или зарегистрируйтесь
         </h2>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '24px', textAlign: 'center', fontSize: '14px' }}>
+        <p
+          style={{
+            color: 'var(--text-muted)',
+            marginBottom: '24px',
+            textAlign: 'center',
+            fontSize: '14px',
+          }}
+        >
           Выберите способ авторизации
         </p>
 
         {/* Tabs */}
-        <div style={{
-          display: 'flex',
-          gap: '8px',
-          marginBottom: '24px',
-          borderBottom: '2px solid var(--border)'
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '24px',
+            borderBottom: '2px solid var(--border)',
+          }}
+        >
           <button
             onClick={() => setTab('oauth')}
             style={{
@@ -196,7 +208,7 @@ export default function AuthModal() {
               color: tab === 'oauth' ? 'var(--accent)' : 'var(--text-muted)',
               cursor: 'pointer',
               fontSize: '16px',
-              fontWeight: 600
+              fontWeight: 600,
             }}
           >
             Соцсети
@@ -212,7 +224,7 @@ export default function AuthModal() {
               color: tab === 'email' ? 'var(--accent)' : 'var(--text-muted)',
               cursor: 'pointer',
               fontSize: '16px',
-              fontWeight: 600
+              fontWeight: 600,
             }}
           >
             Почта
@@ -223,7 +235,9 @@ export default function AuthModal() {
         {tab === 'oauth' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {providers.map(provider => {
-              const loginUrl = `${getLoginUrl(provider.id as any)}${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''}`;
+              const loginUrl = `${getLoginUrl(provider.id as any)}${
+                nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''
+              }`;
               return (
                 <a
                   key={provider.id}
@@ -242,12 +256,12 @@ export default function AuthModal() {
                     fontWeight: 600,
                     border: '2px solid transparent',
                     transition: 'all 0.2s',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
                   }}
-                  onMouseEnter={(e) => {
+                  onMouseEnter={e => {
                     e.currentTarget.style.borderColor = provider.color;
                   }}
-                  onMouseLeave={(e) => {
+                  onMouseLeave={e => {
                     e.currentTarget.style.borderColor = 'transparent';
                   }}
                 >
@@ -269,7 +283,7 @@ export default function AuthModal() {
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
                   required
                   style={{
                     width: '100%',
@@ -279,14 +293,14 @@ export default function AuthModal() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <input
                   type="password"
                   placeholder="Пароль"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={e => setPassword(e.target.value)}
                   required
                   minLength={8}
                   style={{
@@ -297,7 +311,7 @@ export default function AuthModal() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <button
@@ -314,7 +328,7 @@ export default function AuthModal() {
                     fontWeight: 600,
                     cursor: loading ? 'not-allowed' : 'pointer',
                     marginBottom: '12px',
-                    opacity: loading ? 0.7 : 1
+                    opacity: loading ? 0.7 : 1,
                   }}
                 >
                   {loading ? 'Загрузка...' : 'Войти'}
@@ -323,7 +337,12 @@ export default function AuthModal() {
                   <button
                     type="button"
                     onClick={() => setEmailMode('register')}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
                   >
                     Зарегистрироваться
                   </button>
@@ -331,7 +350,12 @@ export default function AuthModal() {
                   <button
                     type="button"
                     onClick={() => setEmailMode('reset')}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
                   >
                     Забыли пароль?
                   </button>
@@ -346,7 +370,7 @@ export default function AuthModal() {
                   type="text"
                   placeholder="Имя (необязательно)"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={e => setName(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '12px',
@@ -355,14 +379,14 @@ export default function AuthModal() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <input
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
                   required
                   style={{
                     width: '100%',
@@ -372,14 +396,14 @@ export default function AuthModal() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <input
                   type="password"
                   placeholder="Пароль (минимум 8 символов)"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={e => setPassword(e.target.value)}
                   required
                   minLength={8}
                   style={{
@@ -390,7 +414,7 @@ export default function AuthModal() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <button
@@ -407,7 +431,7 @@ export default function AuthModal() {
                     fontWeight: 600,
                     cursor: loading ? 'not-allowed' : 'pointer',
                     marginBottom: '12px',
-                    opacity: loading ? 0.7 : 1
+                    opacity: loading ? 0.7 : 1,
                   }}
                 >
                   {loading ? 'Загрузка...' : 'Зарегистрироваться'}
@@ -416,7 +440,12 @@ export default function AuthModal() {
                   <button
                     type="button"
                     onClick={() => setEmailMode('login')}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
                   >
                     Уже есть аккаунт? Войти
                   </button>
@@ -431,7 +460,7 @@ export default function AuthModal() {
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
                   required
                   style={{
                     width: '100%',
@@ -441,7 +470,7 @@ export default function AuthModal() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <button
@@ -458,7 +487,7 @@ export default function AuthModal() {
                     fontWeight: 600,
                     cursor: loading ? 'not-allowed' : 'pointer',
                     marginBottom: '12px',
-                    opacity: loading ? 0.7 : 1
+                    opacity: loading ? 0.7 : 1,
                   }}
                 >
                   {loading ? 'Загрузка...' : 'Отправить ссылку'}
@@ -467,7 +496,12 @@ export default function AuthModal() {
                   <button
                     type="button"
                     onClick={() => setEmailMode('login')}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
                   >
                     Вернуться ко входу
                   </button>
@@ -482,4 +516,3 @@ export default function AuthModal() {
 
   return createPortal(modalContent, document.body);
 }
-

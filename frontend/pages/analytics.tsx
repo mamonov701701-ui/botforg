@@ -8,7 +8,8 @@ export default function AnalyticsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/analytics/templates')
+    api
+      .get('/analytics/templates')
       .then(res => setData(res.data))
       .catch(() => setError('Ошибка загрузки'))
       .finally(() => setLoading(false));
@@ -32,7 +33,7 @@ export default function AnalyticsPage() {
           </tr>
         </thead>
         <tbody>
-          {data.map((tpl) => (
+          {data.map(tpl => (
             <tr key={tpl.id}>
               <td className="p-2 border">{tpl.name}</td>
               <td className="p-2 border text-center">{tpl.launches}</td>
@@ -40,7 +41,9 @@ export default function AnalyticsPage() {
               <td className="p-2 border text-center">{tpl.payments_count}</td>
               <td className="p-2 border text-center">{tpl.payments_sum} ₽</td>
               <td className="p-2 border text-center">
-                <Link href={`/analytics/template/${tpl.id}`} className="text-blue-600 underline">Детали</Link>
+                <Link href={`/analytics/template/${tpl.id}`} className="text-blue-600 underline">
+                  Детали
+                </Link>
               </td>
             </tr>
           ))}
@@ -48,4 +51,4 @@ export default function AnalyticsPage() {
       </table>
     </div>
   );
-} 
+}

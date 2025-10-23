@@ -2,14 +2,13 @@ import uuid
 from datetime import datetime, timezone
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.orm import Session
-
 from backend.database import SessionLocal
 from backend.models.bot import BotInstance
 from backend.models.bot_user_state import BotUserState
 from backend.models.payment import Payment
 from backend.models.template import Template
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -120,7 +119,9 @@ async def telegram_webhook(
             state = BotUserState(telegram_user_id=telegram_user_id, bot_id=bot_id)
             db.add(state)
         state.current_node_id = node["id"]
-        state.history = [{"node_id": node["id"], "entered_at": str(datetime.now(timezone.utc))}]
+        state.history = [
+            {"node_id": node["id"], "entered_at": str(datetime.now(timezone.utc))}
+        ]
         db.commit()
         send_node_message(token, chat_id, node, find_edges_from(node["id"]))
         return {"ok": True}
@@ -277,7 +278,9 @@ async def telegram_webhook(
     # Обновляем состояние
     state.current_node_id = next_node["id"]
     hist = state.history or []
-    hist.append({"node_id": next_node["id"], "entered_at": str(datetime.now(timezone.utc))})
+    hist.append(
+        {"node_id": next_node["id"], "entered_at": str(datetime.now(timezone.utc))}
+    )
     state.history = hist
     db.commit()
     send_node_message(token, chat_id, next_node, find_edges_from(next_node["id"]))

@@ -7,6 +7,7 @@ All requirements have been successfully implemented and tested.
 ## Files Created
 
 ### 1. **backend/data/editor_blocks.json**
+
 - Complete catalog with 24 blocks across 6 categories
 - Categories: `basic`, `business`, `service`, `system`, `ai`, `custom`
 - Each block includes full `configSchema` with field types
@@ -14,6 +15,7 @@ All requirements have been successfully implemented and tested.
 - Plan tiers: `["free","pro","enterprise"]`
 
 ### 2. **docs/editor_blocks.md**
+
 - Comprehensive documentation of blocks system architecture
 - **Key principle clearly stated**: Node on canvas = icon + title + service badges
 - **All user configuration data stored exclusively in `node.data.settings`**
@@ -21,6 +23,7 @@ All requirements have been successfully implemented and tested.
 - Examples and usage patterns included
 
 ### 3. **backend/schemas/blocks.py**
+
 - Pydantic models for validation
 - `BlockConfigField` - defines configuration field structure
 - `BlockCatalogItem` - defines block catalog item
@@ -28,6 +31,7 @@ All requirements have been successfully implemented and tested.
 - Constants for allowed values
 
 ### 4. **backend/routers/blocks.py**
+
 - FastAPI router with `GET /blocks` endpoint
 - Query parameters: `?plan=` and `?role=`
 - Filtering logic for both parameters (AND logic)
@@ -35,6 +39,7 @@ All requirements have been successfully implemented and tested.
 - Error handling for invalid JSON or missing file
 
 ### 5. **backend/main.py** (updated)
+
 - Registered blocks router: `app.include_router(blocks_router.router)`
 
 ## Block Catalog Summary
@@ -42,18 +47,23 @@ All requirements have been successfully implemented and tested.
 ### Categories and Block Count
 
 1. **basic** (4 blocks) - Available on all plans
+
    - start, message, wait, condition
 
 2. **business** (4 blocks) - Pro/Enterprise only
+
    - payment, subscription, invoice, discount
 
 3. **service** (4 blocks) - Pro/Enterprise only
+
    - api_call, webhook, email, sms
 
 4. **system** (4 blocks) - Available on all plans
+
    - variable, log, error_handler, router
 
 5. **ai** (4 blocks) - Pro/Enterprise
+
    - ai_chat, ai_image, ai_text_analysis, ai_voice
 
 6. **custom** (4 blocks) - Mixed permissions
@@ -67,6 +77,7 @@ All requirements have been successfully implemented and tested.
 ## Field Types Implemented
 
 All required field types are supported in `configSchema`:
+
 - `string` - single-line text
 - `text` - multi-line text
 - `number` - numeric values
@@ -82,30 +93,35 @@ All required field types are supported in `configSchema`:
 ## API Tests Performed
 
 ### Test 1: Free Plan Filter
+
 ```bash
 GET /blocks?plan=free
 ✅ Returns 8 blocks (basic + system categories)
 ```
 
 ### Test 2: Viewer Role Filter
+
 ```bash
 GET /blocks?role=viewer
 ✅ Returns 8 blocks (only blocks with viewer in permissions)
 ```
 
 ### Test 3: Combined Filters
+
 ```bash
 GET /blocks?plan=free&role=viewer
 ✅ Returns 8 blocks (basic + system accessible to viewer on free)
 ```
 
 ### Test 4: Pro Plan + Developer Role
+
 ```bash
 GET /blocks?plan=pro&role=developer
 ✅ Returns 21 blocks (excludes enterprise-only blocks and owner/admin-only)
 ```
 
 ### Test 5: Enterprise + Developer Role
+
 ```bash
 GET /blocks?plan=enterprise&role=developer
 ✅ Custom blocks: custom_template, custom_integration
@@ -113,6 +129,7 @@ GET /blocks?plan=enterprise&role=developer
 ```
 
 ### Test 6: Enterprise + Owner Role
+
 ```bash
 GET /blocks?plan=enterprise&role=owner
 ✅ Custom blocks: custom_code, custom_plugin, custom_template, custom_integration
@@ -120,6 +137,7 @@ GET /blocks?plan=enterprise&role=owner
 ```
 
 ### Test 7: Categories Endpoint
+
 ```bash
 GET /blocks/categories
 ✅ Returns: ["ai","basic","business","custom","service","system"]
@@ -130,22 +148,26 @@ GET /blocks/categories
 From `docs/editor_blocks.md`:
 
 1. **Visual Separation**
+
    - Node display: icon + title + badges ONLY
    - No user configuration data in visual layer
 
 2. **Data Storage Rule**
+
    - ALL user configuration → `node.data.settings`
    - NO exceptions, NO other fields
 
 3. **Example Structure**
+
    ```json
    {
      "data": {
-       "label": "Сообщение",    // visual
-       "type": "message",        // block type
-       "icon": "MessageSquare",  // visual
-       "color": "#2196F3",       // visual
-       "settings": {             // ALL user data here
+       "label": "Сообщение", // visual
+       "type": "message", // block type
+       "icon": "MessageSquare", // visual
+       "color": "#2196F3", // visual
+       "settings": {
+         // ALL user data here
          "text": "...",
          "parseMode": "..."
        }
@@ -189,11 +211,11 @@ const node = {
     color: block.color,
     settings: {
       // User fills this based on configSchema
-      url: "https://api.example.com",
-      method: "POST",
-      timeout: 30
-    }
-  }
+      url: 'https://api.example.com',
+      method: 'POST',
+      timeout: 30,
+    },
+  },
 };
 ```
 
@@ -208,6 +230,7 @@ const node = {
 ## Conclusion
 
 The editor blocks catalog system is fully implemented and tested. All requirements have been met:
+
 - ✅ Single source of truth: `backend/data/editor_blocks.json`
 - ✅ Strict role validation (no "user" role)
 - ✅ Complete configSchema for all blocks
@@ -215,4 +238,3 @@ The editor blocks catalog system is fully implemented and tested. All requiremen
 - ✅ Documentation emphasizes `node.data.settings` principle
 - ✅ 24 blocks across 6 categories
 - ✅ All field types supported
-

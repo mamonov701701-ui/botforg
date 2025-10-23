@@ -1,5 +1,7 @@
-html, body, #root { 
-  height: 100%; 
+html,
+body,
+#root {
+  height: 100%;
   overflow: hidden;
 }
 .site-shell {
@@ -21,12 +23,12 @@ html, body, #root {
   background: transparent !important;
   box-shadow: none !important;
 }
-.site-main { 
-  flex: 1 1 auto; 
+.site-main {
+  flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
 }
-.page-content-slot { 
+.page-content-slot {
   height: 100%;
   overflow: hidden;
 }
@@ -46,6 +48,3 @@ html, body, #root {
   position: relative;
   z-index: 1;
 }
-
-
-

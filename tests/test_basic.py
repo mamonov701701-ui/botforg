@@ -61,4 +61,4 @@ def test_import_export(test_user):
     assert resp.status_code == 201
     tpl_id = resp.json()["id"]
     resp = client.get(f"/templates/{tpl_id}", headers=headers)
-    assert resp.status_code == 200 
+    assert resp.status_code == 200

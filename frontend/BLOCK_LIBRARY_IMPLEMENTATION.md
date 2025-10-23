@@ -7,19 +7,25 @@ Successfully implemented dynamic Block Library that fetches blocks from the back
 ## Files Created
 
 ### 1. **frontend/src/types/blocks.ts**
+
 TypeScript interfaces for block catalog items:
+
 - `BlockConfigField` - Configuration field definition
 - `BlockCatalogItem` - Block catalog item structure
 - `PlanType` and `RoleType` - Type aliases
 
 ### 2. **frontend/src/api/blocks.ts**
+
 API client functions:
+
 - `fetchBlocksCatalog(plan?, role?)` - Fetches blocks with filters
 - `fetchCategories()` - Fetches available categories
 - Uses Vite proxy to avoid CORS issues
 
 ### 3. **frontend/src/stores/editorStore.ts**
+
 Zustand state management store:
+
 - Catalog state: `catalog`, `plan`, `role`, `isLoading`
 - Flow state: `nodes`, `edges`
 - Search: `searchQuery`
@@ -27,7 +33,9 @@ Zustand state management store:
 - Computed: `getFilteredCatalog()` for client-side search
 
 ### 4. **frontend/src/features/editorV2/BlockLibrary.tsx**
+
 Block library panel component:
+
 - Loads catalog on mount via `loadCatalog()`
 - Groups blocks by category with Russian labels
 - Drag-and-drop support with `application/block` mime type
@@ -35,7 +43,9 @@ Block library panel component:
 - Loading state and empty state handling
 
 ### 5. **frontend/src/features/editorV2/EditorControls.tsx**
+
 Plan/role control panel:
+
 - Plan selector: Free / Pro / Enterprise
 - Role selector: Owner / Admin / Manager Template / Developer / Support / Viewer
 - Search input for client-side filtering
@@ -45,13 +55,17 @@ Plan/role control panel:
 ## Files Modified
 
 ### 1. **frontend/package.json**
+
 Added dependency:
+
 ```json
 "zustand": "^4.x.x"
 ```
 
 ### 2. **frontend/vite.config.js**
+
 Added proxy configuration:
+
 ```js
 proxy: {
   '/blocks': {
@@ -62,7 +76,9 @@ proxy: {
 ```
 
 ### 3. **frontend/src/features/editorV2/EditorV2Shell.tsx**
+
 Major updates:
+
 - Replaced local state with Zustand store
 - Replaced Toolbar with BlockLibrary in left sidebar
 - Added EditorControls at top
@@ -71,7 +87,9 @@ Major updates:
 - Layout: Top controls + 3-column grid (Library | Canvas | Settings)
 
 ### 4. **frontend/src/features/editorV2/constants.ts**
+
 Removed all hardcoded blocks:
+
 - Deleted `NODE_SPECS` array
 - Deleted `CATEGORY_ORDER` array
 - Now just a placeholder file
@@ -79,6 +97,7 @@ Removed all hardcoded blocks:
 ## Category Mapping
 
 Backend categories → Frontend Russian labels:
+
 - `basic` → "Базовые"
 - `business` → "Бизнесовые"
 - `service` → "Сервисные"
@@ -89,6 +108,7 @@ Backend categories → Frontend Russian labels:
 ## Data Structure
 
 ### Block in Catalog (from API)
+
 ```typescript
 {
   id: "message",
@@ -104,6 +124,7 @@ Backend categories → Frontend Russian labels:
 ```
 
 ### Node Created on Canvas
+
 ```typescript
 {
   id: "node_1234567890",
@@ -123,26 +144,31 @@ Backend categories → Frontend Russian labels:
 ## Features Implemented
 
 ✅ **Dynamic Block Loading**
+
 - Fetches from GET /blocks API
 - No hardcoded blocks in frontend
 
 ✅ **Plan/Role Filtering**
+
 - Free plan: 8 blocks (basic + system)
 - Pro plan: ~21 blocks (adds business, service, ai)
 - Enterprise plan: All 24 blocks
 - Role filtering works correctly
 
 ✅ **Drag-and-Drop**
+
 - Drag block from library
 - Drop on canvas to create node
 - Proper position calculation using `screenToFlowPosition`
 - Data transfer uses `application/block` mime type
 
 ✅ **Search Functionality**
+
 - Client-side filtering by title/description
 - Updates in real-time
 
 ✅ **UI/UX**
+
 - Russian labels throughout
 - Category grouping
 - Visual feedback on hover
@@ -150,6 +176,7 @@ Backend categories → Frontend Russian labels:
 - Empty states
 
 ✅ **State Management**
+
 - Centralized Zustand store
 - Persistent plan/role selection
 - Reactive updates
@@ -170,12 +197,14 @@ Backend categories → Frontend Russian labels:
 ## How to Test
 
 1. **Start Backend:**
+
    ```bash
    cd backend
    python -m uvicorn main:app --reload
    ```
 
 2. **Start Frontend:**
+
    ```bash
    cd frontend
    npm run dev
@@ -193,6 +222,7 @@ Backend categories → Frontend Russian labels:
 **Endpoint:** `GET /blocks?plan={plan}&role={role}`
 
 **Frontend Requests:**
+
 ```
 /blocks?plan=free&role=developer     → 8 blocks
 /blocks?plan=pro&role=developer      → 21 blocks
@@ -200,25 +230,30 @@ Backend categories → Frontend Russian labels:
 ```
 
 **Proxy Setup:**
+
 - Development: Vite proxy `/blocks` → `http://localhost:8000`
 - Production: Configure reverse proxy or CORS
 
 ## Next Steps (Optional Enhancements)
 
 1. **Settings Panel Integration**
+
    - Use `block.configSchema` to generate forms
    - Save data to `node.data.settings`
    - Validate against schema
 
 2. **Icon System**
+
    - Map icon names to actual icon components (Lucide React)
    - Display proper icons instead of text
 
 3. **Block Validation**
+
    - Validate dropped blocks against current plan/role
    - Show warning if block not accessible
 
 4. **Persistence**
+
    - Save plan/role preferences to localStorage
    - Restore on page load
 
@@ -226,4 +261,3 @@ Backend categories → Frontend Russian labels:
    - Custom blocks for enterprise users
    - Block versioning
    - Block templates
-

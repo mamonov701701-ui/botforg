@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 // Функция для получения иконки по типу узла
-export const getNodeIcon = (type) => {
+export const getNodeIcon = type => {
   switch (type) {
     case 'start':
       return <Rocket className="w-4 h-4" />;
@@ -40,7 +40,7 @@ export const getNodeIcon = (type) => {
 };
 
 // Функция для получения цвета по типу узла
-export const getNodeColor = (type) => {
+export const getNodeColor = type => {
   switch (type) {
     case 'start':
       return '#34d399'; // зеленый

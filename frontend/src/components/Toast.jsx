@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, AlertCircle, Info } from 'lucide-react';
 
-const Toast = ({ 
+const Toast = ({
   type = 'info', // 'success', 'error', 'warning', 'info'
-  message, 
+  message,
   duration = 3000,
-  onClose 
+  onClose,
 }) => {
   const [isVisible, setIsVisible] = useState(true);
   const [isExiting, setIsExiting] = useState(false);
@@ -37,28 +37,28 @@ const Toast = ({
           icon: <CheckCircle className="w-5 h-5" />,
           bgColor: '#10b981',
           borderColor: '#059669',
-          textColor: 'white'
+          textColor: 'white',
         };
       case 'error':
         return {
           icon: <XCircle className="w-5 h-5" />,
           bgColor: '#ef4444',
           borderColor: '#dc2626',
-          textColor: 'white'
+          textColor: 'white',
         };
       case 'warning':
         return {
           icon: <AlertCircle className="w-5 h-5" />,
           bgColor: '#f59e0b',
           borderColor: '#d97706',
-          textColor: 'white'
+          textColor: 'white',
         };
       default:
         return {
           icon: <Info className="w-5 h-5" />,
           bgColor: '#3b82f6',
           borderColor: '#2563eb',
-          textColor: 'white'
+          textColor: 'white',
         };
     }
   };
@@ -86,15 +86,11 @@ const Toast = ({
         transform: isExiting ? 'translateX(100%)' : 'translateX(0)',
         opacity: isExiting ? 0 : 1,
         transition: 'all 0.3s ease',
-        backdropFilter: 'blur(8px)'
+        backdropFilter: 'blur(8px)',
       }}
     >
-      <div style={{ flexShrink: 0 }}>
-        {config.icon}
-      </div>
-      <div style={{ flex: 1, fontSize: '14px', fontWeight: '500' }}>
-        {message}
-      </div>
+      <div style={{ flexShrink: 0 }}>{config.icon}</div>
+      <div style={{ flex: 1, fontSize: '14px', fontWeight: '500' }}>{message}</div>
       <button
         onClick={handleClose}
         style={{
@@ -108,10 +104,10 @@ const Toast = ({
           alignItems: 'center',
           justifyContent: 'center',
           opacity: 0.7,
-          transition: 'opacity 0.2s'
+          transition: 'opacity 0.2s',
         }}
-        onMouseEnter={(e) => e.target.style.opacity = '1'}
-        onMouseLeave={(e) => e.target.style.opacity = '0.7'}
+        onMouseEnter={e => (e.target.style.opacity = '1')}
+        onMouseLeave={e => (e.target.style.opacity = '0.7')}
       >
         ×
       </button>
@@ -120,26 +116,3 @@ const Toast = ({
 };
 
 export default Toast;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

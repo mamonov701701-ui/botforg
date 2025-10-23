@@ -3,25 +3,27 @@ import { FieldProps } from './types';
 
 export const MultiselectField: React.FC<FieldProps> = ({ field, value, onChange, error }) => {
   const selectedValues = Array.isArray(value) ? value : [];
-  
+
   const toggleOption = (option: string) => {
     const newValues = selectedValues.includes(option)
       ? selectedValues.filter(v => v !== option)
       : [...selectedValues, option];
     onChange(newValues);
   };
-  
+
   return (
     <div style={{ marginBottom: 16 }}>
       <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
         {field.label} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
       </label>
-      <div style={{
-        padding: 8,
-        borderRadius: 8,
-        border: error ? '1px solid #ef4444' : '1px solid #334155',
-        background: '#0f2436',
-      }}>
+      <div
+        style={{
+          padding: 8,
+          borderRadius: 8,
+          border: error ? '1px solid #ef4444' : '1px solid #334155',
+          background: '#0f2436',
+        }}
+      >
         {field.options?.map(opt => (
           <label
             key={opt}
@@ -48,4 +50,3 @@ export const MultiselectField: React.FC<FieldProps> = ({ field, value, onChange,
     </div>
   );
 };
-

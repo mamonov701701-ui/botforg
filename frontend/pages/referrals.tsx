@@ -9,7 +9,8 @@ export default function ReferralsPage() {
   const [userId, setUserId] = useState<number | null>(null);
 
   useEffect(() => {
-    api.get('/referrals/me')
+    api
+      .get('/referrals/me')
       .then(res => {
         setData(res.data);
         // Попробуем получить userId из первой рефки или из auth (если есть)
@@ -38,16 +39,25 @@ export default function ReferralsPage() {
       <h1 className="text-2xl font-bold mb-6">Реферальный кабинет</h1>
       <div className="bg-yellow-50 border border-yellow-200 rounded p-4 mb-6 flex items-center gap-6">
         <div>
-          <div className="text-lg font-semibold mb-1">💰 Вы заработали: <span className="text-green-700 font-bold">{data.total_earned} ₽</span></div>
-          <div className="text-sm text-gray-600">Доступно: <span className="font-bold">{data.available_balance} ₽</span></div>
+          <div className="text-lg font-semibold mb-1">
+            💰 Вы заработали:{' '}
+            <span className="text-green-700 font-bold">{data.total_earned} ₽</span>
+          </div>
+          <div className="text-sm text-gray-600">
+            Доступно: <span className="font-bold">{data.available_balance} ₽</span>
+          </div>
         </div>
         <button
           className="ml-auto bg-blue-600 text-white px-4 py-2 rounded text-sm"
           onClick={handleCopy}
-        >Скопировать свою реферальную ссылку</button>
+        >
+          Скопировать свою реферальную ссылку
+        </button>
         {copyToast && <span className="ml-2 text-green-600 text-sm">{copyToast}</span>}
       </div>
-      <div className="mb-4 text-gray-500 text-sm">Бонусы можно использовать при покупке шаблонов (скоро)</div>
+      <div className="mb-4 text-gray-500 text-sm">
+        Бонусы можно использовать при покупке шаблонов (скоро)
+      </div>
       <h2 className="font-semibold mb-2">Приглашённые</h2>
       {data.referrals.length === 0 ? (
         <div className="text-gray-400">Вы пока никого не пригласили</div>
@@ -75,4 +85,4 @@ export default function ReferralsPage() {
       )}
     </div>
   );
-} 
+}

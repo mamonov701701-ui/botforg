@@ -1,13 +1,12 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
 from backend.database import SessionLocal
 from backend.dependencies.auth import get_current_user
 from backend.models.comment import Comment
 from backend.models.user import User as UserModel
 from backend.schemas.comment import CommentCreate, CommentOut
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

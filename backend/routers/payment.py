@@ -1,14 +1,12 @@
-from decimal import Decimal
 from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.payment import Payment
 from backend.models.user import User
 from backend.schemas.payment import PaymentCreate, PaymentOut
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 

@@ -1,6 +1,17 @@
 export interface BlockConfigField {
   name: string;
-  type: 'string' | 'text' | 'number' | 'boolean' | 'select' | 'multiselect' | 'json' | 'image' | 'file' | 'datetime' | 'duration';
+  type:
+    | 'string'
+    | 'text'
+    | 'number'
+    | 'boolean'
+    | 'select'
+    | 'multiselect'
+    | 'json'
+    | 'image'
+    | 'file'
+    | 'datetime'
+    | 'duration';
   label: string;
   required: boolean;
   default?: any;
@@ -21,4 +32,3 @@ export interface BlockCatalogItem {
 
 export type PlanType = 'free' | 'pro' | 'enterprise';
 export type RoleType = 'owner' | 'admin' | 'manager_template' | 'developer' | 'support' | 'viewer';
-

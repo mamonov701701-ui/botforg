@@ -208,4 +208,3 @@ if __name__ == "__main__":
 
     result = asyncio.run(run_snap())
     sys.exit(2 if result.get("has_errors") else 0)
-

@@ -19,7 +19,11 @@ class Bot(Base):
     is_active = Column(Boolean, default=True)
     content = Column(JSON, nullable=True)  # Для хранения графа бота
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     user = relationship("User", back_populates="bots")
 

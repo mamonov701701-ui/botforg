@@ -8,7 +8,7 @@
     "skipLibCheck": true,
     "strict": true,
     "baseUrl": ".",
-    "paths": { 
+    "paths": {
       "@/*": ["./src/*"],
       "@/api/*": ["./api/*", "./src/api/*"],
       "@/components/*": ["./components/*", "./src/components/*"],
@@ -20,6 +20,15 @@
       "@/context/*": ["./context/*", "./src/context/*"]
     }
   },
-  "include": ["src", "components", "pages", "api", "types", "utils", "hooks", "constants", "context"]
+  "include": [
+    "src",
+    "components",
+    "pages",
+    "api",
+    "types",
+    "utils",
+    "hooks",
+    "constants",
+    "context"
+  ]
 }
-

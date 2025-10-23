@@ -1,8 +1,4 @@
-from datetime import datetime, timedelta
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
-from sqlalchemy.orm import Session
+from datetime import datetime
 
 from backend.database import SessionLocal
 from backend.dependencies.auth import get_current_user
@@ -10,6 +6,9 @@ from backend.models.bot_user_state import BotUserState
 from backend.models.payment import Payment
 from backend.models.template import Template
 from backend.models.user import User as UserModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

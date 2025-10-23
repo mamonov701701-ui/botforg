@@ -1,15 +1,15 @@
 import React, { useMemo, useCallback, useRef } from 'react';
-import ReactFlow, { 
-  addEdge, 
-  Connection, 
-  MarkerType, 
-  NodeTypes, 
+import ReactFlow, {
+  addEdge,
+  Connection,
+  MarkerType,
+  NodeTypes,
   ReactFlowInstance,
   Background,
   BackgroundVariant,
   ReactFlowProvider,
   Edge,
-  NodeProps
+  NodeProps,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { FlowNode, FlowEdge, BaseNodeData } from '@/types/editor';
@@ -29,9 +29,9 @@ interface FlowEditorProps {
 function CustomNode({ data, selected }: NodeProps<BaseNodeData>) {
   const label = data?.label ?? 'Блок';
   const isError = data?.isError;
-  
+
   return (
-    <div 
+    <div
       style={{
         background: '#fff',
         border: isError ? '2px solid #ef4444' : '2px solid #2f6dff',
@@ -48,15 +48,15 @@ function CustomNode({ data, selected }: NodeProps<BaseNodeData>) {
 }
 
 // Основной компонент FlowEditor
-function FlowEditorInner({ 
-  nodes, 
-  setNodes, 
-  edges, 
-  setEdges, 
-  selectedNodeId, 
-  setSelectedNodeId, 
-  errorNodeIds, 
-  errorEdgeIds 
+function FlowEditorInner({
+  nodes,
+  setNodes,
+  edges,
+  setEdges,
+  selectedNodeId,
+  setSelectedNodeId,
+  errorNodeIds,
+  errorEdgeIds,
 }: FlowEditorProps) {
   const flowRef = useRef<ReactFlowInstance | null>(null);
 
@@ -66,37 +66,49 @@ function FlowEditorInner({
       ...node,
       data: {
         ...node.data,
-        isError: errorNodeIds.includes(node.id)
-      }
+        isError: errorNodeIds.includes(node.id),
+      },
     }));
   }, [nodes, errorNodeIds]);
 
-  const nodeTypes: NodeTypes = useMemo(() => ({
-    default: CustomNode,
-    start: CustomNode,
-    message: CustomNode,
-  }), []);
+  const nodeTypes: NodeTypes = useMemo(
+    () => ({
+      default: CustomNode,
+      start: CustomNode,
+      message: CustomNode,
+    }),
+    []
+  );
 
-  const defaultEdgeOptions = useMemo(() => ({
-    markerEnd: { type: MarkerType.ArrowClosed },
-    style: { stroke: '#2f6dff', strokeWidth: 2 },
-  }), []);
-
-  const onConnect = useCallback((params: Connection) => {
-    const newEdge: Edge = {
-      ...params,
-      id: `${params.source}-${params.target}`,
-      source: params.source!,
-      target: params.target!,
+  const defaultEdgeOptions = useMemo(
+    () => ({
       markerEnd: { type: MarkerType.ArrowClosed },
-      style: { stroke: '#2f6dff', strokeWidth: 2 }
-    };
-    setEdges(addEdge(newEdge, edges));
-  }, [setEdges, edges]);
+      style: { stroke: '#2f6dff', strokeWidth: 2 },
+    }),
+    []
+  );
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: any) => {
-    setSelectedNodeId(node.id);
-  }, [setSelectedNodeId]);
+  const onConnect = useCallback(
+    (params: Connection) => {
+      const newEdge: Edge = {
+        ...params,
+        id: `${params.source}-${params.target}`,
+        source: params.source!,
+        target: params.target!,
+        markerEnd: { type: MarkerType.ArrowClosed },
+        style: { stroke: '#2f6dff', strokeWidth: 2 },
+      };
+      setEdges(addEdge(newEdge, edges));
+    },
+    [setEdges, edges]
+  );
+
+  const onNodeClick = useCallback(
+    (_: React.MouseEvent, node: any) => {
+      setSelectedNodeId(node.id);
+    },
+    [setSelectedNodeId]
+  );
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);

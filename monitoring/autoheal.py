@@ -134,5 +134,3 @@ def run_once() -> int:
 if __name__ == "__main__":
     # one-shot by default; --once is synonymous
     sys.exit(run_once())
-
-

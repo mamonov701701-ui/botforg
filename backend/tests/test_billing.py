@@ -1,9 +1,7 @@
 import os
 import sys
 import uuid
-from decimal import Decimal
 
-import pytest
 from fastapi.testclient import TestClient
 
 # Ensure we can import the FastAPI app from backend/main.py

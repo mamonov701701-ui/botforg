@@ -1,12 +1,9 @@
 from datetime import datetime, timezone
-from typing import Optional
 
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.orm import relationship
 
 from backend.database import Base
-from backend.models.bot import BotInstance
-from backend.models.team import TeamMember
 
 ROLES = ["owner", "admin", "manager", "developer", "support", "observer", "user"]
 
@@ -43,4 +40,6 @@ class User(Base):
     user_templates = relationship(
         "UserTemplate", back_populates="owner", cascade="all, delete"
     )
-    accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
+    accounts = relationship(
+        "Account", back_populates="user", cascade="all, delete-orphan"
+    )

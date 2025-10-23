@@ -22,7 +22,9 @@ export default function TemplatePage({ templateId }: TemplatePageProps) {
         <span className="text-sm text-gray-500">({template.rating_count})</span>
       </div>
       {template.tags?.map((tag: any) => (
-        <span key={tag} className="tag">{tag}</span>
+        <span key={tag} className="tag">
+          {tag}
+        </span>
       ))}
       {template.description && <p className="text-base mt-2">{template.description}</p>}
     </div>

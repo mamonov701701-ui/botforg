@@ -6,11 +6,14 @@
 import { get } from './client';
 import { BlockCatalogItem } from '../types/blocks';
 
-export async function fetchBlocksCatalog(plan?: string, role?: string): Promise<BlockCatalogItem[]> {
+export async function fetchBlocksCatalog(
+  plan?: string,
+  role?: string
+): Promise<BlockCatalogItem[]> {
   const params = new URLSearchParams();
   if (plan) params.set('plan', plan);
   if (role) params.set('role', role);
-  
+
   const url = `/blocks${params.toString() ? '?' + params : ''}`;
   return get(url);
 }

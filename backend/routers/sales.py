@@ -1,19 +1,14 @@
 from datetime import date, datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session, joinedload
-
 from backend.database import SessionLocal
-from backend.dependencies.auth import get_current_user
 from backend.dependencies.roles import require_role
 from backend.models.payment import Payment
 from backend.models.template import Template
 from backend.models.user import User
-from backend.schemas.template import TemplateOut
-from backend.schemas.user import UserOut
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

@@ -3,12 +3,14 @@
 ## Быстрый старт
 
 ### 1. Установка зависимостей
+
 ```powershell
 # В корне проекта
 .\scripts\install-test-deps.ps1
 ```
 
 ### 2. Запуск тестов
+
 ```powershell
 # Активировать venv
 .\venv\Scripts\Activate.ps1
@@ -21,6 +23,7 @@ python -m pytest -v tests/test_simple.py
 ```
 
 ### 3. Через VS Code/Cursor
+
 - `Terminal → Run Task… → Tests: Pytest (venv)`
 
 ## Структура тестов
@@ -34,15 +37,18 @@ python -m pytest -v tests/test_simple.py
 ## Устранение неполадок
 
 ### Ошибка "No module named 'backend'"
+
 1. Убедиться, что `tests/conftest.py` существует
 2. Проверить, что запускаете из корня проекта
 3. Установить `PYTHONPATH=${workspaceFolder}`
 
 ### Ошибка "No module named 'fastapi'"
+
 1. Активировать виртуальное окружение
 2. Установить зависимости: `.\scripts\install-test-deps.ps1`
 
 ### Предупреждение про asyncio_mode
+
 1. Установить `pytest-asyncio`: `pip install pytest-asyncio`
 2. Проверить `pytest.ini`: `asyncio_mode = auto`
 
@@ -51,45 +57,3 @@ python -m pytest -v tests/test_simple.py
 - `pytest.ini` - основная конфигурация pytest
 - `.vscode/settings.json` - настройки VS Code
 - `.vscode/tasks.json` - задачи для запуска тестов
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

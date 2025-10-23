@@ -5,7 +5,10 @@
 const API_TIMEOUT = 10000; // 10 seconds
 
 export class ApiError extends Error {
-  constructor(message: string, public status: number) {
+  constructor(
+    message: string,
+    public status: number
+  ) {
     super(message);
     this.name = 'ApiError';
   }
@@ -14,32 +17,32 @@ export class ApiError extends Error {
 async function request(path: string, options: RequestInit = {}): Promise<any> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
-  
+
   try {
     const baseURL = import.meta.env.VITE_API_URL || '';
     const url = baseURL ? `${baseURL}${path}` : path;
-    
+
     // Get token from localStorage for Authorization header
     const token = localStorage.getItem('auth_token');
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
-    
+
     // Add Authorization header if token exists
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
-    
+
     const response = await fetch(url, {
       ...options,
       credentials: 'include',
       signal: controller.signal,
       headers,
     });
-    
+
     clearTimeout(timeout);
-    
+
     if (!response.ok) {
       let errorMessage = 'Ошибка запроса';
       try {
@@ -48,7 +51,7 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
       } catch {
         // If JSON parsing fails, use default message
       }
-      
+
       if (response.status === 401) {
         throw new ApiError('Сессия не активна. Войдите заново.', 401);
       }
@@ -60,7 +63,7 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
       }
       throw new ApiError(errorMessage, response.status);
     }
-    
+
     return response.json();
   } catch (error: any) {
     clearTimeout(timeout);
@@ -107,4 +110,3 @@ const api = {
 };
 
 export default api;
-

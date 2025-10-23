@@ -3,16 +3,16 @@ import { useState } from 'react';
 import { createTemplate } from '@/api/templates';
 import { useRouter } from 'next/navigation';
 
-const ALLOWED_ROLES = ["owner", "admin", "manager_template"];
+const ALLOWED_ROLES = ['owner', 'admin', 'manager_template'];
 
 export default function CreateTemplatePage() {
   const { user, loading } = useRequireAuth();
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
+  const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return <div>Загрузка...</div>;
@@ -22,13 +22,13 @@ export default function CreateTemplatePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
+    setError('');
     setSubmitting(true);
     try {
       await createTemplate({ name, category, description, is_public: isPublic });
-      router.push("/my-templates");
+      router.push('/my-templates');
     } catch {
-      setError("Ошибка при создании шаблона");
+      setError('Ошибка при создании шаблона');
     } finally {
       setSubmitting(false);
     }
@@ -42,7 +42,7 @@ export default function CreateTemplatePage() {
           type="text"
           placeholder="Название"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={e => setName(e.target.value)}
           className="border rounded px-3 py-2"
           required
         />
@@ -50,23 +50,19 @@ export default function CreateTemplatePage() {
           type="text"
           placeholder="Категория"
           value={category}
-          onChange={(e) => setCategory(e.target.value)}
+          onChange={e => setCategory(e.target.value)}
           className="border rounded px-3 py-2"
           required
         />
         <textarea
           placeholder="Описание"
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={e => setDescription(e.target.value)}
           className="border rounded px-3 py-2 min-h-[80px]"
           required
         />
         <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={isPublic}
-            onChange={() => setIsPublic((v) => !v)}
-          />
+          <input type="checkbox" checked={isPublic} onChange={() => setIsPublic(v => !v)} />
           Публичный шаблон
         </label>
         {error && <div className="text-red-600 text-sm">{error}</div>}
@@ -75,9 +71,9 @@ export default function CreateTemplatePage() {
           className="bg-blue-600 text-white rounded px-4 py-2 mt-2 disabled:opacity-50"
           disabled={submitting}
         >
-          {submitting ? "Создание..." : "Создать шаблон"}
+          {submitting ? 'Создание...' : 'Создать шаблон'}
         </button>
       </form>
     </div>
   );
-} 
+}

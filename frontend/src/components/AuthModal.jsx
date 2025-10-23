@@ -1,25 +1,25 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import { login, register } from "@/api/useAuthApi";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { login, register } from '@/api/useAuthApi';
 
 export default function AuthModal({ open, onClose }) {
-  const [tab, setTab] = useState("login");
-  const [error, setError] = useState("");
+  const [tab, setTab] = useState('login');
+  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   // Очищаем ошибки и поля при открытии/переключении
   useEffect(() => {
-    setError("");
+    setError('');
   }, [open, tab]);
 
   if (!open) return null;
 
   function handleSuccess(token) {
-    localStorage.setItem("token", token);
+    localStorage.setItem('token', token);
     onClose();
-    navigate("/account");
+    navigate('/account');
   }
 
   return (
@@ -30,10 +30,7 @@ export default function AuthModal({ open, onClose }) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
       >
-        <div
-          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-          onClick={onClose}
-        />
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
         <motion.div
           className="relative z-10 bg-[#181f2a] rounded-2xl shadow-2xl max-w-md w-full mx-4 p-8 text-white"
           initial={{ scale: 0.95, opacity: 0 }}
@@ -50,26 +47,26 @@ export default function AuthModal({ open, onClose }) {
           <div className="flex mb-8">
             <button
               className={`flex-1 py-2 font-bold rounded-l-2xl transition ${
-                tab === "login"
-                  ? "bg-yellow-400 text-black"
-                  : "bg-transparent text-white hover:bg-white/10"
+                tab === 'login'
+                  ? 'bg-yellow-400 text-black'
+                  : 'bg-transparent text-white hover:bg-white/10'
               }`}
-              onClick={() => setTab("login")}
+              onClick={() => setTab('login')}
             >
               Вход
             </button>
             <button
               className={`flex-1 py-2 font-bold rounded-r-2xl transition ${
-                tab === "register"
-                  ? "bg-yellow-400 text-black"
-                  : "bg-transparent text-white hover:bg-white/10"
+                tab === 'register'
+                  ? 'bg-yellow-400 text-black'
+                  : 'bg-transparent text-white hover:bg-white/10'
               }`}
-              onClick={() => setTab("register")}
+              onClick={() => setTab('register')}
             >
               Регистрация
             </button>
           </div>
-          {tab === "login" ? (
+          {tab === 'login' ? (
             <LoginForm
               onSuccess={handleSuccess}
               setError={setError}
@@ -93,13 +90,13 @@ export default function AuthModal({ open, onClose }) {
 }
 
 function LoginForm({ onSuccess, setError, error, isLoading, setIsLoading }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   async function handleSubmit(e) {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
+    setError('');
     try {
       const data = await login(email, password);
       onSuccess(data.access_token);
@@ -133,11 +130,13 @@ function LoginForm({ onSuccess, setError, error, isLoading, setIsLoading }) {
         className="bg-yellow-400 text-black font-semibold py-3 rounded-full hover:bg-yellow-300 transition"
         disabled={isLoading}
       >
-        {isLoading ? "Вход..." : "Войти"}
+        {isLoading ? 'Вход...' : 'Войти'}
       </button>
       {error && <div className="text-red-400 text-sm mt-2">{error}</div>}
       <div className="flex justify-between items-center mt-2">
-        <a href="#" className="text-xs text-gray-400 hover:text-yellow-400 transition">Забыли пароль?</a>
+        <a href="#" className="text-xs text-gray-400 hover:text-yellow-400 transition">
+          Забыли пароль?
+        </a>
         <span className="text-xs text-gray-400">или</span>
         <button
           type="button"
@@ -152,17 +151,17 @@ function LoginForm({ onSuccess, setError, error, isLoading, setIsLoading }) {
 }
 
 function RegisterForm({ onSuccess, setError, error, isLoading, setIsLoading }) {
-  const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
 
   async function handleSubmit(e) {
     e.preventDefault();
     setIsLoading(true);
-    setError("");
+    setError('');
     if (password !== confirm) {
-      setError("Пароли не совпадают");
+      setError('Пароли не совпадают');
       setIsLoading(false);
       return;
     }
@@ -215,7 +214,7 @@ function RegisterForm({ onSuccess, setError, error, isLoading, setIsLoading }) {
         className="bg-yellow-400 text-black font-semibold py-3 rounded-full hover:bg-yellow-300 transition"
         disabled={isLoading}
       >
-        {isLoading ? "Регистрация..." : "Зарегистрироваться"}
+        {isLoading ? 'Регистрация...' : 'Зарегистрироваться'}
       </button>
       {error && <div className="text-red-400 text-sm mt-2">{error}</div>}
       <div className="flex justify-end items-center mt-2">
@@ -229,4 +228,4 @@ function RegisterForm({ onSuccess, setError, error, isLoading, setIsLoading }) {
       </div>
     </form>
   );
-} 
+}

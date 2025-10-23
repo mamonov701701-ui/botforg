@@ -8,14 +8,14 @@ type Props = {
 const NodePanel: React.FC<Props> = ({ onDragStart }) => {
   return (
     <div style={{ padding: 12, height: '100%', overflowY: 'auto' }}>
-      {CATEGORY_ORDER.map((cat) => (
+      {CATEGORY_ORDER.map(cat => (
         <div key={cat} style={{ marginBottom: 16 }}>
           <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.6, marginBottom: 8 }}>{cat}</div>
-          {(NODE_SPECS.filter((s) => s.category === cat)).map((spec) => (
+          {NODE_SPECS.filter(s => s.category === cat).map(spec => (
             <div
               key={spec.type}
               draggable
-              onDragStart={(e) => onDragStart(e, spec.type)}
+              onDragStart={e => onDragStart(e, spec.type)}
               style={{
                 background: '#fff',
                 border: `2px solid ${spec.borderColor}`,
@@ -40,34 +40,3 @@ const NodePanel: React.FC<Props> = ({ onDragStart }) => {
 };
 
 export default memo(NodePanel);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

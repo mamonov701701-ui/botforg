@@ -4,37 +4,47 @@ import { useEditorStore } from '../../stores/editorStore';
 const ToastContainer: React.FC = () => {
   const toasts = useEditorStore(state => state.toasts);
   const removeToast = useEditorStore(state => state.removeToast);
-  
+
   if (toasts.length === 0) return null;
-  
+
   const getToastColor = (type: string) => {
     switch (type) {
-      case 'success': return '#22c55e';
-      case 'warning': return '#f59e0b';
-      case 'error': return '#ef4444';
-      default: return '#3b82f6';
+      case 'success':
+        return '#22c55e';
+      case 'warning':
+        return '#f59e0b';
+      case 'error':
+        return '#ef4444';
+      default:
+        return '#3b82f6';
     }
   };
-  
+
   const getToastIcon = (type: string) => {
     switch (type) {
-      case 'success': return '✅';
-      case 'warning': return '⚠️';
-      case 'error': return '❌';
-      default: return 'ℹ️';
+      case 'success':
+        return '✅';
+      case 'warning':
+        return '⚠️';
+      case 'error':
+        return '❌';
+      default:
+        return 'ℹ️';
     }
   };
-  
+
   return (
-    <div style={{
-      position: 'fixed',
-      top: 80,
-      right: 20,
-      zIndex: 9999,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: 8,
-    }}>
+    <div
+      style={{
+        position: 'fixed',
+        top: 80,
+        right: 20,
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+      }}
+    >
       {toasts.map(toast => (
         <div
           key={toast.id}
@@ -54,12 +64,14 @@ const ToastContainer: React.FC = () => {
         >
           <span style={{ fontSize: 20 }}>{getToastIcon(toast.type)}</span>
           <div style={{ flex: 1 }}>
-            <div style={{ 
-              color: '#fff', 
-              fontSize: 14, 
-              lineHeight: 1.4,
-              fontWeight: 500
-            }}>
+            <div
+              style={{
+                color: '#fff',
+                fontSize: 14,
+                lineHeight: 1.4,
+                fontWeight: 500,
+              }}
+            >
               {toast.message}
             </div>
           </div>
@@ -84,4 +96,3 @@ const ToastContainer: React.FC = () => {
 };
 
 export default ToastContainer;
-

@@ -1,13 +1,12 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
 from backend.database import SessionLocal
 from backend.dependencies.auth import get_current_user
 from backend.models.purchase import Purchase
 from backend.models.user import User as UserModel
 from backend.schemas.purchase import PurchaseCreate, PurchaseOut
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

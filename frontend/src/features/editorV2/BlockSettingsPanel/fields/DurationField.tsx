@@ -4,14 +4,14 @@ import { FieldProps } from './types';
 export const DurationField: React.FC<FieldProps> = ({ field, value, onChange, error }) => {
   const [amount, setAmount] = useState(value?.amount || 0);
   const [unit, setUnit] = useState(value?.unit || 'seconds');
-  
+
   useEffect(() => {
     if (value && typeof value === 'object') {
       setAmount(value.amount || 0);
       setUnit(value.unit || 'seconds');
     }
   }, [value]);
-  
+
   const handleChange = (newAmount?: number, newUnit?: string) => {
     const a = newAmount ?? amount;
     const u = newUnit ?? unit;
@@ -19,7 +19,7 @@ export const DurationField: React.FC<FieldProps> = ({ field, value, onChange, er
     setUnit(u);
     onChange({ amount: a, unit: u });
   };
-  
+
   return (
     <div style={{ marginBottom: 16 }}>
       <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
@@ -29,7 +29,7 @@ export const DurationField: React.FC<FieldProps> = ({ field, value, onChange, er
         <input
           type="number"
           value={amount}
-          onChange={(e) => handleChange(Number(e.target.value), undefined)}
+          onChange={e => handleChange(Number(e.target.value), undefined)}
           min={0}
           style={{
             flex: 1,
@@ -43,7 +43,7 @@ export const DurationField: React.FC<FieldProps> = ({ field, value, onChange, er
         />
         <select
           value={unit}
-          onChange={(e) => handleChange(undefined, e.target.value)}
+          onChange={e => handleChange(undefined, e.target.value)}
           style={{
             padding: '10px 12px',
             borderRadius: 8,
@@ -64,4 +64,3 @@ export const DurationField: React.FC<FieldProps> = ({ field, value, onChange, er
     </div>
   );
 };
-

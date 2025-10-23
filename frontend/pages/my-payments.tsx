@@ -7,7 +7,7 @@ function exportToCSV(data: any[], filename: string) {
   if (!data.length) return;
   const csv = [
     Object.keys(data[0]).join(','),
-    ...data.map((row) => Object.values(row).join(',')),
+    ...data.map(row => Object.values(row).join(',')),
   ].join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = window.URL.createObjectURL(blob);
@@ -34,15 +34,15 @@ export default function MyPaymentsPage() {
   const { user, loading } = useRequireAuth();
   const [payments, setPayments] = useState<any[]>([]);
   const [loadingPayments, setLoadingPayments] = useState(true);
-  const [error, setError] = useState("");
-  const [status, setStatus] = useState("");
-  const [method, setMethod] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [error, setError] = useState('');
+  const [status, setStatus] = useState('');
+  const [method, setMethod] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const loadPayments = async () => {
     setLoadingPayments(true);
-    setError("");
+    setError('');
     try {
       const params: any = {};
       if (status) params.status = status;
@@ -52,7 +52,7 @@ export default function MyPaymentsPage() {
       const data = await getMyPayments(params);
       setPayments(data);
     } catch {
-      setError("Ошибка загрузки оплат");
+      setError('Ошибка загрузки оплат');
     } finally {
       setLoadingPayments(false);
     }
@@ -123,7 +123,9 @@ export default function MyPaymentsPage() {
           Экспорт в CSV
         </button>
       </div>
-      <div className="mb-4 text-sm text-gray-600">Всего: {payments.length} | Сумма: {totalSum} ₽</div>
+      <div className="mb-4 text-sm text-gray-600">
+        Всего: {payments.length} | Сумма: {totalSum} ₽
+      </div>
       {error && <div className="text-red-600 mb-2">{error}</div>}
       {payments.length === 0 ? (
         <div>У вас пока нет оплат</div>
@@ -146,7 +148,9 @@ export default function MyPaymentsPage() {
                     {p.template?.name || `Шаблон #${p.template_id}`}
                   </Link>
                 </td>
-                <td className="p-2 border">{p.amount} {p.currency}</td>
+                <td className="p-2 border">
+                  {p.amount} {p.currency}
+                </td>
                 <td className="p-2 border">{METHOD_LABELS[p.provider] || p.provider}</td>
                 <td className="p-2 border">{STATUS_LABELS[p.status] || p.status}</td>
                 <td className="p-2 border">{new Date(p.created_at).toLocaleDateString()}</td>
@@ -157,4 +161,4 @@ export default function MyPaymentsPage() {
       )}
     </div>
   );
-} 
+}

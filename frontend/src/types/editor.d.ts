@@ -28,7 +28,15 @@ export type EditorNode<T extends BaseNodeData = BaseNodeData> = Node<T>;
 export type EditorEdge<T extends BaseEdgeData = BaseEdgeData> = Edge<T>;
 
 // Legacy flow types (for compatibility)
-export type NodeType = 'message' | 'button' | 'input' | 'condition' | 'api' | 'payment' | 'start' | 'default';
+export type NodeType =
+  | 'message'
+  | 'button'
+  | 'input'
+  | 'condition'
+  | 'api'
+  | 'payment'
+  | 'start'
+  | 'default';
 
 export interface FlowNodeData extends BaseNodeData {
   type: NodeType;
@@ -93,4 +101,3 @@ export interface NodeSpec {
   icon?: string;
   borderColor: string;
 }
-

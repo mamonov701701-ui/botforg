@@ -1,29 +1,28 @@
 {
-    "project": "BotForg",
-    "description": "SaaS-платформа для визуального создания и управления Telegram и WhatsApp-ботами. Использует FastAPI (backend), React + Tailwind (frontend), с поддержкой шаблонов, платежей, аналитики и интеграций.",
-    "goals": [
-      "Поддержка шаблонов: магазины, рестораны, подписки, курсы и т.д.",
-      "Редактор на React Flow",
-      "Аутентификация с ролями (владелец, админ, разработчик, поддержка и т.п.)",
-      "Поддержка Telegram Payments, ЮKassa, Stripe",
-      "Мульти-язычный интерфейс",
-      "Маркетплейс шаблонов с рейтингами и покупками",
-      "SaaS-модель с тарифами, лимитами и доп. покупками"
-    ],
-    "tech_stack": {
-      "backend": ["FastAPI", "SQLite", "Pydantic", "SQLAlchemy", "OAuth2 JWT"],
-      "frontend": ["React", "Tailwind", "React Router", "React Flow"],
-      "infrastructure": ["Yandex Cloud", "Docker (позже)"],
-      "integration": ["Telegram Bot API", "Google Sheets API"]
+  "project": "BotForg",
+  "description": "SaaS-платформа для визуального создания и управления Telegram и WhatsApp-ботами. Использует FastAPI (backend), React + Tailwind (frontend), с поддержкой шаблонов, платежей, аналитики и интеграций.",
+  "goals": [
+    "Поддержка шаблонов: магазины, рестораны, подписки, курсы и т.д.",
+    "Редактор на React Flow",
+    "Аутентификация с ролями (владелец, админ, разработчик, поддержка и т.п.)",
+    "Поддержка Telegram Payments, ЮKassa, Stripe",
+    "Мульти-язычный интерфейс",
+    "Маркетплейс шаблонов с рейтингами и покупками",
+    "SaaS-модель с тарифами, лимитами и доп. покупками"
+  ],
+  "tech_stack": {
+    "backend": ["FastAPI", "SQLite", "Pydantic", "SQLAlchemy", "OAuth2 JWT"],
+    "frontend": ["React", "Tailwind", "React Router", "React Flow"],
+    "infrastructure": ["Yandex Cloud", "Docker (позже)"],
+    "integration": ["Telegram Bot API", "Google Sheets API"]
+  },
+  "style": {
+    "naming": {
+      "python": "snake_case",
+      "js": "camelCase",
+      "css": "BEM или Tailwind classes"
     },
-    "style": {
-      "naming": {
-        "python": "snake_case",
-        "js": "camelCase",
-        "css": "BEM или Tailwind classes"
-      },
-      "code": "чистый, читаемый, с комментариями на сложных блоках",
-      "api": "RESTful, JWT, async"
-    }
+    "code": "чистый, читаемый, с комментариями на сложных блоках",
+    "api": "RESTful, JWT, async"
   }
-  
+}

@@ -12,7 +12,7 @@ export default function AuthGate({ children }: Props) {
   const { user, loading, setUser, setLoading } = useAuthStore();
   const { openAuth } = useUiStore();
   const location = useLocation();
-  
+
   useEffect(() => {
     async function loadUser() {
       try {
@@ -23,25 +23,33 @@ export default function AuthGate({ children }: Props) {
         setUser(null);
       }
     }
-    
+
     loadUser();
   }, [setUser]);
-  
+
   useEffect(() => {
     if (!loading && !user) {
       // Open modal instead of showing SignIn page
       openAuth(location.pathname + location.search);
     }
   }, [loading, user, openAuth, location]);
-  
+
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg)' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          background: 'var(--bg)',
+        }}
+      >
         <div style={{ color: 'var(--text)' }}>Загрузка...</div>
       </div>
     );
   }
-  
+
   if (!user) {
     // Return placeholder while modal is opening
     return (
@@ -50,6 +58,6 @@ export default function AuthGate({ children }: Props) {
       </div>
     );
   }
-  
+
   return <>{children}</>;
 }

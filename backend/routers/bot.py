@@ -1,16 +1,15 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import requests
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.bot import Bot
 from backend.models.user import User as UserModel
-from backend.schemas.bot import BotConnectRequest, BotCreate, BotListOut, BotOut, BotUpdate
+from backend.schemas.bot import BotConnectRequest, BotListOut, BotOut, BotUpdate
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -63,7 +62,9 @@ async def connect_bot(
     """Подключение Telegram-бота по токену"""
 
     # Проверяем, что хотя бы один параметр передан
-    if not any([payload.token, payload.webhook_url, payload.bot_id, payload.template_id]):
+    if not any(
+        [payload.token, payload.webhook_url, payload.bot_id, payload.template_id]
+    ):
         raise HTTPException(status_code=400, detail="No connection params provided")
 
     # Если передан токен, проверяем его через Telegram API
@@ -71,7 +72,8 @@ async def connect_bot(
         telegram_info = verify_telegram_token(payload.token)
         if not telegram_info:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Telegram bot token"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid Telegram bot token",
             )
 
         # Проверяем, не подключен ли уже этот бот
@@ -81,7 +83,7 @@ async def connect_bot(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Bot with this token is already connected",
             )
-        
+
         # Проверяем соответствие username если он указан в запросе
         if payload.username and payload.username != telegram_info["username"]:
             raise HTTPException(
@@ -118,7 +120,8 @@ async def connect_bot(
     else:
         # Если токен не передан, возвращаем ошибку
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Token is required for bot connection"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token is required for bot connection",
         )
 
 

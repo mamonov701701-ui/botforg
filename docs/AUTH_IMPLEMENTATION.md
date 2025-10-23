@@ -1,7 +1,7 @@
 # OAuth Authentication Implementation
 
-**Version**: 1.0  
-**Last Updated**: January 14, 2025  
+**Version**: 1.0
+**Last Updated**: January 14, 2025
 **Status**: Complete
 
 ---
@@ -9,6 +9,7 @@
 ## Overview
 
 BotForg implements OAuth 2.0 authentication with three providers:
+
 - **Google** - for users with Google accounts
 - **Yandex ID** - for Russian users
 - **Mail.ru** - for users with Mail.ru accounts
@@ -71,6 +72,7 @@ Authentication uses HttpOnly JWT cookies for secure session management, protecti
 ### Database Schema
 
 **Table: `users`**
+
 ```sql
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
@@ -82,6 +84,7 @@ CREATE TABLE users (
 ```
 
 **Table: `accounts`**
+
 ```sql
 CREATE TABLE accounts (
     id INTEGER PRIMARY KEY,
@@ -104,11 +107,13 @@ CREATE TABLE accounts (
 Initiates OAuth flow for specified provider.
 
 **Parameters**:
+
 - `provider`: One of `google`, `yandex`, `mailru`
 
 **Response**: Redirect to OAuth provider authorization page
 
 **Example**:
+
 ```bash
 GET /auth/google/login
 → Redirects to Google OAuth
@@ -121,15 +126,18 @@ GET /auth/google/login
 Handles OAuth callback after user authorization.
 
 **Parameters**:
+
 - `provider`: One of `google`, `yandex`, `mailru`
 - `code`: OAuth authorization code (query param)
 - `state`: CSRF state token (query param)
 
-**Response**: 
+**Response**:
+
 - Sets HttpOnly session cookie
 - Redirects to `/account` page
 
 **Cookie**:
+
 ```
 session=<JWT>; HttpOnly; SameSite=Lax; Secure; Path=/; Max-Age=604800
 ```
@@ -141,6 +149,7 @@ session=<JWT>; HttpOnly; SameSite=Lax; Secure; Path=/; Max-Age=604800
 Logs out user by clearing session cookie.
 
 **Response**:
+
 ```json
 {
   "message": "Logged out successfully"
@@ -158,6 +167,7 @@ Returns current user profile.
 **Authentication**: Required (JWT cookie)
 
 **Response**:
+
 ```json
 {
   "id": 1,
@@ -169,6 +179,7 @@ Returns current user profile.
 ```
 
 **Error** (401 if not authenticated):
+
 ```json
 {
   "detail": "Not authenticated"
@@ -273,6 +284,7 @@ interface AuthState {
 ```
 
 **Usage**:
+
 ```typescript
 const { user, loading, setUser } = useAuthStore();
 ```
@@ -287,13 +299,13 @@ API client for authentication endpoints.
 
 ```typescript
 // Get current user (returns null if not authenticated)
-async function getMe(): Promise<User | null>
+async function getMe(): Promise<User | null>;
 
 // Logout user
-async function logout(): Promise<void>
+async function logout(): Promise<void>;
 
 // Get OAuth login URL
-function getLoginUrl(provider: 'google' | 'yandex' | 'mailru'): string
+function getLoginUrl(provider: 'google' | 'yandex' | 'mailru'): string;
 ```
 
 ---
@@ -311,6 +323,7 @@ Wraps protected routes, showing SignIn screen if not authenticated.
 ```
 
 **Behavior**:
+
 - On mount: fetches `/me` to check authentication
 - If loading: shows spinner
 - If not authenticated: shows SignIn screen
@@ -323,6 +336,7 @@ Wraps protected routes, showing SignIn screen if not authenticated.
 OAuth provider selection screen.
 
 **Features**:
+
 - 3 provider buttons (Google, Yandex ID, Mail.ru)
 - Each button redirects to `/auth/{provider}/login`
 - Styled with hover effects and provider colors
@@ -332,6 +346,7 @@ OAuth provider selection screen.
 #### AccountPage
 
 User profile page showing:
+
 - User avatar, name, email
 - Connected OAuth providers (badges)
 - Logout button
@@ -364,6 +379,7 @@ ENVIRONMENT=development  # or "production"
 ```
 
 **Generate JWT_SECRET**:
+
 ```bash
 openssl rand -hex 32
 ```
@@ -375,18 +391,21 @@ openssl rand -hex 32
 ### Manual Testing Steps
 
 1. **Start backend**:
+
    ```bash
    cd backend
    uvicorn main:app --reload
    ```
 
 2. **Start frontend**:
+
    ```bash
    cd frontend
    npm run dev
    ```
 
 3. **Test OAuth Flow**:
+
    - Navigate to `http://localhost:5173/account`
    - Should see SignIn screen with 3 providers
    - Click "Войти через Google"
@@ -396,10 +415,11 @@ openssl rand -hex 32
    - Click "Выйти" → returns to SignIn screen
 
 4. **Test `/me` Endpoint**:
+
    ```bash
    # Without cookie (should return 401)
    curl http://localhost:8000/me
-   
+
    # After login (copy cookie from browser)
    curl -H "Cookie: session=<jwt>" http://localhost:8000/me
    ```
@@ -421,6 +441,7 @@ openssl rand -hex 32
 **Cause**: Provider name mismatch or not configured
 
 **Solution**:
+
 - Check provider name in URL matches `google`, `yandex`, or `mailru`
 - Verify OAuth credentials in `.env`
 
@@ -431,6 +452,7 @@ openssl rand -hex 32
 **Cause**: Cookie not being set or sent
 
 **Solution**:
+
 - Check CORS allows credentials: `allow_credentials=True`
 - Verify frontend sends `credentials: 'include'` in fetch
 - Check browser console for cookie errors
@@ -443,6 +465,7 @@ openssl rand -hex 32
 **Cause**: Callback URL in provider dashboard doesn't match
 
 **Solution**:
+
 - Update redirect URI in provider dashboard to match:
   ```
   http://localhost:8000/auth/{provider}/callback
@@ -459,6 +482,7 @@ openssl rand -hex 32
 **Cause**: Cookie expiration or SameSite issues
 
 **Solution**:
+
 - Check cookie `Max-Age` is set (604800 seconds = 7 days)
 - Verify `SameSite=Lax` is set
 - Check browser is not blocking third-party cookies
@@ -497,6 +521,7 @@ openssl rand -hex 32
 ### Overview
 
 In addition to OAuth, BotForg supports email/password authentication with:
+
 - User registration with email verification
 - Login with email/password
 - Password reset via email link
@@ -532,12 +557,14 @@ Password Reset Flow:
 ### Database Schema Updates
 
 **Table: `users` (updated)**
+
 ```sql
 ALTER TABLE users ADD COLUMN password_hash VARCHAR NULL;
 ALTER TABLE users ADD COLUMN email_verified_at TIMESTAMP NULL;
 ```
 
 **Table: `email_verifications` (new)**
+
 ```sql
 CREATE TABLE email_verifications (
     id INTEGER PRIMARY KEY,
@@ -550,6 +577,7 @@ CREATE TABLE email_verifications (
 ```
 
 **Table: `password_resets` (new)**
+
 ```sql
 CREATE TABLE password_resets (
     id INTEGER PRIMARY KEY,
@@ -563,13 +591,13 @@ CREATE TABLE password_resets (
 
 ### API Endpoints
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/auth/email/register` | No | Register new user |
-| POST | `/auth/email/login` | No | Login with email/password |
-| GET | `/auth/email/verify?token=...` | No | Verify email address |
-| POST | `/auth/email/request-reset` | No | Request password reset |
-| POST | `/auth/email/reset` | No | Reset password with token |
+| Method | Endpoint                       | Auth | Description               |
+| ------ | ------------------------------ | ---- | ------------------------- |
+| POST   | `/auth/email/register`         | No   | Register new user         |
+| POST   | `/auth/email/login`            | No   | Login with email/password |
+| GET    | `/auth/email/verify?token=...` | No   | Verify email address      |
+| POST   | `/auth/email/request-reset`    | No   | Request password reset    |
+| POST   | `/auth/email/reset`            | No   | Reset password with token |
 
 ### Password Policy
 
@@ -588,25 +616,30 @@ CREATE TABLE password_resets (
 ### Email Service
 
 **Development Mode**:
+
 - Logs verification/reset links to console
 - No SMTP required
 
 **Production Mode** (TODO):
+
 - Configure SMTP settings in .env
 - Send emails via SMTP server
 
 ### Frontend Features
 
 **Tabbed Auth UI**: `/account` shows tabs:
+
 - **Соцсети** (Social): OAuth providers (Google, Yandex, Mail.ru)
 - **Почта** (Email): Email/password forms
 
 **Email Tab Modes**:
+
 - **Login**: Email + password → login
 - **Register**: Name (optional) + email + password → register
 - **Reset**: Email → request reset link
 
 **Verification/Reset Pages**:
+
 - `/auth/verify?token=...` - Email verification
 - `/auth/reset?token=...` - Password reset form
 
@@ -646,28 +679,28 @@ CREATE TABLE password_resets (
 
 ### Backend Routes
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| GET | `/auth/{provider}/login` | No | Initiate OAuth flow |
-| GET | `/auth/{provider}/callback` | No | Handle OAuth callback |
-| POST | `/auth/email/register` | No | Register with email/password |
-| POST | `/auth/email/login` | No | Login with email/password |
-| GET | `/auth/email/verify` | No | Verify email address |
-| POST | `/auth/email/request-reset` | No | Request password reset |
-| POST | `/auth/email/reset` | No | Reset password |
-| POST | `/auth/logout` | No | Clear session cookie |
-| GET | `/me` | Yes | Get current user profile |
+| Method | Endpoint                    | Auth | Description                  |
+| ------ | --------------------------- | ---- | ---------------------------- |
+| GET    | `/auth/{provider}/login`    | No   | Initiate OAuth flow          |
+| GET    | `/auth/{provider}/callback` | No   | Handle OAuth callback        |
+| POST   | `/auth/email/register`      | No   | Register with email/password |
+| POST   | `/auth/email/login`         | No   | Login with email/password    |
+| GET    | `/auth/email/verify`        | No   | Verify email address         |
+| POST   | `/auth/email/request-reset` | No   | Request password reset       |
+| POST   | `/auth/email/reset`         | No   | Reset password               |
+| POST   | `/auth/logout`              | No   | Clear session cookie         |
+| GET    | `/me`                       | Yes  | Get current user profile     |
 
 ### Response Codes
 
-| Code | Meaning |
-|------|---------|
-| 200 | Success |
-| 400 | Bad Request (invalid provider, weak password) |
-| 401 | Unauthorized (no valid session, invalid credentials) |
-| 403 | Forbidden (email not verified) |
-| 429 | Too Many Requests (rate limit exceeded) |
-| 500 | Server Error |
+| Code | Meaning                                              |
+| ---- | ---------------------------------------------------- |
+| 200  | Success                                              |
+| 400  | Bad Request (invalid provider, weak password)        |
+| 401  | Unauthorized (no valid session, invalid credentials) |
+| 403  | Forbidden (email not verified)                       |
+| 429  | Too Many Requests (rate limit exceeded)              |
+| 500  | Server Error                                         |
 
 ---
 
@@ -716,6 +749,5 @@ react-router-dom (for routing)
 
 ---
 
-**Last Updated**: October 14, 2025  
+**Last Updated**: October 14, 2025
 **Maintained by**: BotForg Development Team
-

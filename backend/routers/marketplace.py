@@ -1,9 +1,5 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import and_, asc, desc, func, or_
-from sqlalchemy.orm import Session
-
 from backend.database import SessionLocal
 from backend.dependencies.auth import get_current_user
 from backend.models.bonus_account import UserBonusAccount
@@ -21,6 +17,9 @@ from backend.schemas.marketplace import (
     MarketplaceTemplateOut,
 )
 from backend.schemas.tag import TagOut
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import asc, desc, func, or_
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

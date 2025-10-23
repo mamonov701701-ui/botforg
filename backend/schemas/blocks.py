@@ -62,9 +62,7 @@ class BlockCatalogItem(BaseModel):
     def validate_plan_access(cls, v: List[str]) -> List[str]:
         for plan in v:
             if plan not in VALID_PLANS:
-                raise ValueError(
-                    f"Invalid plan: {plan}. Must be one of {VALID_PLANS}"
-                )
+                raise ValueError(f"Invalid plan: {plan}. Must be one of {VALID_PLANS}")
         return v
 
     @field_validator("permissions")
@@ -72,9 +70,7 @@ class BlockCatalogItem(BaseModel):
     def validate_permissions(cls, v: List[str]) -> List[str]:
         for role in v:
             if role not in VALID_ROLES:
-                raise ValueError(
-                    f"Invalid role: {role}. Must be one of {VALID_ROLES}"
-                )
+                raise ValueError(f"Invalid role: {role}. Must be one of {VALID_ROLES}")
         return v
 
 
@@ -83,7 +79,4 @@ class BlockCatalogResponse(BaseModel):
 
     blocks: List[BlockCatalogItem]
     total: int
-    filtered: bool = Field(
-        default=False, description="Была ли применена фильтрация"
-    )
-
+    filtered: bool = Field(default=False, description="Была ли применена фильтрация")

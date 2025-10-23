@@ -1,16 +1,14 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
-from sqlalchemy.orm import Session
-
 from backend.database import SessionLocal
 from backend.dependencies.auth import get_current_user
 from backend.models.rating import Rating
 from backend.models.template import Template
-from backend.models.user import User
 from backend.models.user import User as UserModel
 from backend.schemas.rating import RatingCreate, RatingOut
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

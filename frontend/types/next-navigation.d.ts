@@ -12,4 +12,3 @@ declare module 'next/navigation' {
   export function usePathname(): string;
   export function useSearchParams(): URLSearchParams;
 }
-

@@ -29,55 +29,13 @@ def test_pytest_works():
 def test_backend_app_structure():
     """Проверяем структуру backend приложения"""
     from backend.main import app
-    
+
     # Проверяем основные атрибуты
     assert hasattr(app, 'routes'), "Приложение должно иметь routes"
     assert hasattr(app, 'middleware'), "Приложение должно иметь middleware"
-    
+
     # Проверяем наличие health endpoint
     route_paths = [route.path for route in app.routes]
     assert "/health" in route_paths, "Должен быть /health endpoint"
-    
+
     print("✅ Структура backend приложения корректна")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

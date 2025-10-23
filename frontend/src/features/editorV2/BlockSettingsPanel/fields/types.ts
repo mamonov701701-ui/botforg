@@ -6,4 +6,3 @@ export interface FieldProps {
   onChange: (value: any) => void;
   error?: string;
 }
-

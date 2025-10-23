@@ -12,9 +12,8 @@ const HealthBanner: React.FC = () => {
   useEffect(() => {
     // Only check health in development
     if (!import.meta.env.DEV) return;
-    
-    get('/healthz')
-      .catch(() => setApiDown(true));
+
+    get('/healthz').catch(() => setApiDown(true));
   }, []);
 
   if (!apiDown || dismissed) return null;
@@ -37,9 +36,7 @@ const HealthBanner: React.FC = () => {
       }}
     >
       <span>⚠️</span>
-      <span>
-        API не отвечает (localhost:8000). Запустите backend и обновите страницу.
-      </span>
+      <span>API не отвечает (localhost:8000). Запустите backend и обновите страницу.</span>
       <button
         onClick={() => setDismissed(true)}
         style={{
@@ -61,5 +58,3 @@ const HealthBanner: React.FC = () => {
 };
 
 export default HealthBanner;
-
-

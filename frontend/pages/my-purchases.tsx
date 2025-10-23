@@ -15,14 +15,14 @@ export default function MyPurchasesPage() {
   const { user, loading } = useRequireAuth();
   const [purchases, setPurchases] = useState<any[]>([]);
   const [loadingPurchases, setLoadingPurchases] = useState(true);
-  const [error, setError] = useState("");
-  const [category, setCategory] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [error, setError] = useState('');
+  const [category, setCategory] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const loadPurchases = async () => {
     setLoadingPurchases(true);
-    setError("");
+    setError('');
     try {
       const params: any = {};
       if (category) params.category = category;
@@ -31,7 +31,7 @@ export default function MyPurchasesPage() {
       const data = await getMyPurchases(params);
       setPurchases(data);
     } catch {
-      setError("Ошибка загрузки покупок");
+      setError('Ошибка загрузки покупок');
     } finally {
       setLoadingPurchases(false);
     }
@@ -56,7 +56,9 @@ export default function MyPurchasesPage() {
             className="border rounded px-2 py-1"
           >
             {CATEGORIES.map(cat => (
-              <option key={cat.value} value={cat.value}>{cat.label}</option>
+              <option key={cat.value} value={cat.value}>
+                {cat.label}
+              </option>
             ))}
           </select>
         </div>
@@ -90,7 +92,9 @@ export default function MyPurchasesPage() {
               <div>
                 <div className="font-semibold">{p.template?.name}</div>
                 <div className="text-xs text-gray-500">Категория: {p.template?.category}</div>
-                <div className="text-xs text-gray-500">Куплен: {new Date(p.created_at).toLocaleDateString()}</div>
+                <div className="text-xs text-gray-500">
+                  Куплен: {new Date(p.created_at).toLocaleDateString()}
+                </div>
                 <div className="text-xs mt-1 text-gray-700">{p.template?.description}</div>
               </div>
               <Link
@@ -105,4 +109,4 @@ export default function MyPurchasesPage() {
       )}
     </div>
   );
-} 
+}

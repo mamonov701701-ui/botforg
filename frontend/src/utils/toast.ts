@@ -11,5 +11,3 @@ export const toast = {
   warning: (msg: string) => useEditorStore.getState().showToast(msg, 'warning'),
   info: (msg: string) => useEditorStore.getState().showToast(msg, 'info'),
 };
-
-

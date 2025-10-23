@@ -1,10 +1,6 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
-from sqlalchemy import asc, desc, func
-from sqlalchemy.orm import Session
-
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.dependencies.roles import require_role
@@ -19,6 +15,9 @@ from backend.schemas.template import (
     TemplateWithRatingListOut,
     TemplateWithRatingOut,
 )
+from fastapi import APIRouter, Body, Depends, HTTPException, status
+from sqlalchemy import asc, desc, func
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

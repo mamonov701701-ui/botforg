@@ -2,7 +2,7 @@ import logging
 import re
 import time
 from collections import defaultdict
-from typing import Dict, Tuple
+from typing import Dict
 
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse

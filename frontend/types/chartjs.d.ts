@@ -22,4 +22,3 @@ declare module 'chart.js' {
   export const Legend: any;
   export function register(...args: any[]): void;
 }
-

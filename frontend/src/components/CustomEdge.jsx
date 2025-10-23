@@ -26,14 +26,14 @@ const CustomEdge = ({
   const strokeColor = BRAND_AMBER; // BRAND_AMBER для всех стрелок
   const strokeWidth = 3; // Фиксированная толщина 3 пикселя
 
-  const handleEdgeClick = (e) => {
+  const handleEdgeClick = e => {
     e.stopPropagation();
     if (data?.onSelect) {
       data.onSelect(id);
     }
   };
 
-  const handleDelete = (e) => {
+  const handleDelete = e => {
     e.stopPropagation();
     if (data?.onDelete) {
       data.onDelete(id);
@@ -65,17 +65,17 @@ const CustomEdge = ({
           color: BRAND_AMBER,
           width: 12,
           height: 12,
-          strokeWidth: 3
+          strokeWidth: 3,
         }}
         style={{
           ...style,
           cursor: 'pointer',
           transition: 'stroke 0.2s ease, stroke-width 0.2s ease',
           filter: isHighlighted ? 'drop-shadow(0 0 6px rgba(255, 0, 0, 0.4))' : 'none',
-          pointerEvents: 'auto' // Убеждаемся, что edge реагирует на события
+          pointerEvents: 'auto', // Убеждаемся, что edge реагирует на события
         }}
       />
-      
+
       {/* Корзинка - показывается только при выделении */}
       {isHighlighted && (
         <foreignObject
@@ -83,10 +83,10 @@ const CustomEdge = ({
           y={centerY - 16}
           width={32}
           height={32}
-          style={{ 
+          style={{
             overflow: 'visible',
             zIndex: 1000,
-            pointerEvents: 'all'
+            pointerEvents: 'all',
           }}
         >
           <div
@@ -96,14 +96,14 @@ const CustomEdge = ({
               transition: 'all 0.2s ease',
               zIndex: 1001,
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-              cursor: 'pointer'
+              cursor: 'pointer',
             }}
             title="Удалить связь"
-            onMouseEnter={(e) => {
+            onMouseEnter={e => {
               e.target.style.backgroundColor = DANGER_RED;
               e.target.style.transform = 'scale(1.1)';
             }}
-            onMouseLeave={(e) => {
+            onMouseLeave={e => {
               e.target.style.backgroundColor = '#ef4444';
               e.target.style.transform = 'scale(1)';
             }}

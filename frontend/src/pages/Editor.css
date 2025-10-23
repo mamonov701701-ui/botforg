@@ -3,7 +3,7 @@
   position: relative;
   width: 100%;
   height: calc(100vh - 120px); /* подстрой, если шапка/футер другие */
-  background: #0A1B3D;        /* брендовый тёмно-синий */
+  background: #0a1b3d; /* брендовый тёмно-синий */
 }
 
 /* Кнопка "Добавить блок" — плавающая сверху слева */
@@ -14,47 +14,47 @@
   z-index: 5;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 2px solid #FFB300;
+  border: 2px solid #ffb300;
   background: #fff;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0,0,0,.2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   transition: background-color 0.2s ease;
 }
 
 .editor-toolbar__btn:hover {
-  background: #FFF6E0;
+  background: #fff6e0;
 }
 
 /* Узлы над рёбрами, пины не обрезаются */
-.react-flow__node { 
-  overflow: visible !important; 
-  z-index: 2 !important; 
+.react-flow__node {
+  overflow: visible !important;
+  z-index: 2 !important;
 }
 
-.react-flow__edges { 
-  z-index: 1 !important; 
+.react-flow__edges {
+  z-index: 1 !important;
 }
 
 /* Пины: по умолчанию скрыты */
 .node-card .react-flow__handle {
-  width: 12px; 
+  width: 12px;
   height: 12px;
   background: #fff;
-  border: 2px solid #FFB300;
+  border: 2px solid #ffb300;
   border-radius: 50%;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
 
 /* Пины видны у выбранного узла */
-.react-flow .react-flow__node.selected .react-flow__handle { 
-  opacity: 1; 
+.react-flow .react-flow__node.selected .react-flow__handle {
+  opacity: 1;
 }
 
 /* Пины видны когда тянем соединение */
-.react-flow.connecting .node-card .react-flow__handle { 
-  opacity: 1; 
+.react-flow.connecting .node-card .react-flow__handle {
+  opacity: 1;
 }
 
 /* Дополнительные стили для лучшего UX */
@@ -75,47 +75,71 @@
 }
 
 /* Редактор на весь экран, фон — бренд */
-.editor-shell{
+.editor-shell {
   position: relative;
   height: 100vh;
-  background: #0A1B3D;
+  background: #0a1b3d;
 }
 
 /* Плавающая кнопка сверху слева */
-.editor-toolbar__btn{
-  position:absolute; top:12px; left:12px; z-index:5;
-  padding:8px 12px; border-radius:10px; font-weight:600;
-  border:2px solid #FFB300; background:#fff; cursor:pointer;
-  box-shadow:0 4px 14px rgba(0,0,0,.2);
+.editor-toolbar__btn {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 5;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 600;
+  border: 2px solid #ffb300;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
 }
-.editor-toolbar__btn:hover{ background:#FFF6E0 }
+.editor-toolbar__btn:hover {
+  background: #fff6e0;
+}
 
 /* Узлы над рёбрами, пины не обрезаются */
-.react-flow__node{ overflow:visible !important; z-index:2 !important; }
-.react-flow__edges{ z-index:1 !important; }
+.react-flow__node {
+  overflow: visible !important;
+  z-index: 2 !important;
+}
+.react-flow__edges {
+  z-index: 1 !important;
+}
 
 /* СБРОС возможных старых глобальных правил — запрещаем глобальную видимость */
-.react-flow__handle{ opacity: inherit; } /* нейтрально */
+.react-flow__handle {
+  opacity: inherit;
+} /* нейтрально */
 
 /* Пины: только у нашей карточки, по умолчанию скрыты */
-.node-card .react-flow__handle{
-  width:12px; height:12px; border-radius:50%;
-  border:2px solid #FFB300; background:#fff;
-  opacity:0; transition:opacity .12s ease;
+.node-card .react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #ffb300;
+  background: #fff;
+  opacity: 0;
+  transition: opacity 0.12s ease;
 }
 
 /* Видимость у выделенного узла */
-.react-flow .react-flow__node.selected .react-flow__handle{ opacity:1; }
+.react-flow .react-flow__node.selected .react-flow__handle {
+  opacity: 1;
+}
 
 /* Видимость во время протягивания (класс висит на самом ReactFlow) */
-.react-flow.connecting .node-card .react-flow__handle{ opacity:1; }
+.react-flow.connecting .node-card .react-flow__handle {
+  opacity: 1;
+}
 
 /* Новые стили для обновлённого редактора */
 .editor-container {
   position: relative;
   width: 100%;
   height: 100vh;
-  background: #0A1B3D;
+  background: #0a1b3d;
   overflow: hidden;
 }
 
@@ -127,10 +151,10 @@
   z-index: 10;
   padding: 12px 16px;
   background: #fff;
-  border: 2px solid #FFB300;
+  border: 2px solid #ffb300;
   border-radius: 12px;
   font-weight: 600;
-  color: #0A1B3D;
+  color: #0a1b3d;
   cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   transition: all 0.2s ease;
@@ -138,7 +162,7 @@
 }
 
 .add-node-btn:hover {
-  background: #FFF6E0;
+  background: #fff6e0;
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
@@ -170,7 +194,7 @@
 .react-flow__controls-button {
   background: transparent;
   border: none;
-  color: #0A1B3D;
+  color: #0a1b3d;
   transition: background-color 0.2s ease;
 }
 
@@ -191,7 +215,7 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  border: 3px solid #FFB300;
+  border: 3px solid #ffb300;
   background: #fff;
   opacity: 0;
   transition: all 0.2s ease;
@@ -220,7 +244,7 @@
 
 /* Стили для рёбер */
 .react-flow__edge-path {
-  stroke: #FFB300;
+  stroke: #ffb300;
   stroke-width: 3;
   fill: none;
   transition: all 0.2s ease;
@@ -228,24 +252,24 @@
 }
 
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: #FFC64A;
+  stroke: #ffc64a;
   stroke-width: 4;
   filter: drop-shadow(0 0 8px rgba(255, 179, 0, 0.6));
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
-  stroke: #FFC64A;
+  stroke: #ffc64a;
   stroke-width: 4;
 }
 
 /* Стили для маркеров стрелок */
 .react-flow__arrowhead {
-  fill: #FFB300;
+  fill: #ffb300;
   transition: all 0.2s ease;
 }
 
 .react-flow__edge:hover .react-flow__arrowhead {
-  fill: #FFC64A;
+  fill: #ffc64a;
   filter: drop-shadow(0 0 4px rgba(255, 179, 0, 0.6));
 }
 
@@ -256,7 +280,7 @@
     padding: 8px 12px;
     font-size: 12px;
   }
-  
+
   .fit-view-btn {
     right: 140px;
   }

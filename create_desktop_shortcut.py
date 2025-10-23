@@ -15,4 +15,4 @@ shortcut = shell.CreateShortCut(shortcut_path)
 shortcut.TargetPath = target_path
 shortcut.WorkingDirectory = project_dir
 shortcut.IconLocation = "shell32.dll, 167"  # стандартная иконка Windows
-shortcut.Save() 
+shortcut.Save()

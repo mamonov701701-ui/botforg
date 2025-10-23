@@ -13,11 +13,13 @@ BotForg - это платформа для создания и управлен�
 ### 1. Открыть проект в Cursor/VS Code
 
 ### 2. Запуск через задачи:
+
 - `Terminal → Run Task… → Dev: All (Backend + Frontend)`
 - Backend: http://127.0.0.1:8000 (Swagger: /docs)
 - Frontend: http://localhost:5173
 
 ### 3. Альтернативный запуск скриптом:
+
 - **PowerShell**: Открыть PowerShell в корне проекта и выполнить:
   ```powershell
   .\scripts\start-dev.ps1
@@ -79,12 +81,14 @@ botforg/
 ## Разработка
 
 ### Backend
+
 - Авто-перезагрузка при изменениях (uvicorn --reload)
 - Swagger документация: http://127.0.0.1:8000/docs
 - База данных: SQLite (botforg.db) с Alembic миграциями
 - Конфигурация через переменные окружения (файл `.env`)
 
 ### Frontend
+
 - Hot Module Replacement (Vite)
 - Tailwind CSS для стилизации
 - React Flow для визуального редактора
@@ -92,11 +96,12 @@ botforg/
 
 ## Тестирование
 
-✅ **Все тесты проходят успешно** (88/88 passed)  
-✅ **Rate limiting отключается при TESTING=true**  
-✅ **Совместимость bcrypt → pbkdf2**  
+✅ **Все тесты проходят успешно** (88/88 passed)
+✅ **Rate limiting отключается при TESTING=true**
+✅ **Совместимость bcrypt → pbkdf2**
 
 ### Запуск тестов
+
 ```bash
 # Активировать виртуальное окружение
 .\venv\Scripts\Activate.ps1
@@ -115,10 +120,12 @@ python -m pytest --cov=backend tests/
 ```
 
 ### Через VS Code/Cursor
+
 1. `Terminal → Run Task… → Tests: Pytest (venv)`
 2. Или использовать встроенный тест-раннер
 
 ### Отчеты тестирования
+
 Результаты тестов автоматически записываются в `LOGS/TEST_FIX_REPORT.txt`
 
 ## Требования
@@ -130,6 +137,7 @@ python -m pytest --cov=backend tests/
 ## Установка зависимостей
 
 ### Backend
+
 ```bash
 # Активировать виртуальное окружение
 .\venv\Scripts\Activate.ps1
@@ -142,6 +150,7 @@ pip install -r backend/requirements-dev.txt
 ```
 
 ### Frontend
+
 ```bash
 cd frontend
 npm install

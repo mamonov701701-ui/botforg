@@ -28,4 +28,3 @@ ROOT_DIR = Path("monitoring") / "screenshots"
 # Telegram (заполни в ОС как переменные окружения)
 TELEGRAM_BOT_TOKEN = os.getenv("TG_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TG_CHAT_ID", "")
-

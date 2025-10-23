@@ -16,12 +16,13 @@
   "type": "default",
   "position": { "x": 100, "y": 200 },
   "data": {
-    "label": "Сообщение",          // визуальное название
+    "label": "Сообщение", // визуальное название
     "subtitle": "Отправка текста", // подзаголовок
-    "type": "message",             // тип блока из каталога
-    "icon": "MessageSquare",       // иконка
-    "color": "#2196F3",            // цвет
-    "settings": {                  // ВСЕ пользовательские данные
+    "type": "message", // тип блока из каталога
+    "icon": "MessageSquare", // иконка
+    "color": "#2196F3", // цвет
+    "settings": {
+      // ВСЕ пользовательские данные
       "text": "Привет, пользователь!",
       "parseMode": "Markdown",
       "disablePreview": false
@@ -33,24 +34,27 @@
 ### Никаких других полей для пользовательских данных
 
 ❌ **Неправильно:**
+
 ```json
 {
   "data": {
     "label": "Сообщение",
-    "messageText": "Привет!",     // пользовательские данные вне settings
-    "parseMode": "Markdown",       // пользовательские данные вне settings
+    "messageText": "Привет!", // пользовательские данные вне settings
+    "parseMode": "Markdown", // пользовательские данные вне settings
     "settings": {}
   }
 }
 ```
 
 ✅ **Правильно:**
+
 ```json
 {
   "data": {
     "label": "Сообщение",
     "type": "message",
-    "settings": {                  // все пользовательские данные здесь
+    "settings": {
+      // все пользовательские данные здесь
       "text": "Привет!",
       "parseMode": "Markdown"
     }
@@ -110,42 +114,54 @@
 ## Категории блоков
 
 ### basic
+
 Базовые блоки, доступные на всех тарифах:
+
 - Начало (start)
 - Сообщение (message)
 - Ожидание (wait)
 - Условие (condition)
 
 ### business
+
 Бизнес-логика (доступны на pro/enterprise):
+
 - Оплата (payment)
 - Подписка (subscription)
 - Счет на оплату (invoice)
 - Скидка (discount)
 
 ### service
+
 Интеграции с внешними сервисами (pro/enterprise):
+
 - API запрос (api_call)
 - Webhook (webhook)
 - Email (email)
 - SMS (sms)
 
 ### system
+
 Системные блоки для управления сценарием:
+
 - Переменная (variable)
 - Лог (log)
 - Обработчик ошибок (error_handler)
 - Роутер (router)
 
 ### ai
+
 Блоки с искусственным интеллектом (pro/enterprise):
+
 - AI Чат (ai_chat)
 - AI Генерация изображений (ai_image)
 - AI Анализ текста (ai_text_analysis)
 - AI Синтез речи (ai_voice)
 
 ### custom
+
 Пользовательские расширения (преимущественно enterprise):
+
 - Пользовательский код (custom_code)
 - Плагин (custom_plugin)
 - Пользовательский шаблон (custom_template)
@@ -177,6 +193,7 @@
 Получение каталога блоков с фильтрацией.
 
 **Query параметры:**
+
 - `plan` — фильтр по тарифу (free, pro, enterprise)
 - `role` — фильтр по роли (owner, admin, manager_template, developer, support, viewer)
 
@@ -197,6 +214,7 @@ GET /blocks?plan=free&role=viewer
 ```
 
 **Фильтрация:**
+
 - Если указан `plan`, возвращаются только блоки, у которых указанный план есть в `planAccess`
 - Если указан `role`, возвращаются только блоки, у которых указанная роль есть в `permissions`
 - Фильтры применяются одновременно (AND логика)
@@ -225,8 +243,8 @@ const node = {
     type: block.id,
     icon: block.icon,
     color: block.color,
-    settings: {}  // заполняется пользователем через форму
-  }
+    settings: {}, // заполняется пользователем через форму
+  },
 };
 ```
 
@@ -237,7 +255,7 @@ const node = {
 ```typescript
 const renderConfigForm = (block, currentSettings) => {
   return block.configSchema.map(field => {
-    switch(field.type) {
+    switch (field.type) {
       case 'string':
         return <Input name={field.name} label={field.label} />;
       case 'select':
@@ -259,9 +277,9 @@ const updateNodeSettings = (nodeId, newSettings) => {
       ...node.data,
       settings: {
         ...node.data.settings,
-        ...newSettings
-      }
-    }
+        ...newSettings,
+      },
+    },
   });
 };
 ```
@@ -285,4 +303,3 @@ const updateNodeSettings = (nodeId, newSettings) => {
 4. Реализуйте обработчик блока в backend (при необходимости)
 
 **Важно:** Не добавляйте пользовательские поля в `node.data` напрямую. Используйте только `node.data.settings`.
-

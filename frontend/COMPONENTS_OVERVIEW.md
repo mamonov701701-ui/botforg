@@ -52,52 +52,63 @@ frontend/src/
 ## Key Components
 
 ### EditorV2Shell
-**Location**: `features/editorV2/EditorV2Shell.tsx`  
-**Purpose**: Main visual editor component with React Flow integration  
+
+**Location**: `features/editorV2/EditorV2Shell.tsx`
+**Purpose**: Main visual editor component with React Flow integration
 **Features**:
+
 - Drag & drop node creation
 - Visual flow editing
 - Export/import JSON functionality
 - Real-time collaboration ready
 
-**Props**: None (uses React Router params)  
-**State**: 
+**Props**: None (uses React Router params)
+**State**:
+
 - `nodes`: Array of flow nodes
 - `edges`: Array of flow edges
 - `viewport`: Canvas viewport state
 - `selectedNodeId`: Currently selected node
 
 ### Canvas
-**Location**: `features/editorV2/Canvas.tsx`  
-**Purpose**: React Flow canvas wrapper  
+
+**Location**: `features/editorV2/Canvas.tsx`
+**Purpose**: React Flow canvas wrapper
 **Features**:
+
 - Node types configuration
 - Edge creation and deletion
 - Viewport management
 - Custom node rendering
 
 ### NodePanel
-**Location**: `features/editorV2/NodePanel.tsx`  
-**Purpose**: Sidebar with draggable node types  
+
+**Location**: `features/editorV2/NodePanel.tsx`
+**Purpose**: Sidebar with draggable node types
 **Features**:
+
 - Categorized node types
 - Drag & drop functionality
 - Visual node previews
 - Icon-based identification
 
 ### ImportPreviewModal
-**Location**: `components/ImportPreviewModal.jsx`  
-**Purpose**: JSON import preview and validation  
+
+**Location**: `components/ImportPreviewModal.jsx`
+**Purpose**: JSON import preview and validation
 **Features**:
+
 - Schema validation
 - Visual preview
 - Statistics display
 - Import confirmation
 
 ### Toast
-**Location**: `components/Toast.jsx`  
-**Purpose**: Notification system  
+
+**Location**: `components/Toast.jsx`
+**Purpose**: Notification system
 **Features**:
+
 - Multiple types (success, error, warning, info)
 - Auto-dismiss functionality
 - Smooth animations
@@ -106,18 +117,22 @@ frontend/src/
 ## Component Patterns
 
 ### Common Utilities
-**Location**: `components/common/NodeIcons.jsx`  
-**Purpose**: Shared utilities for node visualization  
+
+**Location**: `components/common/NodeIcons.jsx`
+**Purpose**: Shared utilities for node visualization
 **Functions**:
+
 - `getNodeIcon(type)`: Returns appropriate icon for node type
 - `getNodeColor(type)`: Returns color scheme for node type
 
 ### Error Handling
+
 - **ErrorBoundary**: Catches and displays React errors
 - **ErrorIndicator**: Shows error states in UI
 - **Toast**: Displays error notifications
 
 ### State Management
+
 - Local state with `useState` and `useReducer`
 - Context providers for global state
 - Custom hooks for reusable logic
@@ -125,14 +140,17 @@ frontend/src/
 ## Styling
 
 ### Tailwind CSS
+
 - Utility-first CSS framework
 - Responsive design patterns
 - Custom color schemes
 - Component-specific styles
 
 ### QA Mode
-**Activation**: `?qa=1` URL parameter  
+
+**Activation**: `?qa=1` URL parameter
 **Features**:
+
 - Grid overlay for layout debugging
 - Watermark with screen info
 - Element outlines
@@ -141,12 +159,14 @@ frontend/src/
 ## Data Flow
 
 ### Editor State
+
 1. **Canvas**: Manages node/edge state
 2. **NodePanel**: Provides drag sources
 3. **SettingsPanel**: Edits selected node properties
 4. **Toolbar**: Provides export/import actions
 
 ### Authentication
+
 1. **AuthModal**: Handles login/register
 2. **Context**: Manages auth state
 3. **Protected Routes**: Route-level auth checks
@@ -154,11 +174,13 @@ frontend/src/
 ## Performance Optimizations
 
 ### React Flow
+
 - Virtualized rendering for large flows
 - Memoized components
 - Efficient re-rendering strategies
 
 ### Code Splitting
+
 - Route-based code splitting
 - Lazy loading for heavy components
 - Dynamic imports for features
@@ -166,12 +188,14 @@ frontend/src/
 ## Development Tools
 
 ### ESLint Configuration
+
 - React-specific rules
 - TypeScript support
 - Accessibility checks
 - Code quality enforcement
 
 ### Build Process
+
 - Vite for fast development
 - Hot module replacement
 - Optimized production builds
@@ -180,12 +204,14 @@ frontend/src/
 ## Testing Strategy
 
 ### Component Testing
+
 - Unit tests for utilities
 - Integration tests for workflows
 - Visual regression testing
 - Accessibility testing
 
 ### QA Mode Features
+
 - Layout debugging tools
 - Visual indicators
 - Screen size information

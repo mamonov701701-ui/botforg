@@ -31,7 +31,13 @@ interface ConnectionLineProps {
   connectionLineStyle?: React.CSSProperties;
 }
 
-const CustomConnectionLine = ({ fromX, fromY, toX, toY, connectionLineStyle }: ConnectionLineProps) => (
+const CustomConnectionLine = ({
+  fromX,
+  fromY,
+  toX,
+  toY,
+  connectionLineStyle,
+}: ConnectionLineProps) => (
   <g>
     <path
       fill="none"
@@ -41,13 +47,7 @@ const CustomConnectionLine = ({ fromX, fromY, toX, toY, connectionLineStyle }: C
       d={`M${fromX},${fromY} C ${fromX + 50},${fromY} ${toX - 50},${toY} ${toX},${toY}`}
       style={connectionLineStyle}
     />
-    <circle
-      cx={toX}
-      cy={toY}
-      fill={BRAND_AMBER}
-      r={4}
-      className="animated"
-    />
+    <circle cx={toX} cy={toY} fill={BRAND_AMBER} r={4} className="animated" />
   </g>
 );
 
@@ -58,14 +58,14 @@ function EditorFlow() {
       id: 'start',
       type: 'default',
       position: { x: 250, y: 50 }, // Ближе к верху и центру
-      data: { 
-        type: 'start', 
-        label: 'Начало', 
-        subtitle: 'Точка входа сценария' 
+      data: {
+        type: 'start',
+        label: 'Начало',
+        subtitle: 'Точка входа сценария',
       },
     },
   ]);
-  
+
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
@@ -85,14 +85,14 @@ function EditorFlow() {
 
   // Удаление ребра
   const onDeleteEdge = useCallback(
-    (id: string) => setEdges((eds) => eds.filter((e) => e.id !== id)),
+    (id: string) => setEdges(eds => eds.filter(e => e.id !== id)),
     [setEdges]
   );
 
   // Создание соединения
   const onConnect = useCallback(
     (params: Edge | Connection) =>
-      setEdges((eds) =>
+      setEdges(eds =>
         addEdge(
           {
             ...params,
@@ -115,20 +115,20 @@ function EditorFlow() {
     const radius = 150;
     const centerX = 400; // Центр экрана
     const centerY = 200; // Ближе к верху
-    
-    setNodes((nds) => [
+
+    setNodes(nds => [
       ...nds,
       {
         id: crypto.randomUUID(),
         type: 'default',
-        position: { 
-          x: centerX + Math.cos(angle) * radius, 
-          y: centerY + Math.sin(angle) * radius 
+        position: {
+          x: centerX + Math.cos(angle) * radius,
+          y: centerY + Math.sin(angle) * radius,
         },
-        data: { 
-          type: 'message', 
-          label: `Блок ${nds.length + 1}`, 
-          subtitle: 'Новый блок' 
+        data: {
+          type: 'message',
+          label: `Блок ${nds.length + 1}`,
+          subtitle: 'Новый блок',
         },
       },
     ]);
@@ -152,19 +152,18 @@ function EditorFlow() {
     setHoveredEdge(null);
   }, []);
 
-  const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
-    event.stopPropagation();
-    onDeleteEdge(edge.id);
-  }, [onDeleteEdge]);
+  const onEdgeClick = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.stopPropagation();
+      onDeleteEdge(edge.id);
+    },
+    [onDeleteEdge]
+  );
 
   return (
     <div className="editor-container">
       {/* Кнопка добавления блока в правом верхнем углу */}
-      <button 
-        className="add-node-btn"
-        onClick={handleAddNode}
-        title="Добавить новый блок"
-      >
+      <button className="add-node-btn" onClick={handleAddNode} title="Добавить новый блок">
         ➕ Добавить блок
       </button>
 
@@ -182,7 +181,6 @@ function EditorFlow() {
         onEdgeMouseEnter={onEdgeMouseEnter}
         onEdgeMouseLeave={onEdgeMouseLeave}
         onEdgeClick={onEdgeClick}
-        
         // Интерактивность
         nodesDraggable={true}
         nodesConnectable={true}
@@ -192,15 +190,12 @@ function EditorFlow() {
         zoomOnScroll={true}
         zoomOnPinch={true}
         zoomActivationKeyCode={undefined} // Зум колесом мыши без модификаторов
-        
         // Настройки зума - убираем огромный zoom
         minZoom={0.3}
         maxZoom={2}
-        
         // Режим соединения
         connectionMode={ConnectionMode.Loose}
         connectOnClick={true}
-        
         // Настройки рёбер по умолчанию
         defaultEdgeOptions={{
           type: 'amber',
@@ -208,18 +203,14 @@ function EditorFlow() {
           style: { stroke: BRAND_AMBER, strokeWidth: 3 },
           markerEnd: { type: MarkerType.ArrowClosed, color: BRAND_AMBER },
         }}
-        
         // Кастомная линия соединения
         connectionLineComponent={CustomConnectionLine}
         connectionLineStyle={{ stroke: BRAND_AMBER, strokeWidth: 3 }}
-        
         // Автоматическая подгонка при загрузке
         fitView={true}
         fitViewOptions={{ padding: 0.1, duration: 800 }}
-        
         // Скрываем атрибуцию
         proOptions={{ hideAttribution: true }}
-        
         // Стили
         style={{ width: '100%', height: '100%' }}
       >
@@ -231,15 +222,15 @@ function EditorFlow() {
           color="rgba(255, 255, 255, 0.2)"
           style={{ backgroundColor: '#0A1B3D' }}
         />
-        
+
         {/* Элементы управления */}
-        <Controls 
+        <Controls
           position="bottom-left"
           showZoom={true}
           showFitView={true}
           showInteractive={true}
         />
-        
+
         {/* Мини-карта */}
         <MiniMap
           position="bottom-right"

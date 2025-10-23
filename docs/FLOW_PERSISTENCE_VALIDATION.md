@@ -7,18 +7,21 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ## Components Created
 
 ### 1. Schema Validation Utility (`frontend/src/utils/schemaValidation.ts`)
+
 - `validateNodeSettings()` - Validates a single node against its configSchema
 - `validateAllNodesWithSchema()` - Validates all nodes in a flow
 - `hasValidationErrors()` - Checks if any validation results contain errors
 - Checks required fields, handles empty values, arrays, etc.
 
 ### 2. Validation Store (`frontend/src/stores/validationStore.ts`)
+
 - Centralized validation state management using Zustand
 - Map-based storage for O(1) lookups
 - Actions: `setValidationResult`, `setAllValidationResults`, `clearValidation`
 - Getters: `getNodeValidation`, `hasErrors`, `getInvalidNodes`
 
 ### 3. Validation Modal (`frontend/src/features/editorV2/ValidationModal.tsx`)
+
 - Shows all validation errors in a modal
 - Lists each invalid node with:
   - Block title
@@ -29,6 +32,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 - Error count display
 
 ### 4. Export Confirmation Modal (`frontend/src/features/editorV2/ExportConfirmModal.tsx`)
+
 - Warns users before exporting flows with errors
 - Shows error count
 - Two options:
@@ -37,28 +41,34 @@ Successfully implemented comprehensive flow save/load functionality with automat
 - Orange warning theme
 
 ### 5. Enhanced EditorV2Shell
+
 **CustomNode Component:**
+
 - Added validation badge integration
 - Red border for invalid nodes
 - ⚠️ badge in bottom-right corner
 - Tooltip showing missing fields
 
 **Validation Logic:**
+
 - Auto-validation on nodes change
 - `runValidation()` function
 - Integration with validation store
 
 **Export/Import:**
+
 - Enhanced export with metadata (plan, role, counts, timestamp)
 - Validation check before export
 - Import validation (file structure, settings)
 - Toast notifications for success/errors
 
 **Modal Integration:**
+
 - ValidationModal for checking flow
 - ExportConfirmModal for export warnings
 
 ### 6. Updated Toolbar (`frontend/src/features/editorV2/Toolbar.tsx`)
+
 - Simplified to 3 buttons:
   - 💾 "Сохранить" (Export)
   - 📂 "Загрузить" (Import)
@@ -67,6 +77,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 - Clean, modern styling
 
 ### 7. Real-time Validation in BlockSettingsPanel
+
 - Validates node on mount
 - Validates on every settings change
 - Uses useEffect to trigger validation
@@ -75,6 +86,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ## Features Implemented
 
 ### ✅ Export with Metadata
+
 ```json
 {
   "meta": {
@@ -91,12 +103,14 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ```
 
 ### ✅ Schema-based Validation
+
 - Checks all required fields from configSchema
 - Validates on settings changes
 - Validates before export
 - Validates after import
 
 ### ✅ Visual Error Badges
+
 - Red border on invalid nodes
 - ⚠️ badge (28x28px circle)
 - Bottom-right position
@@ -104,6 +118,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 - Shadow effect
 
 ### ✅ Validation Modal
+
 - Lists all invalid nodes
 - Shows missing fields per node
 - "Перейти" button for navigation
@@ -111,12 +126,14 @@ Successfully implemented comprehensive flow save/load functionality with automat
 - Error count display
 
 ### ✅ Export Safety
+
 - Checks validation before export
 - Shows warning modal if errors exist
 - Option to export anyway
 - Prevents accidental broken exports
 
 ### ✅ Import Validation
+
 - Validates file structure
 - Checks for nodes and edges arrays
 - Validates settings exist
@@ -124,6 +141,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 - Auto-validates after import
 
 ### ✅ Real-time Validation
+
 - Validates on field changes
 - Instant visual feedback
 - No manual validation trigger needed
@@ -150,6 +168,7 @@ Successfully implemented comprehensive flow save/load functionality with automat
 ## Validation Logic
 
 ### Required Field Check
+
 ```typescript
 if (field.required) {
   const value = settings[field.name];
@@ -162,6 +181,7 @@ if (field.required) {
 ```
 
 ### Export Flow
+
 ```
 1. User clicks "Сохранить"
    ↓
@@ -175,6 +195,7 @@ if (field.required) {
 ```
 
 ### Import Flow
+
 ```
 1. User clicks "Загрузить"
    ↓
@@ -195,6 +216,7 @@ if (field.required) {
 ## Testing Scenarios
 
 ### Scenario 1: Visual Error Badges ✅
+
 ```
 1. Drag "Сообщение" block to canvas
 2. Don't fill required "text" field
@@ -209,6 +231,7 @@ if (field.required) {
 ```
 
 ### Scenario 2: Validation Modal ✅
+
 ```
 1. Create 3 nodes with missing required fields
 2. Click "Проверить" button (if toolbar integrated)
@@ -223,6 +246,7 @@ if (field.required) {
 ```
 
 ### Scenario 3: Export with Errors ✅
+
 ```
 1. Create flow with 2 invalid nodes
 2. Click "Сохранить"
@@ -237,6 +261,7 @@ if (field.required) {
 ```
 
 ### Scenario 4: Export Success ✅
+
 ```
 1. Create valid flow (all required fields filled)
 2. Click "Сохранить"
@@ -252,6 +277,7 @@ if (field.required) {
 ```
 
 ### Scenario 5: Import Valid File ✅
+
 ```
 1. Export a valid flow
 2. Clear canvas
@@ -265,6 +291,7 @@ if (field.required) {
 ```
 
 ### Scenario 6: Import Invalid File ✅
+
 ```
 Test A: Corrupted JSON
 1. Create file with invalid JSON
@@ -283,6 +310,7 @@ Test C: Invalid node structure
 ```
 
 ### Scenario 7: Real-time Validation ✅
+
 ```
 1. Select node with required fields
 2. Open BlockSettingsPanel
@@ -297,6 +325,7 @@ Test C: Invalid node structure
 ## Visual Design
 
 ### Error Badge
+
 - **Position**: Bottom-right corner of node
 - **Size**: 28x28px circle
 - **Background**: #ef4444 (red)
@@ -305,11 +334,13 @@ Test C: Invalid node structure
 - **Tooltip**: Shows comma-separated list of missing fields
 
 ### Invalid Node Border
+
 - **Color**: #ef4444 (red) instead of normal block color
 - **Width**: 4px (same as valid nodes)
 - **Condition**: `isInvalid && validation && !validation.isValid`
 
 ### Validation Modal
+
 - **Background**: #1a1a2e
 - **Border**: 2px solid #374151
 - **Max width**: 600px
@@ -319,6 +350,7 @@ Test C: Invalid node structure
 - **Close button**: × (24px, gray)
 
 ### Export Confirm Modal
+
 - **Background**: #1a1a2e
 - **Border**: 2px solid #f59e0b (orange warning)
 - **Warning icon**: ⚠️ (48px)
@@ -328,12 +360,14 @@ Test C: Invalid node structure
 ## Files Summary
 
 ### Created (4 files)
+
 1. `frontend/src/utils/schemaValidation.ts` - Validation utilities
 2. `frontend/src/stores/validationStore.ts` - Validation state
 3. `frontend/src/features/editorV2/ValidationModal.tsx` - Validation UI
 4. `frontend/src/features/editorV2/ExportConfirmModal.tsx` - Export warning UI
 
 ### Modified (4 files)
+
 1. `frontend/src/features/editorV2/EditorV2Shell.tsx` - Main integration
 2. `frontend/src/features/editorV2/Toolbar.tsx` - Updated buttons
 3. `frontend/src/features/editorV2/BlockSettingsPanel/index.tsx` - Real-time validation
@@ -342,17 +376,20 @@ Test C: Invalid node structure
 ## Technical Details
 
 ### Performance Optimizations
+
 - **Map-based storage**: O(1) validation lookup
 - **Memoized catalog lookup**: Prevents unnecessary re-renders
 - **useEffect dependencies**: Only re-validates when needed
 - **Validation runs**: On nodes change, not on every render
 
 ### Type Safety
+
 - Full TypeScript coverage
 - Interfaces for ValidationResult, ValidationStore
 - Proper typing for all callbacks and handlers
 
 ### Error Handling
+
 - Try-catch for JSON.parse
 - Graceful handling of missing blocks
 - Fallback messages for unknown errors
@@ -360,10 +397,12 @@ Test C: Invalid node structure
 ## Integration Notes
 
 ### Store Integration
+
 - editorStore: nodes, edges, catalog, plan, role, showToast
 - validationStore: validationResults Map, actions, getters
 
 ### Component Communication
+
 - EditorV2Shell ← ValidationModal: isOpen state
 - EditorV2Shell ← ExportConfirmModal: isOpen + callbacks
 - BlockSettingsPanel → validationStore: setValidationResult
@@ -372,10 +411,12 @@ Test C: Invalid node structure
 ## Future Enhancements
 
 ### 1. Node Navigation
+
 Currently "Перейти" button logs to console. Future:
+
 ```typescript
 const { setCenter, fitView } = useReactFlow();
-const handleNavigateToNode = (nodeId) => {
+const handleNavigateToNode = nodeId => {
   const node = nodes.find(n => n.id === nodeId);
   if (node) {
     setCenter(node.position.x, node.position.y, { zoom: 1.2, duration: 800 });
@@ -385,35 +426,34 @@ const handleNavigateToNode = (nodeId) => {
 ```
 
 ### 2. Validation Summary in Header
+
 Show validation status in EditorControls:
+
 ```typescript
 <div>
-  {hasErrors() ? (
-    <span>⚠️ {getInvalidNodes().length} ошибок</span>
-  ) : (
-    <span>✅ Всё настроено</span>
-  )}
+  {hasErrors() ? <span>⚠️ {getInvalidNodes().length} ошибок</span> : <span>✅ Всё настроено</span>}
 </div>
 ```
 
 ### 3. Field-level Validation in Forms
+
 Show errors directly in FieldRenderer components:
+
 ```typescript
 <FieldRenderer
   field={field}
   value={value}
   onChange={onChange}
-  error={fieldValidationError}  // Add this
+  error={fieldValidationError} // Add this
 />
 ```
 
 ### 4. Debounced Validation
+
 For large flows, debounce validation:
+
 ```typescript
-const debouncedValidation = useMemo(
-  () => debounce(runValidation, 300),
-  [runValidation]
-);
+const debouncedValidation = useMemo(() => debounce(runValidation, 300), [runValidation]);
 ```
 
 ## Verification Checklist
@@ -442,15 +482,14 @@ const debouncedValidation = useMemo(
 
 ## Summary
 
-✅ **Schema Validation** - Checks required fields from configSchema  
-✅ **Visual Feedback** - Error badges and red borders  
-✅ **Validation Modal** - Summary with navigation  
-✅ **Safe Export** - Warnings before saving invalid flows  
-✅ **Robust Import** - File structure validation  
-✅ **Real-time Updates** - Instant validation on changes  
-✅ **Metadata** - Rich export file information  
-✅ **Type Safety** - Full TypeScript coverage  
-✅ **Zero Errors** - Clean linting and compilation  
+✅ **Schema Validation** - Checks required fields from configSchema
+✅ **Visual Feedback** - Error badges and red borders
+✅ **Validation Modal** - Summary with navigation
+✅ **Safe Export** - Warnings before saving invalid flows
+✅ **Robust Import** - File structure validation
+✅ **Real-time Updates** - Instant validation on changes
+✅ **Metadata** - Rich export file information
+✅ **Type Safety** - Full TypeScript coverage
+✅ **Zero Errors** - Clean linting and compilation
 
 The flow persistence and validation system is fully implemented and ready for testing!
-

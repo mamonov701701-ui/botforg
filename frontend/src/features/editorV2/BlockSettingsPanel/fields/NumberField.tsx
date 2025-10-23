@@ -10,7 +10,7 @@ export const NumberField: React.FC<FieldProps> = ({ field, value, onChange, erro
       <input
         type="number"
         value={value ?? ''}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        onChange={e => onChange(e.target.value ? Number(e.target.value) : null)}
         placeholder={field.label}
         style={{
           width: '100%',
@@ -26,4 +26,3 @@ export const NumberField: React.FC<FieldProps> = ({ field, value, onChange, erro
     </div>
   );
 };
-

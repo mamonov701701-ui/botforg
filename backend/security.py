@@ -10,7 +10,9 @@ from passlib.hash import pbkdf2_sha256
 from backend.settings import settings
 
 # Используем pbkdf2_sha256 как основной, но поддерживаем bcrypt для совместимости
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto", pbkdf2_sha256__default_rounds=29000)
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256"], deprecated="auto", pbkdf2_sha256__default_rounds=29000
+)
 
 
 def get_password_hash(password: str) -> str:
@@ -24,15 +26,17 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         # Проверяем pbkdf2_sha256 хеши (новые)
         if hashed_password.startswith("$pbkdf2-sha256$"):
             return pbkdf2_sha256.verify(plain_password, hashed_password)
-        
+
         # Проверяем bcrypt хеши (старые) для совместимости
         elif hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"):
-            return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
-        
+            return bcrypt.checkpw(
+                plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+            )
+
         # Fallback на стандартную проверку
         else:
             return pwd_context.verify(plain_password, hashed_password)
-            
+
     except Exception as e:
         print(f"Password verification error: {e}")
         return False

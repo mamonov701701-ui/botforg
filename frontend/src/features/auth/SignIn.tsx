@@ -17,7 +17,7 @@ export default function SignIn() {
     e.preventDefault();
     setLoading(true);
     setMessage('');
-    
+
     try {
       if (emailMode === 'register') {
         await registerEmail(email, password, name);
@@ -48,16 +48,18 @@ export default function SignIn() {
   ];
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-      background: 'var(--bg)',
-      color: 'var(--text)',
-      padding: '20px'
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: 'var(--bg)',
+        color: 'var(--text)',
+        padding: '20px',
+      }}
+    >
       <div style={{ maxWidth: '400px', width: '100%' }}>
         <h1 style={{ fontSize: '32px', marginBottom: '12px', textAlign: 'center' }}>
           Войдите или зарегистрируйтесь
@@ -65,14 +67,16 @@ export default function SignIn() {
         <p style={{ color: 'var(--text-muted)', marginBottom: '24px', textAlign: 'center' }}>
           Выберите способ авторизации
         </p>
-        
+
         {/* Tabs */}
-        <div style={{
-          display: 'flex',
-          gap: '8px',
-          marginBottom: '24px',
-          borderBottom: '2px solid var(--border)'
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '24px',
+            borderBottom: '2px solid var(--border)',
+          }}
+        >
           <button
             onClick={() => setTab('oauth')}
             style={{
@@ -84,7 +88,7 @@ export default function SignIn() {
               color: tab === 'oauth' ? 'var(--accent)' : 'var(--text-muted)',
               cursor: 'pointer',
               fontSize: '16px',
-              fontWeight: 600
+              fontWeight: 600,
             }}
           >
             Соцсети
@@ -100,7 +104,7 @@ export default function SignIn() {
               color: tab === 'email' ? 'var(--accent)' : 'var(--text-muted)',
               cursor: 'pointer',
               fontSize: '16px',
-              fontWeight: 600
+              fontWeight: 600,
             }}
           >
             Почта
@@ -128,13 +132,13 @@ export default function SignIn() {
                   fontWeight: 600,
                   border: '2px solid transparent',
                   transition: 'all 0.2s',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
                 }}
-                onMouseEnter={(e) => {
+                onMouseEnter={e => {
                   e.currentTarget.style.borderColor = provider.color;
                   e.currentTarget.style.background = 'var(--card)';
                 }}
-                onMouseLeave={(e) => {
+                onMouseLeave={e => {
                   e.currentTarget.style.borderColor = 'transparent';
                   e.currentTarget.style.background = 'var(--surface)';
                 }}
@@ -156,7 +160,7 @@ export default function SignIn() {
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
                   required
                   style={{
                     width: '100%',
@@ -166,14 +170,14 @@ export default function SignIn() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <input
                   type="password"
                   placeholder="Пароль"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={e => setPassword(e.target.value)}
                   required
                   minLength={8}
                   style={{
@@ -184,7 +188,7 @@ export default function SignIn() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <button
@@ -200,7 +204,7 @@ export default function SignIn() {
                     fontSize: '16px',
                     fontWeight: 600,
                     cursor: loading ? 'not-allowed' : 'pointer',
-                    marginBottom: '12px'
+                    marginBottom: '12px',
                   }}
                 >
                   {loading ? 'Загрузка...' : 'Войти'}
@@ -209,7 +213,12 @@ export default function SignIn() {
                   <button
                     type="button"
                     onClick={() => setEmailMode('register')}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
                   >
                     Зарегистрироваться
                   </button>
@@ -217,7 +226,12 @@ export default function SignIn() {
                   <button
                     type="button"
                     onClick={() => setEmailMode('reset')}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
                   >
                     Забыли пароль?
                   </button>
@@ -232,7 +246,7 @@ export default function SignIn() {
                   type="text"
                   placeholder="Имя (необязательно)"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={e => setName(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '12px',
@@ -241,14 +255,14 @@ export default function SignIn() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <input
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
                   required
                   style={{
                     width: '100%',
@@ -258,14 +272,14 @@ export default function SignIn() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <input
                   type="password"
                   placeholder="Пароль (минимум 8 символов)"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={e => setPassword(e.target.value)}
                   required
                   minLength={8}
                   style={{
@@ -276,7 +290,7 @@ export default function SignIn() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <button
@@ -292,7 +306,7 @@ export default function SignIn() {
                     fontSize: '16px',
                     fontWeight: 600,
                     cursor: loading ? 'not-allowed' : 'pointer',
-                    marginBottom: '12px'
+                    marginBottom: '12px',
                   }}
                 >
                   {loading ? 'Загрузка...' : 'Зарегистрироваться'}
@@ -301,7 +315,12 @@ export default function SignIn() {
                   <button
                     type="button"
                     onClick={() => setEmailMode('login')}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
                   >
                     Уже есть аккаунт? Войти
                   </button>
@@ -316,7 +335,7 @@ export default function SignIn() {
                   type="email"
                   placeholder="Email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
                   required
                   style={{
                     width: '100%',
@@ -326,7 +345,7 @@ export default function SignIn() {
                     border: '1px solid var(--border)',
                     borderRadius: '8px',
                     color: 'var(--text)',
-                    fontSize: '14px'
+                    fontSize: '14px',
                   }}
                 />
                 <button
@@ -342,7 +361,7 @@ export default function SignIn() {
                     fontSize: '16px',
                     fontWeight: 600,
                     cursor: loading ? 'not-allowed' : 'pointer',
-                    marginBottom: '12px'
+                    marginBottom: '12px',
                   }}
                 >
                   {loading ? 'Загрузка...' : 'Отправить ссылку'}
@@ -351,7 +370,12 @@ export default function SignIn() {
                   <button
                     type="button"
                     onClick={() => setEmailMode('login')}
-                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--accent)',
+                      cursor: 'pointer',
+                    }}
                   >
                     Вернуться ко входу
                   </button>
@@ -360,14 +384,16 @@ export default function SignIn() {
             )}
 
             {message && (
-              <div style={{
-                marginTop: '16px',
-                padding: '12px',
-                background: message.startsWith('✅') ? 'var(--success)' : 'var(--error)',
-                borderRadius: '8px',
-                color: '#fff',
-                fontSize: '14px'
-              }}>
+              <div
+                style={{
+                  marginTop: '16px',
+                  padding: '12px',
+                  background: message.startsWith('✅') ? 'var(--success)' : 'var(--error)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  fontSize: '14px',
+                }}
+              >
                 {message}
               </div>
             )}

@@ -9,15 +9,21 @@ export default function Footer() {
           <span className="font-heading font-bold tracking-wide text-lg">BOTFORG</span>
         </div>
         <nav className="flex gap-6 mt-4 md:mt-0">
-          <a href="#about" className="hover:text-yellow-400 font-heading transition">О платформе</a>
-          <a href="#policy" className="hover:text-yellow-400 font-heading transition">Политика</a>
+          <a href="#about" className="hover:text-yellow-400 font-heading transition">
+            О платформе
+          </a>
+          <a href="#policy" className="hover:text-yellow-400 font-heading transition">
+            Политика
+          </a>
         </nav>
         <div className="flex gap-2 items-center mt-4 md:mt-0">
           <span className="opacity-70 font-heading">русский</span>
           <span className="mx-1">/</span>
-          <a href="#en" className="hover:text-yellow-400 font-heading transition">English</a>
+          <a href="#en" className="hover:text-yellow-400 font-heading transition">
+            English
+          </a>
         </div>
       </div>
     </footer>
   );
-} 
+}

@@ -1,21 +1,19 @@
 import logging
-from datetime import datetime, timedelta
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from datetime import datetime
 
 from backend.database import get_db
 from backend.models.token_blacklist import TokenBlacklist
-from backend.models.user import ROLES, User
-from backend.schemas.auth import RegisterIn, Token, UserRegister
+from backend.models.user import User
+from backend.schemas.auth import RegisterIn, Token
 from backend.security import (
     create_access_token,
     get_password_hash,
     verify_password,
     verify_token,
 )
-from backend.settings import settings
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

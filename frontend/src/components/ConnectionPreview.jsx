@@ -37,4 +37,3 @@ const ConnectionPreview = ({ connectionLine }) => {
 };
 
 export default ConnectionPreview;
-

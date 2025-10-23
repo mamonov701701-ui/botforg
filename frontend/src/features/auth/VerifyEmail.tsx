@@ -22,28 +22,32 @@ export default function VerifyEmail() {
         setMessage('Email успешно подтвержден! Перенаправление...');
         setTimeout(() => navigate('/account'), 2000);
       })
-      .catch((error) => {
+      .catch(error => {
         setStatus('error');
         setMessage(error.message);
       });
   }, [searchParams, navigate]);
 
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '100vh',
-      background: 'var(--bg)',
-      color: 'var(--text)'
-    }}>
-      <div style={{
-        maxWidth: '400px',
-        padding: '24px',
-        background: 'var(--surface)',
-        borderRadius: '12px',
-        textAlign: 'center'
-      }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        background: 'var(--bg)',
+        color: 'var(--text)',
+      }}
+    >
+      <div
+        style={{
+          maxWidth: '400px',
+          padding: '24px',
+          background: 'var(--surface)',
+          borderRadius: '12px',
+          textAlign: 'center',
+        }}
+      >
         {status === 'loading' && <p>Подтверждение email...</p>}
         {status === 'success' && <p style={{ color: 'var(--success)' }}>{message}</p>}
         {status === 'error' && <p style={{ color: 'var(--error)' }}>{message}</p>}
@@ -51,4 +55,3 @@ export default function VerifyEmail() {
     </div>
   );
 }
-

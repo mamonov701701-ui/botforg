@@ -1,5 +1,12 @@
 import React, { useMemo, useCallback, useRef } from 'react';
-import ReactFlow, { addEdge, Connection, MarkerType, NodeTypes, ReactFlowInstance, Edge } from 'reactflow';
+import ReactFlow, {
+  addEdge,
+  Connection,
+  MarkerType,
+  NodeTypes,
+  ReactFlowInstance,
+  Edge,
+} from 'reactflow';
 import 'reactflow/dist/style.css';
 import CustomNode from './CustomNode';
 import type { V2Node, V2Edge } from '@/types/editor';
@@ -14,26 +21,35 @@ type Props = {
 const Canvas: React.FC<Props> = ({ nodes, setNodes, edges, setEdges }) => {
   const flowRef = useRef<ReactFlowInstance | null>(null);
 
-  const nodeTypes: NodeTypes = useMemo(() => ({
-    default: CustomNode,
-    start: CustomNode,
-    message: CustomNode,
-  }), []);
+  const nodeTypes: NodeTypes = useMemo(
+    () => ({
+      default: CustomNode,
+      start: CustomNode,
+      message: CustomNode,
+    }),
+    []
+  );
 
-  const defaultEdgeOptions = useMemo(() => ({
-    markerEnd: { type: MarkerType.ArrowClosed },
-  }), []);
-
-  const onConnect = useCallback((params: Connection) => {
-    const newEdge: Edge = {
-      ...params,
-      id: `${params.source}-${params.target}`,
-      source: params.source!,
-      target: params.target!,
+  const defaultEdgeOptions = useMemo(
+    () => ({
       markerEnd: { type: MarkerType.ArrowClosed },
-    };
-    setEdges(addEdge(newEdge, edges));
-  }, [setEdges, edges]);
+    }),
+    []
+  );
+
+  const onConnect = useCallback(
+    (params: Connection) => {
+      const newEdge: Edge = {
+        ...params,
+        id: `${params.source}-${params.target}`,
+        source: params.source!,
+        target: params.target!,
+        markerEnd: { type: MarkerType.ArrowClosed },
+      };
+      setEdges(addEdge(newEdge, edges));
+    },
+    [setEdges, edges]
+  );
 
   return (
     <div className="h-full w-full">
@@ -53,34 +69,3 @@ const Canvas: React.FC<Props> = ({ nodes, setNodes, edges, setEdges }) => {
 };
 
 export default Canvas;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

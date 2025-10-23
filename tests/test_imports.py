@@ -42,55 +42,13 @@ def test_pydantic_imports():
 def test_app_structure():
     """Проверяем структуру FastAPI приложения"""
     from backend.main import app
-    
+
     # Проверяем, что это FastAPI приложение
     assert hasattr(app, 'routes'), "Приложение должно иметь атрибут routes"
     assert hasattr(app, 'middleware'), "Приложение должно иметь атрибут middleware"
-    
+
     # Проверяем наличие основных роутов
     route_paths = [route.path for route in app.routes]
     assert "/health" in route_paths, "Должен быть роут /health"
-    
+
     print("✅ Структура приложения корректна")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

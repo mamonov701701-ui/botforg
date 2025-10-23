@@ -3,8 +3,8 @@
 ## Overview
 BotForg - платформа для создания и управления чат-ботами с визуальным редактором потоков.
 
-**Base URL**: `http://localhost:8000` (development)  
-**API Version**: v1  
+**Base URL**: `http://localhost:8000` (development)
+**API Version**: v1
 **Authentication**: JWT Bearer Token
 
 ## Authentication

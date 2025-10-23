@@ -11,8 +11,8 @@ export default [
       sourceType: 'module',
       parserOptions: {
         ecmaFeatures: {
-          jsx: true
-        }
+          jsx: true,
+        },
       },
       globals: {
         console: 'readonly',
@@ -33,14 +33,14 @@ export default [
         alert: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
-        crypto: 'readonly'
-      }
+        crypto: 'readonly',
+      },
     },
     rules: {
       'no-use-before-define': 'error',
       'no-undef': 'error',
-      'no-unused-vars': 'warn'
-    }
+      'no-unused-vars': 'warn',
+    },
   },
   {
     files: ['**/*.{ts,tsx}'],
@@ -50,8 +50,8 @@ export default [
         ecmaVersion: 2020,
         sourceType: 'module',
         ecmaFeatures: {
-          jsx: true
-        }
+          jsx: true,
+        },
       },
       globals: {
         console: 'readonly',
@@ -72,28 +72,28 @@ export default [
         alert: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
-        crypto: 'readonly'
-      }
+        crypto: 'readonly',
+      },
     },
     plugins: {
-      '@typescript-eslint': typescript
+      '@typescript-eslint': typescript,
     },
     rules: {
       'no-use-before-define': 'off',
       '@typescript-eslint/no-use-before-define': 'error',
       'no-unused-vars': 'off',
-      '@typescript-eslint/no-unused-vars': 'warn'
-    }
+      '@typescript-eslint/no-unused-vars': 'warn',
+    },
   },
   {
     files: ['**/*.jsx', '**/*.js'],
     plugins: {
-      '@typescript-eslint': typescript
+      '@typescript-eslint': typescript,
     },
     rules: {
       '@typescript-eslint/ban-ts-comment': 'error',
       '@typescript-eslint/no-inferrable-types': 'error',
-      '@typescript-eslint/consistent-type-assertions': 'off'
-    }
-  }
+      '@typescript-eslint/consistent-type-assertions': 'off',
+    },
+  },
 ];

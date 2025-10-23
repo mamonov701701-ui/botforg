@@ -7,28 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 
-from backend.database import Base, engine
+from backend.auth import email_routes
+from backend.auth import routes as oauth_routes
 from backend.middleware.security import SecurityMiddleware
-from backend.models import (
-    billing,
-    bonus_account,
-    bot,
-    bot_template,
-    bot_user_state,
-    comment,
-    message,
-    payment,
-    purchase,
-    rating,
-    referral,
-    review,
-    tag,
-    team,
-    template,
-    token_blacklist,
-    user,
-    user_template,
-)
+from backend.routers import account as account_router
 from backend.routers import auth
 from backend.routers import billing as billing_router
 from backend.routers import blocks as blocks_router
@@ -40,10 +22,6 @@ from backend.routers import payment as payment_router
 from backend.routers import review as review_router
 from backend.routers import template as templates
 from backend.routers import user_template as user_template_router
-from backend.routers import account as account_router
-from backend.auth import routes as oauth_routes
-from backend.auth import email_routes
-from backend.auth.providers import oauth
 from backend.settings import settings
 
 app = FastAPI()
@@ -51,8 +29,10 @@ app = FastAPI()
 # Add session middleware for OAuth state
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.SESSION_SECRET if settings.SESSION_SECRET else settings.JWT_SECRET,
-    same_site="lax"
+    secret_key=settings.SESSION_SECRET
+    if settings.SESSION_SECRET
+    else settings.JWT_SECRET,
+    same_site="lax",
 )
 
 # Добавляем security middleware

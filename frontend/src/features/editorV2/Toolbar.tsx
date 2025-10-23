@@ -7,16 +7,16 @@ type Props = {
 };
 
 export default function Toolbar({ onExport, onImport, onValidate }: Props) {
-  const Btn = ({ 
-    label, 
-    icon, 
-    color, 
-    onClick 
-  }: { 
-    label: string; 
-    icon: string; 
-    color: string; 
-    onClick: () => void 
+  const Btn = ({
+    label,
+    icon,
+    color,
+    onClick,
+  }: {
+    label: string;
+    icon: string;
+    color: string;
+    onClick: () => void;
   }) => (
     <button
       onClick={onClick}
@@ -34,31 +34,32 @@ export default function Toolbar({ onExport, onImport, onValidate }: Props) {
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        justifyContent: 'center'
+        justifyContent: 'center',
       }}
     >
       <span style={{ fontSize: 18 }}>{icon}</span>
       <span>{label}</span>
     </button>
   );
-  
+
   return (
-    <div style={{
-      position: 'sticky',
-      top: 16,
-      left: 0,
-      display: 'flex',
-      flexDirection: 'column',
-      width: 160,
-      padding: 12,
-      background: 'rgba(11,27,42,.90)',
-      color: '#e2e8f0',
-      borderRadius: 10
-    }}>
+    <div
+      style={{
+        position: 'sticky',
+        top: 16,
+        left: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        width: 160,
+        padding: 12,
+        background: 'rgba(11,27,42,.90)',
+        color: '#e2e8f0',
+        borderRadius: 10,
+      }}
+    >
       <Btn label="Сохранить" icon="💾" color="#22c55e" onClick={onExport} />
       <Btn label="Загрузить" icon="📂" color="#3b82f6" onClick={onImport} />
       <Btn label="Проверить" icon="✓" color="#FFD24C" onClick={onValidate} />
     </div>
   );
 }
-

@@ -9,7 +9,7 @@ export const SelectField: React.FC<FieldProps> = ({ field, value, onChange, erro
       </label>
       <select
         value={value || ''}
-        onChange={(e) => onChange(e.target.value || null)}
+        onChange={e => onChange(e.target.value || null)}
         style={{
           width: '100%',
           padding: '10px 12px',
@@ -23,11 +23,12 @@ export const SelectField: React.FC<FieldProps> = ({ field, value, onChange, erro
       >
         <option value="">-- Выберите --</option>
         {field.options?.map(opt => (
-          <option key={opt} value={opt}>{opt}</option>
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
         ))}
       </select>
       {error && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{error}</div>}
     </div>
   );
 };
-

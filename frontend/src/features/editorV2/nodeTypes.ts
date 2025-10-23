@@ -6,34 +6,3 @@ export const createNodeTypes = (): NodeTypes => ({
   start: CustomNode,
   message: CustomNode,
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -4,8 +4,18 @@ import { Edit, Plus, MessageSquare, Settings } from 'lucide-react';
 
 export default function Templates() {
   const mockTemplates = [
-    { id: 1, name: 'Приветственный бот', description: 'Простой бот для знакомства', type: 'message' },
-    { id: 2, name: 'Бот поддержки', description: 'Автоматические ответы на вопросы', type: 'question' },
+    {
+      id: 1,
+      name: 'Приветственный бот',
+      description: 'Простой бот для знакомства',
+      type: 'message',
+    },
+    {
+      id: 2,
+      name: 'Бот поддержки',
+      description: 'Автоматические ответы на вопросы',
+      type: 'question',
+    },
     { id: 3, name: 'Бот заказов', description: 'Обработка заказов и платежей', type: 'action' },
   ];
 
@@ -20,8 +30,11 @@ export default function Templates() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {mockTemplates.map((template) => (
-          <div key={template.id} className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+        {mockTemplates.map(template => (
+          <div
+            key={template.id}
+            className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+          >
             <div className="flex items-center gap-3 mb-4">
               {template.type === 'message' && <MessageSquare className="text-blue-500" size={24} />}
               {template.type === 'question' && <Settings className="text-green-500" size={24} />}
@@ -43,4 +56,4 @@ export default function Templates() {
       </div>
     </div>
   );
-} 
+}

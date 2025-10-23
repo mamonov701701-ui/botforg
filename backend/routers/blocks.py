@@ -2,13 +2,12 @@ import json
 import os
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
-
 from backend.schemas.blocks import (
     VALID_PLANS,
     VALID_ROLES,
     BlockCatalogItem,
 )
+from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(prefix="/blocks", tags=["Blocks"])
 
@@ -91,4 +90,3 @@ def get_categories():
     blocks = load_blocks_catalog()
     categories = list(set(block.category for block in blocks))
     return sorted(categories)
-

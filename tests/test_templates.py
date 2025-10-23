@@ -108,5 +108,3 @@ def test_delete_template():
     # Проверяем, что шаблон действительно удален
     res_get = client.get(f"/templates/{template_id}")
     assert res_get.status_code == 404
-
-

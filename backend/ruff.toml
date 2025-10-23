@@ -1,0 +1,30 @@
+# Ruff configuration for backend
+[lint]
+# Enable specific rulesets
+select = ["E", "F", "W", "I"]
+
+# Ignore specific rules
+ignore = [
+    "E402",  # Module level import not at top of file (needed in main.py for logging setup)
+    "E501",  # Line too long (handled by formatter)
+    "E711",  # Comparison to None should be `cond is None` (SQLAlchemy style)
+    "E712",  # Comparison to True should be `cond is True` (SQLAlchemy style)
+    "F841",  # Local variable assigned but never used (sometimes intentional)
+]
+
+# Exclude patterns
+exclude = [
+    "venv",
+    "__pycache__",
+    "migrations",
+    ".git",
+    "dist",
+    "build",
+]
+
+[format]
+# Use black-compatible formatting
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+

@@ -55,7 +55,7 @@ export async function registerEmail(email: string, password: string, name?: stri
 export async function loginEmail(email: string, password: string) {
   const baseURL = import.meta.env.VITE_API_URL || '';
   const url = baseURL ? `${baseURL}/auth/login` : '/auth/login';
-  
+
   const response = await fetch(url, {
     method: 'POST',
     credentials: 'include',
@@ -67,12 +67,12 @@ export async function loginEmail(email: string, password: string) {
       password: password,
     }),
   });
-  
+
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || errorData.message || 'Ошибка входа');
   }
-  
+
   const data = await response.json();
   if (data.access_token) {
     saveToken(data.access_token);

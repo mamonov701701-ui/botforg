@@ -1,4 +1,4 @@
-import api from "@/api/client";
+import api from '@/api/client';
 
 interface RegisterData {
   email: string;
@@ -17,18 +17,18 @@ interface AuthResponse {
 }
 
 export async function register(data: RegisterData): Promise<AuthResponse> {
-  const response = await api.post("/register", data);
-  localStorage.setItem("token", response.access_token);
+  const response = await api.post('/register', data);
+  localStorage.setItem('token', response.access_token);
   return response;
 }
 
 export async function login(data: LoginData): Promise<AuthResponse> {
-  const response = await api.post("/login", data);
-  localStorage.setItem("token", response.access_token);
+  const response = await api.post('/login', data);
+  localStorage.setItem('token', response.access_token);
   return response;
 }
 
 export async function getMe(): Promise<any> {
-  const response = await api.get("/me");
+  const response = await api.get('/me');
   return response;
-} 
+}
