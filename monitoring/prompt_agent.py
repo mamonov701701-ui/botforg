@@ -113,6 +113,23 @@ def handle_expose(payload):
     }
 
 
+def handle_pipeline(payload):
+    steps = [
+        ("backend_start", handle_backend_start),
+        ("frontend_start", handle_frontend_start),
+        ("expose", handle_expose),
+    ]
+    logs = []
+    rc_total = 0
+    for name, fn in steps:
+        r = fn({})
+        logs.append(
+            f"== {name} ==\nstdout:\n{r.get('stdout','')}\nstderr:\n{r.get('stderr','')}\nrc={r.get('rc')}"
+        )
+        rc_total = rc_total or r.get("rc", 0)
+    return {"rc": rc_total, "stdout": "\n\n".join(logs), "stderr": ""}
+
+
 TASK_HANDLERS = {
     "status": handle_status,
     "backend_start": handle_backend_start,
@@ -122,6 +139,7 @@ TASK_HANDLERS = {
     "build": handle_build,
     "preview_urls": handle_preview_urls,
     "expose": handle_expose,
+    "pipeline": handle_pipeline,
 }
 
 
