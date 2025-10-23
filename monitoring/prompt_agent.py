@@ -138,6 +138,14 @@ def handle_pipeline(payload):
     return {"rc": rc_total, "stdout": "\n\n".join(logs), "stderr": ""}
 
 
+def handle_stop_all(payload):
+    rc, out, err = run_ps(
+        r"powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-stop.ps1",
+        timeout=60,
+    )
+    return {"rc": rc, "stdout": out, "stderr": err}
+
+
 TASK_HANDLERS = {
     "status": handle_status,
     "backend_start": handle_backend_start,
@@ -148,6 +156,7 @@ TASK_HANDLERS = {
     "preview_urls": handle_preview_urls,
     "expose": handle_expose,
     "pipeline": handle_pipeline,
+    "stop_all": handle_stop_all,
 }
 
 
