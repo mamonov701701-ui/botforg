@@ -99,6 +99,20 @@ def handle_preview_urls(payload):
     }
 
 
+def handle_expose(payload):
+    cmd = r"powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-expose.ps1"
+    rc, out, err = run_ps(cmd, timeout=120)
+    # попытка вытащить URLs из 'cloudflared tunnel list' (если доступно)
+    rc2, out2, err2 = run_ps(
+        "cloudflared tunnel list 2>$null | Out-String", timeout=60
+    )
+    return {
+        "rc": rc,
+        "stdout": (out + "\n" + out2),
+        "stderr": (err + "\n" + err2),
+    }
+
+
 TASK_HANDLERS = {
     "status": handle_status,
     "backend_start": handle_backend_start,
@@ -107,6 +121,7 @@ TASK_HANDLERS = {
     "typecheck": handle_typecheck,
     "build": handle_build,
     "preview_urls": handle_preview_urls,
+    "expose": handle_expose,
 }
 
 
