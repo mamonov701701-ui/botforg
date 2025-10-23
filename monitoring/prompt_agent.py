@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -100,17 +101,24 @@ def handle_preview_urls(payload):
 
 
 def handle_expose(payload):
-    cmd = r"powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-expose.ps1"
-    rc, out, err = run_ps(cmd, timeout=120)
-    # попытка вытащить URLs из 'cloudflared tunnel list' (если доступно)
-    rc2, out2, err2 = run_ps(
-        "cloudflared tunnel list 2>$null | Out-String", timeout=60
+    # Запускаем скрипт и парсим две строки BACKEND_URL=..., FRONTEND_URL=...
+    rc, out, err = run_ps(
+        r"powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-expose.ps1",
+        timeout=180,
     )
-    return {
-        "rc": rc,
-        "stdout": (out + "\n" + out2),
-        "stderr": (err + "\n" + err2),
-    }
+    be_url = None
+    fe_url = None
+    for line in out.splitlines():
+        if line.startswith("BACKEND_URL="):
+            be_url = line.split("=", 1)[1].strip()
+        if line.startswith("FRONTEND_URL="):
+            fe_url = line.split("=", 1)[1].strip()
+    pretty = []
+    if be_url:
+        pretty.append(f"Backend → {be_url}")
+    if fe_url:
+        pretty.append(f"Frontend → {fe_url}")
+    return {"rc": rc, "stdout": "\n".join(pretty) or out, "stderr": err}
 
 
 def handle_pipeline(payload):
