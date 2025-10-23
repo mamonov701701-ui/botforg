@@ -2,12 +2,11 @@ import logging
 import traceback
 from typing import Any, Dict, List
 
+from backend.database import get_db
+from backend.models.editor import Edge, Node
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-
-from backend.database import get_db
-from backend.models.editor import Edge, Node
 
 # Настройка логирования
 logging.basicConfig(level=logging.DEBUG)

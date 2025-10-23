@@ -1,14 +1,13 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
 from backend.database import SessionLocal
 from backend.dependencies.roles import require_role
 from backend.models.tag import Tag
 from backend.models.template import Template
 from backend.schemas.tag import TagCreate, TagOut
 from backend.schemas.template import TemplateOut
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 

@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, AnyUrl, field_validator
+from pydantic import AnyUrl, BaseModel, field_validator
 from pydantic.config import ConfigDict
 
 

@@ -1,9 +1,8 @@
 from typing import List, Optional
 
-from pydantic import BaseModel
-
 from backend.schemas.comment import CommentOut
 from backend.schemas.tag import TagOut
+from pydantic import BaseModel
 
 
 class MarketplaceTemplateOut(BaseModel):

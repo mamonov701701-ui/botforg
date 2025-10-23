@@ -3,9 +3,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.billing import BillingRecord, UserQuota
@@ -18,6 +15,8 @@ from backend.schemas.message import (
     MessageOut,
     MessageUpdate,
 )
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
