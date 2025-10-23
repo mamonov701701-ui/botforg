@@ -77,8 +77,10 @@ export default function AuthModal() {
       if (emailMode === 'register') {
         await registerEmail(email, password, name);
         toast.success('Регистрация успешна! Проверьте email для подтверждения.');
+        setEmailMode('login');
       } else if (emailMode === 'login') {
         await loginEmail(email, password);
+        toast.success('Вход выполнен успешно!');
         // Verify session
         const user = await getMe();
         if (user) {
@@ -86,11 +88,14 @@ export default function AuthModal() {
           closeAuth();
           if (nextPath) {
             navigate(nextPath);
+          } else {
+            navigate('/account');
           }
         }
       } else if (emailMode === 'reset') {
         await requestPasswordReset(email);
         toast.success('Ссылка для сброса отправлена на email.');
+        setEmailMode('login');
       }
     } catch (error: any) {
       toast.error(error.message || 'Произошла ошибка. Попробуйте позже.');

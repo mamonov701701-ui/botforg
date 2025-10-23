@@ -22,15 +22,20 @@ export default function SignIn() {
       if (emailMode === 'register') {
         await registerEmail(email, password, name);
         setMessage('✅ Регистрация успешна! Проверьте email для подтверждения.');
+        setTimeout(() => setEmailMode('login'), 2000);
       } else if (emailMode === 'login') {
         await loginEmail(email, password);
-        window.location.href = '/account';
+        setMessage('✅ Вход выполнен! Перенаправление...');
+        setTimeout(() => {
+          window.location.href = '/account';
+        }, 1000);
       } else if (emailMode === 'reset') {
         await requestPasswordReset(email);
         setMessage('✅ Ссылка для сброса отправлена на email.');
+        setTimeout(() => setEmailMode('login'), 2000);
       }
     } catch (error: any) {
-      setMessage(`❌ ${error.message}`);
+      setMessage(`❌ ${error.message || 'Произошла ошибка'}`);
     } finally {
       setLoading(false);
     }

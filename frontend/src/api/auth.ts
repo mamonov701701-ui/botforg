@@ -5,6 +5,21 @@
 
 import { get, post } from './client';
 
+// Token management
+const TOKEN_KEY = 'auth_token';
+
+export function saveToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
 export async function getMe() {
   try {
     return await get('/me');
@@ -17,7 +32,11 @@ export async function getMe() {
 }
 
 export async function logout() {
-  return post('/auth/logout');
+  try {
+    await post('/auth/logout');
+  } finally {
+    clearToken();
+  }
 }
 
 export function getLoginUrl(provider: 'google' | 'yandex' | 'mailru') {
@@ -26,15 +45,20 @@ export function getLoginUrl(provider: 'google' | 'yandex' | 'mailru') {
 }
 
 export async function registerEmail(email: string, password: string, name?: string) {
-  return post('/auth/register', { email, password, name, role: 'user' });
+  const response = await post('/auth/register', { email, password, name, role: 'user' });
+  if (response.access_token) {
+    saveToken(response.access_token);
+  }
+  return response;
 }
 
 export async function loginEmail(email: string, password: string) {
   const baseURL = import.meta.env.VITE_API_URL || '';
   const url = baseURL ? `${baseURL}/auth/login` : '/auth/login';
   
-  return fetch(url, {
+  const response = await fetch(url, {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
@@ -42,7 +66,18 @@ export async function loginEmail(email: string, password: string) {
       username: email,
       password: password,
     }),
-  }).then(response => response.json());
+  });
+  
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || errorData.message || 'Ошибка входа');
+  }
+  
+  const data = await response.json();
+  if (data.access_token) {
+    saveToken(data.access_token);
+  }
+  return data;
 }
 
 export async function requestPasswordReset(email: string) {

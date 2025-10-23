@@ -19,14 +19,23 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
     const baseURL = import.meta.env.VITE_API_URL || '';
     const url = baseURL ? `${baseURL}${path}` : path;
     
+    // Get token from localStorage for Authorization header
+    const token = localStorage.getItem('auth_token');
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    };
+    
+    // Add Authorization header if token exists
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     const response = await fetch(url, {
       ...options,
       credentials: 'include',
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
     
     clearTimeout(timeout);
