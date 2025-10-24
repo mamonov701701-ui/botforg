@@ -16,25 +16,36 @@ if (-not (Get-Command ngrok -ErrorAction SilentlyContinue)) {
   exit 1
 }
 
-# Запускаем ngrok туннели в фоне
-$beProcess = Start-Process -FilePath "ngrok" -ArgumentList "http", $BackendPort, "--log=stdout" -PassThru -WindowStyle Hidden
-$feProcess = Start-Process -FilePath "ngrok" -ArgumentList "http", $FrontendPort, "--log=stdout" -PassThru -WindowStyle Hidden
+# Проверяем, не запущен ли уже ngrok
+$ngrokRunning = Get-Process ngrok -ErrorAction SilentlyContinue
 
-# Ждём немного для запуска
-Start-Sleep -Seconds 3
-
-# Получаем URLs через ngrok API
-try {
-  $beUrl = (Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -TimeoutSec 5 | Where-Object { $_.config.addr -eq "http://localhost:$BackendPort" }).public_url
-  $feUrl = (Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -TimeoutSec 5 | Where-Object { $_.config.addr -eq "http://localhost:$FrontendPort" }).public_url
-} catch {
-  $beUrl = "PENDING"
-  $feUrl = "PENDING"
+if (-not $ngrokRunning) {
+  # Запускаем один ngrok с двумя туннелями
+  Start-Process -WindowStyle Hidden -FilePath "ngrok" -ArgumentList "start", "--all", "--config", "scripts\.ngrok.yml"
+  Start-Sleep -Seconds 5
 }
 
-# Останавливаем процессы
-$beProcess | Stop-Process -Force -ErrorAction SilentlyContinue
-$feProcess | Stop-Process -Force -ErrorAction SilentlyContinue
+# Получаем URLs через ngrok API
+$beUrl = "PENDING"
+$feUrl = "PENDING"
+
+try {
+  $tunnels = (Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -TimeoutSec 5).tunnels
+  foreach ($t in $tunnels) {
+    if ($t.config.addr -like "*:$BackendPort") {
+      $beUrl = $t.public_url
+    }
+    if ($t.config.addr -like "*:$FrontendPort") {
+      $feUrl = $t.public_url
+    }
+  }
+} catch {
+  # Если API недоступен, попробуем запустить ngrok без конфига
+  if (-not $ngrokRunning) {
+    Start-Process -WindowStyle Hidden -FilePath "ngrok" -ArgumentList "http", $BackendPort
+    Start-Sleep -Seconds 3
+  }
+}
 
 if (-not $beUrl) { $beUrl = "PENDING" }
 if (-not $feUrl) { $feUrl = "PENDING" }
