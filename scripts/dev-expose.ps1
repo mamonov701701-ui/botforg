@@ -11,18 +11,12 @@ Set-Location (Resolve-Path "$root\..")
 # Обновляем PATH
 $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
 
-# Проверяем cloudflared
+# Проверяем cloudflared (быстро)
 if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
-  # Пробуем установить
-  winget install --id Cloudflare.cloudflared --silent --accept-package-agreements --accept-source-agreements
-  Start-Sleep -Seconds 3
-  $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
-}
-
-if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
-  Write-Output "BACKEND_URL=ERROR_cloudflared_not_found"
-  Write-Output "FRONTEND_URL=ERROR_cloudflared_not_found"
-  exit 1
+  Write-Output "BACKEND_URL=NOT_INSTALLED"
+  Write-Output "FRONTEND_URL=NOT_INSTALLED"
+  Write-Output "INSTALL_CMD=winget install Cloudflare.cloudflared"
+  exit 0
 }
 
 # Создаём временные файлы для логов

@@ -131,18 +131,33 @@ def handle_expose(payload):
     # Запускаем скрипт и парсим BACKEND_URL, FRONTEND_URL
     rc, out, err = run_ps(
         r"powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-expose.ps1",
-        timeout=180,
+        timeout=60,  # Уменьшили таймаут
     )
     be_url = None
     fe_url = None
+    install_cmd = None
     
     for line in out.splitlines():
         if line.startswith("BACKEND_URL="):
             be_url = line.split("=", 1)[1].strip()
         if line.startswith("FRONTEND_URL="):
             fe_url = line.split("=", 1)[1].strip()
+        if line.startswith("INSTALL_CMD="):
+            install_cmd = line.split("=", 1)[1].strip()
     
     pretty = []
+    
+    # Cloudflared не установлен
+    if be_url == "NOT_INSTALLED":
+        pretty.append("⚠️ Cloudflared не установлен")
+        pretty.append("")
+        pretty.append("📦 Установите командой:")
+        pretty.append(f"   {install_cmd}")
+        pretty.append("")
+        pretty.append("Затем перезапустите терминал и попробуйте /expose снова")
+        return {"rc": 0, "stdout": "\n".join(pretty), "stderr": ""}
+    
+    # URLs получены
     if be_url and be_url != "PENDING" and not be_url.startswith("ERROR"):
         pretty.append(f"🌐 Backend → {be_url}")
     if fe_url and fe_url != "PENDING" and not fe_url.startswith("ERROR"):
@@ -152,10 +167,23 @@ def handle_expose(payload):
         pretty.append("")
         pretty.append("✅ Открывайте прямо в браузере - БЕЗ пароля!")
     else:
-        pretty.append("⚠️ Туннели не созданы. Cloudflared установится автоматически.")
-        pretty.append("Попробуйте /expose ещё раз через 30 сек.")
+        pretty.append("⏳ Туннели создаются... попробуйте /expose ещё раз через 10 сек")
     
     return {"rc": rc, "stdout": "\n".join(pretty) or out, "stderr": err}
+
+
+def handle_install_cloudflared(payload):
+    # Устанавливаем cloudflared через winget
+    rc, out, err = run_ps(
+        r"winget install Cloudflare.cloudflared --silent --accept-package-agreements --accept-source-agreements",
+        timeout=300,
+    )
+    if rc == 0:
+        msg = "✅ Cloudflared установлен!\n\n"
+        msg += "Теперь попробуйте /expose"
+        return {"rc": 0, "stdout": msg, "stderr": ""}
+    else:
+        return {"rc": rc, "stdout": out or "Ошибка установки", "stderr": err}
 
 
 def handle_pipeline(payload):
@@ -192,6 +220,7 @@ TASK_HANDLERS = {
     "build": handle_build,
     "preview_urls": handle_preview_urls,
     "expose": handle_expose,
+    "install_cloudflared": handle_install_cloudflared,
     "pipeline": handle_pipeline,
     "stop_all": handle_stop_all,
 }
@@ -297,6 +326,7 @@ def handle_text(text: str):
             "/backend_start — Запустить FastAPI\n"
             "/frontend_start — Запустить Vite\n"
             "/expose — Cloudflared туннели\n"
+            "/install_cloudflared — Установить cloudflared\n"
             "/preview_urls — Локальные URLs\n"
             "/pipeline — Всё сразу (backend+frontend+expose)\n"
             "/stop_all — Остановить все процессы\n\n"
@@ -353,6 +383,7 @@ def handle_text(text: str):
         "/backend_start": "backend_start",
         "/frontend_start": "frontend_start",
         "/expose": "expose",
+        "/install_cloudflared": "install_cloudflared",
         "/preview_urls": "preview_urls",
         "/pipeline": "pipeline",
         "/stop_all": "stop_all",
