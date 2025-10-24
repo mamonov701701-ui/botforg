@@ -128,33 +128,32 @@ def handle_preview_urls(payload):
 
 
 def handle_expose(payload):
-    # Запускаем скрипт и парсим BACKEND_URL, FRONTEND_URL, PASSWORD
+    # Запускаем скрипт и парсим BACKEND_URL, FRONTEND_URL
     rc, out, err = run_ps(
         r"powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-expose.ps1",
         timeout=180,
     )
     be_url = None
     fe_url = None
-    password = None
     
     for line in out.splitlines():
         if line.startswith("BACKEND_URL="):
             be_url = line.split("=", 1)[1].strip()
         if line.startswith("FRONTEND_URL="):
             fe_url = line.split("=", 1)[1].strip()
-        if line.startswith("PASSWORD="):
-            password = line.split("=", 1)[1].strip()
     
     pretty = []
-    if be_url and be_url != "PENDING":
+    if be_url and be_url != "PENDING" and not be_url.startswith("ERROR"):
         pretty.append(f"🌐 Backend → {be_url}")
-    if fe_url and fe_url != "PENDING":
+    if fe_url and fe_url != "PENDING" and not fe_url.startswith("ERROR"):
         pretty.append(f"🌐 Frontend → {fe_url}")
-    if password and password != "UNKNOWN":
-        pretty.append(f"🔑 Пароль: {password}")
     
-    if not pretty:
-        pretty.append("⚠️ Туннели не созданы. Установите localtunnel: npm install -g localtunnel")
+    if pretty:
+        pretty.append("")
+        pretty.append("✅ Открывайте прямо в браузере - БЕЗ пароля!")
+    else:
+        pretty.append("⚠️ Туннели не созданы. Cloudflared установится автоматически.")
+        pretty.append("Попробуйте /expose ещё раз через 30 сек.")
     
     return {"rc": rc, "stdout": "\n".join(pretty) or out, "stderr": err}
 
