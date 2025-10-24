@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     host: true,
     historyApiFallback: true,
+    allowedHosts: ['.loca.lt', '.ngrok-free.app', '.ngrok.io'],
     proxy: {
       '/blocks': {
         target: 'http://localhost:8000',
