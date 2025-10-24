@@ -23,12 +23,12 @@ if (-not (Get-Command cloudflared -ErrorAction SilentlyContinue)) {
 $beLog = New-TemporaryFile
 $feLog = New-TemporaryFile
 
-# Запускаем cloudflared туннели
-$beProc = Start-Process -FilePath "cloudflared" -ArgumentList "tunnel", "--url", "http://localhost:$BackendPort" -RedirectStandardOutput $beLog.FullName -PassThru -WindowStyle Hidden
-$feProc = Start-Process -FilePath "cloudflared" -ArgumentList "tunnel", "--url", "http://localhost:$FrontendPort" -RedirectStandardOutput $feLog.FullName -PassThru -WindowStyle Hidden
+# Запускаем cloudflared туннели (ВАЖНО: используем RedirectStandardError!)
+$beProc = Start-Process -FilePath "cloudflared" -ArgumentList "tunnel", "--url", "http://localhost:$BackendPort" -RedirectStandardError $beLog.FullName -PassThru -WindowStyle Hidden
+$feProc = Start-Process -FilePath "cloudflared" -ArgumentList "tunnel", "--url", "http://localhost:$FrontendPort" -RedirectStandardError $feLog.FullName -PassThru -WindowStyle Hidden
 
-# Ждём URLs
-Start-Sleep -Seconds 8
+# Ждём URLs (сократили время)
+Start-Sleep -Seconds 6
 
 # Парсим URLs из логов
 $beUrl = "PENDING"
@@ -44,7 +44,7 @@ if ($feContent -match "https://[a-z0-9\-]+\.trycloudflare\.com") {
   $feUrl = $matches[0]
 }
 
-# Очистка
+# Очистка логов (процессы cloudflared продолжают работать)
 Remove-Item $beLog -Force -ErrorAction SilentlyContinue
 Remove-Item $feLog -Force -ErrorAction SilentlyContinue
 
