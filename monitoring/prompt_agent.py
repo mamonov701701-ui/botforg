@@ -97,6 +97,59 @@ def run_cmd(cmd: str, timeout=600):
         return (1, "", str(e))
 
 
+def do_fix_frontend_host():
+    """Внутренняя функция для исправления vite.config.js"""
+    vite_config_path = ROOT / "frontend" / "vite.config.js"
+    vite_config_ts_path = ROOT / "frontend" / "vite.config.ts"
+    
+    # Определяем какой файл существует
+    if vite_config_path.exists():
+        config_file = vite_config_path
+    elif vite_config_ts_path.exists():
+        config_file = vite_config_ts_path
+    else:
+        return {"success": False, "error": "vite.config.js не найден"}
+    
+    # Правильная рабочая конфигурация с middleware для туннелей
+    correct_config = """import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    {
+      name: 'disable-host-check',
+      configureServer(server) {
+        // Отключаем проверку хоста для туннелей
+        server.middlewares.use((req, res, next) => {
+          delete req.headers['host']
+          req.headers['host'] = 'localhost:5173'
+          next()
+        })
+      },
+    },
+  ],
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: false,
+    cors: true,
+  },
+  preview: {
+    host: '0.0.0.0',
+    port: 4173,
+  },
+})
+"""
+    
+    try:
+        config_file.write_text(correct_config, encoding="utf-8")
+        log_line("vite.config.js restored to working configuration")
+        return {"success": True, "error": None}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def handle_fix_backend_cors():
     """Проверить и исправить CORS настройки в backend/main.py"""
     main_py_path = ROOT / "backend" / "main.py"
@@ -331,6 +384,34 @@ def handle_pipeline(payload):
     return {"rc": rc_total, "stdout": "\n\n".join(logs), "stderr": ""}
 
 
+def handle_fix_pipeline(payload):
+    """Авточин + полный запуск (frontend+backend+туннели)"""
+    results = {}
+    
+    # 1. Фикс frontend host
+    frontend_result = do_fix_frontend_host()
+    results["frontend_host"] = "OK" if frontend_result.get("success") else "FAIL"
+    
+    # 2. Фикс backend CORS
+    cors_result = handle_fix_backend_cors()
+    results["backend_cors"] = "OK" if not cors_result.get("error") else "FAIL"
+    
+    # 3. Запуск полного pipeline
+    pipeline_result = handle_pipeline({})
+    results["pipeline"] = "OK" if pipeline_result.get("rc") == 0 else "FAIL"
+    
+    # Формируем итоговый отчет
+    status = "\n".join([f"  - {k}: {v}" for k, v in results.items()])
+    all_ok = all(v == "OK" for v in results.values())
+    icon = "✅" if all_ok else "⚠️"
+    
+    return {
+        "rc": 0 if all_ok else 1,
+        "stdout": f"🧪 fix_pipeline завершён:\n{status}\nГотово {icon}",
+        "stderr": ""
+    }
+
+
 def handle_stop_all(payload):
     rc, out, err = run_ps(
         r"powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-stop.ps1",
@@ -350,6 +431,7 @@ TASK_HANDLERS = {
     "expose": handle_expose,
     "install_cloudflared": handle_install_cloudflared,
     "pipeline": handle_pipeline,
+    "fix_pipeline": handle_fix_pipeline,
     "stop_all": handle_stop_all,
 }
 
@@ -493,6 +575,8 @@ def handle_text(text: str):
             "/verbose — Полный лог\n"
             "/logs — Скачать логи агента\n"
             "/restart_me — Перезапустить агента\n\n"
+            "🩹 АВТОЧИН / ДИСТАНЦИОННО:\n"
+            "/fix_pipeline — авточин + полный запуск (frontend+backend+туннели)\n\n"
             "🔧 ПРОДВИНУТОЕ:\n"
             "/fix_backend_cors — починить CORS backend и перезапустить FastAPI\n"
             "/fix_frontend_host — восстановить vite.config.js (разрешить доступ через туннели)\n"
@@ -559,60 +643,16 @@ def handle_text(text: str):
     if text == "/fix_frontend_host":
         send_msg("🛠 Исправляю vite.config.js...")
         
-        vite_config_path = ROOT / "frontend" / "vite.config.js"
-        vite_config_ts_path = ROOT / "frontend" / "vite.config.ts"
+        result = do_fix_frontend_host()
         
-        # Определяем какой файл существует
-        if vite_config_path.exists():
-            config_file = vite_config_path
-        elif vite_config_ts_path.exists():
-            config_file = vite_config_ts_path
+        if result.get("error"):
+            send_msg(f"❌ Ошибка: {result['error']}")
         else:
-            send_msg("❌ vite.config.js не найден в папке frontend")
-            return
-        
-        # Правильная рабочая конфигурация с middleware для туннелей
-        correct_config = """import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-
-export default defineConfig({
-  plugins: [
-    react(),
-    {
-      name: 'disable-host-check',
-      configureServer(server) {
-        // Отключаем проверку хоста для туннелей
-        server.middlewares.use((req, res, next) => {
-          delete req.headers['host']
-          req.headers['host'] = 'localhost:5173'
-          next()
-        })
-      },
-    },
-  ],
-  server: {
-    host: '0.0.0.0',
-    port: 5173,
-    strictPort: false,
-    cors: true,
-  },
-  preview: {
-    host: '0.0.0.0',
-    port: 4173,
-  },
-})
-"""
-        
-        try:
-            config_file.write_text(correct_config, encoding="utf-8")
             send_msg(
                 "✅ vite.config.js успешно исправлен!\n"
                 "Теперь можно перезапустить фронтенд:\n"
                 "/frontend_start"
             )
-            log_line(f"vite.config.js restored to working configuration")
-        except Exception as e:
-            send_msg(f"❌ Ошибка при записи конфига: {str(e)[:300]}")
         return
 
     if text == "/restart_me":
@@ -641,6 +681,7 @@ export default defineConfig({
         "/install_cloudflared": "install_cloudflared",
         "/preview_urls": "preview_urls",
         "/pipeline": "pipeline",
+        "/fix_pipeline": "fix_pipeline",
         "/stop_all": "stop_all",
     }
 
