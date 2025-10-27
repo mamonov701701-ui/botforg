@@ -2,6 +2,7 @@ import atexit
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -31,6 +32,8 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "agent.log"
 
 # Mode flags
+ALERTS_ON = False
+BOT_ALREADY_RUNNING = False
 QUIET_MODE = True
 last_err_type = None
 last_err_ts = 0
@@ -39,7 +42,7 @@ last_err_ts = 0
 def run_ps(cmd: str, timeout=600):
     """Запустить PowerShell-команду и вернуть (rc, out, err)."""
     proc = subprocess.Popen(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", cmd],
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         cwd=ROOT,
@@ -56,6 +59,44 @@ def run_ps(cmd: str, timeout=600):
     )
 
 
+def run_ps_file(script_path: str, timeout=600):
+    """Запустить PowerShell скрипт из файла и вернуть (rc, out, err)."""
+    proc = subprocess.Popen(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd=ROOT,
+    )
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        return 124, b"", b"TIMEOUT"
+    return (
+        proc.returncode,
+        out.decode(errors="ignore"),
+        err.decode(errors="ignore"),
+    )
+
+
+def run_cmd(cmd: str, timeout=600):
+    """Выполнить произвольную команду в shell и вернуть (rc, out, err)."""
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=ROOT,
+        )
+        return (result.returncode, result.stdout, result.stderr)
+    except subprocess.TimeoutExpired:
+        return (124, "", "TIMEOUT")
+    except Exception as e:
+        return (1, "", str(e))
+
+
 def handle_status(payload):
     cmd = """
     git rev-parse --abbrev-ref HEAD;
@@ -66,25 +107,29 @@ def handle_status(payload):
 
 
 def handle_backend_start(payload):
-    # быстрый старт бекенда через uvicorn (порт 8000)
+    # быстрый старт бекенда через uvicorn (порт 8001)
     cmd = r"""
     cd backend;
     if (Test-Path .venv) { . .\.venv\Scripts\Activate.ps1 } elseif (Test-Path venv) { . .\venv\Scripts\Activate.ps1 }
     pip install -r requirements.txt;
-    Start-Process -WindowStyle Hidden powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','cd backend; if (Test-Path .venv) { . .\.venv\Scripts\Activate.ps1 } elseif (Test-Path venv) { . .\venv\Scripts\Activate.ps1 }; uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload' | Out-Null;
-    "backend: started on http://localhost:8000"
+    Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*uvicorn*' } | Stop-Process -Force;
+    Start-Sleep 2;
+    Start-Process -WindowStyle Hidden powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','cd C:\Users\mamon\botforg\backend; if (Test-Path .venv) { . .\.venv\Scripts\Activate.ps1 } elseif (Test-Path venv) { . .\venv\Scripts\Activate.ps1 }; uvicorn main:app --host 0.0.0.0 --port 8001 --reload' | Out-Null;
+    "backend: started on http://localhost:8001"
     """
     rc, out, err = run_ps(cmd, timeout=120)
     return {"rc": rc, "stdout": out, "stderr": err}
 
 
 def handle_frontend_start(payload):
-    # vite dev (порт 5173)
+    # vite dev (порт 5173) - host настроен в vite.config.js
     cmd = r"""
     cd frontend;
     if (Test-Path package-lock.json) { npm ci } else { npm install }
-    Start-Process -WindowStyle Hidden powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','cd frontend; npm run dev -- --host' | Out-Null;
-    "frontend: started on http://localhost:5173"
+    Get-Process node -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*vite*' } | Stop-Process -Force;
+    Start-Sleep 2;
+    Start-Process -WindowStyle Hidden powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','cd C:\Users\mamon\botforg\frontend; $env:DANGEROUSLY_DISABLE_HOST_CHECK="true"; npm run dev' | Out-Null;
+    "frontend: started on http://0.0.0.0:5173 (доступен для туннелей)"
     """
     rc, out, err = run_ps(cmd, timeout=240)
     return {"rc": rc, "stdout": out, "stderr": err}
@@ -122,20 +167,21 @@ def handle_preview_urls(payload):
     # печатаем известные локальные адреса
     return {
         "rc": 0,
-        "stdout": "backend: http://localhost:8000\nfrontend: http://localhost:5173",
+        "stdout": "backend: http://localhost:8001\nfrontend: http://localhost:5173",
         "stderr": "",
     }
 
 
 def handle_expose(payload):
-    # Запускаем скрипт и парсим BACKEND_URL, FRONTEND_URL
-    rc, out, err = run_ps(
-        r"powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-expose.ps1",
-        timeout=60,  # Уменьшили таймаут
+    # Запускаем SSH туннель (localhost.run) - работает везде!
+    rc, out, err = run_ps_file(
+        r"scripts\dev-expose-ssh.ps1",
+        timeout=15,  # Скрипт работает ~10 секунд (SSH уходит в фон сразу)
     )
     be_url = None
     fe_url = None
     install_cmd = None
+    error_msg = None
     
     for line in out.splitlines():
         if line.startswith("BACKEND_URL="):
@@ -144,6 +190,8 @@ def handle_expose(payload):
             fe_url = line.split("=", 1)[1].strip()
         if line.startswith("INSTALL_CMD="):
             install_cmd = line.split("=", 1)[1].strip()
+        if line.startswith("ERROR_MSG="):
+            error_msg = line.split("=", 1)[1].strip()
     
     pretty = []
     
@@ -157,17 +205,37 @@ def handle_expose(payload):
         pretty.append("Затем перезапустите терминал и попробуйте /expose снова")
         return {"rc": 0, "stdout": "\n".join(pretty), "stderr": ""}
     
-    # URLs получены
-    if be_url and be_url != "PENDING" and not be_url.startswith("ERROR"):
-        pretty.append(f"🌐 Backend → {be_url}")
-    if fe_url and fe_url != "PENDING" and not fe_url.startswith("ERROR"):
-        pretty.append(f"🌐 Frontend → {fe_url}")
-    
-    if pretty:
+    # Сервера не запущены
+    if be_url == "NOT_RUNNING" and fe_url == "NOT_RUNNING":
+        pretty.append("⚠️ Сервера не запущены")
         pretty.append("")
-        pretty.append("✅ Открывайте прямо в браузере - БЕЗ пароля!")
+        pretty.append("Сначала запустите:")
+        pretty.append("  /backend_start")
+        pretty.append("  /frontend_start")
+        pretty.append("")
+        pretty.append("Затем попробуйте /expose снова")
+        return {"rc": 0, "stdout": "\n".join(pretty), "stderr": ""}
+    
+    # URLs получены
+    has_urls = False
+    if be_url and be_url != "PENDING" and be_url != "NOT_RUNNING" and not be_url.startswith("ERROR"):
+        pretty.append(f"🌐 Backend → {be_url}")
+        has_urls = True
+    if fe_url and fe_url != "PENDING" and fe_url != "NOT_RUNNING" and not fe_url.startswith("ERROR"):
+        pretty.append(f"🌐 Frontend → {fe_url}")
+        has_urls = True
+    
+    if has_urls:
+        pretty.append("")
+        pretty.append("✅ Туннели созданы!")
+        pretty.append("")
+        pretty.append("⚠️ ВАЖНО:")
+        pretty.append("Если видите ошибку 1033 в браузере:")
+        pretty.append("   → Запустите /backend_start")
+        pretty.append("   → Подождите 10 секунд")
+        pretty.append("   → Обновите страницу в браузере")
     else:
-        pretty.append("⏳ Туннели создаются... попробуйте /expose ещё раз через 10 сек")
+        pretty.append("⏳ Туннели создаются... попробуйте /expose ещё раз через 15 сек")
     
     return {"rc": rc, "stdout": "\n".join(pretty) or out, "stderr": err}
 
@@ -248,13 +316,17 @@ def log_line(msg: str):
         pass
 
 
-def send_msg(text: str):
+def send_msg(text: str, reply_markup=None):
+    """Отправить сообщение с опциональной клавиатурой"""
     if not TG_TOKEN or not CHAT_ID:
         return
     try:
+        data = {"chat_id": CHAT_ID, "text": text}
+        if reply_markup:
+            data["reply_markup"] = json.dumps(reply_markup)
         requests.post(
             f"{TG_API}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": text},
+            data=data,
             timeout=30,
         )
     except Exception:
@@ -311,6 +383,30 @@ def append_done(rec: dict):
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
+def build_main_menu():
+    """Главное меню (основное управление проектом)"""
+    return {
+        "keyboard": [
+            [{"text": "/status"}, {"text": "/backend_start"}, {"text": "/frontend_start"}],
+            [{"text": "/expose"}, {"text": "/pipeline"}, {"text": "/stop_all"}],
+            [{"text": "/menu_sys"}, {"text": "/logs"}, {"text": "/restart_me"}],
+        ],
+        "resize_keyboard": True,
+    }
+
+
+def build_sys_menu():
+    """Системное меню (диагностика, билды, шумность)"""
+    return {
+        "keyboard": [
+            [{"text": "/tests"}, {"text": "/typecheck"}, {"text": "/build"}],
+            [{"text": "/quiet"}, {"text": "/verbose"}, {"text": "/logs"}],
+            [{"text": "/install_cloudflared"}, {"text": "/menu_main"}],
+        ],
+        "resize_keyboard": True,
+    }
+
+
 def handle_text(text: str):
     """Handle Telegram commands"""
     text = text.strip()
@@ -318,26 +414,37 @@ def handle_text(text: str):
     if text in ("/start", "/help"):
         help_text = (
             "🤖 BotForg Dev Agent\n\n"
-            "Команды:\n"
+            "⚡ БЫСТРЫЙ СТАРТ:\n"
+            "/pipeline — Запустить всё сразу (backend+frontend+туннели)\n"
+            "/preview_urls — Показать все ссылки\n\n"
+            "🚀 УПРАВЛЕНИЕ СЕРВИСАМИ:\n"
+            "/backend_start — Запустить FastAPI (порт 8001)\n"
+            "/frontend_start — Запустить Vite (порт 5173)\n"
+            "/expose — Создать публичные туннели (SSH)\n"
+            "/stop_all — Остановить все процессы\n\n"
+            "🔍 РАЗРАБОТКА:\n"
             "/status — Git branch + статус\n"
             "/typecheck — TypeScript проверка\n"
-            "/build — Production build\n"
             "/tests — Backend pytest\n"
-            "/backend_start — Запустить FastAPI\n"
-            "/frontend_start — Запустить Vite\n"
-            "/expose — Cloudflared туннели\n"
-            "/install_cloudflared — Установить cloudflared\n"
-            "/preview_urls — Локальные URLs\n"
-            "/pipeline — Всё сразу (backend+frontend+expose)\n"
-            "/stop_all — Остановить все процессы\n\n"
-            "Расширенные:\n"
-            "/task {JSON} — Выполнить задачу\n"
-            "/quiet — Тихий режим\n"
+            "/build — Production build\n\n"
+            "⚙️ НАСТРОЙКИ:\n"
+            "/quiet — Тихий режим (меньше логов)\n"
             "/verbose — Полный лог\n"
-            "/logs — Скачать логи\n"
-            "/restart_me — Перезапустить агента\n"
+            "/logs — Скачать логи агента\n"
+            "/restart_me — Перезапустить агента\n\n"
+            "🔧 ПРОДВИНУТОЕ:\n"
+            '/task {"action":"exec","cmd":"echo test"} — выполнить команду на Dev-машине (ТОЛЬКО ВЛАДЕЛЕЦ)\n\n'
+            "💡 Используйте кнопки меню ниже ⬇️"
         )
-        send_msg(help_text)
+        send_msg(help_text, reply_markup=build_main_menu())
+        return
+
+    if text == "/menu_main":
+        send_msg("📋 Главное меню ✅", reply_markup=build_main_menu())
+        return
+
+    if text == "/menu_sys":
+        send_msg("⚙️ Системное меню", reply_markup=build_sys_menu())
         return
 
     if text == "/quiet":
@@ -415,6 +522,28 @@ def handle_text(text: str):
         try:
             task = json.loads(payload)
             action = task.get("action")
+            
+            # Специальная обработка для exec - выполнение произвольной команды
+            if action == "exec":
+                cmd = task.get("cmd", "").strip()
+                if not cmd:
+                    send_msg("❌ exec: no cmd provided")
+                    return
+                
+                send_msg(f"Выполняю команду: {cmd[:100]}...")
+                rc, stdout, stderr = run_cmd(cmd, timeout=300)
+                
+                icon = "✅" if rc == 0 else "❌"
+                response = f"{icon} exec (rc={rc})\n"
+                if stdout:
+                    response += f"\n{stdout[:2000]}"
+                if stderr:
+                    response += f"\n\nstderr:\n{stderr[:1000]}"
+                
+                send_msg(response)
+                log_line(f"exec: cmd='{cmd[:100]}' rc={rc}")
+                return
+            
             if action in TASK_HANDLERS:
                 send_msg(f"Выполняю: {action}...")
                 result = TASK_HANDLERS[action](task.get("payload", {}))
@@ -470,6 +599,12 @@ def single_instance():
 
 def main():
     """Main Telegram bot loop"""
+    global BOT_ALREADY_RUNNING
+    if BOT_ALREADY_RUNNING:
+        # уже есть активный polling цикл, не запускаем второй, просто выходим спокойно
+        return
+    BOT_ALREADY_RUNNING = True
+    
     if not TG_TOKEN or not CHAT_ID:
         print("❌ TG_BOT_TOKEN/TG_CHAT_ID не заданы")
         print("Установите переменные окружения:")
@@ -477,7 +612,10 @@ def main():
         print("  set TG_CHAT_ID=your_chat_id")
         return
 
-    send_msg("🤖 Агент команд запущен ✅\nИспользуй /help для списка команд")
+    send_msg(
+        "🤖 Агент команд запущен ✅\nИспользуй /help для списка команд",
+        reply_markup=build_main_menu()
+    )
     log_line("agent started; quiet mode ON")
 
     # Delete webhook
