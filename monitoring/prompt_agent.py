@@ -368,20 +368,55 @@ def handle_install_cloudflared(payload):
 
 
 def handle_pipeline(payload):
+    """Полный запуск dev-среды (backend + frontend + туннели)"""
     steps = [
-        ("backend_start", handle_backend_start),
-        ("frontend_start", handle_frontend_start),
-        ("expose", handle_expose),
+        ("backend_start", handle_backend_start, "Backend"),
+        ("frontend_start", handle_frontend_start, "Frontend"),
+        ("expose", handle_expose, "Туннели"),
     ]
-    logs = []
-    rc_total = 0
-    for name, fn in steps:
-        r = fn({})
-        logs.append(
-            f"== {name} ==\nstdout:\n{r.get('stdout','')}\nstderr:\n{r.get('stderr','')}\nrc={r.get('rc')}"
-        )
-        rc_total = rc_total or r.get("rc", 0)
-    return {"rc": rc_total, "stdout": "\n\n".join(logs), "stderr": ""}
+    
+    results = []
+    all_success = True
+    
+    for step_name, handler_fn, display_name in steps:
+        try:
+            result = handler_fn({})
+            rc = result.get("rc", 0)
+            stdout = result.get("stdout", "").strip()
+            stderr = result.get("stderr", "").strip()
+            
+            # Определяем статус шага
+            if rc == 0:
+                icon = "✅"
+                status = "OK"
+            else:
+                icon = "❌"
+                status = "FAIL"
+                all_success = False
+            
+            # Форматируем вывод шага
+            step_output = f"{icon} {display_name} (rc={rc})"
+            if stdout:
+                # Берем первые 300 символов для компактности
+                step_output += f"\n{stdout[:300]}"
+            if stderr and rc != 0:
+                step_output += f"\nErrors: {stderr[:200]}"
+            
+            results.append(step_output)
+            
+        except Exception as e:
+            results.append(f"❌ {display_name}\nОшибка: {str(e)[:200]}")
+            all_success = False
+    
+    # Формируем итоговое сообщение
+    header = "✅ pipeline завершён" if all_success else "⚠️ pipeline завершён с ошибками"
+    final_output = f"{header}\n\n" + "\n\n".join(results)
+    
+    return {
+        "rc": 0 if all_success else 1,
+        "stdout": final_output,
+        "stderr": ""
+    }
 
 
 def handle_fix_pipeline(payload):
