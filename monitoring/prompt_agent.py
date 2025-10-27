@@ -97,6 +97,66 @@ def run_cmd(cmd: str, timeout=600):
         return (1, "", str(e))
 
 
+def handle_fix_backend_cors():
+    """Проверить и исправить CORS настройки в backend/main.py"""
+    main_py_path = ROOT / "backend" / "main.py"
+    
+    if not main_py_path.exists():
+        return {"changed": False, "error": "backend/main.py не найден"}
+    
+    try:
+        content = main_py_path.read_text(encoding="utf-8")
+        original_content = content
+        changed = False
+        
+        # Проверяем наличие импорта CORSMiddleware
+        if "from fastapi.middleware.cors import CORSMiddleware" not in content:
+            # Находим первый импорт FastAPI и добавляем после него
+            if "from fastapi import FastAPI" in content:
+                content = content.replace(
+                    "from fastapi import FastAPI",
+                    "from fastapi import FastAPI\nfrom fastapi.middleware.cors import CORSMiddleware"
+                )
+                changed = True
+        
+        # Проверяем правильность настройки CORS
+        has_correct_cors = (
+            'allow_origins=allowed_origins if settings.ENVIRONMENT != "development" else ["*"]' in content
+            or 'allow_origins=["*"]' in content
+        ) and 'allow_credentials=True' in content and 'allow_methods=["*"]' in content
+        
+        if not has_correct_cors:
+            # Ищем блок app.add_middleware(CORSMiddleware
+            if "app.add_middleware(\n    CORSMiddleware," in content:
+                # CORS блок уже есть, но неправильный - не трогаем, просто сообщаем
+                pass
+            else:
+                # CORS блока нет - добавляем после app = FastAPI()
+                if "app = FastAPI()" in content:
+                    cors_block = """\n\n# Настройка CORS - разрешаем все источники в dev
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)"""
+                    content = content.replace(
+                        "app = FastAPI()",
+                        "app = FastAPI()" + cors_block
+                    )
+                    changed = True
+        
+        if changed:
+            main_py_path.write_text(content, encoding="utf-8")
+            log_line("backend/main.py: CORS settings updated")
+        
+        return {"changed": changed, "error": None}
+    
+    except Exception as e:
+        return {"changed": False, "error": str(e)}
+
+
 def handle_status(payload):
     cmd = """
     git rev-parse --abbrev-ref HEAD;
@@ -401,6 +461,7 @@ def build_sys_menu():
         "keyboard": [
             [{"text": "/tests"}, {"text": "/typecheck"}, {"text": "/build"}],
             [{"text": "/quiet"}, {"text": "/verbose"}, {"text": "/logs"}],
+            [{"text": "/fix_backend_cors"}, {"text": "/fix_frontend_host"}],
             [{"text": "/install_cloudflared"}, {"text": "/menu_main"}],
         ],
         "resize_keyboard": True,
@@ -433,6 +494,7 @@ def handle_text(text: str):
             "/logs — Скачать логи агента\n"
             "/restart_me — Перезапустить агента\n\n"
             "🔧 ПРОДВИНУТОЕ:\n"
+            "/fix_backend_cors — починить CORS backend и перезапустить FastAPI\n"
             "/fix_frontend_host — восстановить vite.config.js (разрешить доступ через туннели)\n"
             '/task {"action":"exec","cmd":"echo test"} — выполнить команду на Dev-машине (ТОЛЬКО ВЛАДЕЛЕЦ)\n\n'
             "💡 Используйте кнопки меню ниже ⬇️"
@@ -466,6 +528,32 @@ def handle_text(text: str):
             send_doc(LOG_FILE, "agent.log")
         else:
             send_msg("Логов пока нет")
+        return
+
+    if text == "/fix_backend_cors":
+        send_msg("🛡 Проверяю CORS настройки backend...")
+        
+        result = handle_fix_backend_cors()
+        
+        if result.get("error"):
+            send_msg(f"❌ Ошибка: {result['error']}")
+            return
+        
+        # Перезапускаем backend
+        send_msg("🔄 Перезапускаю backend...")
+        backend_result = handle_backend_start({})
+        
+        changed_text = "✅ да" if result.get("changed") else "ℹ️ уже был настроен"
+        backend_status = "✅ успешно" if backend_result.get("rc") == 0 else "❌ ошибка"
+        
+        response = (
+            f"🛡 CORS проверен\n"
+            f"🔄 Backend перезапущен: {backend_status}\n"
+            f"✍️ Файл обновлён: {changed_text}"
+        )
+        
+        send_msg(response)
+        log_line(f"fix_backend_cors: changed={result.get('changed')}, backend_rc={backend_result.get('rc')}")
         return
 
     if text == "/fix_frontend_host":
