@@ -225,10 +225,11 @@ def handle_backend_start(payload):
     cd backend;
     if (Test-Path .venv) { . .\.venv\Scripts\Activate.ps1 } elseif (Test-Path venv) { . .\venv\Scripts\Activate.ps1 }
     pip install -r requirements.txt;
-    Get-Process python -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like '*uvicorn*' } | Stop-Process -Force;
-    Start-Sleep 2;
+    # Убиваем ВСЕ процессы python (включая зависшие)
+    Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force;
+    Start-Sleep 3;
     Start-Process -WindowStyle Hidden powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-Command','cd C:\Users\mamon\botforg\backend; if (Test-Path .venv) { . .\.venv\Scripts\Activate.ps1 } elseif (Test-Path venv) { . .\venv\Scripts\Activate.ps1 }; uvicorn main:app --host 0.0.0.0 --port 8001 --reload' | Out-Null;
-    "backend: started on http://localhost:8001"
+    "backend: started on http://0.0.0.0:8001 (порт освобожден)"
     """
     rc, out, err = run_ps(cmd, timeout=120)
     return {"rc": rc, "stdout": out, "stderr": err}
