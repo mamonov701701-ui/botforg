@@ -433,6 +433,7 @@ def handle_text(text: str):
             "/logs — Скачать логи агента\n"
             "/restart_me — Перезапустить агента\n\n"
             "🔧 ПРОДВИНУТОЕ:\n"
+            "/fix_frontend_host — восстановить vite.config.js (разрешить доступ через туннели)\n"
             '/task {"action":"exec","cmd":"echo test"} — выполнить команду на Dev-машине (ТОЛЬКО ВЛАДЕЛЕЦ)\n\n'
             "💡 Используйте кнопки меню ниже ⬇️"
         )
@@ -465,6 +466,65 @@ def handle_text(text: str):
             send_doc(LOG_FILE, "agent.log")
         else:
             send_msg("Логов пока нет")
+        return
+
+    if text == "/fix_frontend_host":
+        send_msg("🛠 Исправляю vite.config.js...")
+        
+        vite_config_path = ROOT / "frontend" / "vite.config.js"
+        vite_config_ts_path = ROOT / "frontend" / "vite.config.ts"
+        
+        # Определяем какой файл существует
+        if vite_config_path.exists():
+            config_file = vite_config_path
+        elif vite_config_ts_path.exists():
+            config_file = vite_config_ts_path
+        else:
+            send_msg("❌ vite.config.js не найден в папке frontend")
+            return
+        
+        # Правильная рабочая конфигурация с middleware для туннелей
+        correct_config = """import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    {
+      name: 'disable-host-check',
+      configureServer(server) {
+        // Отключаем проверку хоста для туннелей
+        server.middlewares.use((req, res, next) => {
+          delete req.headers['host']
+          req.headers['host'] = 'localhost:5173'
+          next()
+        })
+      },
+    },
+  ],
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: false,
+    cors: true,
+  },
+  preview: {
+    host: '0.0.0.0',
+    port: 4173,
+  },
+})
+"""
+        
+        try:
+            config_file.write_text(correct_config, encoding="utf-8")
+            send_msg(
+                "✅ vite.config.js успешно исправлен!\n"
+                "Теперь можно перезапустить фронтенд:\n"
+                "/frontend_start"
+            )
+            log_line(f"vite.config.js restored to working configuration")
+        except Exception as e:
+            send_msg(f"❌ Ошибка при записи конфига: {str(e)[:300]}")
         return
 
     if text == "/restart_me":
