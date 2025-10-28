@@ -1,35 +1,29 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: 'disable-host-check',
+      configureServer(server) {
+        // Отключаем проверку хоста для туннелей
+        server.middlewares.use((req, res, next) => {
+          delete req.headers['host'];
+          req.headers['host'] = 'localhost:5173';
+          next();
+        });
+      },
+    },
+  ],
   server: {
-    host: true,
-    historyApiFallback: true,
-    allowedHosts: ['.loca.lt', '.ngrok-free.app', '.ngrok.io'],
-    proxy: {
-      '/blocks': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        credentials: 'include',
-      },
-      '/auth': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        credentials: 'include',
-      },
-      '/me': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        credentials: 'include',
-      },
-    },
+    host: '0.0.0.0',
+    port: 5173,
+    strictPort: false,
+    cors: true,
   },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@application': path.resolve(__dirname, './src/application'),
-    },
+  preview: {
+    host: '0.0.0.0',
+    port: 4173,
   },
 });

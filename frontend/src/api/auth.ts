@@ -3,7 +3,7 @@
  * All endpoints use the unified HTTP client with proper error handling
  */
 
-import { get, post } from './client';
+import { get, post, ApiError } from './client';
 
 // Token management
 const TOKEN_KEY = 'auth_token';
@@ -45,11 +45,19 @@ export function getLoginUrl(provider: 'google' | 'yandex' | 'mailru') {
 }
 
 export async function registerEmail(email: string, password: string, name?: string) {
-  const response = await post('/auth/register', { email, password, name, role: 'user' });
-  if (response.access_token) {
-    saveToken(response.access_token);
+  try {
+    const response = await post('/auth/register', { email, password, name, role: 'user' });
+    if (response.access_token) {
+      saveToken(response.access_token);
+    }
+    return response;
+  } catch (error: any) {
+    // Передаем ошибку дальше с правильным сообщением
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    throw new Error(error?.message || 'Ошибка регистрации');
   }
-  return response;
 }
 
 export async function loginEmail(email: string, password: string) {

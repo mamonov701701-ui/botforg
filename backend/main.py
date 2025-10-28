@@ -38,10 +38,15 @@ app.add_middleware(
 # Добавляем security middleware
 app.add_middleware(SecurityMiddleware)
 
-# Настройка CORS - единая регистрация
+# Настройка CORS - разрешаем localhost + туннели
+allowed_origins = [settings.FRONTEND_ORIGIN, settings.FRONTEND_URL]
+if settings.ENVIRONMENT == "development":
+    # В dev режиме разрешаем туннельные домены
+    allowed_origins.append("*")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_ORIGIN, settings.FRONTEND_URL],
+    allow_origins=allowed_origins if settings.ENVIRONMENT != "development" else ["*"],
     allow_credentials=True,  # Important for OAuth cookies
     allow_methods=["*"],
     allow_headers=["*"],
