@@ -156,7 +156,11 @@ function CustomNode({ data, id }: any) {
 
 function InnerEditor() {
   const { nodes, edges, setNodes, setEdges, catalog, plan, role, showToast } = useEditorStore();
-  const { setAllValidationResults, getInvalidNodes } = useValidationStore();
+  const { setAllValidationResults } = useValidationStore();
+  const invalidNodesCount = useValidationStore(state => {
+    const results = Array.from(state.validationResults.values());
+    return results.filter(r => !r.isValid).length;
+  });
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(undefined);
   const [isPanelVisible, setIsPanelVisible] = useState(true);
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
@@ -517,7 +521,7 @@ function InnerEditor() {
       {/* Export Confirmation Modal */}
       <ExportConfirmModal
         isOpen={isExportConfirmOpen}
-        errorCount={getInvalidNodes().length}
+        errorCount={invalidNodesCount}
         onConfirm={performExport}
         onCancel={() => setIsExportConfirmOpen(false)}
       />

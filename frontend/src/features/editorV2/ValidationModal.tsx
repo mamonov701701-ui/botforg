@@ -7,11 +7,15 @@ interface Props {
   onClose: () => void;
 }
 
-const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const invalidNodes = useValidationStore(state => state.getInvalidNodes());
-  const nodes = useEditorStore(state => state.nodes);
+// Inner component that only renders when modal is open
+const ValidationModalContent: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  // Only subscribe when this component is rendered (modal is open)
+  const invalidNodes = useValidationStore(state => {
+    const results = Array.from(state.validationResults.values());
+    return results.filter(r => !r.isValid);
+  });
 
-  if (!isOpen) return null;
+  const nodes = useEditorStore(state => state.nodes);
 
   const handleNavigateToNode = (nodeId: string) => {
     // Find node and highlight it
@@ -182,6 +186,15 @@ const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
       </div>
     </div>
   );
+};
+
+const ValidationModal: React.FC<Props> = ({ isOpen, onClose }) => {
+  // Don't render content when closed - this prevents store subscriptions
+  if (!isOpen) {
+    return null;
+  }
+
+  return <ValidationModalContent onClose={onClose} />;
 };
 
 export default ValidationModal;

@@ -21,6 +21,16 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
     cors: true,
+    proxy: {
+      '/blocks': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     host: '0.0.0.0',
