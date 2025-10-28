@@ -1,21 +1,25 @@
 html,
 body,
 #root {
-  height: 100%;
-  overflow: hidden;
+  height: auto;
+  min-height: 100%;
 }
 .site-shell {
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 .site-header {
-  position: relative;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
   flex: 0 0 auto;
   z-index: 100;
-  background: transparent !important;
-  box-shadow: none !important;
+  background: #001127 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  height: fit-content;
 }
 .site-footer {
   flex: 0 0 auto;
@@ -26,9 +30,13 @@ body,
 .site-main {
   flex: 1 1 auto;
   min-height: 0;
-  overflow: hidden;
+  padding-top: var(--header-h, 88px);
 }
+/* Для редактора нужен overflow: hidden, для остальных страниц - скроллинг */
 .page-content-slot {
+  min-height: 100%;
+}
+.page-content-slot.editor-surface {
   height: 100%;
   overflow: hidden;
 }

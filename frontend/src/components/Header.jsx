@@ -17,8 +17,8 @@ export default function Header({ openAuthModal }) {
 
   return (
     <header
-      className="max-w-7xl mx-auto px-4 py-6 flex items-center justify-between w-full"
-      style={{ position: 'relative', zIndex: 100 }}
+      className="max-w-7xl mx-auto px-4 flex items-center justify-between w-full"
+      style={{ position: 'relative', zIndex: 100, height: 'fit-content' }}
     >
       <div className="flex items-center gap-3">
         <Link to="/">
