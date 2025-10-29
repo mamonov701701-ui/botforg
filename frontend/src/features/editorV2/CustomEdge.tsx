@@ -30,7 +30,9 @@ export default function CustomEdge({
         markerEnd={markerEnd}
         style={{
           stroke: selected ? '#FF4D4F' : '#FFC107',
-          strokeWidth: 2,
+          strokeWidth: selected ? 4 : 3,
+          transition: 'all 0.2s ease',
+          opacity: selected ? 1 : 0.8,
         }}
       />
       {selected && (
@@ -43,12 +45,23 @@ export default function CustomEdge({
               pointerEvents: 'all',
               background: '#ef4444',
               color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              padding: '4px 6px',
+              border: '2px solid #fff',
+              borderRadius: 8,
+              padding: '6px 10px',
               cursor: 'pointer',
-              boxShadow: '0 3px 10px rgba(0,0,0,.25)',
-              fontSize: '14px',
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.4)',
+              fontSize: '16px',
+              fontWeight: 600,
+              transition: 'all 0.2s ease',
+            }}
+            title="Удалить соединение"
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = `translate(-50%, -50%) translate(${labelX}px, ${labelY}px) scale(1.1)`;
+              e.currentTarget.style.boxShadow = '0 6px 16px rgba(239, 68, 68, 0.6)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = `translate(-50%, -50%) translate(${labelX}px, ${labelY}px) scale(1)`;
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(239, 68, 68, 0.4)';
             }}
           >
             🗑

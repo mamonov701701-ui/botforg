@@ -13,8 +13,7 @@ body {
   overscroll-behavior-y: none;
 }
 
-html,
-#root {
+html {
   margin: 0;
   padding: 0;
   min-height: 100vh;
@@ -22,4 +21,10 @@ html,
   color: white;
   font-family: 'Inter', sans-serif;
   overflow-x: hidden;
+}
+
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useEditorStore } from '../../stores/editorStore';
 import { PlanType, RoleType } from '../../types/blocks';
 
@@ -13,7 +13,19 @@ const getPlanBadgeColor = (plan: PlanType) => {
   }
 };
 
-const EditorControls: React.FC = () => {
+interface EditorControlsProps {
+  onExport?: () => void;
+  onImport?: () => void;
+  onOpenBlockLibrary?: () => void;
+}
+
+const EditorControls: React.FC<EditorControlsProps> = ({
+  onExport,
+  onImport,
+  onOpenBlockLibrary,
+}) => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
   const { plan, role, setPlan, setRole, searchQuery, setSearchQuery, catalog } = useEditorStore();
 
   const handlePlanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -23,6 +35,23 @@ const EditorControls: React.FC = () => {
   const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setRole(e.target.value as RoleType);
   };
+
+  // Закрытие меню при клике вне его
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isMenuOpen]);
 
   return (
     <div
@@ -80,24 +109,38 @@ const EditorControls: React.FC = () => {
         </select>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>Поиск:</label>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          placeholder="Найти блок..."
-          style={{
-            background: '#1a1a2e',
-            color: '#fff',
-            border: '1px solid #374151',
-            borderRadius: 6,
-            padding: '6px 12px',
-            fontSize: 12,
-            flex: 1,
-            maxWidth: 300,
-          }}
-        />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Кнопка "Добавить блок" */}
+        {onOpenBlockLibrary && (
+          <button
+            onClick={onOpenBlockLibrary}
+            style={{
+              background: '#22c55e',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              padding: '8px 16px',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#16a34a';
+              e.currentTarget.style.transform = 'translateY(-1px)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = '#22c55e';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <span>➕</span>
+            <span>Добавить блок</span>
+          </button>
+        )}
       </div>
 
       <div
@@ -134,6 +177,145 @@ const EditorControls: React.FC = () => {
           </div>
         </div>
         <div style={{ color: '#6b7280', fontSize: 12 }}>Блоков: {catalog.length}</div>
+
+        {/* Меню "Настройки" */}
+        {(onExport || onImport) && (
+          <div style={{ position: 'relative' }} ref={menuRef}>
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              style={{
+                background: '#1a1a2e',
+                color: '#fff',
+                border: '1px solid #374151',
+                borderRadius: 6,
+                padding: '6px 12px',
+                fontSize: 12,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <span>⚙️</span>
+              <span>Настройки</span>
+              <span style={{ fontSize: 10 }}>{isMenuOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {isMenuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: 4,
+                  background: '#1a1a2e',
+                  border: '1px solid #374151',
+                  borderRadius: 8,
+                  padding: 4,
+                  minWidth: 180,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                  zIndex: 1000,
+                }}
+              >
+                {onImport && (
+                  <button
+                    onClick={() => {
+                      onImport();
+                      setIsMenuOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      background: 'transparent',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = '#252540';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span>📥</span>
+                    <span>Импорт сценария</span>
+                  </button>
+                )}
+                {onExport && (
+                  <button
+                    onClick={() => {
+                      onExport();
+                      setIsMenuOpen(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      background: 'transparent',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                      fontSize: 13,
+                      textAlign: 'left',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = '#252540';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span>📤</span>
+                    <span>Экспорт сценария</span>
+                  </button>
+                )}
+                <div
+                  style={{
+                    height: 1,
+                    background: '#374151',
+                    margin: '4px 0',
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    // TODO: Настройки проекта - будет добавлено позже
+                    setIsMenuOpen(false);
+                  }}
+                  disabled
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    background: 'transparent',
+                    color: '#6b7280',
+                    border: 'none',
+                    borderRadius: 4,
+                    cursor: 'not-allowed',
+                    fontSize: 13,
+                    textAlign: 'left',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    opacity: 0.5,
+                  }}
+                >
+                  <span>⚙️</span>
+                  <span>Настройки проекта</span>
+                  <span style={{ fontSize: 10, marginLeft: 'auto' }}>скоро</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

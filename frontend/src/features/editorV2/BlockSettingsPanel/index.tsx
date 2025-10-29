@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Node } from 'reactflow';
 import { useEditorStore } from '../../../stores/editorStore';
 import { useValidationStore } from '../../../stores/validationStore';
@@ -21,13 +21,20 @@ export default function BlockSettingsPanel({
 }: Props) {
   const catalog = useEditorStore(state => state.catalog);
   const setNodes = useEditorStore(state => state.setNodes);
+  const showToast = useEditorStore(state => state.showToast);
   const setValidationResult = useValidationStore(state => state.setValidationResult);
+  const [hasChanges, setHasChanges] = useState(false);
 
   // Find block definition from catalog
   const block = useMemo(
     () => catalog.find(b => b.id === selectedNode.data.blockId),
     [catalog, selectedNode.data.blockId]
   );
+
+  // Reset changes when node changes
+  useEffect(() => {
+    setHasChanges(false);
+  }, [selectedNode.id]);
 
   // Validate on mount and when settings change
   useEffect(() => {
@@ -39,6 +46,7 @@ export default function BlockSettingsPanel({
 
   // Handle field change - updates node.data.settings
   const handleFieldChange = (fieldName: string, value: any) => {
+    setHasChanges(true);
     setNodes(nodes =>
       nodes.map(n =>
         n.id === selectedNode.id
@@ -55,6 +63,21 @@ export default function BlockSettingsPanel({
           : n
       )
     );
+  };
+
+  // Handle save - показывает подтверждение (изменения уже применены)
+  const handleSave = () => {
+    if (block) {
+      const validation = validateNodeSettings(selectedNode, block);
+      setValidationResult(selectedNode.id, validation);
+
+      if (validation.isValid) {
+        showToast('Настройки блока сохранены', 'success');
+        setHasChanges(false);
+      } else {
+        showToast('Исправьте ошибки перед сохранением', 'warning');
+      }
+    }
   };
 
   // Validate field
@@ -109,10 +132,51 @@ export default function BlockSettingsPanel({
       }}
     >
       {/* Header */}
-      <div style={{ padding: 16, borderBottom: '1px solid #1f2937' }}>
-        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4 }}>{block.title}</div>
-        <div style={{ opacity: 0.7, fontSize: 13, lineHeight: 1.4 }}>{block.description}</div>
-        <div style={{ opacity: 0.5, fontSize: 11, marginTop: 8 }}>ID: {selectedNode.id}</div>
+      <div style={{ padding: 16, borderBottom: '1px solid #1f2937', position: 'relative' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 8,
+          }}
+        >
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 20 }}>{block.icon || '📦'}</span>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>{block.title}</div>
+            </div>
+            <div style={{ opacity: 0.7, fontSize: 13, lineHeight: 1.4, marginBottom: 4 }}>
+              {block.description}
+            </div>
+            <div style={{ opacity: 0.5, fontSize: 11 }}>ID: {selectedNode.id}</div>
+          </div>
+          {/* Кнопка закрытия */}
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#9ca3af',
+              fontSize: 20,
+              cursor: 'pointer',
+              padding: 4,
+              lineHeight: 1,
+              borderRadius: 4,
+            }}
+            title="Закрыть панель"
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#252540';
+              e.currentTarget.style.color = '#fff';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = '#9ca3af';
+            }}
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       {/* Form Fields */}
@@ -155,15 +219,18 @@ export default function BlockSettingsPanel({
           borderTop: '1px solid #1f2937',
           display: 'flex',
           gap: 8,
+          flexWrap: 'wrap',
         }}
       >
+        {/* Кнопка Сохранить - всегда видна */}
         <button
-          onClick={handleInspect}
+          onClick={handleSave}
           style={{
             flex: 1,
+            minWidth: 120,
             padding: '10px 12px',
             borderRadius: 8,
-            background: '#3b82f6',
+            background: hasChanges ? '#22c55e' : '#374151',
             color: '#fff',
             border: 'none',
             fontWeight: 600,
@@ -173,11 +240,34 @@ export default function BlockSettingsPanel({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
+            transition: 'background 0.2s ease',
           }}
-          title="Inspect node in console"
+          title={hasChanges ? 'Сохранить изменения' : 'Настройки сохранены'}
         >
-          🔍 Inspect
+          <span>💾</span>
+          <span>Сохранить</span>
         </button>
+
+        {/* Кнопка Inspect */}
+        <button
+          onClick={handleInspect}
+          style={{
+            width: 44,
+            borderRadius: 8,
+            background: '#3b82f6',
+            border: 'none',
+            color: '#fff',
+            fontWeight: 800,
+            fontSize: 18,
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+          title="Посмотреть данные блока в консоли"
+        >
+          🔍
+        </button>
+
+        {/* Кнопка Дублировать */}
         {onDuplicate && (
           <button
             onClick={onDuplicate}
@@ -190,12 +280,15 @@ export default function BlockSettingsPanel({
               fontWeight: 800,
               fontSize: 18,
               cursor: 'pointer',
+              flexShrink: 0,
             }}
             title="Дублировать блок"
           >
             📋
           </button>
         )}
+
+        {/* Кнопка Удалить */}
         <button
           onClick={onDelete}
           style={{
@@ -207,6 +300,7 @@ export default function BlockSettingsPanel({
             fontWeight: 800,
             fontSize: 18,
             cursor: 'pointer',
+            flexShrink: 0,
           }}
           title="Удалить блок"
         >

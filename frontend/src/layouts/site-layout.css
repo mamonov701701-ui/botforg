@@ -9,6 +9,13 @@ body,
   display: flex;
   flex-direction: column;
 }
+
+/* Для редактора фиксируем высоту и убираем скролл */
+.site-shell:has(.editor-surface) {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+}
 .site-header {
   position: fixed;
   top: 0;
@@ -28,11 +35,12 @@ body,
   box-shadow: none !important;
 }
 .site-main {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   padding-top: var(--header-h, 88px);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 /* Для редактора нужен overflow: hidden, для остальных страниц - скроллинг */
 .page-content-slot {
@@ -41,7 +49,8 @@ body,
 }
 .page-content-slot.editor-surface {
   height: 100%;
-  min-height: calc(100vh - var(--header-h, 88px));
+  min-height: 0;
+  max-height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -58,7 +67,34 @@ body,
 
 /* ТОЛЬКО БЛОК РЕДАКТОРА: тёмно-синий фон (без картинки страницы) */
 .editor-surface {
-  background: #0b1b2a;
+  background: #0a1b2a !important;
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  isolation: isolate; /* Создаёт новый stacking context */
+}
+
+/* Отключаем фоновое изображение для редактора */
+.editor-surface.bg-circuit {
+  background-image: none !important;
+}
+
+.site-shell.bg-circuit .editor-surface {
+  background-image: none !important;
+  background-attachment: scroll !important;
+}
+
+/* Убеждаемся что фоновое изображение не перекрывает редактор */
+.editor-surface {
+  position: relative;
+}
+
+/* ReactFlow должен быть поверх всего */
+.editor-surface .react-flow {
+  position: relative !important;
+  z-index: 10 !important;
+}
+
+/* Исключаем ReactFlow узлы из глобального position: relative */
+.editor-surface .react-flow__node {
+  position: absolute !important;
 }

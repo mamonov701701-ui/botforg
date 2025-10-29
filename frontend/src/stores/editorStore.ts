@@ -51,23 +51,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
   plan: 'free',
   role: 'developer',
   isLoading: false,
-  nodes: [
-    {
-      id: nanoid(),
-      type: 'default',
-      position: { x: 250, y: 100 },
-      data: {
-        blockId: 'start',
-        title: 'Начало',
-        icon: 'PlayCircle',
-        color: '#4CAF50',
-        settings: {},
-      },
-      style: {
-        borderColor: '#4CAF50',
-      },
-    },
-  ],
+  nodes: [],
   edges: [],
   searchQuery: '',
   toasts: [],
