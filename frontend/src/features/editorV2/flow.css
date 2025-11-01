@@ -614,10 +614,27 @@ svg[class*="selection"]:not(.react-flow__node-selected):not(.react-flow__edge.se
   right: -9.7px !important; /* Сохраняем позицию центра на границе */
 }
 
+/* Connection line - временная линия при создании соединения */
+.react-flow__connection {
+  pointer-events: none !important;
+  z-index: 1001 !important;
+}
+
+.react-flow__connection svg {
+  transform: none !important;
+}
+
+.react-flow__connection path {
+  stroke: #FFC107 !important;
+  stroke-width: 6 !important;
+  fill: none !important;
+  pointer-events: none !important;
+}
+
 .react-flow__connection-line {
-  stroke: #ffc107 !important;
-  stroke-width: 3 !important;
-  stroke-dasharray: 5 5;
+  stroke: #FFC107 !important;
+  stroke-width: 6 !important;
+  fill: none !important;
 }
 
 /* Анимация для рёбер при создании */

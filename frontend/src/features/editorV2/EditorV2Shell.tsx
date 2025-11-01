@@ -104,8 +104,9 @@ function CustomNode({ data, id, selected }: any) {
           />
         </>
       ) : (
-        /* Для остальных блоков - 4 Handle (со всех сторон) - все универсальные */
+        /* Для остальных блоков - 4 Handle (со всех сторон) - source и target */
         <>
+          {/* Top - входящие соединения */}
           <Handle
             id="top"
             type="target"
@@ -121,9 +122,11 @@ function CustomNode({ data, id, selected }: any) {
             }}
             className="react-flow__handle-visible"
           />
+          
+          {/* Right - исходящие соединения */}
           <Handle
             id="right"
-            type="target"
+            type="source"
             position={Position.Right}
             style={{
               background: '#00ff00',
@@ -137,9 +140,10 @@ function CustomNode({ data, id, selected }: any) {
             className="react-flow__handle-visible"
           />
 
+          {/* Bottom - исходящие соединения */}
           <Handle
             id="bottom"
-            type="target"
+            type="source"
             position={Position.Bottom}
             style={{
               background: '#00ff00',
@@ -153,6 +157,7 @@ function CustomNode({ data, id, selected }: any) {
             className="react-flow__handle-visible"
           />
 
+          {/* Left - входящие соединения */}
           <Handle
             id="left"
             type="target"
@@ -1175,20 +1180,52 @@ function InnerEditor() {
         >
           <svg style={{ position: 'absolute', width: 0, height: 0, zIndex: 1 }}>
             <defs>
+              {/* Янтарный маркер стрелки для обычного состояния */}
               <marker
-                id="arrow-marker"
+                id="arrow-marker-amber"
                 viewBox="0 0 20 20"
                 refX="10"
                 refY="10"
-                markerWidth="20"
-                markerHeight="20"
+                markerWidth="30"
+                markerHeight="30"
                 orient="auto"
               >
                 <path
-                  d="M 0 5 L 5 10 L 0 15 L 10 10 Z"
+                  d="M 2 4 L 10 10 L 2 16 L 2 10 Z"
                   fill="#FFC107"
-                  stroke="#FFC107"
-                  strokeWidth="1"
+                  stroke="none"
+                />
+              </marker>
+              {/* Красный маркер стрелки для выбранного состояния */}
+              <marker
+                id="arrow-marker-red"
+                viewBox="0 0 20 20"
+                refX="10"
+                refY="10"
+                markerWidth="30"
+                markerHeight="30"
+                orient="auto"
+              >
+                <path
+                  d="M 2 4 L 10 10 L 2 16 L 2 10 Z"
+                  fill="#ef4444"
+                  stroke="none"
+                />
+              </marker>
+              {/* Светло-янтарный маркер для hover */}
+              <marker
+                id="arrow-marker-hover"
+                viewBox="0 0 20 20"
+                refX="10"
+                refY="10"
+                markerWidth="30"
+                markerHeight="30"
+                orient="auto"
+              >
+                <path
+                  d="M 2 4 L 10 10 L 2 16 L 2 10 Z"
+                  fill="#FFD54F"
+                  stroke="none"
                 />
               </marker>
             </defs>
