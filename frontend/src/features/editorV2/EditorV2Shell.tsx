@@ -61,8 +61,8 @@ const ConnectionLine = ({
       <path
         d={edgePath}
         className="connection-line-path"
-        stroke="#FFC107"
-        strokeWidth={6}
+        stroke="#FFB300"
+        strokeWidth={8}
         fill="none"
         strokeDasharray="5,5"
         style={{
@@ -883,11 +883,11 @@ function InnerEditor() {
               type: MarkerType.ArrowClosed,
               width: 30,
               height: 30,
-              color: '#FFC107',
+              color: '#FFB300',
             },
             style: {
-              stroke: '#FFC107',
-              strokeWidth: 6,
+              stroke: '#FFB300',
+              strokeWidth: 8,
             },
           },
           eds
@@ -1273,7 +1273,7 @@ function InnerEditor() {
                 markerHeight="30"
                 orient="auto"
               >
-                <path d="M 2 4 L 10 10 L 2 16 L 2 10 Z" fill="#FFC107" stroke="none" />
+                <path d="M 2 4 L 10 10 L 2 16 L 2 10 Z" fill="#FFB300" stroke="none" />
               </marker>
               {/* Красный маркер стрелки для выбранного состояния */}
               <marker
@@ -1348,9 +1348,9 @@ function InnerEditor() {
                 type: MarkerType.ArrowClosed,
                 width: 30,
                 height: 30,
-                color: '#FFC107',
+                color: '#FFB300',
               },
-              style: { stroke: '#FFC107', strokeWidth: 6 },
+              style: { stroke: '#FFB300', strokeWidth: 8 },
             }}
             // Скрываем атрибуцию
             proOptions={{ hideAttribution: true }}

@@ -576,8 +576,8 @@ svg[class*="selection"]:not(.react-flow__node-selected):not(.react-flow__edge.se
 .connection-line-path,
 g[data-connection-line='true'],
 g[data-connection-line='true'] path {
-  stroke: #ffc107 !important;
-  stroke-width: 6 !important;
+  stroke: #ffb300 !important;
+  stroke-width: 8 !important;
   fill: none !important;
   pointer-events: none !important;
   display: block !important;
@@ -586,8 +586,8 @@ g[data-connection-line='true'] path {
 }
 
 .react-flow__connection-line {
-  stroke: #ffc107 !important;
-  stroke-width: 6 !important;
+  stroke: #ffb300 !important;
+  stroke-width: 8 !important;
   fill: none !important;
   opacity: 1 !important;
   visibility: visible !important;

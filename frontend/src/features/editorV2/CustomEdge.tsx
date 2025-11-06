@@ -31,8 +31,8 @@ const CustomEdge = React.memo(
     const centerY = (sourceY + targetY) / 2;
 
     // Цвета в зависимости от состояния
-    const strokeColor = selected ? '#ef4444' : isHovered ? '#FFD54F' : '#FFC107';
-    const strokeWidth = isHovered || selected ? 8 : 6;
+    const strokeColor = selected ? '#ef4444' : isHovered ? '#FFD54F' : '#FFB300';
+    const strokeWidth = isHovered || selected ? 10 : 8;
 
     const handleDelete = (e: React.MouseEvent) => {
       e.stopPropagation();
