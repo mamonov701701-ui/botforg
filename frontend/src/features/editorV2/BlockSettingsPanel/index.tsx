@@ -99,7 +99,42 @@ export default function BlockSettingsPanel({
     console.groupEnd();
   };
 
+  // Специальная обработка для системного блока "start"
   if (!block) {
+    // Если это блок "start" - показываем информацию о системном блоке
+    if (selectedNode.data.blockId === 'start') {
+      return (
+        <div
+          style={{
+            height: '100%',
+            padding: 16,
+            background: '#0b1b2a',
+            color: '#e2e8f0',
+          }}
+        >
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 12, color: '#10B981' }}>
+            ▶️ Начало
+          </div>
+          <div style={{ opacity: 0.7, marginBottom: 12, fontSize: 14 }}>
+            Системный блок - точка входа сценария
+          </div>
+          <div
+            style={{
+              padding: 12,
+              background: '#1f2937',
+              borderRadius: 8,
+              fontSize: 13,
+              opacity: 0.8,
+            }}
+          >
+            Это специальный системный блок, с которого начинается выполнение сценария. Он не требует
+            настройки и создается автоматически.
+          </div>
+        </div>
+      );
+    }
+
+    // Для других блоков показываем ошибку
     return (
       <div
         style={{

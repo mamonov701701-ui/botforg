@@ -298,6 +298,7 @@ function InnerEditor() {
     plan,
     role,
     showToast,
+    loadCatalog,
   } = useEditorStore();
 
   // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
@@ -820,6 +821,11 @@ function InnerEditor() {
   ]);
 
   // onNodesChange и onEdgesChange уже определены выше с обертками для логирования
+
+  // Загрузка каталога блоков при монтировании редактора
+  useEffect(() => {
+    loadCatalog();
+  }, [loadCatalog]);
 
   // Инициализация начального блока "start" если nodes пуст
   useEffect(() => {
