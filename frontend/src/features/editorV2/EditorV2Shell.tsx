@@ -304,22 +304,51 @@ function InnerEditor() {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState(zustandNodes);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
 
-  // Синхронизируем nodes из Zustand в локальное состояние
-  useEffect(() => {
-    setNodes(zustandNodes);
-  }, [zustandNodes, setNodes]);
+  // Используем ref для отслеживания, что мы обновляем nodes программно
+  const isInternalUpdate = React.useRef(false);
 
-  // Синхронизируем nodes обратно в Zustand при изменении
+  // Синхронизируем nodes из Zustand в локальное состояние только когда изменяется Zustand
   useEffect(() => {
-    setZustandNodes(nodes);
-  }, [nodes, setZustandNodes]);
+    // Проверяем, что изменение пришло извне (не от нас)
+    if (!isInternalUpdate.current) {
+      setNodes(zustandNodes);
+    }
+    isInternalUpdate.current = false;
+  }, [zustandNodes, setNodes]);
 
   // Обработчики изменений для ReactFlow
   const onNodesChange = useCallback(
     (changes: any) => {
       onNodesChangeInternal(changes);
+
+      // Помечаем, что это внутреннее обновление, чтобы избежать цикла
+      isInternalUpdate.current = true;
+
+      // Применяем изменения к Zustand store
+      setZustandNodes(currentNodes => {
+        // Применяем изменения вручную к текущему состоянию Zustand
+        return currentNodes
+          .map((node: Node) => {
+            const change = changes.find((c: any) => c.id === node.id);
+            if (!change) return node;
+
+            if (change.type === 'position' && change.position) {
+              return { ...node, position: change.position };
+            }
+            if (change.type === 'select') {
+              return { ...node, selected: change.selected };
+            }
+            if (change.type === 'remove') return null;
+            if (change.type === 'dimensions' && change.dimensions) {
+              return { ...node, dimensions: change.dimensions };
+            }
+
+            return node;
+          })
+          .filter(Boolean) as Node[];
+      });
     },
-    [onNodesChangeInternal]
+    [onNodesChangeInternal, setZustandNodes]
   );
 
   const onEdgesChange = useCallback(
