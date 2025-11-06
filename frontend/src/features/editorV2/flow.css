@@ -427,10 +427,6 @@ svg[class*="selection"]:not(.react-flow__node-selected):not(.react-flow__edge.se
   height: 0 !important;
 }
 
-.react-flow__edge:hover path {
-  stroke: #f8fafc !important;
-}
-
 /* Улучшенная визуализация маркеров подключения */
 .react-flow__handle-visible {
   opacity: 1 !important;
@@ -632,12 +628,6 @@ g[data-connection-line='true'] path {
   to {
     stroke-dashoffset: -10;
   }
-}
-
-/* Улучшенная анимация для выделенных рёбер */
-.react-flow__edge.selected path {
-  stroke-width: 4 !important;
-  filter: drop-shadow(0 0 8px rgba(255, 193, 7, 0.6));
 }
 
 /* Визуальная индикация при перетаскивании блока над холстом */
