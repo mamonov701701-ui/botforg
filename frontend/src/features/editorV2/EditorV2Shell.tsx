@@ -302,52 +302,61 @@ function InnerEditor() {
   } = useEditorStore();
 
   // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
-  const [nodes, setNodes, onNodesChangeInternal] = useNodesState(zustandNodes);
+  const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
 
-  // Используем ref для отслеживания, что мы обновляем nodes программно
-  const isInternalUpdate = React.useRef(false);
-
-  // Синхронизируем nodes из Zustand в локальное состояние только когда изменяется Zustand
+  // Односторонняя синхронизация: из Zustand -> useNodesState только если Zustand содержит БОЛЬШЕ узлов
+  // или совсем другой набор (при импорте)
   useEffect(() => {
-    // Проверяем, что изменение пришло извне (не от нас)
-    if (!isInternalUpdate.current) {
+    // Сравниваем по длине и ID узлов
+    const zustandIds = zustandNodes
+      .map(n => n.id)
+      .sort()
+      .join(',');
+    const currentIds = nodes
+      .map(n => n.id)
+      .sort()
+      .join(',');
+
+    // Обновляем только если:
+    // 1. Zustand содержит больше узлов (добавлен через Zustand API)
+    // 2. Или узлы полностью отличаются (импорт сценария)
+    if (zustandNodes.length > nodes.length || (zustandIds !== currentIds && zustandIds !== '')) {
       setNodes(zustandNodes);
     }
-    isInternalUpdate.current = false;
-  }, [zustandNodes, setNodes]);
+  }, [zustandNodes, nodes, setNodes]);
 
   // Обработчики изменений для ReactFlow
   const onNodesChange = useCallback(
     (changes: any) => {
+      // Сначала применяем изменения локально в React Flow
       onNodesChangeInternal(changes);
 
-      // Помечаем, что это внутреннее обновление, чтобы избежать цикла
-      isInternalUpdate.current = true;
+      // Синхронизируем только важные изменения в Zustand (position, select, remove)
+      // НЕ синхронизируем 'dimensions' и 'add' - они вызовут цикл
+      const importantChanges = changes.filter(
+        (c: any) => c.type === 'position' || c.type === 'select' || c.type === 'remove'
+      );
 
-      // Применяем изменения к Zustand store
-      setZustandNodes(currentNodes => {
-        // Применяем изменения вручную к текущему состоянию Zustand
-        return currentNodes
-          .map((node: Node) => {
-            const change = changes.find((c: any) => c.id === node.id);
-            if (!change) return node;
+      if (importantChanges.length > 0) {
+        setZustandNodes(currentNodes => {
+          let updated = [...currentNodes];
 
-            if (change.type === 'position' && change.position) {
-              return { ...node, position: change.position };
-            }
-            if (change.type === 'select') {
-              return { ...node, selected: change.selected };
-            }
-            if (change.type === 'remove') return null;
-            if (change.type === 'dimensions' && change.dimensions) {
-              return { ...node, dimensions: change.dimensions };
-            }
+          importantChanges.forEach((change: any) => {
+            const index = updated.findIndex((n: Node) => n.id === change.id);
 
-            return node;
-          })
-          .filter(Boolean) as Node[];
-      });
+            if (change.type === 'position' && change.position && index !== -1) {
+              updated[index] = { ...updated[index], position: change.position };
+            } else if (change.type === 'select' && index !== -1) {
+              updated[index] = { ...updated[index], selected: change.selected };
+            } else if (change.type === 'remove' && index !== -1) {
+              updated.splice(index, 1);
+            }
+          });
+
+          return updated;
+        });
+      }
     },
     [onNodesChangeInternal, setZustandNodes]
   );
@@ -692,11 +701,11 @@ function InnerEditor() {
     const nodeTitle = nodeToDelete?.data?.title || 'Блок';
 
     setEdges(es => es.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId));
-    setNodes(ns => ns.filter(n => n.id !== selectedNodeId));
+    setZustandNodes(ns => ns.filter(n => n.id !== selectedNodeId));
     setSelectedNodeId(undefined);
     setIsPanelVisible(false);
     showToast(`Блок "${nodeTitle}" удалён`, 'success');
-  }, [selectedNodeId, nodes, setEdges, setNodes, showToast]);
+  }, [selectedNodeId, nodes, setEdges, setZustandNodes, showToast]);
 
   const handleDuplicateNode = useCallback(() => {
     if (!selectedNode) return;
@@ -713,9 +722,9 @@ function InnerEditor() {
       },
       selected: false, // Новая копия не выделена
     };
-    setNodes(ns => [...ns, newNode]);
+    setZustandNodes(ns => [...ns, newNode]);
     showToast(`Блок "${selectedNode.data.title || 'Блок'}" продублирован`, 'success');
-  }, [selectedNode, setNodes, showToast]);
+  }, [selectedNode, setZustandNodes, showToast]);
 
   // Export function - определяется сначала
   const performExport = useCallback(
@@ -950,8 +959,8 @@ function InnerEditor() {
       // Debug: log the created node structure
       debugNodeStructure(newNode);
 
-      // Добавляем новый узел в массив
-      setNodes(nds => [...nds, newNode]);
+      // Добавляем новый узел в массив Zustand
+      setZustandNodes(nds => [...nds, newNode]);
       showToast(`Блок "${block.title}" добавлен`, 'success');
 
       // КРИТИЧНО: Принудительно делаем узел видимым (через несколько попыток, т.к. React Flow может перезаписывать стили)
@@ -994,7 +1003,7 @@ function InnerEditor() {
       setTimeout(() => ensureNodeVisible(), 1200);
       setTimeout(() => ensureNodeVisible(), 2000);
     },
-    [setNodes, showToast]
+    [setZustandNodes, showToast]
   );
 
   // Handle drop block from library (legacy drag-n-drop support)
@@ -1153,7 +1162,7 @@ function InnerEditor() {
           }
 
           // Import data
-          setNodes(data.nodes);
+          setZustandNodes(data.nodes);
           setEdges(data.edges);
           setSelectedNodeId(undefined);
 
@@ -1169,7 +1178,7 @@ function InnerEditor() {
       reader.readAsText(file);
     };
     input.click();
-  }, [setNodes, setEdges, showToast, runValidation]);
+  }, [setZustandNodes, setEdges, showToast, runValidation]);
 
   // Show validation modal
   const handleValidate = useCallback(() => {
