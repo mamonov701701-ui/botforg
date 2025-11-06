@@ -14,6 +14,10 @@ import ReactFlow, {
   useReactFlow,
   Handle,
   Position,
+  ConnectionLineComponentProps,
+  getBezierPath,
+  useEdgesState,
+  useNodesState,
 } from 'reactflow';
 import { nanoid } from 'nanoid';
 import 'reactflow/dist/style.css';
@@ -33,7 +37,45 @@ import ValidationModal from './ValidationModal';
 import ExportConfirmModal from './ExportConfirmModal';
 import BlockLibraryModal from './BlockLibraryModal';
 
-function CustomNode({ data, id, selected }: any) {
+// Connection line component - временная линия при создании соединения
+const ConnectionLine = ({
+  fromX,
+  fromY,
+  toX,
+  toY,
+  fromPosition,
+  toPosition,
+}: ConnectionLineComponentProps) => {
+  // Координаты уже в правильном пространстве viewport, используем getBezierPath
+  const [edgePath] = getBezierPath({
+    sourceX: fromX,
+    sourceY: fromY,
+    sourcePosition: fromPosition,
+    targetX: toX,
+    targetY: toY,
+    targetPosition: toPosition,
+  });
+
+  return (
+    <g className="react-flow__connection" data-connection-line="true">
+      <path
+        d={edgePath}
+        className="connection-line-path"
+        stroke="#FFC107"
+        strokeWidth={6}
+        fill="none"
+        strokeDasharray="5,5"
+        style={{
+          animation: 'dashdraw 0.5s linear infinite',
+        }}
+      />
+    </g>
+  );
+};
+
+// КРИТИЧНО: CustomNode должен быть определен ВНЕ компонента InnerEditor,
+// чтобы не пересоздаваться при каждом рендере
+const CustomNode = React.memo(({ data, id, selected }: any) => {
   const title = data?.title ?? 'Блок';
   const isStartNode = data?.blockId === 'start';
   const borderColor = data?.color || '#2f6dff';
@@ -68,6 +110,7 @@ function CustomNode({ data, id, selected }: any) {
         overflow: 'visible' /* Разрешаем handles выходить за границы */,
         boxSizing: 'border-box',
         zIndex: 1,
+        pointerEvents: 'all' /* Разрешаем события для блока и handles */,
         /* Убираем isolation: 'isolate' чтобы handles могли быть выше границы */
       }}
     >
@@ -75,8 +118,10 @@ function CustomNode({ data, id, selected }: any) {
       {isStartNode ? (
         <>
           <Handle
+            id="top"
             type="target"
             position={Position.Top}
+            isConnectable={true}
             style={{
               background: '#00ff00',
               width: 19.4,
@@ -89,8 +134,10 @@ function CustomNode({ data, id, selected }: any) {
             className="react-flow__handle-visible"
           />
           <Handle
+            id="bottom"
             type="source"
             position={Position.Bottom}
+            isConnectable={true}
             style={{
               background: '#00ff00',
               width: 19.4,
@@ -111,6 +158,7 @@ function CustomNode({ data, id, selected }: any) {
             id="top"
             type="target"
             position={Position.Top}
+            isConnectable={true}
             style={{
               background: '#00ff00',
               width: 19.4,
@@ -122,12 +170,13 @@ function CustomNode({ data, id, selected }: any) {
             }}
             className="react-flow__handle-visible"
           />
-          
+
           {/* Right - исходящие соединения */}
           <Handle
             id="right"
             type="source"
             position={Position.Right}
+            isConnectable={true}
             style={{
               background: '#00ff00',
               width: 19.4,
@@ -145,6 +194,7 @@ function CustomNode({ data, id, selected }: any) {
             id="bottom"
             type="source"
             position={Position.Bottom}
+            isConnectable={true}
             style={{
               background: '#00ff00',
               width: 19.4,
@@ -162,6 +212,7 @@ function CustomNode({ data, id, selected }: any) {
             id="left"
             type="target"
             position={Position.Left}
+            isConnectable={true}
             style={{
               background: '#00ff00',
               width: 19.4,
@@ -234,10 +285,50 @@ function CustomNode({ data, id, selected }: any) {
       {/* Visual shows icon + title, no settings content */}
     </div>
   );
-}
+});
+
+// Устанавливаем displayName для отладки
+CustomNode.displayName = 'CustomNode';
 
 function InnerEditor() {
-  const { nodes, edges, setNodes, setEdges, catalog, plan, role, showToast } = useEditorStore();
+  const {
+    nodes: zustandNodes,
+    setNodes: setZustandNodes,
+    catalog,
+    plan,
+    role,
+    showToast,
+  } = useEditorStore();
+
+  // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
+  const [nodes, setNodes, onNodesChangeInternal] = useNodesState(zustandNodes);
+  const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
+
+  // Синхронизируем nodes из Zustand в локальное состояние
+  useEffect(() => {
+    setNodes(zustandNodes);
+  }, [zustandNodes, setNodes]);
+
+  // Синхронизируем nodes обратно в Zustand при изменении
+  useEffect(() => {
+    setZustandNodes(nodes);
+  }, [nodes, setZustandNodes]);
+
+  // Обработчики изменений для ReactFlow
+  const onNodesChange = useCallback(
+    (changes: any) => {
+      onNodesChangeInternal(changes);
+    },
+    [onNodesChangeInternal]
+  );
+
+  const onEdgesChange = useCallback(
+    (changes: any) => {
+      onEdgesChangeInternal(changes);
+    },
+    [onEdgesChangeInternal]
+  );
+
   const { setAllValidationResults } = useValidationStore();
   const invalidNodesCount = useValidationStore(state => {
     const results = Array.from(state.validationResults.values());
@@ -369,6 +460,9 @@ function InnerEditor() {
 
   // КРИТИЧНО: Максимально агрессивно убираем контур selection box
   React.useEffect(() => {
+    // ОТКЛЮЧЕНО - конфликтует с connection line
+    if (true) return;
+
     const removeSelectionBox = () => {
       // 1. Находим и УДАЛЯЕМ все элементы nodesselection
       const selectionBoxes = document.querySelectorAll(
@@ -415,6 +509,17 @@ function InnerEditor() {
               if (isBackground) return;
               if (shape.closest('.react-flow__background')) return;
               if (shape.closest('.react-flow__edge')) return;
+              // КРИТИЧНО: Пропускаем connection line
+              if (shape.closest('.react-flow__connection')) return;
+              if (shape.getAttribute('data-connection-line') === 'true') return;
+              if (shape.closest('[data-connection-line="true"]')) return;
+
+              // КРИТИЧНО: Пропускаем элементы connection line по цвету
+              if (
+                stroke &&
+                (stroke.toLowerCase() === '#ffc107' || stroke.toLowerCase() === 'rgb(255, 193, 7)')
+              )
+                return;
 
               // Удаляем любой элемент с цветным stroke/fill (кроме прозрачного или background цветов)
               if (
@@ -520,10 +625,8 @@ function InnerEditor() {
   useEffect(() => {
     if (reactFlowWrapper.current) {
       const resizeObserver = new ResizeObserver(() => {
-        // Принудительно обновляем размеры ReactFlow
-        setTimeout(() => {
-          fitView({ padding: 0.2, duration: 0 });
-        }, 100);
+        // НЕ вызываем fitView - это создает автомасштабирование
+        // React Flow сам обрабатывает изменения размера
       });
 
       resizeObserver.observe(reactFlowWrapper.current);
@@ -532,7 +635,7 @@ function InnerEditor() {
         resizeObserver.disconnect();
       };
     }
-  }, [fitView]);
+  }, []);
 
   // Validate all nodes
   const runValidation = useCallback(() => {
@@ -585,33 +688,36 @@ function InnerEditor() {
   }, [selectedNode, setNodes, showToast]);
 
   // Export function - определяется сначала
-  const performExport = useCallback(() => {
-    const exportData = {
-      meta: {
-        created_at: new Date().toISOString(),
-        plan: plan,
-        role: role,
-        node_count: nodes.length,
-        edge_count: edges.length,
-        version: '1.0',
-      },
-      nodes: nodes,
-      edges: edges,
-    };
+  const performExport = useCallback(
+    (edgesToExport: Edge[]) => {
+      const exportData = {
+        meta: {
+          created_at: new Date().toISOString(),
+          plan: plan,
+          role: role,
+          node_count: nodes.length,
+          edge_count: edgesToExport.length,
+          version: '1.0',
+        },
+        nodes: nodes,
+        edges: edgesToExport,
+      };
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `botforg-flow-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `botforg-flow-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
 
-    showToast('Сценарий экспортирован', 'success');
-    setIsExportConfirmOpen(false);
-  }, [nodes, edges, plan, role, showToast]);
+      showToast('Сценарий экспортирован', 'success');
+      setIsExportConfirmOpen(false);
+    },
+    [nodes, plan, role, showToast]
+  );
 
   // Export with validation - использует performExport
   const handleExport = useCallback(() => {
@@ -622,8 +728,8 @@ function InnerEditor() {
       return;
     }
 
-    performExport();
-  }, [runValidation, performExport]);
+    performExport(edges);
+  }, [runValidation, performExport, edges]);
 
   // Keyboard shortcuts - теперь selectedNode и функции определены
   useEffect(() => {
@@ -684,58 +790,28 @@ function InnerEditor() {
     handleExport,
   ]);
 
-  // Create wrapper functions for React Flow's onChange handlers
-  const onNodesChange = useCallback(
-    (changes: any) => {
-      setNodes(nds => {
-        // Apply React Flow changes
-        const updatedNodes = nds
-          .map(node => {
-            const change = changes.find((c: any) => c.id === node.id);
-            if (!change) return node;
+  // onNodesChange и onEdgesChange уже определены выше с обертками для логирования
 
-            if (change.type === 'position' && change.position) {
-              return { ...node, position: change.position };
-            }
-            if (change.type === 'select') {
-              return { ...node, selected: change.selected };
-            }
-            if (change.type === 'remove') {
-              return null;
-            }
-            return node;
-          })
-          .filter(Boolean) as Node[];
-
-        return updatedNodes;
-      });
-    },
-    [setNodes]
-  );
-
-  const onEdgesChange = useCallback(
-    (changes: any) => {
-      setEdges(eds => {
-        const updatedEdges = eds
-          .map(edge => {
-            const change = changes.find((c: any) => c.id === edge.id);
-            if (!change) return edge;
-
-            if (change.type === 'select') {
-              return { ...edge, selected: change.selected };
-            }
-            if (change.type === 'remove') {
-              return null;
-            }
-            return edge;
-          })
-          .filter(Boolean) as Edge[];
-
-        return updatedEdges;
-      });
-    },
-    [setEdges]
-  );
+  // Инициализация начального блока "start" если nodes пуст
+  useEffect(() => {
+    if (nodes.length === 0) {
+      setNodes([
+        {
+          id: 'start',
+          type: 'start',
+          position: { x: 250, y: 100 },
+          data: {
+            blockId: 'start',
+            title: 'Начало',
+            subtitle: 'Точка входа сценария',
+            color: '#10B981',
+            icon: 'Play',
+            settings: {},
+          },
+        },
+      ]);
+    }
+  }, []); // Только при монтировании
 
   // Установка начального viewport ОДИН раз при монтировании
   useEffect(() => {
@@ -759,6 +835,15 @@ function InnerEditor() {
     []
   );
 
+  // Удаление edge
+  const handleDeleteEdge = useCallback(
+    (edgeId: string) => {
+      setEdges(eds => eds.filter(e => e.id !== edgeId));
+      showToast('Соединение удалено', 'success');
+    },
+    [setEdges, showToast]
+  );
+
   // Создание соединения
   const onConnect = useCallback(
     (params: Connection) => {
@@ -767,7 +852,10 @@ function InnerEditor() {
           {
             ...params,
             type: 'default',
-            animated: true, // Включаем анимацию для новых соединений
+            animated: false,
+            data: {
+              onDelete: handleDeleteEdge,
+            },
             markerEnd: {
               type: MarkerType.ArrowClosed,
               width: 30,
@@ -777,17 +865,14 @@ function InnerEditor() {
             style: {
               stroke: '#FFC107',
               strokeWidth: 6,
-              strokeDasharray: '0',
             },
           },
           eds
         )
       );
-
-      // Показываем уведомление о создании соединения
       showToast('Соединение создано', 'success');
     },
-    [setEdges, showToast]
+    [setEdges, showToast, handleDeleteEdge]
   );
 
   // Handle drag over canvas - улучшаем визуальную обратную связь
@@ -852,13 +937,7 @@ function InnerEditor() {
       debugNodeStructure(newNode);
 
       // Добавляем новый узел в массив
-      setNodes(nds => {
-        const newNodes = [...nds, newNode];
-        console.log('Adding new node:', newNode);
-        console.log('Total nodes after add:', newNodes.length);
-        console.log('New node position:', newNode.position);
-        return newNodes;
-      });
+      setNodes(nds => [...nds, newNode]);
       showToast(`Блок "${block.title}" добавлен`, 'success');
 
       // КРИТИЧНО: Принудительно делаем узел видимым (через несколько попыток, т.к. React Flow может перезаписывать стили)
@@ -981,48 +1060,29 @@ function InnerEditor() {
 
       addBlockAtPosition(block, finalPosition);
 
-      // Scroll to new node after a short delay to ensure it's rendered
+      // НЕ используем fitView - это вызывает автомасштабирование
       setTimeout(() => {
         const newNodes = useEditorStore.getState().nodes;
         const addedNode = newNodes[newNodes.length - 1];
         if (addedNode) {
-          fitView({
-            padding: 0.2,
-            duration: 300,
-            nodes: [addedNode],
-            maxZoom: 1.5,
-          });
+          // Просто убеждаемся что узел видим
+          const nodeElement = document.querySelector(`[data-id="${addedNode.id}"]`) as HTMLElement;
+          if (nodeElement) {
+            nodeElement.style.setProperty('visibility', 'visible', 'important');
+            nodeElement.style.setProperty('opacity', '1', 'important');
+            nodeElement.style.setProperty('display', 'block', 'important');
 
-          // КРИТИЧНО: После fitView React Flow может установить visibility: hidden, проверяем и исправляем
-          setTimeout(() => {
-            const nodeElement = document.querySelector(
-              `[data-id="${addedNode.id}"]`
-            ) as HTMLElement;
-            if (nodeElement) {
-              nodeElement.style.setProperty('visibility', 'visible', 'important');
-              nodeElement.style.setProperty('opacity', '1', 'important');
-              nodeElement.style.setProperty('display', 'block', 'important');
-
-              const innerDiv = nodeElement.firstElementChild as HTMLElement;
-              if (innerDiv && innerDiv.tagName === 'DIV') {
-                innerDiv.style.setProperty('visibility', 'visible', 'important');
-                innerDiv.style.setProperty('opacity', '1', 'important');
-                innerDiv.style.setProperty('display', 'flex', 'important');
-              }
+            const innerDiv = nodeElement.firstElementChild as HTMLElement;
+            if (innerDiv && innerDiv.tagName === 'DIV') {
+              innerDiv.style.setProperty('visibility', 'visible', 'important');
+              innerDiv.style.setProperty('opacity', '1', 'important');
+              innerDiv.style.setProperty('display', 'flex', 'important');
             }
-          }, 350); // После завершения fitView (300ms + небольшой запас)
+          }
         }
       }, 100);
     },
-    [
-      selectedNode,
-      nodes,
-      screenToFlowPosition,
-      getViewport,
-      addBlockAtPosition,
-      reactFlowWrapper,
-      fitView,
-    ]
+    [selectedNode, nodes, screenToFlowPosition, getViewport, addBlockAtPosition, reactFlowWrapper]
   );
 
   // Обработчики кликов
@@ -1129,7 +1189,7 @@ function InnerEditor() {
       <ExportConfirmModal
         isOpen={isExportConfirmOpen}
         errorCount={invalidNodesCount}
-        onConfirm={performExport}
+        onConfirm={() => performExport(edges)}
         onCancel={() => setIsExportConfirmOpen(false)}
       />
 
@@ -1190,11 +1250,7 @@ function InnerEditor() {
                 markerHeight="30"
                 orient="auto"
               >
-                <path
-                  d="M 2 4 L 10 10 L 2 16 L 2 10 Z"
-                  fill="#FFC107"
-                  stroke="none"
-                />
+                <path d="M 2 4 L 10 10 L 2 16 L 2 10 Z" fill="#FFC107" stroke="none" />
               </marker>
               {/* Красный маркер стрелки для выбранного состояния */}
               <marker
@@ -1206,11 +1262,7 @@ function InnerEditor() {
                 markerHeight="30"
                 orient="auto"
               >
-                <path
-                  d="M 2 4 L 10 10 L 2 16 L 2 10 Z"
-                  fill="#ef4444"
-                  stroke="none"
-                />
+                <path d="M 2 4 L 10 10 L 2 16 L 2 10 Z" fill="#ef4444" stroke="none" />
               </marker>
               {/* Светло-янтарный маркер для hover */}
               <marker
@@ -1222,11 +1274,7 @@ function InnerEditor() {
                 markerHeight="30"
                 orient="auto"
               >
-                <path
-                  d="M 2 4 L 10 10 L 2 16 L 2 10 Z"
-                  fill="#FFD54F"
-                  stroke="none"
-                />
+                <path d="M 2 4 L 10 10 L 2 16 L 2 10 Z" fill="#FFD54F" stroke="none" />
               </marker>
             </defs>
           </svg>
@@ -1248,11 +1296,12 @@ function InnerEditor() {
             nodesDraggable={true}
             nodesConnectable={true}
             elementsSelectable={true}
-            // КРИТИЧНО: Панорамирование ТОЛЬКО левой кнопкой мыши для предотвращения selection box
-            panOnDrag={true} // Используем boolean, чтобы всегда панорамировать левой кнопкой
+            // Панорамирование: ЛКМ на пустом месте ИЛИ с зажатым пробелом
+            panOnDrag={true}
             panOnScroll={true}
             zoomOnScroll={true}
             zoomOnPinch={true}
+            panActivationKeyCode="Space" // Пробел для принудительного панорамирования
             // КРИТИЧНО: Отключаем selection box полностью
             selectNodesOnDrag={false}
             selectionOnDrag={false}
@@ -1267,6 +1316,7 @@ function InnerEditor() {
             // Режим соединения
             connectionMode={ConnectionMode.Loose}
             connectOnClick={true}
+            connectionLineComponent={ConnectionLine}
             // Настройки рёбер по умолчанию
             defaultEdgeOptions={{
               type: 'default',
