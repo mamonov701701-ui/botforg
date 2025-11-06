@@ -827,27 +827,6 @@ function InnerEditor() {
     loadCatalog();
   }, [loadCatalog]);
 
-  // Инициализация начального блока "start" если nodes пуст
-  useEffect(() => {
-    if (nodes.length === 0) {
-      setNodes([
-        {
-          id: 'start',
-          type: 'start',
-          position: { x: 250, y: 100 },
-          data: {
-            blockId: 'start',
-            title: 'Начало',
-            subtitle: 'Точка входа сценария',
-            color: '#10B981',
-            icon: 'Play',
-            settings: {},
-          },
-        },
-      ]);
-    }
-  }, []); // Только при монтировании
-
   // Установка начального viewport ОДИН раз при монтировании
   useEffect(() => {
     setViewport({ x: 0, y: 0, zoom: 0.6 }, { duration: 0 });
