@@ -67,7 +67,6 @@ const CustomEdge = React.memo(
           strokeLinecap="round"
           className="react-flow__edge-path"
           style={{
-            ...style,
             cursor: 'pointer',
             transition: 'stroke 0.2s ease, stroke-width 0.2s ease',
             filter: selected
