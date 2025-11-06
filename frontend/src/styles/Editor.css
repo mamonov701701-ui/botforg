@@ -78,24 +78,42 @@
   box-shadow: 0 0 0 4px rgba(255, 179, 0, 0.3) !important;
 }
 
-/* Улучшенные стрелки */
-.react-flow__edge-path {
-  stroke: #ffb300 !important;
-  stroke-width: 3 !important;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2)) !important;
+/* Улучшенные стрелки - только для NON-кастомных edges (со старым классом) */
+.react-flow__edge-path:not([data-edge-path='custom']) {
+  stroke: #ffb300;
+  stroke-width: 4;
+  stroke-linecap: round;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  transition:
+    stroke 0.2s ease,
+    stroke-width 0.2s ease;
 }
 
-.react-flow__edge.selected .react-flow__edge-path {
-  stroke: #ffb300 !important;
-  stroke-width: 4 !important;
-  filter: drop-shadow(0 0 8px rgba(255, 179, 0, 0.6)) !important;
+/* При hover линия становится светло-желтой */
+.react-flow__edge:hover .react-flow__edge-path:not([data-edge-path='custom']) {
+  stroke: #ffd54f;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.4));
 }
 
-/* Маркеры стрелок */
-.react-flow__arrowhead {
-  fill: #ffb300 !important;
-  stroke: #ffb300 !important;
-  stroke-width: 2 !important;
+/* При выделении линия становится КРАСНОЙ */
+.react-flow__edge.selected .react-flow__edge-path:not([data-edge-path='custom']) {
+  stroke: #ef4444;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
+}
+
+/* Маркеры стрелок - янтарный цвет по умолчанию (только для старых edges) */
+.react-flow__arrowhead:not([data-custom-marker]) {
+  fill: #ffb300;
+  stroke: #ffb300;
+  stroke-width: 2;
+}
+
+/* При selected маркер красный */
+.react-flow__edge.selected .react-flow__arrowhead:not([data-custom-marker]) {
+  fill: #ef4444;
+  stroke: #ef4444;
 }
 
 /* Улучшенный фон */

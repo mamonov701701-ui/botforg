@@ -577,7 +577,7 @@ svg[class*="selection"]:not(.react-flow__node-selected):not(.react-flow__edge.se
 g[data-connection-line='true'],
 g[data-connection-line='true'] path {
   stroke: #ffb300 !important;
-  stroke-width: 8 !important;
+  stroke-width: 4 !important;
   fill: none !important;
   pointer-events: none !important;
   display: block !important;
@@ -587,7 +587,7 @@ g[data-connection-line='true'] path {
 
 .react-flow__connection-line {
   stroke: #ffb300 !important;
-  stroke-width: 8 !important;
+  stroke-width: 4 !important;
   fill: none !important;
   opacity: 1 !important;
   visibility: visible !important;
@@ -612,9 +612,34 @@ g[data-connection-line='true'] path {
   visibility: visible !important;
 }
 
-/* Path элементы внутри edges */
-.react-flow__edge path,
-.react-flow__edges path {
+/* Path элементы внутри edges - только для NON-кастомных edges */
+.react-flow__edge path:not([data-edge-path='custom']) {
+  opacity: 1 !important;
+  visibility: visible !important;
+  stroke: #ffb300;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition:
+    stroke 0.2s ease,
+    stroke-width 0.2s ease;
+}
+
+/* При hover на edge - только для NON-кастомных */
+.react-flow__edge:hover path:not([data-edge-path='custom']) {
+  stroke: #ffd54f;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 6px rgba(255, 213, 79, 0.4));
+}
+
+/* При selected - только для NON-кастомных */
+.react-flow__edge.selected path:not([data-edge-path='custom']) {
+  stroke: #ef4444;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
+}
+
+/* Для кастомных edges - только базовая видимость */
+.react-flow__edge path[data-edge-path='custom'] {
   opacity: 1 !important;
   visibility: visible !important;
 }

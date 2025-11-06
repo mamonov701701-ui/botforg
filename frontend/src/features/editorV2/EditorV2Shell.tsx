@@ -62,7 +62,7 @@ const ConnectionLine = ({
         d={edgePath}
         className="connection-line-path"
         stroke="#FFB300"
-        strokeWidth={8}
+        strokeWidth={4}
         fill="none"
         strokeDasharray="5,5"
         style={{
@@ -887,7 +887,7 @@ function InnerEditor() {
             },
             style: {
               stroke: '#FFB300',
-              strokeWidth: 8,
+              strokeWidth: 4,
             },
           },
           eds
@@ -1350,7 +1350,7 @@ function InnerEditor() {
                 height: 30,
                 color: '#FFB300',
               },
-              style: { stroke: '#FFB300', strokeWidth: 8 },
+              style: { stroke: '#FFB300', strokeWidth: 4 },
             }}
             // Скрываем атрибуцию
             proOptions={{ hideAttribution: true }}
