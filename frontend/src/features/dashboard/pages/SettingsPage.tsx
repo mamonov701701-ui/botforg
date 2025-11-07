@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Smartphone, MessageSquare, FileSpreadsheet, CreditCard } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
@@ -59,28 +60,28 @@ export default function SettingsPage() {
     {
       id: 'telegram',
       name: 'Telegram Bot API',
-      icon: '📱',
+      icon: 'Smartphone',
       status: 'connected',
       description: 'Подключение ботов к Telegram',
     },
     {
       id: 'whatsapp',
       name: 'WhatsApp Business',
-      icon: '💬',
+      icon: 'MessageSquare',
       status: 'disconnected',
       description: 'Подключение ботов к WhatsApp',
     },
     {
       id: 'google_sheets',
       name: 'Google Sheets',
-      icon: '📊',
+      icon: 'FileSpreadsheet',
       status: 'connected',
       description: 'Экспорт данных в Google Таблицы',
     },
     {
       id: 'payments',
       name: 'Платёжные системы',
-      icon: '💳',
+      icon: 'CreditCard',
       status: 'connected',
       description: 'YooKassa, Stripe, Telegram Payments',
     },
@@ -331,7 +332,7 @@ export default function SettingsPage() {
                 style={{
                   padding: '12px 24px',
                   background: 'var(--primary)',
-                  color: '#fff',
+                  color: '#000',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '15px',
@@ -369,65 +370,79 @@ export default function SettingsPage() {
       {/* Интеграции */}
       {activeTab === 'integrations' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {integrations.map(integration => (
-            <Card key={integration.id}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div
-                  style={{
-                    width: '48px',
-                    height: '48px',
-                    borderRadius: '8px',
-                    background: 'var(--card)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '24px',
-                  }}
-                >
-                  {integration.icon}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
-                    {integration.name}
-                  </h3>
-                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    {integration.description}
-                  </p>
-                  <span
+          {integrations.map(integration => {
+            const iconMap: Record<
+              string,
+              React.ComponentType<{ size?: number; style?: React.CSSProperties }>
+            > = {
+              Smartphone,
+              MessageSquare,
+              FileSpreadsheet,
+              CreditCard,
+            };
+            const IntegrationIcon = iconMap[integration.icon] || CreditCard;
+
+            return (
+              <Card key={integration.id}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div
                     style={{
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      fontSize: '12px',
-                      fontWeight: 500,
-                      background: statusColors[integration.status].bg,
-                      color: statusColors[integration.status].color,
-                    }}
-                  >
-                    {statusColors[integration.status].label}
-                  </span>
-                </div>
-                {canEditIntegrations && (
-                  <button
-                    style={{
-                      padding: '10px 20px',
-                      background: 'transparent',
-                      border: '1px solid var(--border)',
+                      width: '48px',
+                      height: '48px',
                       borderRadius: '8px',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      color: 'var(--text)',
+                      background: 'rgba(255, 210, 76, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    {integration.status === 'connected' ? 'Настроить' : 'Подключить'}
-                  </button>
-                )}
-              </div>
-            </Card>
-          ))}
+                    <IntegrationIcon size={24} style={{ color: 'var(--primary)' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
+                      {integration.name}
+                    </h3>
+                    <p
+                      style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}
+                    >
+                      {integration.description}
+                    </p>
+                    <span
+                      style={{
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: 500,
+                        background: statusColors[integration.status].bg,
+                        color: statusColors[integration.status].color,
+                      }}
+                    >
+                      {statusColors[integration.status].label}
+                    </span>
+                  </div>
+                  {canEditIntegrations && (
+                    <button
+                      style={{
+                        padding: '10px 20px',
+                        background: 'transparent',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        color: 'var(--text)',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      {integration.status === 'connected' ? 'Настроить' : 'Подключить'}
+                    </button>
+                  )}
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -545,7 +560,7 @@ export default function SettingsPage() {
                 style={{
                   padding: '12px 24px',
                   background: 'var(--primary)',
-                  color: '#fff',
+                  color: '#000',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '15px',
@@ -644,7 +659,7 @@ export default function SettingsPage() {
                   padding: '12px 24px',
                   marginTop: '16px',
                   background: 'var(--primary)',
-                  color: '#fff',
+                  color: '#000',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '15px',
@@ -766,7 +781,7 @@ export default function SettingsPage() {
               style={{
                 padding: '12px 24px',
                 background: 'var(--primary)',
-                color: '#fff',
+                color: '#000',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '15px',

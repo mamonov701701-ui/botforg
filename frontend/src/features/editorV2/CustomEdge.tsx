@@ -27,9 +27,9 @@ const CustomEdge = React.memo(
       targetPosition,
     });
 
-    // Используем ТОЧНЫЕ координаты центра пути (а не среднее арифметическое)
-    const centerX = labelX;
-    const centerY = labelY;
+    // Используем ТОЧНЫЕ координаты центра пути с fallback на среднее арифметическое
+    const centerX = typeof labelX === 'number' && !isNaN(labelX) ? labelX : (sourceX + targetX) / 2;
+    const centerY = typeof labelY === 'number' && !isNaN(labelY) ? labelY : (sourceY + targetY) / 2;
 
     // Цвета в зависимости от состояния
     const strokeColor = selected ? '#ef4444' : isHovered ? '#FFD54F' : '#FFB300';

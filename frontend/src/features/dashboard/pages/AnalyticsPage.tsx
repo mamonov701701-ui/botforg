@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Download, Lightbulb } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
@@ -129,7 +130,7 @@ export default function AnalyticsPage() {
                   gap: '8px',
                   padding: '10px 20px',
                   background: 'var(--primary)',
-                  color: '#fff',
+                  color: '#000',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '14px',
@@ -141,7 +142,7 @@ export default function AnalyticsPage() {
                 onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}
                 onClick={() => handleExport('pdf')}
               >
-                ⬇️ Экспорт
+                <Download size={16} /> Экспорт
               </button>
             </div>
           )}
@@ -387,14 +388,23 @@ export default function AnalyticsPage() {
         style={{
           marginTop: '32px',
           padding: '16px',
-          background: 'var(--card)',
+          background: 'rgba(255, 210, 76, 0.1)',
           borderRadius: '8px',
           borderLeft: '4px solid var(--primary)',
         }}
       >
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-          💡 <strong>Совет:</strong> Изменяйте период для получения более детальной статистики.
-          Используйте экспорт для сохранения отчётов.
+        <p
+          style={{
+            fontSize: '14px',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <Lightbulb size={16} style={{ color: 'var(--primary)' }} /> <strong>Совет:</strong>{' '}
+          Изменяйте период для получения более детальной статистики. Используйте экспорт для
+          сохранения отчётов.
         </p>
       </div>
     </DashboardPage>

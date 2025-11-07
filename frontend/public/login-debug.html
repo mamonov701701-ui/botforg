@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <title>DEBUG: Тест входа</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #0f0; }
+        .log { margin: 5px 0; padding: 5px; background: #000; border-left: 3px solid #0f0; }
+        .error { border-left-color: #f00; color: #f00; }
+        .success { border-left-color: #0f0; color: #0f0; }
+        button { padding: 15px 30px; background: #0f0; color: #000; border: none; font-size: 18px; cursor: pointer; margin: 20px 0; }
+        input { padding: 10px; margin: 5px 0; width: 300px; background: #333; color: #fff; border: 1px solid #555; }
+        h1 { color: #0f0; }
+    </style>
+</head>
+<body>
+    <h1>DEBUG: Тест входа</h1>
+    
+    <div>
+        <input type="email" id="email" value="admin@example.com" placeholder="Email"><br>
+        <input type="password" id="password" value="admin123456" placeholder="Password"><br>
+        <button onclick="testLogin()">ТЕСТ ВХОДА</button>
+    </div>
+    
+    <div id="log"></div>
+
+    <script>
+        function log(message, type = 'log') {
+            const div = document.createElement('div');
+            div.className = `log ${type}`;
+            div.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            document.getElementById('log').appendChild(div);
+            console.log(message);
+        }
+
+        async function testLogin() {
+            document.getElementById('log').innerHTML = '';
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            log('START: Testing login...');
+            log('Email: ' + email);
+            log('Password length: ' + password.length);
+            
+            // Test 1: Direct backend
+            log('\n=== TEST 1: Direct Backend (8001) ===');
+            try {
+                const r1 = await fetch('http://localhost:8001/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ username: email, password: password })
+                });
+                
+                log('Backend status: ' + r1.status);
+                
+                if (r1.ok) {
+                    const d1 = await r1.json();
+                    log('Backend token: ' + d1.access_token.substring(0, 30) + '...', 'success');
+                } else {
+                    log('Backend ERROR: ' + await r1.text(), 'error');
+                }
+            } catch (e) {
+                log('Backend EXCEPTION: ' + e.message, 'error');
+            }
+            
+            // Test 2: Through proxy
+            log('\n=== TEST 2: Through Proxy (5173) ===');
+            try {
+                const r2 = await fetch('/auth/login', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ username: email, password: password })
+                });
+                
+                log('Proxy status: ' + r2.status);
+                log('Proxy content-type: ' + r2.headers.get('content-type'));
+                
+                const contentType = r2.headers.get('content-type');
+                if (contentType && contentType.includes('json')) {
+                    const d2 = await r2.json();
+                    
+                    if (r2.ok) {
+                        log('Proxy token: ' + d2.access_token.substring(0, 30) + '...', 'success');
+                        
+                        // Save token
+                        localStorage.setItem('auth_token', d2.access_token);
+                        localStorage.setItem('token', d2.access_token);
+                        log('Token saved to localStorage', 'success');
+                        
+                        // Test getMe
+                        log('\n=== TEST 3: Get User Data ===');
+                        const r3 = await fetch('/me', {
+                            headers: { 'Authorization': 'Bearer ' + d2.access_token }
+                        });
+                        
+                        log('/me status: ' + r3.status);
+                        
+                        if (r3.ok) {
+                            const user = await r3.json();
+                            log('User: ' + user.name + ' (' + user.role + ')', 'success');
+                            
+                            log('\n=== SUCCESS! All tests passed ===', 'success');
+                            log('Redirecting to dashboard in 3 seconds...', 'success');
+                            
+                            setTimeout(() => {
+                                window.location.href = '/dashboard';
+                            }, 3000);
+                        } else {
+                            log('/me ERROR: ' + await r3.text(), 'error');
+                        }
+                    } else {
+                        log('Proxy JSON error: ' + JSON.stringify(d2), 'error');
+                    }
+                } else {
+                    const text = await r2.text();
+                    log('Proxy returned HTML instead of JSON!', 'error');
+                    log('Response preview: ' + text.substring(0, 200), 'error');
+                }
+            } catch (e) {
+                log('Proxy EXCEPTION: ' + e.message, 'error');
+            }
+        }
+        
+        // Auto-test on load
+        window.addEventListener('load', () => {
+            setTimeout(testLogin, 1000);
+        });
+    </script>
+</body>
+</html>
+

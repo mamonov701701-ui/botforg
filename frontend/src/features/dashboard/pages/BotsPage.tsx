@@ -1,5 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Smartphone,
+  MessageCircle,
+  Settings,
+  Pause,
+  Play,
+  Edit,
+  Copy,
+  Trash2,
+  Plus,
+  Users,
+  Bot,
+} from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
@@ -29,8 +42,8 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
   const { user } = useAuthStore();
 
   const channelIcons = {
-    telegram: '📱',
-    whatsapp: '💬',
+    telegram: Smartphone,
+    whatsapp: MessageCircle,
   };
 
   const statusColors = {
@@ -76,15 +89,14 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
             width: '56px',
             height: '56px',
             borderRadius: '12px',
-            background: 'var(--card)',
+            background: 'rgba(255, 210, 76, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '28px',
             flexShrink: 0,
           }}
         >
-          {bot.icon || '🤖'}
+          <Bot size={28} style={{ color: 'var(--primary)' }} />
         </div>
 
         {/* Info */}
@@ -101,15 +113,34 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
             >
               {bot.name}
             </h3>
-            <span style={{ fontSize: '16px' }}>{channelIcons[bot.channel]}</span>
+            {React.createElement(channelIcons[bot.channel], {
+              size: 16,
+              style: { color: 'var(--primary)' },
+            })}
           </div>
 
           <div style={{ display: 'flex', gap: '16px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-              👥 {bot.usersCount}
+            <span
+              style={{
+                fontSize: '14px',
+                color: 'var(--text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <Users size={14} /> {bot.usersCount}
             </span>
-            <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-              💬 {bot.messagesCount}
+            <span
+              style={{
+                fontSize: '14px',
+                color: 'var(--text-muted)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+            >
+              <MessageCircle size={14} /> {bot.messagesCount}
             </span>
           </div>
 
@@ -193,11 +224,14 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
                       fontSize: '14px',
                       transition: 'background 0.2s',
                       color: 'var(--text)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    ⚙️ Настройки
+                    <Settings size={16} /> Настройки
                   </button>
                 )}
                 {canStartStop && (
@@ -217,11 +251,22 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
                       fontSize: '14px',
                       transition: 'background 0.2s',
                       color: 'var(--text)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    {bot.status === 'active' ? '⏸ Приостановить' : '▶️ Запустить'}
+                    {bot.status === 'active' ? (
+                      <>
+                        <Pause size={16} /> Приостановить
+                      </>
+                    ) : (
+                      <>
+                        <Play size={16} /> Запустить
+                      </>
+                    )}
                   </button>
                 )}
                 {canEdit && (
@@ -241,11 +286,14 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
                       fontSize: '14px',
                       transition: 'background 0.2s',
                       color: 'var(--text)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    ✏️ Открыть редактор
+                    <Edit size={16} /> Открыть редактор
                   </button>
                 )}
                 {canEdit && (
@@ -265,11 +313,14 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
                       fontSize: '14px',
                       transition: 'background 0.2s',
                       color: 'var(--text)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    📋 Дублировать
+                    <Copy size={16} /> Дублировать
                   </button>
                 )}
                 {canDelete && (
@@ -297,11 +348,14 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
                         fontSize: '14px',
                         transition: 'background 0.2s',
                         color: 'var(--error)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
                       }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#ef444410')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                      🗑️ Удалить
+                      <Trash2 size={16} /> Удалить
                     </button>
                   </>
                 )}
@@ -403,7 +457,7 @@ export default function BotsPage() {
               gap: '8px',
               padding: '12px 24px',
               background: 'var(--primary)',
-              color: '#fff',
+              color: '#000',
               border: 'none',
               borderRadius: '8px',
               fontSize: '15px',
@@ -420,7 +474,7 @@ export default function BotsPage() {
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
-            <span style={{ fontSize: '18px' }}>➕</span>
+            <Plus size={18} />
             Создать бота
           </button>
         ) : undefined
@@ -514,11 +568,14 @@ export default function BotsPage() {
                   fontSize: '14px',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
               >
-                ▶️ Запустить
+                <Play size={14} /> Запустить
               </button>
               <button
                 onClick={() => handleBulkAction('pause')}
@@ -530,11 +587,14 @@ export default function BotsPage() {
                   fontSize: '14px',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
               >
-                ⏸ Приостановить
+                <Pause size={14} /> Приостановить
               </button>
               <button
                 onClick={() => handleBulkAction('delete')}
@@ -547,11 +607,14 @@ export default function BotsPage() {
                   color: 'var(--error)',
                   cursor: 'pointer',
                   transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.background = '#ef444410')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface)')}
               >
-                🗑️ Удалить
+                <Trash2 size={14} /> Удалить
               </button>
             </div>
           </div>

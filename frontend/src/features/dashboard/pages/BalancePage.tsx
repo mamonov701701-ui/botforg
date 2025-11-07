@@ -1,4 +1,13 @@
 import React, { useState } from 'react';
+import {
+  CreditCard,
+  Wallet,
+  RotateCcw,
+  Calendar,
+  Smartphone,
+  Gem,
+  AlertTriangle,
+} from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
@@ -25,10 +34,10 @@ interface PaymentProvider {
 
 function TransactionRow({ transaction }: { transaction: Transaction }) {
   const typeIcons = {
-    topup: '💳',
-    payment: '💰',
-    refund: '↩️',
-    subscription: '📅',
+    topup: CreditCard,
+    payment: Wallet,
+    refund: RotateCcw,
+    subscription: Calendar,
   };
 
   const typeLabels = {
@@ -61,7 +70,7 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
         gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr',
         gap: '16px',
         padding: '16px',
-        background: 'var(--card)',
+        background: 'rgba(255, 210, 76, 0.1)',
         borderRadius: '8px',
         alignItems: 'center',
         fontSize: '14px',
@@ -69,7 +78,10 @@ function TransactionRow({ transaction }: { transaction: Transaction }) {
     >
       <div>{formatDate(transaction.date)}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ fontSize: '16px' }}>{typeIcons[transaction.type]}</span>
+        {React.createElement(typeIcons[transaction.type], {
+          size: 16,
+          style: { color: 'var(--primary)' },
+        })}
         {typeLabels[transaction.type]}
       </div>
       <div style={{ fontWeight: 600 }}>
@@ -112,6 +124,17 @@ function ProviderCard({ provider }: { provider: PaymentProvider }) {
     disabled: { bg: '#6b728020', color: '#6b7280', label: 'Отключён' },
   };
 
+  const iconMap: Record<
+    string,
+    React.ComponentType<{ size?: number; style?: React.CSSProperties }>
+  > = {
+    Smartphone,
+    CreditCard,
+    Gem,
+  };
+
+  const IconComponent = iconMap[provider.icon] || CreditCard;
+
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -120,14 +143,13 @@ function ProviderCard({ provider }: { provider: PaymentProvider }) {
             width: '48px',
             height: '48px',
             borderRadius: '8px',
-            background: 'var(--card)',
+            background: 'rgba(255, 210, 76, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '24px',
           }}
         >
-          {provider.icon}
+          <IconComponent size={24} style={{ color: 'var(--primary)' }} />
         </div>
         <div style={{ flex: 1 }}>
           <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
@@ -225,19 +247,19 @@ export default function BalancePage() {
     {
       id: '1',
       name: 'Telegram Payments',
-      icon: '📱',
+      icon: 'Smartphone',
       status: 'active',
     },
     {
       id: '2',
       name: 'YooKassa',
-      icon: '💳',
+      icon: 'CreditCard',
       status: 'active',
     },
     {
       id: '3',
       name: 'Stripe',
-      icon: '💎',
+      icon: 'Gem',
       status: 'disabled',
     },
   ];
@@ -288,13 +310,16 @@ export default function BalancePage() {
                 style={{
                   padding: '12px 32px',
                   background: 'var(--primary)',
-                  color: '#fff',
+                  color: '#000',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '15px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   transition: 'all 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.background = 'var(--primary-hover)';
@@ -305,7 +330,7 @@ export default function BalancePage() {
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
               >
-                💳 Пополнить
+                <CreditCard size={18} /> Пополнить
               </button>
             )}
           </div>
@@ -331,9 +356,12 @@ export default function BalancePage() {
                   borderRadius: '6px',
                   fontSize: '13px',
                   color: '#f59e0b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                 }}
               >
-                ⚠️ Подписка скоро истекает
+                <AlertTriangle size={16} /> Подписка скоро истекает
               </div>
             )}
           </div>

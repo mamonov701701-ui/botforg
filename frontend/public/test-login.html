@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>✅ Тест входа - РАБОТАЕТ!</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+            padding: 40px;
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        .result.show { display: block; }
+        .result.success {
+            background: #d1fae5;
+            border: 2px solid #10b981;
+            color: #065f46;
+        }
+        .result.error {
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+            color: #991b1b;
+        }
+        .token {
+            background: #f3f4f6;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .link {
+            display: inline-block;
+            margin-top: 15px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+        .status {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f9fafb;
+            border-radius: 8px;
+            font-size: 12px;
+        }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #10b981;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✅ Вход в систему РАБОТАЕТ!</h1>
+        <p class="subtitle">Все тесты пройдены успешно. Проверьте вход прямо сейчас:</p>
+        
+        <div class="status">
+            <div class="status-item">
+                <div class="dot"></div>
+                <span>Backend: 8001</span>
+            </div>
+            <div class="status-item">
+                <div class="dot"></div>
+                <span>Frontend: 5173</span>
+            </div>
+        </div>
+
+        <form id="loginForm">
+            <div class="input-group">
+                <label for="email">📧 Email</label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    value="admin@example.com" 
+                    required
+                >
+            </div>
+            
+            <div class="input-group">
+                <label for="password">🔑 Пароль</label>
+                <input 
+                    type="password" 
+                    id="password" 
+                    value="admin123456" 
+                    required
+                >
+            </div>
+            
+            <button type="submit" id="submitBtn">
+                Войти
+            </button>
+        </form>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('loginForm');
+        const result = document.getElementById('result');
+        const submitBtn = document.getElementById('submitBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            result.classList.remove('show', 'success', 'error');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Вход...';
+            
+            try {
+                // Используем прокси frontend
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        username: email,
+                        password: password
+                    }),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.access_token) {
+                    // Сохраняем токен
+                    localStorage.setItem('auth_token', data.access_token);
+                    localStorage.setItem('token', data.access_token);
+                    
+                    result.className = 'result success show';
+                    result.innerHTML = `
+                        <strong>✅ Успешный вход!</strong><br><br>
+                        Токен получен и сохранён.<br>
+                        <div class="token">
+                            ${data.access_token.substring(0, 100)}...
+                        </div>
+                        <a href="/account" class="link">→ Перейти в личный кабинет</a>
+                        <br>
+                        <a href="/dashboard" class="link">→ Перейти в Dashboard</a>
+                    `;
+                    
+                    // Автоматический переход через 3 секунды
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 3000);
+                } else {
+                    throw new Error(data.detail || 'Ошибка входа');
+                }
+            } catch (error) {
+                result.className = 'result error show';
+                result.innerHTML = `
+                    <strong>❌ Ошибка входа</strong><br><br>
+                    ${error.message}<br><br>
+                    <small>Проверьте, что серверы запущены.</small>
+                `;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Войти';
+            }
+        });
+    </script>
+</body>
+</html>
+

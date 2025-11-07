@@ -44,10 +44,6 @@ html:has(.editor-surface) {
   backdrop-filter: blur(10px);
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2) !important;
 }
-/* Скрываем футер на странице редактора */
-.site-shell:has(.editor-surface) .site-footer {
-  display: none;
-}
 .site-main {
   flex: 1 1 0;
   min-height: 0;
@@ -57,10 +53,9 @@ html:has(.editor-surface) {
   flex-direction: column;
   overflow: visible;
 }
-/* Только для редактора блокируем скролл и убираем отступ под футер */
+/* Только для редактора блокируем скролл */
 .site-shell:has(.editor-surface) .site-main {
   overflow: hidden;
-  padding-bottom: 0;
 }
 /* Для редактора нужен overflow: hidden, для остальных страниц - скроллинг */
 .page-content-slot {

@@ -1,115 +1,121 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { useEditorStore } from '../../stores/editorStore';
-import { PlanType, RoleType } from '../../types/blocks';
-
-const getPlanBadgeColor = (plan: PlanType) => {
-  switch (plan) {
-    case 'free':
-      return '#6b7280';
-    case 'pro':
-      return '#3b82f6';
-    case 'enterprise':
-      return '#8b5cf6';
-  }
-};
+import React, { useState } from 'react';
+import { Plus } from 'lucide-react';
+import ScenariosDropdown from './ScenariosDropdown';
+import SaveDropdown from './SaveDropdown';
+import NewScenarioModal from './NewScenarioModal';
+import SaveToLibraryModal from './SaveToLibraryModal';
+import SaveBotModal from './SaveBotModal';
 
 interface EditorControlsProps {
   onExport?: () => void;
-  onImport?: () => void;
+  onSave?: () => void;
   onOpenBlockLibrary?: () => void;
+  hasUnsavedChanges?: boolean;
 }
 
 const EditorControls: React.FC<EditorControlsProps> = ({
   onExport,
-  onImport,
+  onSave,
   onOpenBlockLibrary,
+  hasUnsavedChanges = false,
 }) => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const { plan, role, setPlan, setRole, searchQuery, setSearchQuery, catalog } = useEditorStore();
+  // Стартовый сценарий (создается автоматически при создании бота)
+  // TODO: Заменить на данные из API/store
+  const [scenarios] = useState([
+    { id: '1', name: 'Главный', icon: 'Home' },
+    // Остальные сценарии добавляются через "Новый сценарий"
+  ]);
 
-  const handlePlanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setPlan(e.target.value as PlanType);
+  const [currentScenarioId, setCurrentScenarioId] = useState('1');
+
+  // Модальные окна
+  const [isNewScenarioOpen, setIsNewScenarioOpen] = useState(false);
+  const [isSaveToLibraryOpen, setIsSaveToLibraryOpen] = useState(false);
+  const [isSaveBotOpen, setIsSaveBotOpen] = useState(false);
+
+  const handleSelectScenario = (scenarioId: string) => {
+    setCurrentScenarioId(scenarioId);
+    // TODO: Загрузить nodes и edges выбранного сценария
+    console.log('Switching to scenario:', scenarioId);
   };
 
-  const handleRoleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setRole(e.target.value as RoleType);
-  };
-
-  // Закрытие меню при клике вне его
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsMenuOpen(false);
-      }
-    };
-
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
+  const handleDeleteScenario = (scenarioId: string) => {
+    // TODO: Подтверждение и удаление сценария
+    console.log('Delete scenario:', scenarioId);
+    if (confirm('Удалить этот сценарий?')) {
+      // Удаление
     }
+  };
 
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isMenuOpen]);
+  // Обработчики для NewScenarioModal
+  const handleCreateEmpty = (name: string, icon: string) => {
+    console.log('Create empty scenario:', name, icon);
+    // TODO: Создать пустой сценарий и переключиться на него
+  };
+
+  const handleCreateFromTemplate = (templateId: string, name: string) => {
+    console.log('Create from template:', templateId, name);
+    // TODO: Создать сценарий из шаблона
+  };
+
+  const handleImportFromFile = (file: File, name: string) => {
+    console.log('Import from file:', file.name, name);
+    // TODO: Импортировать сценарий из файла
+  };
+
+  // Обработчики для SaveDropdown
+  const handleQuickSave = () => {
+    console.log('Quick save');
+    if (onSave) onSave();
+  };
+
+  const handleSaveBot = () => {
+    setIsSaveBotOpen(true);
+  };
+
+  const handleSaveToLibrary = () => {
+    setIsSaveToLibraryOpen(true);
+  };
+
+  const handleExportToFile = () => {
+    console.log('Export to file');
+    if (onExport) onExport();
+  };
+
+  // Обработчики для SaveToLibraryModal
+  const handleSaveScenarioToLibrary = (data: {
+    name: string;
+    description: string;
+    category: string;
+    icon: string;
+    overwrite: boolean;
+  }) => {
+    console.log('Save scenario to library:', data);
+    // TODO: Сохранить сценарий в библиотеку через API
+  };
+
+  // Обработчики для SaveBotModal
+  const handleSaveBotSubmit = (data: {
+    name: string;
+    description: string;
+    action: 'update' | 'copy' | 'rename';
+  }) => {
+    console.log('Save bot:', data);
+    // TODO: Сохранить бота через API
+  };
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 16,
-        padding: '12px 16px',
-        backgroundColor: '#0f1729',
-        borderBottom: '1px solid #1f2937',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>Тариф:</label>
-        <select
-          value={plan}
-          onChange={handlePlanChange}
-          style={{
-            background: '#1a1a2e',
-            color: '#fff',
-            border: '1px solid #374151',
-            borderRadius: 6,
-            padding: '6px 12px',
-            fontSize: 12,
-            cursor: 'pointer',
-          }}
-        >
-          <option value="free">Free</option>
-          <option value="pro">Pro</option>
-          <option value="enterprise">Enterprise</option>
-        </select>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <label style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500 }}>Роль:</label>
-        <select
-          value={role}
-          onChange={handleRoleChange}
-          style={{
-            background: '#1a1a2e',
-            color: '#fff',
-            border: '1px solid #374151',
-            borderRadius: 6,
-            padding: '6px 12px',
-            fontSize: 12,
-            cursor: 'pointer',
-          }}
-        >
-          <option value="viewer">Viewer</option>
-          <option value="support">Support</option>
-          <option value="developer">Developer</option>
-          <option value="manager_template">Manager Template</option>
-          <option value="admin">Admin</option>
-          <option value="owner">Owner</option>
-        </select>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '12px 16px',
+          backgroundColor: '#0f1729',
+          borderBottom: '1px solid #1f2937',
+        }}
+      >
         {/* Кнопка "Добавить блок" */}
         {onOpenBlockLibrary && (
           <button
@@ -119,13 +125,13 @@ const EditorControls: React.FC<EditorControlsProps> = ({
               color: '#fff',
               border: 'none',
               borderRadius: 6,
-              padding: '8px 16px',
-              fontSize: 13,
+              padding: '10px 20px',
+              fontSize: 14,
               fontWeight: 600,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 8,
               transition: 'all 0.2s ease',
             }}
             onMouseEnter={e => {
@@ -136,188 +142,101 @@ const EditorControls: React.FC<EditorControlsProps> = ({
               e.currentTarget.style.background = '#22c55e';
               e.currentTarget.style.transform = 'translateY(0)';
             }}
+            title="Открыть библиотеку блоков и добавить новый блок в сценарий"
           >
-            <span>➕</span>
+            <Plus size={18} />
             <span>Добавить блок</span>
           </button>
         )}
-      </div>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginLeft: 'auto',
-        }}
-      >
-        <div
+        {/* Кнопка "Новый сценарий" */}
+        <button
+          onClick={() => setIsNewScenarioOpen(true)}
           style={{
+            background: 'transparent',
+            color: '#fff',
+            border: '1px solid #374151',
+            borderRadius: 6,
+            padding: '10px 20px',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: 8,
-            padding: '6px 12px',
-            background: 'rgba(59, 130, 246, 0.1)',
-            borderRadius: 6,
-            border: '1px solid rgba(59, 130, 246, 0.3)',
+            transition: 'all 0.2s ease',
           }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = '#1a1a2e';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+          title="Создать новый сценарий в текущем боте"
         >
-          <span style={{ fontSize: 20 }}>👤</span>
-          <div style={{ fontSize: 12 }}>
-            <div
-              style={{
-                fontWeight: 700,
-                color: getPlanBadgeColor(plan),
-                textTransform: 'uppercase',
-              }}
-            >
-              {plan}
-            </div>
-            <div style={{ opacity: 0.7, fontSize: 10, color: '#9ca3af' }}>{role}</div>
-          </div>
+          <Plus size={18} />
+          <span>Новый сценарий</span>
+        </button>
+
+        {/* Dropdown сценариев */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ color: '#9ca3af', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
+            Сценарии:
+          </label>
+          <ScenariosDropdown
+            scenarios={scenarios}
+            currentScenarioId={currentScenarioId}
+            onSelectScenario={handleSelectScenario}
+            onDeleteScenario={handleDeleteScenario}
+          />
         </div>
-        <div style={{ color: '#6b7280', fontSize: 12 }}>Блоков: {catalog.length}</div>
 
-        {/* Меню "Настройки" */}
-        {(onExport || onImport) && (
-          <div style={{ position: 'relative' }} ref={menuRef}>
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              style={{
-                background: '#1a1a2e',
-                color: '#fff',
-                border: '1px solid #374151',
-                borderRadius: 6,
-                padding: '6px 12px',
-                fontSize: 12,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <span>⚙️</span>
-              <span>Настройки</span>
-              <span style={{ fontSize: 10 }}>{isMenuOpen ? '▲' : '▼'}</span>
-            </button>
+        {/* Разделитель */}
+        <div
+          style={{
+            width: 1,
+            height: 32,
+            background: '#374151',
+            marginLeft: 'auto',
+          }}
+        />
 
-            {isMenuOpen && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: 4,
-                  background: '#1a1a2e',
-                  border: '1px solid #374151',
-                  borderRadius: 8,
-                  padding: 4,
-                  minWidth: 180,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                  zIndex: 1000,
-                }}
-              >
-                {onImport && (
-                  <button
-                    onClick={() => {
-                      onImport();
-                      setIsMenuOpen(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      background: 'transparent',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = '#252540';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    <span>📥</span>
-                    <span>Импорт сценария</span>
-                  </button>
-                )}
-                {onExport && (
-                  <button
-                    onClick={() => {
-                      onExport();
-                      setIsMenuOpen(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      background: 'transparent',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      textAlign: 'left',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = '#252540';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    <span>📤</span>
-                    <span>Экспорт сценария</span>
-                  </button>
-                )}
-                <div
-                  style={{
-                    height: 1,
-                    background: '#374151',
-                    margin: '4px 0',
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    // TODO: Настройки проекта - будет добавлено позже
-                    setIsMenuOpen(false);
-                  }}
-                  disabled
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: 'transparent',
-                    color: '#6b7280',
-                    border: 'none',
-                    borderRadius: 4,
-                    cursor: 'not-allowed',
-                    fontSize: 13,
-                    textAlign: 'left',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    opacity: 0.5,
-                  }}
-                >
-                  <span>⚙️</span>
-                  <span>Настройки проекта</span>
-                  <span style={{ fontSize: 10, marginLeft: 'auto' }}>скоро</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {/* SaveDropdown */}
+        <SaveDropdown
+          onQuickSave={handleQuickSave}
+          onSaveBot={handleSaveBot}
+          onSaveToLibrary={handleSaveToLibrary}
+          onExportToFile={handleExportToFile}
+          hasUnsavedChanges={hasUnsavedChanges}
+        />
       </div>
-    </div>
+
+      {/* Модальные окна */}
+      <NewScenarioModal
+        isOpen={isNewScenarioOpen}
+        onClose={() => setIsNewScenarioOpen(false)}
+        onCreateEmpty={handleCreateEmpty}
+        onCreateFromTemplate={handleCreateFromTemplate}
+        onImportFromFile={handleImportFromFile}
+      />
+
+      <SaveToLibraryModal
+        isOpen={isSaveToLibraryOpen}
+        onClose={() => setIsSaveToLibraryOpen(false)}
+        onSave={handleSaveScenarioToLibrary}
+        currentScenarioName={scenarios.find(s => s.id === currentScenarioId)?.name}
+      />
+
+      <SaveBotModal
+        isOpen={isSaveBotOpen}
+        onClose={() => setIsSaveBotOpen(false)}
+        onSave={handleSaveBotSubmit}
+        currentBotName="Магазин одежды"
+        currentBotDescription="Бот для интернет-магазина"
+        scenarioCount={scenarios.length}
+        hasUnsavedChanges={hasUnsavedChanges}
+      />
+    </>
   );
 };
 

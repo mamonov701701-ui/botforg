@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Home, Bot, FileText, Wallet, BarChart3, Users, Settings } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { hasAccessToSection, ROLE_NAMES, type SectionKey } from '../../constants/roles';
 import { getMe } from '../../api/auth';
@@ -8,17 +9,17 @@ interface NavItem {
   id: SectionKey;
   label: string;
   path: string;
-  icon: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Главная', path: '/dashboard', icon: '🏠' },
-  { id: 'bots', label: 'Мои боты', path: '/dashboard/bots', icon: '🤖' },
-  { id: 'templates', label: 'Шаблоны', path: '/dashboard/templates', icon: '📋' },
-  { id: 'balance', label: 'Баланс', path: '/dashboard/balance', icon: '💰' },
-  { id: 'analytics', label: 'Аналитика', path: '/dashboard/analytics', icon: '📊' },
-  { id: 'team', label: 'Команда', path: '/dashboard/team', icon: '👥' },
-  { id: 'settings', label: 'Настройки', path: '/dashboard/settings', icon: '⚙️' },
+  { id: 'dashboard', label: 'Главная', path: '/dashboard', icon: Home },
+  { id: 'bots', label: 'Мои боты', path: '/dashboard/bots', icon: Bot },
+  { id: 'templates', label: 'Шаблоны', path: '/dashboard/templates', icon: FileText },
+  { id: 'balance', label: 'Баланс', path: '/dashboard/balance', icon: Wallet },
+  { id: 'analytics', label: 'Аналитика', path: '/dashboard/analytics', icon: BarChart3 },
+  { id: 'team', label: 'Команда', path: '/dashboard/team', icon: Users },
+  { id: 'settings', label: 'Настройки', path: '/dashboard/settings', icon: Settings },
 ];
 
 export default function DashboardLayout() {
@@ -57,7 +58,6 @@ export default function DashboardLayout() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'var(--bg)',
         }}
       >
         <div
@@ -91,7 +91,6 @@ export default function DashboardLayout() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'var(--bg)',
           padding: '20px',
         }}
       >
@@ -120,7 +119,7 @@ export default function DashboardLayout() {
               style={{
                 padding: '14px 32px',
                 background: 'var(--primary)',
-                color: '#fff',
+                color: '#000',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '16px',
@@ -172,7 +171,6 @@ export default function DashboardLayout() {
     <div
       style={{
         minHeight: '100vh',
-        background: 'var(--bg)',
         color: 'var(--text)',
       }}
     >
@@ -181,7 +179,7 @@ export default function DashboardLayout() {
         style={{
           maxWidth: '1400px',
           margin: '0 auto',
-          padding: '32px 24px',
+          padding: '32px 24px 100px 24px',
           display: 'flex',
           gap: '24px',
         }}
@@ -198,10 +196,10 @@ export default function DashboardLayout() {
             style={{
               position: 'sticky',
               top: '32px',
-              background: 'var(--surface)',
+              background: 'rgba(26, 34, 56, 0.9)',
               borderRadius: '16px',
               padding: '16px',
-              border: '1px solid var(--border)',
+              border: '1px solid rgba(255, 210, 76, 0.2)',
             }}
           >
             {/* Заголовок */}
@@ -248,6 +246,7 @@ export default function DashboardLayout() {
             <nav>
               {availableNavItems.map(item => {
                 const isActive = location.pathname === item.path;
+                const IconComponent = item.icon;
                 return (
                   <NavLink
                     key={item.id}
@@ -261,13 +260,13 @@ export default function DashboardLayout() {
                       borderRadius: '8px',
                       textDecoration: 'none',
                       color: isActive ? 'var(--primary)' : 'var(--text)',
-                      background: isActive ? 'var(--primary-bg)' : 'transparent',
+                      background: isActive ? 'rgba(255, 210, 76, 0.1)' : 'transparent',
                       fontWeight: isActive ? 600 : 400,
                       transition: 'all 0.2s',
                     }}
                     onMouseEnter={e => {
                       if (!isActive) {
-                        e.currentTarget.style.background = 'var(--card)';
+                        e.currentTarget.style.background = 'rgba(26, 34, 56, 0.5)';
                       }
                     }}
                     onMouseLeave={e => {
@@ -276,7 +275,7 @@ export default function DashboardLayout() {
                       }
                     }}
                   >
-                    <span style={{ fontSize: '20px' }}>{item.icon}</span>
+                    <IconComponent size={20} className="lucide-icon" />
                     {!isSidebarCollapsed && <span>{item.label}</span>}
                   </NavLink>
                 );

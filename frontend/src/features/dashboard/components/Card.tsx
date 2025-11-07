@@ -21,8 +21,8 @@ export default function Card({
   const [isHovered, setIsHovered] = React.useState(false);
 
   const baseStyle: React.CSSProperties = {
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
+    background: 'rgba(26, 34, 56, 0.9)',
+    border: '1px solid rgba(255, 210, 76, 0.2)',
     borderRadius: '12px',
     padding,
     transition: 'all 0.2s',

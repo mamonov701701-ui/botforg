@@ -1,12 +1,24 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Bot,
+  Users,
+  MessageCircle,
+  Wallet,
+  Star,
+  Plus,
+  FileText,
+  CreditCard,
+  RefreshCw,
+  XCircle,
+} from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction, hasAccessToSection } from '../../../constants/roles';
 
 interface KPICardProps {
-  icon: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
   label: string;
   value: string | number;
   change?: string;
@@ -14,7 +26,14 @@ interface KPICardProps {
   isLoading?: boolean;
 }
 
-function KPICard({ icon, label, value, change, changeType = 'neutral', isLoading }: KPICardProps) {
+function KPICard({
+  icon: Icon,
+  label,
+  value,
+  change,
+  changeType = 'neutral',
+  isLoading,
+}: KPICardProps) {
   const changeColors = {
     positive: '#10b981',
     negative: '#ef4444',
@@ -26,17 +45,16 @@ function KPICard({ icon, label, value, change, changeType = 'neutral', isLoading
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
         <div
           style={{
-            fontSize: '32px',
             width: '48px',
             height: '48px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'var(--card)',
+            background: 'rgba(255, 210, 76, 0.1)',
             borderRadius: '8px',
           }}
         >
-          {icon}
+          <Icon size={24} style={{ color: 'var(--primary)' }} />
         </div>
         <div style={{ flex: 1 }}>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px' }}>
@@ -101,12 +119,12 @@ function ActivityFeed() {
     },
   ];
 
-  const eventIcons = {
-    bot_created: '🤖',
-    bot_updated: '🔄',
-    payment: '💰',
-    review: '⭐',
-    error: '❌',
+  const eventIcons: Record<ActivityEvent['type'], React.ComponentType<{ size?: number }>> = {
+    bot_created: Bot,
+    bot_updated: RefreshCw,
+    payment: Wallet,
+    review: Star,
+    error: XCircle,
   };
 
   const formatRelativeTime = (date: Date) => {
@@ -129,38 +147,53 @@ function ActivityFeed() {
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {events.map(event => (
-            <div
-              key={event.id}
-              style={{
-                display: 'flex',
-                gap: '12px',
-                padding: '12px',
-                borderRadius: '8px',
-                background: 'var(--card)',
-                transition: 'background 0.2s',
-                cursor: event.link ? 'pointer' : 'default',
-              }}
-              onClick={() => event.link && console.log('Navigate to:', event.link)}
-              onMouseEnter={e => {
-                if (event.link) e.currentTarget.style.background = 'var(--surface)';
-              }}
-              onMouseLeave={e => {
-                if (event.link) e.currentTarget.style.background = 'var(--card)';
-              }}
-            >
-              <div style={{ fontSize: '24px' }}>{eventIcons[event.type]}</div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontWeight: 600, marginBottom: '2px' }}>{event.title}</p>
-                <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                  {event.description}
-                </p>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  {formatRelativeTime(event.timestamp)}
-                </p>
+          {events.map(event => {
+            const EventIcon = eventIcons[event.type];
+            return (
+              <div
+                key={event.id}
+                style={{
+                  display: 'flex',
+                  gap: '12px',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  background: 'rgba(255, 210, 76, 0.1)',
+                  transition: 'background 0.2s',
+                  cursor: event.link ? 'pointer' : 'default',
+                }}
+                onClick={() => event.link && console.log('Navigate to:', event.link)}
+                onMouseEnter={e => {
+                  if (event.link) e.currentTarget.style.background = 'rgba(255, 210, 76, 0.15)';
+                }}
+                onMouseLeave={e => {
+                  if (event.link) e.currentTarget.style.background = 'rgba(255, 210, 76, 0.1)';
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(255, 210, 76, 0.1)',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <EventIcon size={20} style={{ color: 'var(--primary)' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: 600, marginBottom: '2px' }}>{event.title}</p>
+                  <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    {event.description}
+                  </p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    {formatRelativeTime(event.timestamp)}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       <button
@@ -196,19 +229,19 @@ export default function HomePage() {
 
   const quickActions = [
     {
-      icon: '➕',
+      icon: Plus,
       label: 'Создать бота',
       action: () => navigate('/dashboard/bots/new'),
       permission: hasAccessToAction(user?.role, 'bot_create'),
     },
     {
-      icon: '📋',
+      icon: FileText,
       label: 'Шаблоны',
       action: () => navigate('/dashboard/templates'),
       permission: hasAccessToSection(user?.role, 'templates'),
     },
     {
-      icon: '💳',
+      icon: CreditCard,
       label: 'Пополнить баланс',
       action: () => navigate('/dashboard/balance'),
       permission: hasAccessToAction(user?.role, 'balance_topup'),
@@ -227,28 +260,28 @@ export default function HomePage() {
         }}
       >
         <KPICard
-          icon="🤖"
+          icon={Bot}
           label="Активные боты"
           value={5}
           change="+2 за месяц"
           changeType="positive"
         />
         <KPICard
-          icon="👥"
+          icon={Users}
           label="Новые пользователи"
           value={143}
           change="+12% за неделю"
           changeType="positive"
         />
-        <KPICard icon="💬" label="Сообщения" value="2.4K" change="+340 за сегодня" />
+        <KPICard icon={MessageCircle} label="Сообщения" value="2.4K" change="+340 за сегодня" />
         <KPICard
-          icon="💰"
+          icon={Wallet}
           label="Выручка"
           value="12 500 ₽"
           change="+8% за месяц"
           changeType="positive"
         />
-        <KPICard icon="⭐" label="Средний рейтинг" value="4.8" change="из 5.0" />
+        <KPICard icon={Star} label="Средний рейтинг" value="4.8" change="из 5.0" />
       </div>
 
       {/* Быстрые действия */}
@@ -259,37 +292,40 @@ export default function HomePage() {
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
           {quickActions
             .filter(action => action.permission)
-            .map((action, index) => (
-              <button
-                key={index}
-                onClick={action.action}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '12px 20px',
-                  background: 'var(--primary)',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '15px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'var(--primary-hover)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'var(--primary)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <span style={{ fontSize: '18px' }}>{action.icon}</span>
-                {action.label}
-              </button>
-            ))}
+            .map((action, index) => {
+              const ActionIcon = action.icon;
+              return (
+                <button
+                  key={index}
+                  onClick={action.action}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '12px 20px',
+                    background: 'var(--primary)',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'var(--primary-hover)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'var(--primary)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <ActionIcon size={18} />
+                  {action.label}
+                </button>
+              );
+            })}
         </div>
       </div>
 

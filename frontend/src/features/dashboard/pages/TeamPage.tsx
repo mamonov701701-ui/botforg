@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Plus, Mail, RefreshCw, Trash2, Lock, Pause } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
@@ -167,7 +168,7 @@ function InviteMemberModal({
                   flex: 1,
                   padding: '12px 24px',
                   background: 'var(--primary)',
-                  color: '#fff',
+                  color: '#000',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '15px',
@@ -337,11 +338,14 @@ export default function TeamPage() {
     expired: { bg: '#6b728020', color: '#6b7280', label: 'Истёк' },
   };
 
-  const eventIcons = {
-    invite: '📨',
-    role_change: '🔄',
-    remove: '🗑️',
-    login: '🔐',
+  const eventIcons: Record<
+    AuditEvent['type'],
+    React.ComponentType<{ size?: number; style?: React.CSSProperties }>
+  > = {
+    invite: Mail,
+    role_change: RefreshCw,
+    remove: Trash2,
+    login: Lock,
   };
 
   const formatRelativeTime = (date: Date) => {
@@ -399,7 +403,7 @@ export default function TeamPage() {
               gap: '8px',
               padding: '12px 24px',
               background: 'var(--primary)',
-              color: '#fff',
+              color: '#000',
               border: 'none',
               borderRadius: '8px',
               fontSize: '15px',
@@ -416,7 +420,7 @@ export default function TeamPage() {
               e.currentTarget.style.transform = 'translateY(0)';
             }}
           >
-            <span>➕</span>
+            <Plus size={18} />
             Пригласить
           </button>
         ) : undefined
@@ -535,12 +539,14 @@ export default function TeamPage() {
                         cursor: 'pointer',
                         transition: 'all 0.2s',
                         color: 'var(--text)',
+                        display: 'flex',
+                        alignItems: 'center',
                       }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       title="Деактивировать"
                     >
-                      ⏸
+                      <Pause size={14} />
                     </button>
                   )}
                   {canRemove && (
@@ -555,12 +561,14 @@ export default function TeamPage() {
                         cursor: 'pointer',
                         transition: 'all 0.2s',
                         color: 'var(--error)',
+                        display: 'flex',
+                        alignItems: 'center',
                       }}
                       onMouseEnter={e => (e.currentTarget.style.background = '#ef444410')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       title="Удалить"
                     >
-                      🗑️
+                      <Trash2 size={14} />
                     </button>
                   )}
                 </div>
@@ -622,36 +630,51 @@ export default function TeamPage() {
 
         {/* События */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {filteredAuditLog.map(event => (
-            <div
-              key={event.id}
-              style={{
-                display: 'flex',
-                gap: '12px',
-                padding: '12px',
-                background: 'var(--card)',
-                borderRadius: '8px',
-                alignItems: 'center',
-              }}
-            >
-              <div style={{ fontSize: '20px' }}>{eventIcons[event.type]}</div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: '14px', marginBottom: '2px' }}>
-                  <strong>{event.actor}</strong>
-                  {event.target && (
-                    <>
-                      {' → '}
-                      <strong>{event.target}</strong>
-                    </>
-                  )}
-                </p>
-                <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{event.details}</p>
+          {filteredAuditLog.map(event => {
+            const EventIcon = eventIcons[event.type];
+            return (
+              <div
+                key={event.id}
+                style={{
+                  display: 'flex',
+                  gap: '12px',
+                  padding: '12px',
+                  background: 'rgba(255, 210, 76, 0.1)',
+                  borderRadius: '8px',
+                  alignItems: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(255, 210, 76, 0.1)',
+                    borderRadius: '6px',
+                  }}
+                >
+                  <EventIcon size={18} style={{ color: 'var(--primary)' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '14px', marginBottom: '2px' }}>
+                    <strong>{event.actor}</strong>
+                    {event.target && (
+                      <>
+                        {' → '}
+                        <strong>{event.target}</strong>
+                      </>
+                    )}
+                  </p>
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{event.details}</p>
+                </div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  {formatRelativeTime(event.timestamp)}
+                </div>
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                {formatRelativeTime(event.timestamp)}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
 

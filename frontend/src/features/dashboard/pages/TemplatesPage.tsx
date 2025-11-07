@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  FileText,
+  Star,
+  Plus,
+  Upload,
+  Copy,
+  Download,
+  Heart,
+  Trash2,
+  ShoppingCart,
+} from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
@@ -49,29 +60,29 @@ function TemplateCard({ template, onAction }: TemplateCardProps) {
             width: '100%',
             height: '160px',
             borderRadius: '8px',
-            background: 'var(--card)',
+            background: 'rgba(255, 210, 76, 0.1)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '48px',
             position: 'relative',
             overflow: 'hidden',
           }}
         >
-          {template.preview || '📋'}
+          <FileText size={48} style={{ color: 'var(--primary)' }} />
           {template.isFavorite && (
             <div
               style={{
                 position: 'absolute',
                 top: '8px',
                 right: '8px',
-                background: 'rgba(0, 0, 0, 0.6)',
+                background: 'rgba(255, 210, 76, 0.2)',
                 borderRadius: '4px',
                 padding: '4px 8px',
-                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
               }}
             >
-              ⭐
+              <Star size={14} style={{ color: 'var(--primary)', fill: 'var(--primary)' }} />
             </div>
           )}
         </div>
@@ -104,7 +115,8 @@ function TemplateCard({ template, onAction }: TemplateCardProps) {
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span>⭐ {template.rating.toFixed(1)}</span>
+              <Star size={14} style={{ color: 'var(--primary)', fill: 'var(--primary)' }} />
+              <span>{template.rating.toFixed(1)}</span>
               <span style={{ color: 'var(--text-muted)' }}>({template.reviewsCount})</span>
             </div>
             <span style={{ color: 'var(--text-muted)' }}>{formatDate(template.updatedAt)}</span>
@@ -127,7 +139,7 @@ function TemplateCard({ template, onAction }: TemplateCardProps) {
               flex: 1,
               padding: '8px 12px',
               background: 'var(--primary)',
-              color: '#fff',
+              color: '#000',
               border: 'none',
               borderRadius: '6px',
               fontSize: '13px',
@@ -222,11 +234,14 @@ function TemplateCard({ template, onAction }: TemplateCardProps) {
                           fontSize: '14px',
                           transition: 'background 0.2s',
                           color: 'var(--text)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
                         }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        📋 Дублировать
+                        <Copy size={16} /> Дублировать
                       </button>
                       <button
                         onClick={() => {
@@ -244,11 +259,14 @@ function TemplateCard({ template, onAction }: TemplateCardProps) {
                           fontSize: '14px',
                           transition: 'background 0.2s',
                           color: 'var(--text)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
                         }}
                         onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        ⬇️ Экспорт
+                        <Download size={16} /> Экспорт
                       </button>
                     </>
                   )}
@@ -268,11 +286,21 @@ function TemplateCard({ template, onAction }: TemplateCardProps) {
                       fontSize: '14px',
                       transition: 'background 0.2s',
                       color: 'var(--text)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
                     }}
                     onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
-                    {template.isFavorite ? '💔 Убрать из избранного' : '❤️ В избранное'}
+                    <Heart
+                      size={16}
+                      style={{
+                        fill: template.isFavorite ? 'var(--primary)' : 'none',
+                        color: template.isFavorite ? 'var(--primary)' : 'currentColor',
+                      }}
+                    />
+                    {template.isFavorite ? 'Убрать из избранного' : 'В избранное'}
                   </button>
                   {canDelete && (
                     <>
@@ -299,11 +327,14 @@ function TemplateCard({ template, onAction }: TemplateCardProps) {
                           fontSize: '14px',
                           transition: 'background 0.2s',
                           color: 'var(--error)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
                         }}
                         onMouseEnter={e => (e.currentTarget.style.background = '#ef444410')}
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        🗑️ Удалить
+                        <Trash2 size={16} /> Удалить
                       </button>
                     </>
                   )}
@@ -422,7 +453,7 @@ export default function TemplatesPage() {
               onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
-              <span>⬆️</span>
+              <Upload size={18} />
               Импорт
             </button>
             <button
@@ -433,7 +464,7 @@ export default function TemplatesPage() {
                 gap: '8px',
                 padding: '12px 24px',
                 background: 'var(--primary)',
-                color: '#fff',
+                color: '#000',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '15px',
@@ -450,7 +481,7 @@ export default function TemplatesPage() {
                 e.currentTarget.style.transform = 'translateY(0)';
               }}
             >
-              <span>➕</span>
+              <Plus size={18} />
               Создать шаблон
             </button>
           </div>
@@ -593,6 +624,10 @@ export default function TemplatesPage() {
             cursor: 'pointer',
             transition: 'all 0.2s',
             color: 'var(--text)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            justifyContent: 'center',
           }}
           onMouseEnter={e => {
             e.currentTarget.style.background = 'var(--surface)';
@@ -603,7 +638,7 @@ export default function TemplatesPage() {
             e.currentTarget.style.transform = 'translateY(0)';
           }}
         >
-          🛒 Перейти в маркетплейс
+          <ShoppingCart size={18} /> Перейти в маркетплейс
         </button>
       </div>
     </DashboardPage>

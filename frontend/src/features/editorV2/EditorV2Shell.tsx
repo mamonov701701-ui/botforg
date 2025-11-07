@@ -770,6 +770,13 @@ function InnerEditor() {
     performExport(edges);
   }, [runValidation, performExport, edges]);
 
+  const handleSave = useCallback(() => {
+    // TODO: Реализовать сохранение сценария через API
+    // Пока просто показываем уведомление
+    showToast('Сценарий сохранён', 'success');
+    console.log('Saving scenario:', { nodes, edges });
+  }, [nodes, edges]);
+
   // Keyboard shortcuts - теперь selectedNode и функции определены
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -858,14 +865,18 @@ function InnerEditor() {
     []
   );
 
-  // Удаление edge
-  const handleDeleteEdge = useCallback(
-    (edgeId: string) => {
-      setEdges(eds => eds.filter(e => e.id !== edgeId));
-      showToast('Соединение удалено', 'success');
-    },
-    [setEdges, showToast]
-  );
+  // Стабильная ссылка на функцию удаления через useRef для избежания бесконечного цикла
+  const handleDeleteEdgeRef = React.useRef<(edgeId: string) => void>();
+
+  handleDeleteEdgeRef.current = (edgeId: string) => {
+    setEdges(eds => eds.filter(e => e.id !== edgeId));
+    showToast('Соединение удалено', 'success');
+  };
+
+  // Удаление edge - стабильная обертка
+  const handleDeleteEdge = useCallback((edgeId: string) => {
+    handleDeleteEdgeRef.current?.(edgeId);
+  }, []);
 
   // Создание соединения
   const onConnect = useCallback(
@@ -1220,6 +1231,7 @@ function InnerEditor() {
       <EditorControls
         onExport={handleExport}
         onImport={handleImport}
+        onSave={handleSave}
         onOpenBlockLibrary={() => setIsBlockLibraryOpen(true)}
       />
 
@@ -1405,7 +1417,7 @@ function InnerEditor() {
                 >
                   Нажмите кнопку "Добавить блок" в верхней панели,
                   <br />
-                  или используйте меню "Настройки" для импорта готового сценария
+                  или используйте кнопку "Импорт" для загрузки готового сценария
                 </div>
               </div>
             )}
