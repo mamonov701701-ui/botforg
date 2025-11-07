@@ -50,6 +50,10 @@ export default function ScenariosDropdown({
 
   const currentScenario = scenarios.find(s => s.id === currentScenarioId);
 
+  // Если сценарии еще загружаются
+  const isLoading = scenarios.length === 0;
+  const displayName = currentScenario?.name || (isLoading ? 'Загрузка...' : 'Сценарий');
+
   // Получаем компонент иконки
   const getIconComponent = (iconName?: string): LucideIcon => {
     if (!iconName) return FileText;
@@ -79,7 +83,11 @@ export default function ScenariosDropdown({
     <div style={{ position: 'relative' }} ref={dropdownRef}>
       {/* Кнопка dropdown */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isLoading) {
+            setIsOpen(!isOpen);
+          }
+        }}
         style={{
           background: '#1a1a2e',
           color: '#fff',
@@ -88,23 +96,28 @@ export default function ScenariosDropdown({
           padding: '10px 16px',
           fontSize: 14,
           fontWeight: 600,
-          cursor: 'pointer',
+          cursor: isLoading ? 'wait' : 'pointer',
           display: 'flex',
           alignItems: 'center',
           gap: 8,
           transition: 'all 0.2s ease',
           minWidth: 180,
+          opacity: isLoading ? 0.6 : 1,
         }}
         onMouseEnter={e => {
-          e.currentTarget.style.background = '#252540';
+          if (!isLoading) {
+            e.currentTarget.style.background = '#252540';
+          }
         }}
         onMouseLeave={e => {
-          e.currentTarget.style.background = '#1a1a2e';
+          if (!isLoading) {
+            e.currentTarget.style.background = '#1a1a2e';
+          }
         }}
         title="Переключение между сценариями"
       >
         <CurrentIcon size={18} style={{ color: 'var(--primary)' }} />
-        <span style={{ flex: 1, textAlign: 'left' }}>{currentScenario?.name || 'Сценарий'}</span>
+        <span style={{ flex: 1, textAlign: 'left' }}>{displayName}</span>
         <ChevronDown
           size={16}
           style={{

@@ -2,9 +2,10 @@
 API endpoints для работы со сценариями
 """
 from typing import List, Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
@@ -50,8 +51,14 @@ class ScenarioOut(BaseModel):
     is_public: bool
     content: Optional[dict]
     order: int
-    created_at: str
-    updated_at: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    @field_serializer('created_at', 'updated_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.isoformat()
 
     class Config:
         from_attributes = True
