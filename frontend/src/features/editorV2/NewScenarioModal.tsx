@@ -2,12 +2,21 @@ import React, { useState } from 'react';
 import { X, FileText, Library, Upload, AlertTriangle } from 'lucide-react';
 import { validateScenarioFile } from '../../utils/scenarioValidator';
 
+interface LibraryScenario {
+  id: number;
+  name: string;
+  icon?: string;
+  category?: string;
+  description?: string;
+}
+
 interface NewScenarioModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreateEmpty: (name: string, icon: string) => void;
   onCreateFromTemplate: (templateId: string, name: string) => void;
   onImportFromFile: (file: File, name: string) => void;
+  libraryScenarios?: LibraryScenario[];
 }
 
 // Доступные иконки для сценариев
@@ -22,20 +31,13 @@ const SCENARIO_ICONS = [
   { id: 'Gift', label: '🎁 Акции' },
 ];
 
-// Моковые шаблоны (потом из API)
-const TEMPLATES = [
-  { id: '1', name: 'Стандартная оплата', icon: 'CreditCard', category: 'Оплата' },
-  { id: '2', name: 'Поддержка клиентов', icon: 'Headphones', category: 'Поддержка' },
-  { id: '3', name: 'Каталог товаров', icon: 'Package', category: 'Каталог' },
-  { id: '4', name: 'FAQ база', icon: 'HelpCircle', category: 'FAQ' },
-];
-
 export default function NewScenarioModal({
   isOpen,
   onClose,
   onCreateEmpty,
   onCreateFromTemplate,
   onImportFromFile,
+  libraryScenarios = [],
 }: NewScenarioModalProps) {
   const [mode, setMode] = useState<'empty' | 'template' | 'file'>('empty');
   const [scenarioName, setScenarioName] = useState('');
@@ -287,7 +289,7 @@ export default function NewScenarioModal({
           {mode === 'template' && (
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', color: '#9ca3af', fontSize: 13, marginBottom: 8 }}>
-                Выбрать шаблон:
+                Выбрать сценарий:
               </label>
               <select
                 value={selectedTemplate}
@@ -303,13 +305,18 @@ export default function NewScenarioModal({
                   cursor: 'pointer',
                 }}
               >
-                <option value="">-- Выберите шаблон --</option>
-                {TEMPLATES.map(template => (
-                  <option key={template.id} value={template.id}>
-                    {template.name} ({template.category})
+                <option value="">-- Выберите сценарий --</option>
+                {libraryScenarios.map(scenario => (
+                  <option key={scenario.id} value={scenario.id.toString()}>
+                    {scenario.name} {scenario.category ? `(${scenario.category})` : ''}
                   </option>
                 ))}
               </select>
+              {libraryScenarios.length === 0 && (
+                <div style={{ marginTop: 8, color: '#9ca3af', fontSize: 13 }}>
+                  💡 Библиотека пуста. Сохраните сценарий в библиотеку чтобы использовать его позже.
+                </div>
+              )}
             </div>
           )}
 

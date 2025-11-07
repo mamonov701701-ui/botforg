@@ -22,12 +22,13 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   onOpenBlockLibrary,
   hasUnsavedChanges = false,
 }) => {
-  const { botId } = useParams<{ botId: string }>();
+  const { id: botId } = useParams<{ id: string }>();
 
   // Scenario store
   const {
     scenarios,
     currentScenarioId,
+    libraryScenarios,
     loadBotScenarios,
     loadLibraryScenarios,
     selectScenario,
@@ -35,6 +36,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     saveCurrentScenario,
     deleteScenario: deleteScenarioAPI,
     saveToLibrary: saveToLibraryAPI,
+    addFromLibrary,
     enableAutoSave,
     disableAutoSave,
     hasUnsavedChanges: storeHasUnsaved,
@@ -51,7 +53,10 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   // Загрузка сценариев при монтировании
   useEffect(() => {
     if (botId) {
-      loadBotScenarios(parseInt(botId));
+      const botIdNum = parseInt(botId);
+      console.log('🔄 Loading scenarios for bot:', botIdNum);
+
+      loadBotScenarios(botIdNum);
       loadLibraryScenarios();
       enableAutoSave(); // Включаем автосохранение
     }
@@ -59,7 +64,8 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     return () => {
       disableAutoSave(); // Выключаем при размонтировании
     };
-  }, [botId, loadBotScenarios, loadLibraryScenarios, enableAutoSave, disableAutoSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botId]); // Только botId в зависимостях
 
   const handleSelectScenario = (scenarioId: string) => {
     selectScenario(parseInt(scenarioId));
@@ -96,8 +102,13 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   };
 
   const handleCreateFromTemplate = async (templateId: string, name: string) => {
-    // TODO: Реализовать импорт из библиотеки
-    showToast('Функция в разработке', 'info');
+    try {
+      await addFromLibrary(parseInt(templateId));
+      showToast(`Сценарий "${name}" добавлен из библиотеки`, 'success');
+      setIsNewScenarioOpen(false);
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка при добавлении', 'error');
+    }
   };
 
   const handleImportFromFile = async (file: File, name: string) => {
@@ -276,6 +287,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
         onCreateEmpty={handleCreateEmpty}
         onCreateFromTemplate={handleCreateFromTemplate}
         onImportFromFile={handleImportFromFile}
+        libraryScenarios={libraryScenarios}
       />
 
       <SaveToLibraryModal

@@ -47,8 +47,8 @@ class Scenario(Base):
     )
     
     # Связи
-    user = relationship("User", foreign_keys=[user_id])
-    bot = relationship("Bot", foreign_keys=[bot_id])
+    user = relationship("backend.models.user.User", foreign_keys=[user_id], back_populates="scenarios")
+    bot = relationship("backend.models.bot.Bot", foreign_keys=[bot_id])
 
 
 class ScenarioVersion(Base):
