@@ -28,6 +28,7 @@ import BlockSettingsPanel from './BlockSettingsPanel';
 import CustomEdge from './CustomEdge';
 import ToastContainer from './ToastContainer';
 import { useEditorStore } from '../../stores/editorStore';
+import { useScenarioStore } from '../../stores/scenarioStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { validateAllNodes, debugNodeStructure } from '../../utils/validateNode';
 import { canAccessBlock, getAccessDeniedMessage, logAccessDenied } from '../../utils/accessControl';
@@ -300,6 +301,9 @@ function InnerEditor() {
     showToast,
     loadCatalog,
   } = useEditorStore();
+
+  // Scenario store для работы со сценариями
+  const syncFromEditor = useScenarioStore(state => state.syncFromEditor);
 
   // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
@@ -848,6 +852,12 @@ function InnerEditor() {
     setViewport({ x: 0, y: 0, zoom: 0.6 }, { duration: 0 });
   }, [setViewport]);
 
+  // Синхронизация изменений с scenarioStore
+  useEffect(() => {
+    // При изменении nodes/edges синхронизируем с scenarioStore
+    syncFromEditor();
+  }, [zustandNodes, edges, syncFromEditor]);
+
   // Типы узлов и рёбер
   const nodeTypes = useMemo(
     () => ({
@@ -1230,7 +1240,6 @@ function InnerEditor() {
       {/* Top controls bar */}
       <EditorControls
         onExport={handleExport}
-        onImport={handleImport}
         onSave={handleSave}
         onOpenBlockLibrary={() => setIsBlockLibraryOpen(true)}
       />

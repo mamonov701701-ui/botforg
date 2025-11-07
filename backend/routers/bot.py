@@ -6,6 +6,7 @@ import requests
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.bot import Bot
+from backend.models.scenario import Scenario
 from backend.models.user import User as UserModel
 from backend.schemas.bot import BotConnectRequest, BotListOut, BotOut, BotUpdate
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -103,6 +104,24 @@ async def connect_bot(
         db.add(db_bot)
         db.commit()
         db.refresh(db_bot)
+        
+        # Создаем главный сценарий автоматически
+        main_scenario = Scenario(
+            user_id=current_user.id,
+            bot_id=db_bot.id,
+            name="Главный",
+            description="Главный сценарий - точка входа в бот",
+            icon="Home",
+            category="main",
+            is_main=True,
+            is_library=False,
+            is_standard=False,
+            content={"nodes": [], "edges": []},
+            order=0,
+        )
+        db.add(main_scenario)
+        db.commit()
+        logger.info(f"Main scenario created for bot {db_bot.id}")
 
         # Устанавливаем webhook если указан URL
         if payload.webhook_url:

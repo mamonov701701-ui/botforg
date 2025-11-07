@@ -20,6 +20,7 @@ from backend.routers import editor as editor_router
 from backend.routers import message as message_router
 from backend.routers import payment as payment_router
 from backend.routers import review as review_router
+from backend.routers import scenario as scenario_router
 from backend.routers import template as templates
 from backend.routers import user_template as user_template_router
 from backend.settings import settings
@@ -71,6 +72,7 @@ app.include_router(billing_router.router, prefix="/billing")
 app.include_router(payment_router.router)
 app.include_router(editor_router.router)
 app.include_router(blocks_router.router)
+app.include_router(scenario_router.router)
 
 
 @app.get("/health")

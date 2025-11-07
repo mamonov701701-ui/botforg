@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 import ScenariosDropdown from './ScenariosDropdown';
 import SaveDropdown from './SaveDropdown';
 import NewScenarioModal from './NewScenarioModal';
 import SaveToLibraryModal from './SaveToLibraryModal';
 import SaveBotModal from './SaveBotModal';
+import { useScenarioStore } from '../../stores/scenarioStore';
+import { useEditorStore } from '../../stores/editorStore';
 
 interface EditorControlsProps {
   onExport?: () => void;
@@ -19,54 +22,97 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   onOpenBlockLibrary,
   hasUnsavedChanges = false,
 }) => {
-  // Стартовый сценарий (создается автоматически при создании бота)
-  // TODO: Заменить на данные из API/store
-  const [scenarios] = useState([
-    { id: '1', name: 'Главный', icon: 'Home' },
-    // Остальные сценарии добавляются через "Новый сценарий"
-  ]);
+  const { botId } = useParams<{ botId: string }>();
 
-  const [currentScenarioId, setCurrentScenarioId] = useState('1');
+  // Scenario store
+  const {
+    scenarios,
+    currentScenarioId,
+    loadBotScenarios,
+    loadLibraryScenarios,
+    selectScenario,
+    createScenario,
+    saveCurrentScenario,
+    deleteScenario: deleteScenarioAPI,
+    saveToLibrary: saveToLibraryAPI,
+    enableAutoSave,
+    disableAutoSave,
+    hasUnsavedChanges: storeHasUnsaved,
+  } = useScenarioStore();
+
+  // Editor store для toast
+  const { showToast } = useEditorStore();
 
   // Модальные окна
   const [isNewScenarioOpen, setIsNewScenarioOpen] = useState(false);
   const [isSaveToLibraryOpen, setIsSaveToLibraryOpen] = useState(false);
   const [isSaveBotOpen, setIsSaveBotOpen] = useState(false);
 
+  // Загрузка сценариев при монтировании
+  useEffect(() => {
+    if (botId) {
+      loadBotScenarios(parseInt(botId));
+      loadLibraryScenarios();
+      enableAutoSave(); // Включаем автосохранение
+    }
+
+    return () => {
+      disableAutoSave(); // Выключаем при размонтировании
+    };
+  }, [botId, loadBotScenarios, loadLibraryScenarios, enableAutoSave, disableAutoSave]);
+
   const handleSelectScenario = (scenarioId: string) => {
-    setCurrentScenarioId(scenarioId);
-    // TODO: Загрузить nodes и edges выбранного сценария
-    console.log('Switching to scenario:', scenarioId);
+    selectScenario(parseInt(scenarioId));
   };
 
-  const handleDeleteScenario = (scenarioId: string) => {
-    // TODO: Подтверждение и удаление сценария
-    console.log('Delete scenario:', scenarioId);
-    if (confirm('Удалить этот сценарий?')) {
-      // Удаление
+  const handleDeleteScenario = async (scenarioId: string) => {
+    const scenario = scenarios.find(s => s.id === parseInt(scenarioId));
+    if (!scenario) return;
+
+    if (!confirm(`Удалить сценарий "${scenario.name}"?`)) return;
+
+    try {
+      await deleteScenarioAPI(parseInt(scenarioId));
+      showToast('Сценарий удалён', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка при удалении', 'error');
     }
   };
 
   // Обработчики для NewScenarioModal
-  const handleCreateEmpty = (name: string, icon: string) => {
-    console.log('Create empty scenario:', name, icon);
-    // TODO: Создать пустой сценарий и переключиться на него
+  const handleCreateEmpty = async (name: string, icon: string) => {
+    try {
+      await createScenario({
+        name,
+        icon,
+        content: { nodes: [], edges: [] },
+        is_main: false,
+      });
+      showToast(`Сценарий "${name}" создан`, 'success');
+      setIsNewScenarioOpen(false);
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка при создании', 'error');
+    }
   };
 
-  const handleCreateFromTemplate = (templateId: string, name: string) => {
-    console.log('Create from template:', templateId, name);
-    // TODO: Создать сценарий из шаблона
+  const handleCreateFromTemplate = async (templateId: string, name: string) => {
+    // TODO: Реализовать импорт из библиотеки
+    showToast('Функция в разработке', 'info');
   };
 
-  const handleImportFromFile = (file: File, name: string) => {
-    console.log('Import from file:', file.name, name);
-    // TODO: Импортировать сценарий из файла
+  const handleImportFromFile = async (file: File, name: string) => {
+    // TODO: Реализовать импорт из файла
+    showToast('Функция в разработке', 'info');
   };
 
   // Обработчики для SaveDropdown
-  const handleQuickSave = () => {
-    console.log('Quick save');
-    if (onSave) onSave();
+  const handleQuickSave = async () => {
+    try {
+      await saveCurrentScenario();
+      showToast('Сценарий сохранён', 'success');
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка при сохранении', 'error');
+    }
   };
 
   const handleSaveBot = () => {
@@ -78,31 +124,43 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   };
 
   const handleExportToFile = () => {
-    console.log('Export to file');
     if (onExport) onExport();
   };
 
   // Обработчики для SaveToLibraryModal
-  const handleSaveScenarioToLibrary = (data: {
+  const handleSaveScenarioToLibrary = async (data: {
     name: string;
     description: string;
     category: string;
     icon: string;
     overwrite: boolean;
   }) => {
-    console.log('Save scenario to library:', data);
-    // TODO: Сохранить сценарий в библиотеку через API
+    try {
+      await saveToLibraryAPI(data);
+      showToast(`Сценарий "${data.name}" сохранён в библиотеку`, 'success');
+      setIsSaveToLibraryOpen(false);
+    } catch (error: any) {
+      showToast(error.message || 'Ошибка при сохранении', 'error');
+    }
   };
 
   // Обработчики для SaveBotModal
-  const handleSaveBotSubmit = (data: {
+  const handleSaveBotSubmit = async (data: {
     name: string;
     description: string;
     action: 'update' | 'copy' | 'rename';
   }) => {
-    console.log('Save bot:', data);
-    // TODO: Сохранить бота через API
+    // TODO: Реализовать сохранение бота
+    showToast('Функция в разработке', 'info');
+    setIsSaveBotOpen(false);
   };
+
+  // Преобразуем сценарии для dropdown
+  const scenariosForDropdown = scenarios.map(s => ({
+    id: s.id.toString(),
+    name: s.name,
+    icon: s.icon || 'FileText',
+  }));
 
   return (
     <>
@@ -184,8 +242,8 @@ const EditorControls: React.FC<EditorControlsProps> = ({
             Сценарии:
           </label>
           <ScenariosDropdown
-            scenarios={scenarios}
-            currentScenarioId={currentScenarioId}
+            scenarios={scenariosForDropdown}
+            currentScenarioId={currentScenarioId?.toString() || ''}
             onSelectScenario={handleSelectScenario}
             onDeleteScenario={handleDeleteScenario}
           />
@@ -207,7 +265,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
           onSaveBot={handleSaveBot}
           onSaveToLibrary={handleSaveToLibrary}
           onExportToFile={handleExportToFile}
-          hasUnsavedChanges={hasUnsavedChanges}
+          hasUnsavedChanges={storeHasUnsaved()}
         />
       </div>
 
@@ -224,17 +282,17 @@ const EditorControls: React.FC<EditorControlsProps> = ({
         isOpen={isSaveToLibraryOpen}
         onClose={() => setIsSaveToLibraryOpen(false)}
         onSave={handleSaveScenarioToLibrary}
-        currentScenarioName={scenarios.find(s => s.id === currentScenarioId)?.name}
+        currentScenarioName={scenarios.find(s => s.id === currentScenarioId)?.name || 'Сценарий'}
       />
 
       <SaveBotModal
         isOpen={isSaveBotOpen}
         onClose={() => setIsSaveBotOpen(false)}
         onSave={handleSaveBotSubmit}
-        currentBotName="Магазин одежды"
-        currentBotDescription="Бот для интернет-магазина"
+        currentBotName={`Бот #${botId}`}
+        currentBotDescription="Описание бота"
         scenarioCount={scenarios.length}
-        hasUnsavedChanges={hasUnsavedChanges}
+        hasUnsavedChanges={storeHasUnsaved()}
       />
     </>
   );
