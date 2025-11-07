@@ -40,6 +40,10 @@ body,
   padding-top: var(--header-h, 88px);
   display: flex;
   flex-direction: column;
+  overflow: visible;
+}
+/* Только для редактора блокируем скролл */
+.site-shell:has(.editor-surface) .site-main {
   overflow: hidden;
 }
 /* Для редактора нужен overflow: hidden, для остальных страниц - скроллинг */
