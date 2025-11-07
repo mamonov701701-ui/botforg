@@ -6,11 +6,9 @@ import './output.css';
 import SiteLayout from './layouts/SiteLayout';
 import EditorV2Shell from './features/editorV2/EditorV2Shell';
 import Home from './pages/Home';
-import Login from './pages/Login';
 import Pricing from './pages/Pricing';
 import Templates from './pages/Templates';
 import Features from './pages/Features';
-import Account from './pages/Account';
 import NotFound from './pages/NotFound';
 import AuthGate from './features/auth/AuthGate';
 import AccountPage from './features/account/AccountPage';
@@ -35,7 +33,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Routes>
         <Route path="/" element={<SiteLayout />}>
           <Route index element={<Home />} />
-          <Route path="login" element={<Login />} />
           <Route path="pricing" element={<Pricing />} />
           <Route path="templates" element={<Templates />} />
           <Route path="features" element={<Features />} />
@@ -52,7 +49,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="editor/:id" element={<EditorV2Shell />} />
 
           {/* Dashboard routes */}
-          <Route path="dashboard" element={<DashboardLayout />}>
+          <Route
+            path="dashboard"
+            element={
+              <AuthGate>
+                <DashboardLayout />
+              </AuthGate>
+            }
+          >
             <Route index element={<HomePage />} />
             <Route path="bots" element={<BotsPage />} />
             <Route path="templates" element={<TemplatesPage />} />

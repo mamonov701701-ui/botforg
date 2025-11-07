@@ -209,7 +209,7 @@ export default function AuthModal() {
             if (nextPath) {
               navigate(nextPath);
             } else {
-              navigate('/account');
+              navigate('/dashboard');
             }
           } else {
             // Если не удалось получить пользователя, переключаемся на вкладку входа
@@ -262,7 +262,7 @@ export default function AuthModal() {
           if (nextPath) {
             navigate(nextPath);
           } else {
-            navigate('/account');
+            navigate('/dashboard');
           }
         } else {
           toast.error('Не удалось получить данные пользователя');

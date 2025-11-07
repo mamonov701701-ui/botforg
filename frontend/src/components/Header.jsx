@@ -10,7 +10,7 @@ export default function Header({ openAuthModal }) {
   const handleAccountClick = e => {
     if (!user) {
       e.preventDefault();
-      openAuth();
+      openAuth('/dashboard');
     }
     // If user exists, Link will navigate normally
   };
@@ -118,7 +118,7 @@ export default function Header({ openAuthModal }) {
           Тарифы
         </Link>
         <Link
-          to="/account"
+          to="/dashboard"
           onClick={handleAccountClick}
           className="nav-link"
           style={{
