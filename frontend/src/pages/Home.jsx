@@ -5,7 +5,10 @@ export default function Home() {
     <div className="min-h-screen font-sans">
       {/* Hero-блок */}
       <section className="max-w-screen-xl mx-auto px-4 py-16 flex flex-col items-center justify-center">
-        <div className="rounded-xl p-10 w-full flex flex-col items-center justify-center text-center text-white">
+        <div
+          className="rounded-xl p-10 w-full flex flex-col items-center justify-center text-center text-white"
+          style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+        >
           <h1 className="text-4xl md:text-5xl font-bold mb-6 leading-tight">
             Запустите чат-бота за 10 минут —<br />
             без кода и программистов
@@ -22,22 +25,34 @@ export default function Home() {
 
       {/* Блок преимуществ */}
       <section className="grid grid-cols-1 md:grid-cols-4 gap-8 text-white text-center px-4 py-20 max-w-6xl mx-auto">
-        <div className="p-6 rounded-xl hover:scale-105 hover:shadow-xl transition text-center">
+        <div
+          className="p-6 rounded-xl hover:scale-105 hover:shadow-xl transition text-center"
+          style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+        >
           <LayoutDashboard className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
           <h3 className="text-lg font-semibold mb-1 text-white">Шаблоны</h3>
           <p className="text-sm text-gray-300">Готовые решения — просто выберите и запустите</p>
         </div>
-        <div className="p-6 rounded-xl hover:scale-105 hover:shadow-xl transition text-center">
+        <div
+          className="p-6 rounded-xl hover:scale-105 hover:shadow-xl transition text-center"
+          style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+        >
           <Settings2 className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
           <h3 className="text-lg font-semibold mb-1 text-white">Без кода</h3>
           <p className="text-sm text-gray-300">Визуальный редактор — только для ботов</p>
         </div>
-        <div className="p-6 rounded-xl hover:scale-105 hover:shadow-xl transition text-center">
+        <div
+          className="p-6 rounded-xl hover:scale-105 hover:shadow-xl transition text-center"
+          style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+        >
           <Workflow className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
           <h3 className="text-lg font-semibold mb-1 text-white">Интеграции</h3>
           <p className="text-sm text-gray-300">Telegram, WhatsApp, Google, ЮKassa, Stripe и др.</p>
         </div>
-        <div className="p-6 rounded-xl hover:scale-105 hover:shadow-xl transition text-center">
+        <div
+          className="p-6 rounded-xl hover:scale-105 hover:shadow-xl transition text-center"
+          style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+        >
           <BarChart3 className="w-10 h-10 text-yellow-400 mx-auto mb-3" />
           <h3 className="text-lg font-semibold mb-1 text-white">Аналитика</h3>
           <p className="text-sm text-gray-300">Отслеживайте, как пользователи общаются с ботами</p>
@@ -46,7 +61,10 @@ export default function Home() {
 
       {/* Секция визуального редактора */}
       <section className="max-w-screen-xl mx-auto px-4 py-16">
-        <div className="rounded-xl p-10 flex flex-col md:flex-row items-center justify-between gap-12">
+        <div
+          className="rounded-xl p-10 flex flex-col md:flex-row items-center justify-between gap-12"
+          style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+        >
           <div className="flex-1 text-white text-center md:text-left">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
               Визуальный редактор, с которым справится даже новичок
@@ -76,21 +94,30 @@ export default function Home() {
           Всего 3 шага до вашего чат-бота
         </h2>
         <div className="flex flex-col md:flex-row gap-8 justify-center text-center">
-          <div className="rounded-xl p-6 flex flex-col items-center">
+          <div
+            className="rounded-xl p-6 flex flex-col items-center"
+            style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+          >
             <FileStack className="w-10 h-10 text-yellow-400 mb-4" />
             <h3 className="text-lg font-semibold text-white">1. Выберите шаблон</h3>
             <p className="text-gray-300 text-sm mt-2">
               Сэкономьте часы — начните с готового решения для вашей ниши
             </p>
           </div>
-          <div className="rounded-xl p-6 flex flex-col items-center">
+          <div
+            className="rounded-xl p-6 flex flex-col items-center"
+            style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+          >
             <Settings2 className="w-10 h-10 text-yellow-400 mb-4" />
             <h3 className="text-lg font-semibold text-white">2. Настройте блоки</h3>
             <p className="text-gray-300 text-sm mt-2">
               Перетаскивайте и соединяйте — визуально и без кода
             </p>
           </div>
-          <div className="rounded-xl p-6 flex flex-col items-center">
+          <div
+            className="rounded-xl p-6 flex flex-col items-center"
+            style={{ backgroundColor: 'rgba(26, 34, 56, 0.25)' }}
+          >
             <Rocket className="w-10 h-10 text-yellow-400 mb-4" />
             <h3 className="text-lg font-semibold text-white">3. Запустите</h3>
             <p className="text-gray-300 text-sm mt-2">

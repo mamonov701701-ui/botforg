@@ -7,16 +7,6 @@
   --color-text-dark: #111;
 }
 
-body {
-  background: #1a2238;
-  color: var(--color-text-light);
-  font-family: 'Roboto', Arial, sans-serif;
-  min-height: 100vh;
-  margin: 0;
-  position: relative;
-  overflow-x: hidden;
-}
-
 .font-poppins {
   font-family: 'Poppins', Arial, sans-serif;
 }
@@ -34,27 +24,4 @@ body {
 }
 .border-primary {
   border-color: var(--color-primary);
-}
-
-/* Анимированный фон нейросети/схемы */
-body::before {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 0;
-  pointer-events: none;
-  background: url('data:image/svg+xml;utf8,<svg width="100%25" height="100%25" xmlns="http://www.w3.org/2000/svg"><g opacity="0.08"><polyline points="0,50 100,100 200,50 300,100 400,50" fill="none" stroke="%23FFD24C" stroke-width="2"/><circle cx="100" cy="100" r="4" fill="%23FFD24C"/><circle cx="200" cy="50" r="4" fill="%23FFD24C"/><circle cx="300" cy="100" r="4" fill="%23FFD24C"/></g></svg>');
-  animation: bgmove 20s linear infinite alternate;
-}
-
-@keyframes bgmove {
-  0% {
-    background-position: 0 0;
-  }
-  100% {
-    background-position: 100px 40px;
-  }
 }
