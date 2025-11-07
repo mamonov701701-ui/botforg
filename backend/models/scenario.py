@@ -46,9 +46,8 @@ class Scenario(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
     
-    # Связи
-    user = relationship("backend.models.user.User", foreign_keys=[user_id], back_populates="scenarios")
-    bot = relationship("backend.models.bot.Bot", foreign_keys=[bot_id])
+    # Связи (без back_populates для избежания конфликтов)
+    # user и bot доступны через foreign keys
 
 
 class ScenarioVersion(Base):

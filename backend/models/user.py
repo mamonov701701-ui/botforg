@@ -43,6 +43,3 @@ class User(Base):
     accounts = relationship(
         "Account", back_populates="user", cascade="all, delete-orphan"
     )
-    scenarios = relationship(
-        "Scenario", back_populates="user", cascade="all, delete"
-    )
