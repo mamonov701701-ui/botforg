@@ -14,7 +14,7 @@ export default function SiteLayout() {
 
   return (
     // ЕДИНЫЙ ФОН СТРАНИЦЫ ДЛЯ ВСЕГО САЙТА (включая header/footer)
-    <div className="site-shell bg-circuit">
+    <div className="site-shell">
       <header className="site-header">
         <Header />
       </header>

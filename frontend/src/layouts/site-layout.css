@@ -8,7 +8,6 @@ body,
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #1a2238;
 }
 
 /* Для редактора фиксируем высоту и убираем скролл */
@@ -16,6 +15,11 @@ body,
   height: 100vh;
   max-height: 100vh;
   overflow: hidden;
+}
+/* Скрываем фоновое изображение html для редактора */
+html:has(.editor-surface) {
+  background-image: none !important;
+  background-color: #0a1b2a !important;
 }
 .site-header {
   position: fixed;
