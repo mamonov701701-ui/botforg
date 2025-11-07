@@ -29,6 +29,6 @@
 }
 
 body {
-  background-color: var(--bg);
+  background-color: transparent;
   color: var(--text);
 }

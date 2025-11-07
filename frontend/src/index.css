@@ -17,7 +17,7 @@ html {
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  background-color: #1a2238;
+  background-color: transparent;
   color: white;
   font-family: 'Inter', sans-serif;
   overflow-x: hidden;
