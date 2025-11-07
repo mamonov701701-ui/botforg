@@ -2,12 +2,16 @@ import React from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { logout } from '../../api/auth';
 import { useNavigate } from 'react-router-dom';
+import { hasAccessToSection } from '../../constants/roles';
 
 export default function AccountPage() {
   const { user, clearUser } = useAuthStore();
   const navigate = useNavigate();
 
   if (!user) return null;
+
+  // Проверяем, есть ли доступ к Dashboard
+  const hasDashboardAccess = hasAccessToSection(user.role, 'dashboard');
 
   const handleLogout = async () => {
     try {
@@ -87,6 +91,60 @@ export default function AccountPage() {
             </div>
           </div>
         </div>
+
+        {/* Кнопка перехода в Dashboard */}
+        {hasDashboardAccess && (
+          <div
+            style={{
+              background: 'var(--surface)',
+              borderRadius: '12px',
+              padding: '24px',
+              marginBottom: '24px',
+              border: '2px solid var(--primary)',
+            }}
+          >
+            <h3
+              style={{
+                fontSize: '20px',
+                marginBottom: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              <span style={{ fontSize: '24px' }}>🏠</span>
+              Личный кабинет (Dashboard)
+            </h3>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '16px' }}>
+              Управляйте ботами, шаблонами, аналитикой и настройками проекта
+            </p>
+            <button
+              onClick={() => navigate('/dashboard')}
+              style={{
+                width: '100%',
+                padding: '16px',
+                background: 'var(--primary)',
+                color: '#000',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'var(--primary-hover)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'var(--primary)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              Открыть личный кабинет →
+            </button>
+          </div>
+        )}
 
         {/* Actions */}
         <button

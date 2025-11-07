@@ -19,6 +19,14 @@ import ResetPassword from './features/auth/ResetPassword';
 import AuthModal from './features/auth/AuthModal';
 import ToastContainer from './features/editorV2/ToastContainer';
 import HealthBanner from './components/HealthBanner';
+import DashboardLayout from './features/dashboard/DashboardLayout';
+import HomePage from './features/dashboard/pages/HomePage';
+import BotsPage from './features/dashboard/pages/BotsPage';
+import TemplatesPage from './features/dashboard/pages/TemplatesPage';
+import BalancePage from './features/dashboard/pages/BalancePage';
+import AnalyticsPage from './features/dashboard/pages/AnalyticsPage';
+import TeamPage from './features/dashboard/pages/TeamPage';
+import SettingsPage from './features/dashboard/pages/SettingsPage';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -42,6 +50,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="auth/verify" element={<VerifyEmail />} />
           <Route path="auth/reset" element={<ResetPassword />} />
           <Route path="editor/:id" element={<EditorV2Shell />} />
+
+          {/* Dashboard routes */}
+          <Route path="dashboard" element={<DashboardLayout />}>
+            <Route index element={<HomePage />} />
+            <Route path="bots" element={<BotsPage />} />
+            <Route path="templates" element={<TemplatesPage />} />
+            <Route path="balance" element={<BalancePage />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="team" element={<TeamPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

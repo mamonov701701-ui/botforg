@@ -1,4 +1,4 @@
-from backend.auth.deps import get_current_user
+from backend.dependencies.auth import get_current_user
 from backend.database import get_db
 from backend.models.user import User
 from fastapi import APIRouter, Depends
@@ -14,6 +14,7 @@ class UserProfile(BaseModel):
     name: str | None
     avatar: str | None
     providers: list[str]
+    role: str
 
     class Config:
         from_attributes = True
@@ -32,4 +33,5 @@ async def get_me(
         name=current_user.name,
         avatar=current_user.avatar,
         providers=providers,
+        role=current_user.role,
     )

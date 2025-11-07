@@ -2,6 +2,25 @@
 
 BotForg - это платформа для создания и управления чат-ботами с визуальным редактором потоков.
 
+---
+
+## 🎉 ОБНОВЛЕНИЕ 2025-11-07
+
+**✅ Личный кабинет полностью реализован!**
+
+- Вход в систему работает
+- 8 фаз ЛК готовы (Главная, Боты, Шаблоны, Баланс, Аналитика, Команда, Настройки)
+- RBAC настроен (6 ролей)
+
+**🚀 Быстрый вход:**
+- Откройте: http://localhost:5173/test-login.html
+- Email: admin@example.com
+- Password: admin123456
+
+**📚 Подробности:** см. `БЫСТРЫЙ_СТАРТ.txt` или `README_УТРО.txt`
+
+---
+
 ## Технологии
 
 - **Backend**: FastAPI + SQLAlchemy + SQLite + Alembic
@@ -15,7 +34,7 @@ BotForg - это платформа для создания и управлен�
 ### 2. Запуск через задачи:
 
 - `Terminal → Run Task… → Dev: All (Backend + Frontend)`
-- Backend: http://127.0.0.1:8000 (Swagger: /docs)
+- Backend: http://127.0.0.1:8001 (Swagger: /docs)
 - Frontend: http://localhost:5173
 
 ### 3. Альтернативный запуск скриптом:
@@ -33,7 +52,7 @@ BotForg - это платформа для создания и управлен�
 
 Frontend использует переменную окружения `VITE_API_URL` для подключения к backend:
 
-- **Development**: `VITE_API_URL=http://localhost:8000` (файл `frontend/env.development`)
+- **Development**: `VITE_API_URL=http://localhost:8001` (файл `frontend/.env.development`)
 - **Production**: `VITE_API_URL=https://your-production-api.com` (файл `frontend/env.production`)
 
 ## Миграции
@@ -83,7 +102,7 @@ botforg/
 ### Backend
 
 - Авто-перезагрузка при изменениях (uvicorn --reload)
-- Swagger документация: http://127.0.0.1:8000/docs
+- Swagger документация: http://127.0.0.1:8001/docs
 - База данных: SQLite (botforg.db) с Alembic миграциями
 - Конфигурация через переменные окружения (файл `.env`)
 

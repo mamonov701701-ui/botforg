@@ -19,8 +19,8 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
 
   try {
-    const baseURL = import.meta.env.VITE_API_URL || '';
-    const url = baseURL ? `${baseURL}${path}` : path;
+    // Всегда используем прокси (не baseURL)
+    const url = path;
 
     // Get token from localStorage for Authorization header
     const token = localStorage.getItem('auth_token');

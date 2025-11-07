@@ -40,29 +40,40 @@ export async function logout() {
 }
 
 export function getLoginUrl(provider: 'google' | 'yandex' | 'mailru') {
-  const baseURL = import.meta.env.VITE_API_URL || '';
-  return `${baseURL}/auth/${provider}/login`;
+  // Используем прокси
+  return `/auth/${provider}/login`;
 }
 
 export async function registerEmail(email: string, password: string, name?: string) {
   try {
-    const response = await post('/auth/register', { email, password, name, role: 'user' });
-    if (response.access_token) {
-      saveToken(response.access_token);
+    // Используем прямой fetch для регистрации (JSON формат)
+    const response = await fetch('/auth/register', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password, name, role: 'user' }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || errorData.message || 'Ошибка регистрации');
     }
-    return response;
+
+    const data = await response.json();
+    if (data.access_token) {
+      saveToken(data.access_token);
+    }
+    return data;
   } catch (error: any) {
-    // Передаем ошибку дальше с правильным сообщением
-    if (error instanceof ApiError) {
-      throw error;
-    }
     throw new Error(error?.message || 'Ошибка регистрации');
   }
 }
 
 export async function loginEmail(email: string, password: string) {
-  const baseURL = import.meta.env.VITE_API_URL || '';
-  const url = baseURL ? `${baseURL}/auth/login` : '/auth/login';
+  // Всегда используем прокси для надёжности
+  const url = '/auth/login';
 
   const response = await fetch(url, {
     method: 'POST',

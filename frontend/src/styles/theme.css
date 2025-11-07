@@ -10,10 +10,16 @@
 
   /* Borders */
   --border: #232b36;
+  --error-border: #ef4444;
 
   /* Accent */
   --accent: #ffd24c;
   --accent-hover: #ffc107;
+
+  /* Primary (for dashboard) */
+  --primary: #ffd24c;
+  --primary-hover: #ffc107;
+  --primary-bg: rgba(255, 210, 76, 0.1);
 
   /* Status */
   --success: #10b981;

@@ -5,7 +5,7 @@ from sqlalchemy.orm import relationship
 
 from backend.database import Base
 
-ROLES = ["owner", "admin", "manager", "developer", "support", "observer", "user"]
+ROLES = ["owner", "admin", "developer", "templates_manager", "support", "viewer", "user"]
 
 
 class User(Base):
