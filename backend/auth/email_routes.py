@@ -91,35 +91,41 @@ async def register(
 @router.post("/login")
 async def login(
     data: LoginRequest,
-    request: Request,
-    response: Response,
     db: Session = Depends(get_db),
 ):
     """Login with email/password"""
-    check_rate_limit(request, "login")
-
-    email = normalize_email(data.email)
-
-    # Find user
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not user.password_hash:
-        raise HTTPException(status_code=401, detail="Неверный email или пароль")
-
-    # Verify password
-    if not verify_password(data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Неверный email или пароль")
-
-    # Check email verified (if required)
-    if settings.REQUIRE_EMAIL_VERIFICATION and not user.email_verified_at:
-        raise HTTPException(
-            status_code=403, detail="Email не подтвержден. Проверьте почту."
-        )
-
-    # Create session
-    jwt_token = create_jwt_token(user.id)
-    set_auth_cookie(response, jwt_token)
-
-    return {"message": "Вход выполнен успешно"}
+    try:
+        # Normalize email
+        email = data.email.lower().strip()
+        
+        # Find user
+        user = db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Неверный email или пароль")
+        
+        if not user.hashed_password:
+            raise HTTPException(status_code=401, detail="Неверный email или пароль")
+        
+        # Verify password
+        from backend.security import verify_password
+        if not verify_password(data.password, user.hashed_password):
+            raise HTTPException(status_code=401, detail="Неверный email или пароль")
+        
+        # Create token
+        jwt_token = create_jwt_token(user.id)
+        
+        return {
+            "message": "Вход выполнен успешно",
+            "access_token": jwt_token,
+            "token_type": "bearer"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Log the actual error
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
 
 @router.get("/verify")
@@ -141,6 +147,13 @@ async def verify_email(token: str, response: Response, db: Session = Depends(get
         # Auto-login
         jwt_token = create_jwt_token(user.id)
         set_auth_cookie(response, jwt_token)
+        
+        return {
+            "message": "Регистрация успешна",
+            "access_token": jwt_token,
+            "token_type": "bearer",
+            "user_id": user.id,
+        }
 
     return {"message": "Email подтвержден успешно"}
 

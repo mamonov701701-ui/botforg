@@ -9,7 +9,7 @@ class RegisterIn(BaseModel):
     name: Optional[str] = None
     email: EmailStr
     password: str
-    role: Optional[str] = "user"
+    role: Optional[str] = "viewer"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -35,7 +35,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     name: Optional[str] = None
     password: str
-    role: Optional[str] = "user"
+    role: Optional[str] = "viewer"
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Smartphone, MessageSquare, FileSpreadsheet, CreditCard } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction } from '../../../constants/roles';
 
@@ -18,6 +19,7 @@ interface Integration {
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>('profile');
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   // Стейт для профиля
   const [profileData, setProfileData] = useState({
@@ -346,6 +348,7 @@ export default function SettingsPage() {
                 Сохранить
               </button>
               <button
+                onClick={() => setShowPasswordModal(true)}
                 style={{
                   padding: '12px 24px',
                   background: 'transparent',
@@ -796,6 +799,14 @@ export default function SettingsPage() {
             </button>
           </div>
         </Card>
+      )}
+
+      {/* Модальное окно смены пароля */}
+      {showPasswordModal && (
+        <ChangePasswordModal
+          onClose={() => setShowPasswordModal(false)}
+          onSuccess={() => alert('Пароль успешно изменён!')}
+        />
       )}
     </DashboardPage>
   );

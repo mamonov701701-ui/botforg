@@ -30,7 +30,7 @@ def register(user_in: RegisterIn, db: Session = Depends(get_db)):
         name=user_in.name or "User",
         email=user_in.email,
         hashed_password=get_password_hash(user_in.password),
-        role=user_in.role or "user",
+        role=user_in.role or "viewer",
     )
     db.add(user)
     db.commit()

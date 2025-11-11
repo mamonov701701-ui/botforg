@@ -24,6 +24,7 @@ import TemplatesPage from './features/dashboard/pages/TemplatesPage';
 import BalancePage from './features/dashboard/pages/BalancePage';
 import AnalyticsPage from './features/dashboard/pages/AnalyticsPage';
 import TeamPage from './features/dashboard/pages/TeamPage';
+import BFTeamPage from './features/dashboard/pages/BFTeamPage';
 import SettingsPage from './features/dashboard/pages/SettingsPage';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -63,6 +64,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="balance" element={<BalancePage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="team" element={<TeamPage />} />
+            <Route path="bf-team" element={<BFTeamPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

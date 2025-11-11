@@ -19,7 +19,7 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     hashed_password = Column(String, nullable=True)  # NULL for OAuth-only users
     password_hash = Column(String, nullable=True)  # Alias for OAuth compatibility
-    role = Column(String, default="user", nullable=False)
+    role = Column(String, default="viewer", nullable=False)
     email_verified_at = Column(DateTime, nullable=True)
 
     templates = relationship("Template", back_populates="user", cascade="all, delete")

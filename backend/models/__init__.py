@@ -22,6 +22,7 @@ from backend.models.tag import Tag
 from backend.models.editor import Node, Edge
 from backend.models.referral import Referral
 from backend.models.scenario import Scenario, ScenarioVersion
+from backend.models.platform_role import PlatformRole
 
 __all__ = [
     "User",
@@ -51,4 +52,5 @@ __all__ = [
     "Referral",
     "Scenario",
     "ScenarioVersion",
+    "PlatformRole",
 ]

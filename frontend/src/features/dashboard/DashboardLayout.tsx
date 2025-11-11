@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Bot, FileText, Wallet, BarChart3, Users, Settings } from 'lucide-react';
+import { Home, Bot, FileText, Wallet, BarChart3, Users, Shield, Settings } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { hasAccessToSection, ROLE_NAMES, type SectionKey } from '../../constants/roles';
 import { getMe } from '../../api/auth';
@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'balance', label: 'Баланс', path: '/dashboard/balance', icon: Wallet },
   { id: 'analytics', label: 'Аналитика', path: '/dashboard/analytics', icon: BarChart3 },
   { id: 'team', label: 'Команда', path: '/dashboard/team', icon: Users },
+  { id: 'bf_team', label: 'BF команда', path: '/dashboard/bf-team', icon: Shield },
   { id: 'settings', label: 'Настройки', path: '/dashboard/settings', icon: Settings },
 ];
 

@@ -1,12 +1,29 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuthStore } from '../../stores/authStore';
 import { logout } from '../../api/auth';
 import { useNavigate } from 'react-router-dom';
 import { hasAccessToSection } from '../../constants/roles';
+import { getMyPlatformRoles, type MyPlatformRole } from '../../api/myRoles';
 
 export default function AccountPage() {
   const { user, clearUser } = useAuthStore();
   const navigate = useNavigate();
+  const [platformRoles, setPlatformRoles] = useState<MyPlatformRole[]>([]);
+
+  useEffect(() => {
+    if (user) {
+      loadPlatformRoles();
+    }
+  }, [user]);
+
+  const loadPlatformRoles = async () => {
+    try {
+      const roles = await getMyPlatformRoles();
+      setPlatformRoles(roles);
+    } catch (error) {
+      console.error('Failed to load platform roles:', error);
+    }
+  };
 
   if (!user) return null;
 
@@ -67,12 +84,16 @@ export default function AccountPage() {
               <h2 style={{ fontSize: '24px', marginBottom: '4px' }}>
                 {user.name || 'Пользователь'}
               </h2>
-              <p style={{ color: 'var(--text-muted)' }}>{user.email}</p>
+              <p style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>{user.email}</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+                ID:{' '}
+                <span style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>{user.id}</span>
+              </p>
             </div>
           </div>
 
           {/* Connected Providers */}
-          <div>
+          <div style={{ marginBottom: '20px' }}>
             <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>Подключённые аккаунты</h3>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {user.providers.map(provider => (
@@ -90,6 +111,37 @@ export default function AccountPage() {
               ))}
             </div>
           </div>
+
+          {/* BF Platform Roles */}
+          {platformRoles.length > 0 && (
+            <div>
+              <h3 style={{ fontSize: '18px', marginBottom: '12px' }}>BF-роли платформы</h3>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {platformRoles.map((role, idx) => (
+                  <span
+                    key={idx}
+                    style={{
+                      padding: '8px 12px',
+                      background:
+                        'linear-gradient(135deg, rgba(255, 210, 76, 0.2), rgba(255, 210, 76, 0.1))',
+                      border: '1px solid var(--primary)',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      color: 'var(--primary)',
+                    }}
+                  >
+                    {role.role_name}
+                    {role.expires_at && (
+                      <span style={{ fontSize: '11px', opacity: 0.7, marginLeft: '6px' }}>
+                        (до {new Date(role.expires_at).toLocaleDateString()})
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Кнопка перехода в Dashboard */}

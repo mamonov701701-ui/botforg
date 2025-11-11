@@ -294,7 +294,9 @@ CustomNode.displayName = 'CustomNode';
 function InnerEditor() {
   const {
     nodes: zustandNodes,
+    edges: zustandEdges,
     setNodes: setZustandNodes,
+    setEdges: setZustandEdges,
     catalog,
     plan,
     role,
@@ -329,6 +331,23 @@ function InnerEditor() {
       setNodes(zustandNodes);
     }
   }, [zustandNodes, nodes, setNodes]);
+
+  // Синхронизация edges из Zustand -> React Flow
+  useEffect(() => {
+    const zustandEdgeIds = zustandEdges
+      .map(e => e.id)
+      .sort()
+      .join(',');
+    const currentEdgeIds = edges
+      .map(e => e.id)
+      .sort()
+      .join(',');
+
+    // Обновляем edges если они отличаются
+    if (zustandEdges.length !== edges.length || zustandEdgeIds !== currentEdgeIds) {
+      setEdges(zustandEdges);
+    }
+  }, [zustandEdges, edges, setEdges]);
 
   // Обработчики изменений для ReactFlow
   const onNodesChange = useCallback(
@@ -368,8 +387,16 @@ function InnerEditor() {
   const onEdgesChange = useCallback(
     (changes: any) => {
       onEdgesChangeInternal(changes);
+
+      // Синхронизируем удаление edges в Zustand
+      const removeChanges = changes.filter((c: any) => c.type === 'remove');
+      if (removeChanges.length > 0) {
+        setZustandEdges(currentEdges => {
+          return currentEdges.filter(edge => !removeChanges.some((c: any) => c.id === edge.id));
+        });
+      }
     },
-    [onEdgesChangeInternal]
+    [onEdgesChangeInternal, setZustandEdges]
   );
 
   const { setAllValidationResults } = useValidationStore();
@@ -856,7 +883,7 @@ function InnerEditor() {
   useEffect(() => {
     // При изменении nodes/edges синхронизируем с scenarioStore
     syncFromEditor();
-  }, [zustandNodes, edges, syncFromEditor]);
+  }, [zustandNodes, zustandEdges, syncFromEditor]);
 
   // Типы узлов и рёбер
   const nodeTypes = useMemo(
@@ -880,6 +907,7 @@ function InnerEditor() {
 
   handleDeleteEdgeRef.current = (edgeId: string) => {
     setEdges(eds => eds.filter(e => e.id !== edgeId));
+    setZustandEdges(eds => eds.filter(e => e.id !== edgeId));
     showToast('Соединение удалено', 'success');
   };
 
@@ -891,32 +919,35 @@ function InnerEditor() {
   // Создание соединения
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges(eds =>
-        addEdge(
-          {
-            ...params,
-            type: 'default',
-            animated: false,
-            data: {
-              onDelete: handleDeleteEdge,
-            },
-            markerEnd: {
-              type: MarkerType.ArrowClosed,
-              width: 30,
-              height: 30,
-              color: '#FFB300',
-            },
-            style: {
-              stroke: '#FFB300',
-              strokeWidth: 4,
-            },
-          },
-          eds
-        )
-      );
+      const newEdge = {
+        ...params,
+        id: `${params.source}-${params.target}`,
+        type: 'default',
+        animated: false,
+        data: {
+          onDelete: handleDeleteEdge,
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 30,
+          height: 30,
+          color: '#FFB300',
+        },
+        style: {
+          stroke: '#FFB300',
+          strokeWidth: 4,
+        },
+      };
+
+      // Добавляем в React Flow
+      setEdges(eds => addEdge(newEdge, eds));
+
+      // Синхронизируем в Zustand
+      setZustandEdges(eds => addEdge(newEdge, eds));
+
       showToast('Соединение создано', 'success');
     },
-    [setEdges, showToast, handleDeleteEdge]
+    [setEdges, setZustandEdges, showToast, handleDeleteEdge]
   );
 
   // Handle drag over canvas - улучшаем визуальную обратную связь
@@ -1184,7 +1215,7 @@ function InnerEditor() {
 
           // Import data
           setZustandNodes(data.nodes);
-          setEdges(data.edges);
+          setZustandEdges(data.edges);
           setSelectedNodeId(undefined);
 
           // Run validation
@@ -1199,7 +1230,7 @@ function InnerEditor() {
       reader.readAsText(file);
     };
     input.click();
-  }, [setZustandNodes, setEdges, showToast, runValidation]);
+  }, [setZustandNodes, setZustandEdges, showToast, runValidation]);
 
   // Show validation modal
   const handleValidate = useCallback(() => {

@@ -23,6 +23,9 @@ from backend.routers import review as review_router
 from backend.routers import scenario as scenario_router
 from backend.routers import template as templates
 from backend.routers import user_template as user_template_router
+from backend.routers import platform_admin as platform_admin_router
+from backend.routers import user_security as user_security_router
+from backend.routers import my_roles as my_roles_router
 from backend.settings import settings
 
 app = FastAPI()
@@ -61,7 +64,7 @@ app.include_router(email_routes.router)
 app.include_router(account_router.router)
 
 # Existing routes
-app.include_router(auth.router, prefix="/auth")
+# app.include_router(auth.router, prefix="/auth")  # ОТКЛЮЧЕН - используем email_routes вместо этого
 app.include_router(templates.router)  # без prefix
 app.include_router(bot_router.router, prefix="/bots")
 app.include_router(review_router.router)  # без prefix
@@ -73,6 +76,9 @@ app.include_router(payment_router.router)
 app.include_router(editor_router.router)
 app.include_router(blocks_router.router)
 app.include_router(scenario_router.router)
+app.include_router(platform_admin_router.router)
+app.include_router(user_security_router.router)
+app.include_router(my_roles_router.router)
 
 
 @app.get("/health")

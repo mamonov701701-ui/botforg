@@ -47,13 +47,13 @@ export function getLoginUrl(provider: 'google' | 'yandex' | 'mailru') {
 export async function registerEmail(email: string, password: string, name?: string) {
   try {
     // Используем прямой fetch для регистрации (JSON формат)
-    const response = await fetch('/auth/register', {
+    const response = await fetch('/auth/email/register', {
       method: 'POST',
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email, password, name, role: 'user' }),
+      body: JSON.stringify({ email, password, name }),
     });
 
     if (!response.ok) {
@@ -72,17 +72,17 @@ export async function registerEmail(email: string, password: string, name?: stri
 }
 
 export async function loginEmail(email: string, password: string) {
-  // Всегда используем прокси для надёжности
-  const url = '/auth/login';
+  // Используем новый email endpoint
+  const url = '/auth/email/login';
 
   const response = await fetch(url, {
     method: 'POST',
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Type': 'application/json',
     },
-    body: new URLSearchParams({
-      username: email,
+    body: JSON.stringify({
+      email: email,
       password: password,
     }),
   });
