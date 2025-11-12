@@ -32,16 +32,6 @@ export default function BFTeamPage() {
         getAllUsers(searchQuery, true), // Всегда показываем только команду
         getAvailableRoles(),
       ]);
-
-      // DEBUG: Проверяем что приходит
-      console.log('=== BF Team Users Data ===');
-      if (usersData && usersData.length > 0) {
-        console.log('First user:', usersData[0]);
-        console.log('Has public_id?', 'public_id' in usersData[0]);
-        console.log('public_id value:', usersData[0].public_id);
-        console.log('id value:', usersData[0].id);
-      }
-
       setUsers(usersData || []);
       setAvailableRoles(rolesData || []);
     } catch (error) {
