@@ -1,9 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Bot, FileText, Wallet, BarChart3, Users, Shield, Settings } from 'lucide-react';
+import {
+  Home,
+  Bot,
+  FileText,
+  Wallet,
+  BarChart3,
+  Users,
+  Shield,
+  Settings,
+  LogOut,
+} from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { hasAccessToSection, ROLE_NAMES, type SectionKey } from '../../constants/roles';
-import { getMe } from '../../api/auth';
+import { getMe, logout } from '../../api/auth';
 
 interface NavItem {
   id: SectionKey;
@@ -24,10 +34,23 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function DashboardLayout() {
-  const { user, setUser, loading, setLoading } = useAuthStore();
+  const { user, setUser, loading, setLoading, clearUser } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      clearUser();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // В любом случае очищаем данные пользователя
+      clearUser();
+      navigate('/');
+    }
+  };
 
   // Загружаем данные пользователя при первом рендере
   useEffect(() => {
@@ -116,7 +139,7 @@ export default function DashboardLayout() {
           </p>
           {!user ? (
             <button
-              onClick={() => navigate('/account')}
+              onClick={() => navigate('/dashboard')}
               style={{
                 padding: '14px 32px',
                 background: 'var(--primary)',
@@ -203,45 +226,125 @@ export default function DashboardLayout() {
               border: '1px solid rgba(255, 210, 76, 0.2)',
             }}
           >
-            {/* Заголовок */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginBottom: '24px',
-                paddingBottom: '16px',
-                borderBottom: '1px solid var(--border)',
-              }}
-            >
-              {!isSidebarCollapsed && (
-                <div>
-                  <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '4px' }}>
-                    Личный кабинет
-                  </h2>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {ROLE_NAMES[user.role]}
-                  </p>
-                </div>
-              )}
-              <button
-                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            {/* Профиль пользователя */}
+            {!isSidebarCollapsed ? (
+              <div
                 style={{
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '20px',
-                  padding: '4px',
-                  color: 'var(--text-muted)',
-                  transition: 'color 0.2s',
+                  marginBottom: '24px',
+                  paddingBottom: '16px',
+                  borderBottom: '1px solid var(--border)',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
-                title={isSidebarCollapsed ? 'Развернуть' : 'Свернуть'}
               >
-                {isSidebarCollapsed ? '→' : '←'}
-              </button>
-            </div>
+                <div
+                  style={{
+                    background:
+                      'linear-gradient(135deg, rgba(255, 210, 76, 0.1), rgba(255, 210, 76, 0.05))',
+                    border: '1px solid rgba(255, 210, 76, 0.3)',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    position: 'relative',
+                  }}
+                >
+                  <button
+                    onClick={() => setIsSidebarCollapsed(true)}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      padding: '4px',
+                      color: 'var(--text-muted)',
+                      transition: 'color 0.2s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+                    title="Свернуть"
+                  >
+                    ←
+                  </button>
+
+                  <div style={{ paddingRight: '24px' }}>
+                    {/* Имя */}
+                    <h2
+                      style={{
+                        fontSize: '16px',
+                        fontWeight: 700,
+                        marginBottom: '6px',
+                        color: 'var(--text)',
+                        wordBreak: 'break-word',
+                      }}
+                    >
+                      {user.name || 'Пользователь'}
+                    </h2>
+
+                    {/* Статус (роль) */}
+                    <div
+                      style={{
+                        display: 'inline-block',
+                        padding: '3px 8px',
+                        background: 'rgba(255, 210, 76, 0.2)',
+                        borderRadius: '6px',
+                        marginBottom: '8px',
+                      }}
+                    >
+                      <p
+                        style={{
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: 'var(--primary)',
+                          margin: 0,
+                        }}
+                      >
+                        {ROLE_NAMES[user.role]}
+                      </p>
+                    </div>
+
+                    {/* ID */}
+                    <p
+                      style={{
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                        fontFamily: 'monospace',
+                        margin: 0,
+                      }}
+                    >
+                      ID: {user.public_id || user.id}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  marginBottom: '24px',
+                  paddingBottom: '16px',
+                  borderBottom: '1px solid var(--border)',
+                }}
+              >
+                <button
+                  onClick={() => setIsSidebarCollapsed(false)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '20px',
+                    padding: '4px',
+                    color: 'var(--text-muted)',
+                    transition: 'color 0.2s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
+                  title="Развернуть"
+                >
+                  →
+                </button>
+              </div>
+            )}
 
             {/* Навигация */}
             <nav>
@@ -281,6 +384,45 @@ export default function DashboardLayout() {
                   </NavLink>
                 );
               })}
+
+              {/* Кнопка выхода */}
+              <div
+                style={{
+                  marginTop: '16px',
+                  paddingTop: '16px',
+                  borderTop: '1px solid var(--border)',
+                }}
+              >
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 16px',
+                    width: '100%',
+                    borderRadius: '8px',
+                    textDecoration: 'none',
+                    color: '#ef4444',
+                    background: 'transparent',
+                    border: 'none',
+                    fontWeight: 500,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
+                  title="Выйти из аккаунта"
+                >
+                  <LogOut size={20} />
+                  {!isSidebarCollapsed && <span>Выйти</span>}
+                </button>
+              </div>
             </nav>
           </div>
         </aside>

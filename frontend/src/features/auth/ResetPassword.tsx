@@ -28,7 +28,7 @@ export default function ResetPassword() {
     try {
       await resetPassword(token, newPassword);
       setMessage('✅ Пароль успешно изменен! Перенаправление...');
-      setTimeout(() => navigate('/account'), 2000);
+      setTimeout(() => navigate('/dashboard'), 2000);
     } catch (error: any) {
       setMessage(`❌ ${error.message}`);
     } finally {

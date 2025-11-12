@@ -11,7 +11,6 @@ import Templates from './pages/Templates';
 import Features from './pages/Features';
 import NotFound from './pages/NotFound';
 import AuthGate from './features/auth/AuthGate';
-import AccountPage from './features/account/AccountPage';
 import VerifyEmail from './features/auth/VerifyEmail';
 import ResetPassword from './features/auth/ResetPassword';
 import AuthModal from './features/auth/AuthModal';
@@ -37,14 +36,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="pricing" element={<Pricing />} />
           <Route path="templates" element={<Templates />} />
           <Route path="features" element={<Features />} />
-          <Route
-            path="account"
-            element={
-              <AuthGate>
-                <AccountPage />
-              </AuthGate>
-            }
-          />
           <Route path="auth/verify" element={<VerifyEmail />} />
           <Route path="auth/reset" element={<ResetPassword />} />
           <Route path="editor/:id" element={<EditorV2Shell />} />

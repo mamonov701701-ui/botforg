@@ -20,7 +20,7 @@ export default function VerifyEmail() {
       .then(() => {
         setStatus('success');
         setMessage('Email успешно подтвержден! Перенаправление...');
-        setTimeout(() => navigate('/account'), 2000);
+        setTimeout(() => navigate('/dashboard'), 2000);
       })
       .catch(error => {
         setStatus('error');

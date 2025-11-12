@@ -43,7 +43,16 @@ class PlatformRole(Base):
         """Проверка истек ли срок действия роли"""
         if not self.expires_at:
             return False
-        return datetime.now(timezone.utc) > self.expires_at
+        
+        # Приводим к timezone-aware для корректного сравнения
+        now = datetime.now(timezone.utc)
+        expires = self.expires_at
+        
+        # Если expires_at naive (без timezone), делаем его timezone-aware UTC
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+        
+        return now > expires
     
     def is_valid(self) -> bool:
         """Проверка действительна ли роль (активна и не истекла)"""

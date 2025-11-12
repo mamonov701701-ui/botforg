@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Shield, Clock, Search, Plus, X, Check } from 'lucide-react';
+import { Users, Shield, Clock, Search, Plus, X, Check, Trash2 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import {
   getAllUsers,
   assignPlatformRole,
   updatePlatformRole,
   deletePlatformRole,
+  removeTeamMember,
   getAvailableRoles,
   type User,
   type PlatformRole,
@@ -28,9 +29,19 @@ export default function BFTeamPage() {
     try {
       setLoading(true);
       const [usersData, rolesData] = await Promise.all([
-        getAllUsers(searchQuery),
+        getAllUsers(searchQuery, true), // Всегда показываем только команду
         getAvailableRoles(),
       ]);
+
+      // DEBUG: Проверяем что приходит
+      console.log('=== BF Team Users Data ===');
+      if (usersData && usersData.length > 0) {
+        console.log('First user:', usersData[0]);
+        console.log('Has public_id?', 'public_id' in usersData[0]);
+        console.log('public_id value:', usersData[0].public_id);
+        console.log('id value:', usersData[0].id);
+      }
+
       setUsers(usersData || []);
       setAvailableRoles(rolesData || []);
     } catch (error) {
@@ -78,13 +89,41 @@ export default function BFTeamPage() {
   };
 
   const handleDeleteRole = async (roleId: number) => {
-    if (!confirm('Удалить эту роль?')) return;
+    if (!confirm('Вы уверены, что хотите удалить эту роль? Это действие нельзя отменить.')) return;
 
     try {
       await deletePlatformRole(roleId);
+      alert('Роль успешно удалена!');
       await loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete role:', error);
+      const errorMsg = error.response?.data?.detail || error.message || 'Ошибка при удалении роли';
+      alert(errorMsg);
+    }
+  };
+
+  const handleRemoveTeamMember = async (userId: number, userName: string, hasRoles: boolean) => {
+    if (!hasRoles) {
+      alert('У этого пользователя нет BF-ролей. Удалять нечего.');
+      return;
+    }
+
+    if (
+      !confirm(
+        `Вы уверены, что хотите удалить "${userName}" из команды?\n\nВсе BF-роли этого пользователя будут удалены. Это действие нельзя отменить.`
+      )
+    )
+      return;
+
+    try {
+      await removeTeamMember(userId);
+      alert('Участник успешно удален из команды!');
+      await loadData();
+    } catch (error: any) {
+      console.error('Failed to remove team member:', error);
+      const errorMsg =
+        error.response?.data?.detail || error.message || 'Ошибка при удалении участника';
+      alert(errorMsg);
     }
   };
 
@@ -94,9 +133,17 @@ export default function BFTeamPage() {
       subtitle="Управление пользователями платформы и назначение BF-ролей"
     >
       {/* Toolbar */}
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', alignItems: 'center' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '16px',
+          marginBottom: '24px',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+        }}
+      >
         {/* Search */}
-        <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
+        <div style={{ position: 'relative', flex: 1, maxWidth: '400px', minWidth: '250px' }}>
           <Search
             size={20}
             style={{
@@ -109,7 +156,7 @@ export default function BFTeamPage() {
           />
           <input
             type="text"
-            placeholder="Поиск по email или имени..."
+            placeholder="Поиск участника по email или имени..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             style={{
@@ -143,7 +190,7 @@ export default function BFTeamPage() {
           }}
         >
           <Plus size={18} />
-          Добавить по ID
+          Добавить участника
         </button>
       </div>
 
@@ -192,7 +239,7 @@ export default function BFTeamPage() {
                           fontSize: '13px',
                         }}
                       >
-                        #{user.id}
+                        {user.public_id || user.id}
                       </span>
                     </td>
                     <td style={tdStyle}>{user.name || '—'}</td>
@@ -213,10 +260,13 @@ export default function BFTeamPage() {
                     <td style={tdStyle}>
                       {user.platform_roles.length > 0 ? (
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                          {user.platform_roles.map((role, idx) => (
-                            <span
-                              key={idx}
+                          {user.platform_roles.map(role => (
+                            <div
+                              key={role.id}
                               style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
                                 padding: '4px 8px',
                                 background: 'var(--primary)',
                                 color: '#000',
@@ -225,8 +275,26 @@ export default function BFTeamPage() {
                                 fontWeight: 600,
                               }}
                             >
-                              {role}
-                            </span>
+                              <span>{role.role_name}</span>
+                              <button
+                                onClick={() => handleDeleteRole(role.id)}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  padding: '0',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  color: '#000',
+                                  opacity: 0.7,
+                                }}
+                                onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+                                onMouseLeave={e => (e.currentTarget.style.opacity = '0.7')}
+                                title="Удалить роль"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
                           ))}
                         </div>
                       ) : (
@@ -236,28 +304,75 @@ export default function BFTeamPage() {
                       )}
                     </td>
                     <td style={tdStyle}>
-                      <button
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setShowAssignModal(true);
-                        }}
-                        style={{
-                          padding: '6px 12px',
-                          background: 'var(--primary)',
-                          color: '#000',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        <Plus size={14} />
-                        Роль
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setShowAssignModal(true);
+                          }}
+                          style={{
+                            padding: '6px 12px',
+                            background: 'var(--primary)',
+                            color: '#000',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Plus size={14} />
+                          Роль
+                        </button>
+
+                        {/* Кнопка удаления участника (всегда видна) */}
+                        <button
+                          onClick={() =>
+                            handleRemoveTeamMember(
+                              user.id,
+                              user.name || user.email,
+                              user.platform_roles.length > 0
+                            )
+                          }
+                          style={{
+                            padding: '8px',
+                            background:
+                              user.platform_roles.length > 0
+                                ? 'rgba(239, 68, 68, 0.1)'
+                                : 'rgba(107, 114, 128, 0.1)',
+                            color: user.platform_roles.length > 0 ? '#ef4444' : '#6b7280',
+                            border:
+                              user.platform_roles.length > 0
+                                ? '1px solid rgba(239, 68, 68, 0.3)'
+                                : '1px solid rgba(107, 114, 128, 0.2)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            opacity: user.platform_roles.length > 0 ? 1 : 0.5,
+                          }}
+                          title={
+                            user.platform_roles.length > 0
+                              ? 'Удалить участника из команды'
+                              : 'У пользователя нет BF-ролей'
+                          }
+                          onMouseEnter={e => {
+                            if (user.platform_roles.length > 0) {
+                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+                            }
+                          }}
+                          onMouseLeave={e => {
+                            if (user.platform_roles.length > 0) {
+                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                            }
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -267,7 +382,11 @@ export default function BFTeamPage() {
                     colSpan={6}
                     style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}
                   >
-                    {loading ? 'Загрузка...' : 'Пользователи не найдены'}
+                    {loading
+                      ? 'Загрузка...'
+                      : searchQuery
+                        ? 'Участников с таким именем или email не найдено'
+                        : 'В команде пока нет участников. Нажмите "Добавить участника" для назначения BF-ролей.'}
                   </td>
                 </tr>
               )}
@@ -349,9 +468,9 @@ function AddByIdModal({ availableRoles, onAssign, onClose }: AddByIdModalProps) 
         }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Назначить роль по ID</h2>
+        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Добавить участника в команду</h2>
         <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
-          Введите ID пользователя и выберите BF-роль
+          Введите 8-значный ID пользователя и назначьте ему BF-роль
         </p>
 
         <form onSubmit={handleSubmit}>
@@ -364,11 +483,11 @@ function AddByIdModal({ availableRoles, onAssign, onClose }: AddByIdModalProps) 
                 fontWeight: 600,
               }}
             >
-              ID пользователя
+              ID пользователя (8 цифр)
             </label>
             <input
               type="number"
-              placeholder="Например: 130"
+              placeholder="Например: 97410876"
               value={userId}
               onChange={e => setUserId(e.target.value)}
               required
@@ -463,7 +582,7 @@ function AddByIdModal({ availableRoles, onAssign, onClose }: AddByIdModalProps) 
                 cursor: 'pointer',
               }}
             >
-              Назначить роль
+              Добавить в команду
             </button>
             <button
               type="button"
@@ -537,9 +656,9 @@ function AssignRoleModal({ user, availableRoles, onAssign, onClose }: AssignRole
         }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Назначить BF-роль</h2>
+        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Назначить дополнительную роль</h2>
         <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
-          Пользователь: <strong>{user.name || user.email}</strong> (ID: #{user.id})
+          Участник: <strong>{user.name || user.email}</strong> (ID: #{user.id})
         </p>
 
         <form onSubmit={handleSubmit}>

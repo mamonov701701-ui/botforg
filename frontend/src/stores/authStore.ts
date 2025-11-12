@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 interface User {
   id: number;
+  public_id?: number; // 8-значный публичный ID
   email: string;
   name: string | null;
   avatar: string | null;

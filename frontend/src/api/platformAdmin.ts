@@ -3,13 +3,22 @@
  */
 import api from './client';
 
+export interface PlatformRoleListItem {
+  id: number;
+  role_name: string;
+  granted_at: string;
+  expires_at: string | null;
+  is_active: boolean;
+}
+
 export interface User {
   id: number;
+  public_id: number;
   email: string;
   name: string | null;
   role: string;
   created_at: string;
-  platform_roles: string[];
+  platform_roles: PlatformRoleListItem[];
 }
 
 export interface PlatformRole {
@@ -43,9 +52,10 @@ export interface UpdateRoleRequest {
 /**
  * Получить список всех пользователей
  */
-export async function getAllUsers(search?: string): Promise<User[]> {
+export async function getAllUsers(search?: string, teamOnly?: boolean): Promise<User[]> {
   const params = new URLSearchParams();
   if (search) params.append('search', search);
+  if (teamOnly) params.append('team_only', 'true');
 
   const response = await api.get(`/api/platform-admin/users?${params.toString()}`);
   // API возвращает массив напрямую
@@ -100,6 +110,13 @@ export async function getAvailableRoles(): Promise<string[]> {
     console.error('Failed to load available roles:', error);
     return [];
   }
+}
+
+/**
+ * Удалить участника из BF команды (удаляет все его BF-роли)
+ */
+export async function removeTeamMember(userId: number): Promise<void> {
+  await api.delete(`/api/platform-admin/users/${userId}/team-member`);
 }
 
 /**

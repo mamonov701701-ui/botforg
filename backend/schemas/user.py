@@ -12,6 +12,7 @@ class UserCreate(BaseModel):
 
 class UserOut(BaseModel):
     id: int
+    public_id: int  # 8-значный публичный ID
     email: str
     name: Optional[str] = None
     created_at: datetime

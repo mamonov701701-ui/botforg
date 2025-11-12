@@ -27,7 +27,7 @@ export default function SignIn() {
         await loginEmail(email, password);
         setMessage('✅ Вход выполнен! Перенаправление...');
         setTimeout(() => {
-          window.location.href = '/account';
+          window.location.href = '/dashboard';
         }, 1000);
       } else if (emailMode === 'reset') {
         await requestPasswordReset(email);

@@ -19,13 +19,25 @@ router = APIRouter(prefix="/api/platform-admin", tags=["Platform Admin"])
 
 # === Schemas ===
 
+class PlatformRoleListItem(BaseModel):
+    id: int
+    role_name: str
+    granted_at: datetime
+    expires_at: Optional[datetime]
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
+
 class UserListItem(BaseModel):
     id: int
+    public_id: int
     email: str
     name: Optional[str]
     role: str
     created_at: datetime
-    platform_roles: List[str] = []
+    platform_roles: List[PlatformRoleListItem] = []
     
     class Config:
         from_attributes = True
@@ -60,6 +72,7 @@ class PlatformRoleOut(BaseModel):
 
 class UserDetailOut(BaseModel):
     id: int
+    public_id: int
     email: str
     name: Optional[str]
     role: str
@@ -89,14 +102,32 @@ async def get_all_users(
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
+    team_only: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_owner)
 ):
     """
     Получить список всех пользователей платформы
     Только для owner
+    
+    Args:
+        team_only: если True, показывать только участников BF команды (с активными ролями)
     """
     query = db.query(User)
+    
+    # Фильтр только участников команды
+    if team_only:
+        # Получаем ID пользователей с активными ролями
+        team_user_ids = db.query(PlatformRole.user_id).filter(
+            PlatformRole.is_active == True
+        ).distinct().all()
+        team_user_ids = [uid[0] for uid in team_user_ids]
+        
+        if team_user_ids:
+            query = query.filter(User.id.in_(team_user_ids))
+        else:
+            # Если нет участников команды, возвращаем пустой список
+            return []
     
     # Поиск по email или имени
     if search:
@@ -114,13 +145,26 @@ async def get_all_users(
             PlatformRole.is_active == True
         ).all()
         
+        # Формируем объекты ролей с ID для возможности удаления
+        role_items = []
+        for pr in platform_roles:
+            if pr.is_valid():
+                role_items.append(PlatformRoleListItem(
+                    id=pr.id,
+                    role_name=pr.role_name,
+                    granted_at=pr.granted_at,
+                    expires_at=pr.expires_at,
+                    is_active=pr.is_active
+                ))
+        
         user_dict = {
             "id": user.id,
+            "public_id": user.public_id,
             "email": user.email,
             "name": user.name,
             "role": user.role,
             "created_at": user.created_at,
-            "platform_roles": [pr.role_name for pr in platform_roles if pr.is_valid()]
+            "platform_roles": role_items
         }
         result.append(UserListItem(**user_dict))
     
@@ -148,6 +192,7 @@ async def get_user_detail(
     
     return UserDetailOut(
         id=user.id,
+        public_id=user.public_id,
         email=user.email,
         name=user.name,
         role=user.role,
@@ -165,11 +210,16 @@ async def assign_platform_role(
     """
     Назначить BF-роль пользователю
     Только для owner
+    
+    user_id может быть как внутренним ID, так и публичным ID (8-значный)
     """
-    # Проверяем существование пользователя
-    user = db.query(User).filter(User.id == role_data.user_id).first()
+    # Ищем пользователя сначала по public_id, потом по обычному id
+    user = db.query(User).filter(User.public_id == role_data.user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        user = db.query(User).filter(User.id == role_data.user_id).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail=f"Пользователь с ID {role_data.user_id} не найден")
     
     # Проверяем валидность роли
     if role_data.role_name not in BF_ROLES:
@@ -180,7 +230,7 @@ async def assign_platform_role(
     
     # Проверяем, нет ли уже активной такой роли
     existing_role = db.query(PlatformRole).filter(
-        PlatformRole.user_id == role_data.user_id,
+        PlatformRole.user_id == user.id,
         PlatformRole.role_name == role_data.role_name,
         PlatformRole.is_active == True
     ).first()
@@ -201,7 +251,7 @@ async def assign_platform_role(
             pass
     
     new_role = PlatformRole(
-        user_id=role_data.user_id,
+        user_id=user.id,  # Используем внутренний ID найденного пользователя
         role_name=role_data.role_name,
         granted_by=current_user.id,
         expires_at=expires_at_dt,
@@ -273,6 +323,46 @@ async def get_available_roles(
     Только для owner
     """
     return BF_ROLES
+
+
+@router.delete("/users/{user_id}/team-member")
+async def remove_team_member(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_owner)
+):
+    """
+    Удалить участника из BF команды (удаляет все его BF-роли)
+    Только для owner
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    
+    # Защита от удаления самого себя
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Вы не можете удалить себя из команды"
+        )
+    
+    # Удаляем все BF-роли пользователя
+    roles_to_delete = db.query(PlatformRole).filter(
+        PlatformRole.user_id == user_id
+    ).all()
+    
+    roles_count = len(roles_to_delete)
+    
+    for role in roles_to_delete:
+        db.delete(role)
+    
+    db.commit()
+    
+    return {
+        "detail": "Участник удален из команды",
+        "user_id": user_id,
+        "roles_removed": roles_count
+    }
 
 
 @router.patch("/users/{user_id}/base-role")

@@ -20,7 +20,7 @@ export default function AuthModal({ open, onClose }) {
   function handleSuccess(token) {
     localStorage.setItem('token', token);
     onClose();
-    navigate('/account');
+    navigate('/dashboard');
   }
 
   return (

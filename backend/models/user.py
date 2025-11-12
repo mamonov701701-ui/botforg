@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
+import random
 
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Column, DateTime, Integer, String, BigInteger
 from sqlalchemy.orm import relationship
 
 from backend.database import Base
@@ -13,6 +14,7 @@ class User(Base):
     __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(BigInteger, unique=True, nullable=False, index=True, default=lambda: random.randint(10000000, 99999999))  # 8-значный публичный ID
     email = Column(String, unique=True, nullable=False, index=True)
     name = Column(String, nullable=True)
     avatar = Column(String, nullable=True)

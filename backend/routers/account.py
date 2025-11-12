@@ -10,6 +10,7 @@ router = APIRouter(tags=["account"])
 
 class UserProfile(BaseModel):
     id: int
+    public_id: int  # 8-значный публичный ID
     email: str
     name: str | None
     avatar: str | None
@@ -29,6 +30,7 @@ async def get_me(
 
     return UserProfile(
         id=current_user.id,
+        public_id=current_user.public_id,
         email=current_user.email,
         name=current_user.name,
         avatar=current_user.avatar,
