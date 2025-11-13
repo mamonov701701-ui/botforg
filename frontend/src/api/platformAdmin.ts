@@ -86,7 +86,7 @@ export async function updatePlatformRole(
   data: UpdateRoleRequest
 ): Promise<PlatformRole> {
   const response = await api.patch(`/api/platform-admin/roles/${roleId}`, data);
-  return response.data;
+  return response;
 }
 
 /**
@@ -123,7 +123,5 @@ export async function removeTeamMember(userId: number): Promise<void> {
  * Изменить базовую роль пользователя
  */
 export async function updateUserBaseRole(userId: number, role: string): Promise<void> {
-  await api.patch(`/api/platform-admin/users/${userId}/base-role`, null, {
-    params: { role },
-  });
+  await api.patch(`/api/platform-admin/users/${userId}/base-role?role=${encodeURIComponent(role)}`);
 }

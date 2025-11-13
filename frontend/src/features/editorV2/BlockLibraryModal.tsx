@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useEditorStore } from '../../stores/editorStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { nanoid } from 'nanoid';
+import { ROLE_NAMES } from '../../constants/roles';
 
 // Category names mapping
 const CATEGORY_LABELS: Record<string, string> = {
@@ -202,12 +203,12 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                   cursor: 'pointer',
                 }}
               >
-                <option value="viewer">Viewer</option>
-                <option value="support">Support</option>
-                <option value="developer">Developer</option>
-                <option value="manager_template">Manager Template</option>
-                <option value="admin">Admin</option>
-                <option value="owner">Owner</option>
+                <option value="viewer">{ROLE_NAMES.viewer}</option>
+                <option value="support">{ROLE_NAMES.support}</option>
+                <option value="developer">{ROLE_NAMES.developer}</option>
+                <option value="manager_template">{ROLE_NAMES.templates_manager}</option>
+                <option value="admin">{ROLE_NAMES.admin}</option>
+                <option value="owner">{ROLE_NAMES.owner}</option>
               </select>
             </div>
           </div>

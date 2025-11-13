@@ -23,6 +23,7 @@ from backend.models.editor import Node, Edge
 from backend.models.referral import Referral
 from backend.models.scenario import Scenario, ScenarioVersion
 from backend.models.platform_role import PlatformRole
+from backend.models.bf_team_member import BFTeamMember
 
 __all__ = [
     "User",
@@ -53,4 +54,5 @@ __all__ = [
     "Scenario",
     "ScenarioVersion",
     "PlatformRole",
+    "BFTeamMember",
 ]

@@ -97,6 +97,14 @@ export const put = (path: string, body?: any, options?: RequestInit) => {
   });
 };
 
+export const patch = (path: string, body?: any, options?: RequestInit) => {
+  return request(path, {
+    ...options,
+    method: 'PATCH',
+    body: body ? JSON.stringify(body) : undefined,
+  });
+};
+
 export const del = (path: string, options?: RequestInit) => {
   return request(path, { ...options, method: 'DELETE' });
 };
@@ -106,6 +114,7 @@ const api = {
   get,
   post,
   put,
+  patch,
   delete: del,
 };
 

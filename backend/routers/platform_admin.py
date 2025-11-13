@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from backend.database import get_db
 from backend.models.user import User
 from backend.models.platform_role import PlatformRole, BF_ROLES
+from backend.models.bf_team_member import BFTeamMember
 from backend.dependencies.auth import get_current_user
 
 
@@ -116,12 +117,14 @@ async def get_all_users(
     query = db.query(User)
     
     # Фильтр только участников команды
+    # Используем таблицу bf_team_members для отслеживания участников
+    # Участники остаются в списке даже после удаления всех ролей
     if team_only:
-        # Получаем ID пользователей с активными ролями
-        team_user_ids = db.query(PlatformRole.user_id).filter(
-            PlatformRole.is_active == True
-        ).distinct().all()
-        team_user_ids = [uid[0] for uid in team_user_ids]
+        # Получаем ID активных участников команды из таблицы bf_team_members
+        team_members = db.query(BFTeamMember).filter(
+            BFTeamMember.is_active == True
+        ).all()
+        team_user_ids = [tm.user_id for tm in team_members]
         
         if team_user_ids:
             query = query.filter(User.id.in_(team_user_ids))
@@ -259,6 +262,22 @@ async def assign_platform_role(
     )
     
     db.add(new_role)
+    
+    # Проверяем, есть ли уже запись участника команды
+    # Если нет - создаем запись при назначении первой роли
+    team_member = db.query(BFTeamMember).filter(
+        BFTeamMember.user_id == user.id
+    ).first()
+    
+    if not team_member:
+        # Добавляем пользователя в команду при назначении первой роли
+        team_member = BFTeamMember(
+            user_id=user.id,
+            added_by=current_user.id,
+            is_active=True
+        )
+        db.add(team_member)
+    
     db.commit()
     db.refresh(new_role)
     
@@ -356,12 +375,26 @@ async def remove_team_member(
     for role in roles_to_delete:
         db.delete(role)
     
+    # Удаляем запись участника команды
+    team_member = db.query(BFTeamMember).filter(
+        BFTeamMember.user_id == user_id
+    ).first()
+    
+    if team_member:
+        db.delete(team_member)
+    
+    # Понижаем базовую роль до "user", чтобы ограничить доступ к платформе
+    # Это предотвращает использование платформы бесплатно после удаления из команды
+    if user.role != "user":
+        user.role = "user"
+    
     db.commit()
     
     return {
         "detail": "Участник удален из команды",
         "user_id": user_id,
-        "roles_removed": roles_count
+        "roles_removed": roles_count,
+        "base_role_changed": True
     }
 
 

@@ -298,7 +298,7 @@ export default function DashboardLayout() {
                           margin: 0,
                         }}
                       >
-                        {ROLE_NAMES[user.role]}
+                        {ROLE_NAMES[user.role as keyof typeof ROLE_NAMES] || user.role}
                       </p>
                     </div>
 

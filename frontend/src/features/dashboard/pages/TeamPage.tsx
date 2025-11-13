@@ -506,7 +506,7 @@ export default function TeamPage() {
                       <option value="viewer">{ROLE_NAMES.viewer}</option>
                     </select>
                   ) : (
-                    <span>{ROLE_NAMES[member.role]}</span>
+                    <span>{ROLE_NAMES[member.role] || member.role}</span>
                   )}
                 </div>
                 <div>

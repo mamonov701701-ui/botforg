@@ -1,5 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Users, Shield, Clock, Search, Plus, X, Check, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Users,
+  Shield,
+  Clock,
+  Search,
+  Plus,
+  X,
+  Check,
+  Trash2,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Settings,
+} from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import {
   getAllUsers,
@@ -8,14 +21,22 @@ import {
   deletePlatformRole,
   removeTeamMember,
   getAvailableRoles,
+  updateUserBaseRole,
   type User,
   type PlatformRole,
 } from '../../../api/platformAdmin';
+import { ROLES, ROLE_NAMES } from '../../../constants/roles';
+import { toast } from '../../../utils/toast';
+
+type SortField = 'id' | 'name' | 'email' | 'role' | 'platform_roles';
+type SortDirection = 'asc' | 'desc' | null;
 
 export default function BFTeamPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -24,6 +45,79 @@ export default function BFTeamPage() {
   useEffect(() => {
     loadData();
   }, [searchQuery]);
+
+  // Сортировка данных
+  const sortedUsers = useMemo(() => {
+    if (!sortField || !sortDirection) return users;
+
+    return [...users].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortField) {
+        case 'id':
+          aValue = a.public_id || a.id;
+          bValue = b.public_id || b.id;
+          break;
+        case 'name':
+          aValue = (a.name || '').toLowerCase();
+          bValue = (b.name || '').toLowerCase();
+          break;
+        case 'email':
+          aValue = a.email.toLowerCase();
+          bValue = b.email.toLowerCase();
+          break;
+        case 'role':
+          aValue = a.role.toLowerCase();
+          bValue = b.role.toLowerCase();
+          break;
+        case 'platform_roles':
+          // Сортируем по названиям ролей (отсортированным по алфавиту)
+          // Если ролей нет - используем 'zzz' чтобы они были в конце
+          if (a.platform_roles.length === 0) {
+            aValue = 'zzz_no_roles';
+          } else {
+            aValue = a.platform_roles
+              .map(r => r.role_name)
+              .sort()
+              .join(', ')
+              .toLowerCase();
+          }
+
+          if (b.platform_roles.length === 0) {
+            bValue = 'zzz_no_roles';
+          } else {
+            bValue = b.platform_roles
+              .map(r => r.role_name)
+              .sort()
+              .join(', ')
+              .toLowerCase();
+          }
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [users, sortField, sortDirection]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Переключаем направление: asc -> desc -> null
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else if (sortDirection === 'desc') {
+        setSortField(null);
+        setSortDirection(null);
+      }
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -57,7 +151,7 @@ export default function BFTeamPage() {
         expires_at,
       });
 
-      alert('Роль успешно назначена!');
+      toast.success('Роль успешно назначена!');
       await loadData();
       setShowAssignModal(false);
       setShowAddByIdModal(false);
@@ -65,8 +159,13 @@ export default function BFTeamPage() {
       console.error('Assign role error:', error);
       const errorMsg =
         error.response?.data?.detail || error.message || 'Ошибка при назначении роли';
-      alert(errorMsg);
+      toast.error(errorMsg);
     }
+  };
+
+  const handleUpdateBaseRole = async (userId: number, role: string) => {
+    await updateUserBaseRole(userId, role);
+    await loadData(); // Обновляем список после изменения роли
   };
 
   const handleToggleRole = async (roleId: number, isActive: boolean) => {
@@ -83,12 +182,12 @@ export default function BFTeamPage() {
 
     try {
       await deletePlatformRole(roleId);
-      alert('Роль успешно удалена!');
-      await loadData();
+      toast.success('Роль успешно удалена!');
+      await loadData(); // Обновляем список, но участник остается в списке
     } catch (error: any) {
       console.error('Failed to delete role:', error);
       const errorMsg = error.response?.data?.detail || error.message || 'Ошибка при удалении роли';
-      alert(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
@@ -201,17 +300,107 @@ export default function BFTeamPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
-                <th style={thStyle}>ID</th>
-                <th style={thStyle}>Имя</th>
-                <th style={thStyle}>Email</th>
-                <th style={thStyle}>Базовая роль</th>
-                <th style={thStyle}>BF-роли</th>
+                <th
+                  style={{ ...thStyle, cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('id')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255, 210, 76, 0.1)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    ID
+                    {sortField === 'id' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp size={14} />
+                      ) : (
+                        <ArrowDown size={14} />
+                      )
+                    ) : (
+                      <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                    )}
+                  </div>
+                </th>
+                <th
+                  style={{ ...thStyle, cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('name')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255, 210, 76, 0.1)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    Имя
+                    {sortField === 'name' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp size={14} />
+                      ) : (
+                        <ArrowDown size={14} />
+                      )
+                    ) : (
+                      <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                    )}
+                  </div>
+                </th>
+                <th
+                  style={{ ...thStyle, cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('email')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255, 210, 76, 0.1)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    Email
+                    {sortField === 'email' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp size={14} />
+                      ) : (
+                        <ArrowDown size={14} />
+                      )
+                    ) : (
+                      <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                    )}
+                  </div>
+                </th>
+                <th
+                  style={{ ...thStyle, cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('role')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255, 210, 76, 0.1)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    Базовая роль
+                    {sortField === 'role' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp size={14} />
+                      ) : (
+                        <ArrowDown size={14} />
+                      )
+                    ) : (
+                      <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                    )}
+                  </div>
+                </th>
+                <th
+                  style={{ ...thStyle, cursor: 'pointer', userSelect: 'none' }}
+                  onClick={() => handleSort('platform_roles')}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255, 210, 76, 0.1)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'var(--card)')}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    BF-роли
+                    {sortField === 'platform_roles' ? (
+                      sortDirection === 'asc' ? (
+                        <ArrowUp size={14} />
+                      ) : (
+                        <ArrowDown size={14} />
+                      )
+                    ) : (
+                      <ArrowUpDown size={14} style={{ opacity: 0.3 }} />
+                    )}
+                  </div>
+                </th>
                 <th style={thStyle}>Действия</th>
               </tr>
             </thead>
             <tbody>
-              {users && users.length > 0 ? (
-                users.map(user => (
+              {sortedUsers && sortedUsers.length > 0 ? (
+                sortedUsers.map(user => (
                   <tr
                     key={user.id}
                     style={{
@@ -244,7 +433,7 @@ export default function BFTeamPage() {
                           fontWeight: 500,
                         }}
                       >
-                        {user.role}
+                        {ROLE_NAMES[user.role as keyof typeof ROLE_NAMES] || user.role}
                       </span>
                     </td>
                     <td style={tdStyle}>
@@ -313,9 +502,10 @@ export default function BFTeamPage() {
                             alignItems: 'center',
                             gap: '4px',
                           }}
+                          title="Настройки ролей"
                         >
-                          <Plus size={14} />
-                          Роль
+                          <Settings size={14} />
+                          Настройка
                         </button>
 
                         {/* Кнопка удаления участника (всегда видна) */}
@@ -391,6 +581,7 @@ export default function BFTeamPage() {
           user={selectedUser}
           availableRoles={availableRoles}
           onAssign={handleAssignRole}
+          onUpdateBaseRole={handleUpdateBaseRole}
           onClose={() => {
             setShowAssignModal(false);
             setSelectedUser(null);
@@ -572,7 +763,7 @@ function AddByIdModal({ availableRoles, onAssign, onClose }: AddByIdModalProps) 
                 cursor: 'pointer',
               }}
             >
-              Добавить в команду
+              Сохранить
             </button>
             <button
               type="button"
@@ -604,18 +795,46 @@ interface AssignRoleModalProps {
   user: User;
   availableRoles: string[];
   onAssign: (userId: number, roleName: string, expiresInDays?: number) => void;
+  onUpdateBaseRole: (userId: number, role: string) => Promise<void>;
   onClose: () => void;
 }
 
-function AssignRoleModal({ user, availableRoles, onAssign, onClose }: AssignRoleModalProps) {
+function AssignRoleModal({
+  user,
+  availableRoles,
+  onAssign,
+  onUpdateBaseRole,
+  onClose,
+}: AssignRoleModalProps) {
   const [selectedRole, setSelectedRole] = useState('');
   const [expiresInDays, setExpiresInDays] = useState<number | ''>('');
+  const [baseRole, setBaseRole] = useState(user.role);
+  const [isUpdatingBaseRole, setIsUpdatingBaseRole] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) return;
 
     onAssign(user.id, selectedRole, expiresInDays ? Number(expiresInDays) : undefined);
+  };
+
+  const handleBaseRoleChange = async (newRole: string) => {
+    if (newRole === user.role) return;
+
+    setIsUpdatingBaseRole(true);
+    try {
+      await onUpdateBaseRole(user.id, newRole);
+      setBaseRole(newRole);
+      toast.success('Базовая роль успешно изменена!');
+    } catch (error: any) {
+      console.error('Failed to update base role:', error);
+      const errorMsg =
+        error.response?.data?.detail || error.message || 'Ошибка при изменении базовой роли';
+      toast.error(errorMsg);
+      setBaseRole(user.role); // Откатываем изменение
+    } finally {
+      setIsUpdatingBaseRole(false);
+    }
   };
 
   return (
@@ -646,12 +865,59 @@ function AssignRoleModal({ user, availableRoles, onAssign, onClose }: AssignRole
         }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Назначить дополнительную роль</h2>
+        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Настройки ролей</h2>
         <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
-          Участник: <strong>{user.name || user.email}</strong> (ID: #{user.id})
+          Участник: <strong>{user.name || user.email}</strong> (ID: {user.public_id || user.id})
         </p>
 
+        {/* Базовая роль */}
+        <div
+          style={{
+            marginBottom: '24px',
+            paddingBottom: '24px',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
+          <label
+            style={{
+              display: 'block',
+              marginBottom: '8px',
+              fontSize: '14px',
+              fontWeight: 600,
+            }}
+          >
+            Базовая роль в проекте
+          </label>
+          <select
+            value={baseRole}
+            onChange={e => handleBaseRoleChange(e.target.value)}
+            disabled={isUpdatingBaseRole}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: 'var(--card)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              color: 'var(--text)',
+              fontSize: '14px',
+              opacity: isUpdatingBaseRole ? 0.6 : 1,
+              cursor: isUpdatingBaseRole ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {Object.values(ROLES).map(role => (
+              <option key={role} value={role}>
+                {ROLE_NAMES[role] || role}
+              </option>
+            ))}
+          </select>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            Базовая роль определяет доступ к функциям платформы
+          </p>
+        </div>
+
+        {/* BF-роли */}
         <form onSubmit={handleSubmit}>
+          <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>BF-роли платформы</h3>
           <div style={{ marginBottom: '20px' }}>
             <label
               style={{
@@ -661,7 +927,7 @@ function AssignRoleModal({ user, availableRoles, onAssign, onClose }: AssignRole
                 fontWeight: 600,
               }}
             >
-              Выберите роль
+              Добавить BF-роль
             </label>
             <select
               value={selectedRole}
@@ -730,7 +996,7 @@ function AssignRoleModal({ user, availableRoles, onAssign, onClose }: AssignRole
                 cursor: 'pointer',
               }}
             >
-              Назначить роль
+              Сохранить
             </button>
             <button
               type="button"
