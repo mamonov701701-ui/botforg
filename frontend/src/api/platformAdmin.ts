@@ -11,6 +11,14 @@ export interface PlatformRoleListItem {
   is_active: boolean;
 }
 
+export interface BaseRoleListItem {
+  id: number;
+  role_name: string;
+  granted_at: string;
+  expires_at: string | null;
+  is_active: boolean;
+}
+
 export interface User {
   id: number;
   public_id: number;
@@ -19,6 +27,7 @@ export interface User {
   role: string;
   created_at: string;
   platform_roles: PlatformRoleListItem[];
+  base_roles: BaseRoleListItem[];
 }
 
 export interface PlatformRole {
@@ -120,8 +129,34 @@ export async function removeTeamMember(userId: number): Promise<void> {
 }
 
 /**
- * Изменить базовую роль пользователя
+ * Изменить базовую роль пользователя (устаревший метод)
  */
 export async function updateUserBaseRole(userId: number, role: string): Promise<void> {
   await api.patch(`/api/platform-admin/users/${userId}/base-role?role=${encodeURIComponent(role)}`);
+}
+
+/**
+ * Назначить базовую роль пользователю с возможностью указать срок действия
+ */
+export async function assignBaseRole(data: AssignRoleRequest): Promise<BaseRoleListItem> {
+  const response = await api.post('/api/platform-admin/base-roles', data);
+  return response.data;
+}
+
+/**
+ * Обновить базовую роль
+ */
+export async function updateBaseRole(
+  roleId: number,
+  data: UpdateRoleRequest
+): Promise<BaseRoleListItem> {
+  const response = await api.patch(`/api/platform-admin/base-roles/${roleId}`, data);
+  return response;
+}
+
+/**
+ * Удалить базовую роль
+ */
+export async function deleteBaseRole(roleId: number): Promise<void> {
+  await api.delete(`/api/platform-admin/base-roles/${roleId}`);
 }

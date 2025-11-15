@@ -22,7 +22,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from backend.database import Base
-from backend.models import auth, user, bot, template, user_template, bot_template, message, billing, payment, purchase, rating, referral, review, tag, team, comment, bonus_account, bot_user_state, token_blacklist
+from backend.models import auth, user, bot, template, user_template, bot_template, message, billing, payment, purchase, rating, referral, review, tag, team, comment, bonus_account, bot_user_state, token_blacklist, platform_role, bf_team_member, base_role
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

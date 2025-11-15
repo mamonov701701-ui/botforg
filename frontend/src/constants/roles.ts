@@ -42,6 +42,7 @@ export const ROLE_DESCRIPTIONS: Record<RoleValue, string> = {
 export const SECTION_ACCESS = {
   dashboard: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer'],
   bots: ['owner', 'admin', 'developer'],
+  scenarios: ['owner', 'admin', 'developer'],
   templates: ['owner', 'admin', 'developer', 'templates_manager'],
   balance: ['owner', 'admin'],
   analytics: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer'],

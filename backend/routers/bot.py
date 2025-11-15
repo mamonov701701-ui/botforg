@@ -9,6 +9,12 @@ from backend.models.bot import Bot
 from backend.models.scenario import Scenario
 from backend.models.user import User as UserModel
 from backend.schemas.bot import BotConnectRequest, BotListOut, BotOut, BotUpdate
+from backend.utils.bot_access import (
+    check_bot_access,
+    check_bot_edit_permission,
+    check_bot_delete_permission,
+    get_accessible_bot_owner_ids,
+)
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -148,9 +154,67 @@ async def connect_bot(
 async def get_bots(
     db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)
 ):
-    """Получение списка ботов пользователя"""
-    bots = db.query(Bot).filter(Bot.owner_id == current_user.id).all()
-    return {"total": len(bots), "items": bots}
+    """
+    Получение списка ботов пользователя.
+    Включает: свои боты + боты команд, где пользователь участник.
+    Возвращает информацию о владельце для группировки по проектам.
+    """
+    from backend.models.team import TeamMember
+    
+    # Получаем список ID владельцев ботов, к которым есть доступ
+    owner_ids = get_accessible_bot_owner_ids(current_user.id, db)
+    
+    # Получаем все боты: свои + боты владельцев команд
+    bots = db.query(Bot).filter(Bot.owner_id.in_(owner_ids)).all()
+    
+    # Получаем информацию о владельцах и ролях в командах
+    owner_info = {}
+    team_roles = {}
+    
+    # Получаем информацию о владельцах
+    owners = db.query(UserModel).filter(UserModel.id.in_(owner_ids)).all()
+    for owner in owners:
+        owner_info[owner.id] = {
+            "name": owner.name,
+            "email": owner.email,
+            "public_id": owner.public_id,
+        }
+    
+    # Получаем роли в командах (если пользователь не владелец)
+    if current_user.id in owner_ids:
+        # Если пользователь владелец, его боты не требуют роли
+        pass
+    
+    team_members = db.query(TeamMember).filter(
+        TeamMember.user_id == current_user.id,
+        TeamMember.owner_id.in_(owner_ids)
+    ).all()
+    
+    for tm in team_members:
+        team_roles[tm.owner_id] = tm.role
+    
+    # Формируем ответ с информацией о владельцах
+    bot_items = []
+    for bot in bots:
+        owner_data = owner_info.get(bot.owner_id, {})
+        team_role = team_roles.get(bot.owner_id) if bot.owner_id != current_user.id else None
+        
+        bot_items.append(BotOut(
+            id=bot.id,
+            title=bot.title,
+            username=bot.username,
+            webhook_url=bot.webhook_url,
+            is_active=bot.is_active,
+            created_at=bot.created_at,
+            updated_at=bot.updated_at,
+            owner_id=bot.owner_id,
+            owner_name=owner_data.get("name"),
+            owner_email=owner_data.get("email"),
+            owner_public_id=owner_data.get("public_id"),
+            team_role=team_role,
+        ))
+    
+    return {"total": len(bot_items), "items": bot_items}
 
 
 @router.get("/{bot_id}", response_model=BotOut)
@@ -160,15 +224,7 @@ async def get_bot(
     current_user: UserModel = Depends(get_current_user),
 ):
     """Получение конкретного бота"""
-    bot = (
-        db.query(Bot).filter(Bot.id == bot_id, Bot.owner_id == current_user.id).first()
-    )
-
-    if not bot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found"
-        )
-
+    bot = check_bot_access(bot_id, current_user.id, db)
     return bot
 
 
@@ -180,13 +236,13 @@ async def update_bot(
     current_user: UserModel = Depends(get_current_user),
 ):
     """Обновление бота"""
-    bot = (
-        db.query(Bot).filter(Bot.id == bot_id, Bot.owner_id == current_user.id).first()
-    )
-
-    if not bot:
+    bot = check_bot_access(bot_id, current_user.id, db)
+    
+    # Проверяем право на редактирование
+    if not check_bot_edit_permission(bot, current_user.id, db):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Your role does not allow editing bots"
         )
 
     # Обновляем только указанные поля
@@ -209,13 +265,13 @@ async def delete_bot(
     current_user: UserModel = Depends(get_current_user),
 ):
     """Деактивация бота (soft delete)"""
-    bot = (
-        db.query(Bot).filter(Bot.id == bot_id, Bot.owner_id == current_user.id).first()
-    )
-
-    if not bot:
+    bot = check_bot_access(bot_id, current_user.id, db)
+    
+    # Только владелец может удалять бота
+    if not check_bot_delete_permission(bot, current_user.id):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Only bot owner can delete bots"
         )
 
     # Soft delete - деактивируем бота
@@ -245,16 +301,7 @@ async def get_bot_graph(
     current_user: UserModel = Depends(get_current_user),
 ):
     """Получение графа бота (узлы и связи)"""
-
-    # Проверяем, что бот существует и принадлежит пользователю
-    bot = (
-        db.query(Bot).filter(Bot.id == bot_id, Bot.owner_id == current_user.id).first()
-    )
-
-    if not bot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found"
-        )
+    bot = check_bot_access(bot_id, current_user.id, db)
 
     # Возвращаем граф из content или дефолтные данные
     graph_data = (
@@ -297,15 +344,13 @@ async def update_bot_graph(
     current_user: UserModel = Depends(get_current_user),
 ):
     """Обновление графа бота (узлы и связи)"""
-
-    # Проверяем, что бот существует и принадлежит пользователю
-    bot = (
-        db.query(Bot).filter(Bot.id == bot_id, Bot.owner_id == current_user.id).first()
-    )
-
-    if not bot:
+    bot = check_bot_access(bot_id, current_user.id, db)
+    
+    # Проверяем право на редактирование
+    if not check_bot_edit_permission(bot, current_user.id, db):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Bot not found"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Your role does not allow editing bots"
         )
 
     # Валидируем структуру данных

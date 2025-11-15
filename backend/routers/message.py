@@ -9,6 +9,11 @@ from backend.models.billing import BillingRecord, UserQuota
 from backend.models.bot import Bot
 from backend.models.message import Message
 from backend.models.user import User as UserModel
+from backend.utils.bot_access import (
+    check_bot_access,
+    check_bot_edit_permission,
+    get_accessible_bot_owner_ids,
+)
 from backend.schemas.message import (
     MessageCreate,
     MessageListOut,
@@ -30,16 +35,12 @@ async def create_message(
 ):
     """Создание нового сообщения"""
 
-    # Проверяем, что бот существует и принадлежит пользователю
-    bot = (
-        db.query(Bot)
-        .filter(Bot.id == message.bot_id, Bot.owner_id == current_user.id)
-        .first()
-    )
-    if not bot:
+    # Проверяем доступ к боту и право на редактирование
+    bot = check_bot_access(message.bot_id, current_user.id, db)
+    if not check_bot_edit_permission(bot, current_user.id, db):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bot not found or access denied",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Your role does not allow creating messages"
         )
 
     # Получаем или создаем квоту пользователя
@@ -115,8 +116,9 @@ async def get_messages(
 ):
     """Получение списка сообщений пользователя"""
 
-    # Базовый запрос - только сообщения для ботов пользователя
-    query = db.query(Message).join(Bot).filter(Bot.owner_id == current_user.id)
+    # Базовый запрос - сообщения для ботов пользователя и команд
+    owner_ids = get_accessible_bot_owner_ids(current_user.id, db)
+    query = db.query(Message).join(Bot).filter(Bot.owner_id.in_(owner_ids))
 
     # Применяем фильтры
     if bot_id:
@@ -139,18 +141,17 @@ async def get_message(
 ):
     """Получение конкретного сообщения"""
 
-    message = (
-        db.query(Message)
-        .join(Bot)
-        .filter(Message.id == message_id, Bot.owner_id == current_user.id)
-        .first()
-    )
-
+    # Получаем сообщение и проверяем доступ через бота
+    message = db.query(Message).filter(Message.id == message_id).first()
+    
     if not message:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
         )
-
+    
+    # Проверяем доступ к боту
+    check_bot_access(message.bot_id, current_user.id, db)
+    
     return message
 
 
@@ -163,16 +164,20 @@ async def update_message(
 ):
     """Обновление сообщения"""
 
-    message = (
-        db.query(Message)
-        .join(Bot)
-        .filter(Message.id == message_id, Bot.owner_id == current_user.id)
-        .first()
-    )
-
+    # Получаем сообщение и проверяем доступ через бота
+    message = db.query(Message).filter(Message.id == message_id).first()
+    
     if not message:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
+        )
+    
+    # Проверяем доступ к боту и право на редактирование
+    bot = check_bot_access(message.bot_id, current_user.id, db)
+    if not check_bot_edit_permission(bot, current_user.id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Your role does not allow editing messages"
         )
 
     # Обновляем только указанные поля
@@ -196,16 +201,20 @@ async def delete_message(
 ):
     """Удаление сообщения (soft delete)"""
 
-    message = (
-        db.query(Message)
-        .join(Bot)
-        .filter(Message.id == message_id, Bot.owner_id == current_user.id)
-        .first()
-    )
-
+    # Получаем сообщение и проверяем доступ через бота
+    message = db.query(Message).filter(Message.id == message_id).first()
+    
     if not message:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
+        )
+    
+    # Проверяем доступ к боту и право на редактирование
+    bot = check_bot_access(message.bot_id, current_user.id, db)
+    if not check_bot_edit_permission(bot, current_user.id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Your role does not allow deleting messages"
         )
 
     # Soft delete - можно добавить поле is_deleted в модель

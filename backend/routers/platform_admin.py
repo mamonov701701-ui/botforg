@@ -2,16 +2,17 @@
 API для управления платформой (только для владельца)
 Управление пользователями и назначение BF-ролей
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from backend.database import get_db
-from backend.models.user import User
+from backend.models.user import User, ROLES
 from backend.models.platform_role import PlatformRole, BF_ROLES
 from backend.models.bf_team_member import BFTeamMember
+from backend.models.base_role import BaseRole
 from backend.dependencies.auth import get_current_user
 
 
@@ -31,6 +32,17 @@ class PlatformRoleListItem(BaseModel):
         from_attributes = True
 
 
+class BaseRoleListItem(BaseModel):
+    id: int
+    role_name: str
+    granted_at: datetime
+    expires_at: Optional[datetime]
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
+
 class UserListItem(BaseModel):
     id: int
     public_id: int
@@ -39,6 +51,7 @@ class UserListItem(BaseModel):
     role: str
     created_at: datetime
     platform_roles: List[PlatformRoleListItem] = []
+    base_roles: List[BaseRoleListItem] = []
     
     class Config:
         from_attributes = True
@@ -55,6 +68,33 @@ class PlatformRoleUpdate(BaseModel):
     is_active: Optional[bool] = None
     expires_at: Optional[datetime] = None
     notes: Optional[str] = None
+
+
+class BaseRoleCreate(BaseModel):
+    user_id: int
+    role_name: str
+    expires_at: Optional[str] = None  # Принимаем строку ISO формата
+    notes: Optional[str] = None
+
+
+class BaseRoleUpdate(BaseModel):
+    is_active: Optional[bool] = None
+    expires_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class BaseRoleOut(BaseModel):
+    id: int
+    user_id: int
+    role_name: str
+    granted_by: int
+    granted_at: datetime
+    expires_at: Optional[datetime]
+    is_active: bool
+    notes: Optional[str]
+    
+    class Config:
+        from_attributes = True
 
 
 class PlatformRoleOut(BaseModel):
@@ -132,15 +172,25 @@ async def get_all_users(
             # Если нет участников команды, возвращаем пустой список
             return []
     
-    # Поиск по email или имени
+    # Поиск по email, имени или public_id
     if search:
-        query = query.filter(
-            (User.email.contains(search)) | (User.name.contains(search))
-        )
+        # Пытаемся преобразовать search в число для поиска по public_id
+        try:
+            search_public_id = int(search)
+            query = query.filter(
+                (User.email.contains(search)) | 
+                (User.name.contains(search)) |
+                (User.public_id == search_public_id)
+            )
+        except ValueError:
+            # Если не число, ищем только по email и имени
+            query = query.filter(
+                (User.email.contains(search)) | (User.name.contains(search))
+            )
     
     users = query.offset(skip).limit(limit).all()
     
-    # Добавляем информацию о BF-ролях
+    # Добавляем информацию о BF-ролях и базовых ролях
     result = []
     for user in users:
         platform_roles = db.query(PlatformRole).filter(
@@ -148,7 +198,7 @@ async def get_all_users(
             PlatformRole.is_active == True
         ).all()
         
-        # Формируем объекты ролей с ID для возможности удаления
+        # Формируем объекты BF-ролей с ID для возможности удаления
         role_items = []
         for pr in platform_roles:
             if pr.is_valid():
@@ -160,6 +210,24 @@ async def get_all_users(
                     is_active=pr.is_active
                 ))
         
+        # Получаем базовые роли с историей
+        base_roles = db.query(BaseRole).filter(
+            BaseRole.user_id == user.id,
+            BaseRole.is_active == True
+        ).all()
+        
+        # Формируем объекты базовых ролей
+        base_role_items = []
+        for br in base_roles:
+            if br.is_valid():
+                base_role_items.append(BaseRoleListItem(
+                    id=br.id,
+                    role_name=br.role_name,
+                    granted_at=br.granted_at,
+                    expires_at=br.expires_at,
+                    is_active=br.is_active
+                ))
+        
         user_dict = {
             "id": user.id,
             "public_id": user.public_id,
@@ -167,7 +235,8 @@ async def get_all_users(
             "name": user.name,
             "role": user.role,
             "created_at": user.created_at,
-            "platform_roles": role_items
+            "platform_roles": role_items,
+            "base_roles": base_role_items
         }
         result.append(UserListItem(**user_dict))
     
@@ -245,7 +314,6 @@ async def assign_platform_role(
         )
     
     # Создаем новую роль
-    from datetime import datetime
     expires_at_dt = None
     if role_data.expires_at:
         try:
@@ -398,19 +466,155 @@ async def remove_team_member(
     }
 
 
+@router.post("/base-roles", response_model=BaseRoleOut)
+async def assign_base_role(
+    role_data: BaseRoleCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_owner)
+):
+    """
+    Назначить базовую роль пользователю с возможностью указать срок действия
+    Только для owner
+    """
+    if role_data.role_name not in ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Неверная роль. Доступные: {', '.join(ROLES)}"
+        )
+    
+    user = db.query(User).filter(User.id == role_data.user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    
+    # Защита от случайного понижения собственной роли
+    if user.id == current_user.id and role_data.role_name != "owner":
+        raise HTTPException(
+            status_code=400,
+            detail="Вы не можете понизить собственную роль владельца"
+        )
+    
+    # Деактивируем все предыдущие активные базовые роли
+    existing_roles = db.query(BaseRole).filter(
+        BaseRole.user_id == user.id,
+        BaseRole.is_active == True
+    ).all()
+    
+    for existing_role in existing_roles:
+        existing_role.is_active = False
+    
+    # Создаем новую базовую роль
+    expires_at_dt = None
+    if role_data.expires_at:
+        try:
+            expires_at_dt = datetime.fromisoformat(role_data.expires_at.replace('Z', '+00:00'))
+        except:
+            pass
+    
+    new_role = BaseRole(
+        user_id=user.id,
+        role_name=role_data.role_name,
+        granted_by=current_user.id,
+        expires_at=expires_at_dt,
+        notes=role_data.notes,
+        is_active=True
+    )
+    
+    db.add(new_role)
+    
+    # Обновляем текущую роль пользователя
+    user.role = role_data.role_name
+    
+    db.commit()
+    db.refresh(new_role)
+    
+    return BaseRoleOut.from_orm(new_role)
+
+
+@router.patch("/base-roles/{role_id}", response_model=BaseRoleOut)
+async def update_base_role(
+    role_id: int,
+    role_update: BaseRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_owner)
+):
+    """
+    Обновить базовую роль (деактивировать, изменить срок и т.д.)
+    Только для owner
+    """
+    role = db.query(BaseRole).filter(BaseRole.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Роль не найдена")
+    
+    # Обновляем поля
+    if role_update.is_active is not None:
+        role.is_active = role_update.is_active
+        # Если деактивируем роль, нужно обновить текущую роль пользователя
+        if not role_update.is_active:
+            user = db.query(User).filter(User.id == role.user_id).first()
+            if user and user.role == role.role_name:
+                # Ищем другую активную базовую роль или ставим "user"
+                other_active = db.query(BaseRole).filter(
+                    BaseRole.user_id == user.id,
+                    BaseRole.is_active == True,
+                    BaseRole.id != role_id
+                ).first()
+                user.role = other_active.role_name if other_active and other_active.is_valid() else "user"
+    
+    if role_update.expires_at is not None:
+        role.expires_at = role_update.expires_at
+    if role_update.notes is not None:
+        role.notes = role_update.notes
+    
+    db.commit()
+    db.refresh(role)
+    
+    return BaseRoleOut.from_orm(role)
+
+
+@router.delete("/base-roles/{role_id}")
+async def delete_base_role(
+    role_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_owner)
+):
+    """
+    Удалить базовую роль
+    Только для owner
+    """
+    role = db.query(BaseRole).filter(BaseRole.id == role_id).first()
+    if not role:
+        raise HTTPException(status_code=404, detail="Роль не найдена")
+    
+    user = db.query(User).filter(User.id == role.user_id).first()
+    
+    # Если удаляемая роль была текущей, обновляем роль пользователя
+    if user and user.role == role.role_name:
+        other_active = db.query(BaseRole).filter(
+            BaseRole.user_id == user.id,
+            BaseRole.is_active == True,
+            BaseRole.id != role_id
+        ).first()
+        user.role = other_active.role_name if other_active and other_active.is_valid() else "user"
+    
+    db.delete(role)
+    db.commit()
+    
+    return {"detail": "Базовая роль удалена"}
+
+
 @router.patch("/users/{user_id}/base-role")
 async def update_user_base_role(
     user_id: int,
     role: str,
+    expires_in_days: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_owner)
 ):
     """
     Изменить базовую роль пользователя (owner, admin, developer и т.д.)
     Только для owner
+    Устаревший endpoint, используйте POST /base-roles для назначения с сроком действия
     """
-    from backend.models.user import ROLES
-    
     if role not in ROLES:
         raise HTTPException(
             status_code=400,
@@ -428,6 +632,31 @@ async def update_user_base_role(
             detail="Вы не можете понизить собственную роль владельца"
         )
     
+    # Деактивируем все предыдущие активные базовые роли
+    existing_roles = db.query(BaseRole).filter(
+        BaseRole.user_id == user.id,
+        BaseRole.is_active == True
+    ).all()
+    
+    for existing_role in existing_roles:
+        existing_role.is_active = False
+    
+    # Создаем новую базовую роль
+    expires_at_dt = None
+    if expires_in_days:
+        expires_at_dt = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + timedelta(days=expires_in_days)
+    
+    new_role = BaseRole(
+        user_id=user.id,
+        role_name=role,
+        granted_by=current_user.id,
+        expires_at=expires_at_dt,
+        is_active=True
+    )
+    
+    db.add(new_role)
     user.role = role
     db.commit()
     

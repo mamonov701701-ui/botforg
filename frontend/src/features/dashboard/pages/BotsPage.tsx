@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Smartphone,
@@ -11,24 +11,22 @@ import {
   Trash2,
   Plus,
   Users,
-  Bot,
+  Bot as BotIcon,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
 import { useAuthStore } from '../../../stores/authStore';
-import { hasAccessToAction } from '../../../constants/roles';
-
-interface Bot {
-  id: string;
-  name: string;
-  channel: 'telegram' | 'whatsapp';
-  status: 'active' | 'paused' | 'error';
-  usersCount: number;
-  messagesCount: number;
-  updatedAt: Date;
-  icon?: string;
-}
+import { hasAccessToAction, ROLE_NAMES } from '../../../constants/roles';
+import {
+  getBots,
+  groupBotsByProject,
+  getProjectName,
+  getProjectRole,
+  type Bot,
+} from '../../../api/bot';
 
 interface BotCardProps {
   bot: Bot;
@@ -373,65 +371,67 @@ export default function BotsPage() {
   const { user } = useAuthStore();
 
   // State
+  const [loading, setLoading] = useState(true);
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [projects, setProjects] = useState<ReturnType<typeof groupBotsByProject>>([]);
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused' | 'error'>('all');
-  const [channelFilter, setChannelFilter] = useState<'all' | 'telegram' | 'whatsapp'>('all');
-  const [selectedBots, setSelectedBots] = useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused'>('all');
+  const [selectedBots, setSelectedBots] = useState<number[]>([]);
 
-  // Моковые данные (позже заменить на API)
-  const mockBots: Bot[] = [
-    {
-      id: '1',
-      name: 'Поддержка магазина',
-      channel: 'telegram',
-      status: 'active',
-      usersCount: 342,
-      messagesCount: 1520,
-      updatedAt: new Date(Date.now() - 1000 * 60 * 30),
-    },
-    {
-      id: '2',
-      name: 'Бот-консультант',
-      channel: 'whatsapp',
-      status: 'paused',
-      usersCount: 128,
-      messagesCount: 890,
-      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 5),
-    },
-    {
-      id: '3',
-      name: 'Бронирование столиков',
-      channel: 'telegram',
-      status: 'error',
-      usersCount: 67,
-      messagesCount: 234,
-      updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    },
-  ];
+  // Загружаем боты
+  useEffect(() => {
+    async function loadBots() {
+      try {
+        setLoading(true);
+        const botsData = await getBots();
+        setBots(botsData.items);
 
-  // Фильтрация
-  const filteredBots = mockBots.filter(bot => {
-    if (statusFilter !== 'all' && bot.status !== statusFilter) return false;
-    if (channelFilter !== 'all' && bot.channel !== channelFilter) return false;
-    if (searchQuery && !bot.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    return true;
-  });
+        if (user) {
+          const grouped = groupBotsByProject(botsData.items, user.id);
+          setProjects(grouped);
 
-  const handleSelectAll = () => {
-    if (selectedBots.length === filteredBots.length) {
-      setSelectedBots([]);
-    } else {
-      setSelectedBots(filteredBots.map(bot => bot.id));
+          // Автоматически разворачиваем все проекты
+          setExpandedProjects(new Set(grouped.map(p => p.owner_id)));
+        }
+      } catch (error) {
+        console.error('Failed to load bots:', error);
+      } finally {
+        setLoading(false);
+      }
     }
+
+    loadBots();
+  }, [user]);
+
+  // Фильтрация ботов
+  const getFilteredBots = (projectBots: Bot[]) => {
+    return projectBots.filter(bot => {
+      if (statusFilter !== 'all' && bot.is_active !== (statusFilter === 'active')) return false;
+      if (searchQuery && !bot.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      return true;
+    });
   };
 
-  const handleSelectBot = (id: string) => {
+  const toggleProject = (ownerId: number) => {
+    setExpandedProjects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(ownerId)) {
+        newSet.delete(ownerId);
+      } else {
+        newSet.add(ownerId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectBot = (id: number) => {
     setSelectedBots(prev =>
       prev.includes(id) ? prev.filter(botId => botId !== id) : [...prev, id]
     );
   };
 
-  const handleBotAction = (action: string, botId: string) => {
+  const handleBotAction = (action: string, botId: number) => {
     console.log(`Action: ${action}, Bot ID: ${botId}`);
     // TODO: Реализовать действия
   };
@@ -441,12 +441,34 @@ export default function BotsPage() {
     // TODO: Реализовать массовые действия
   };
 
+  if (loading) {
+    return (
+      <DashboardPage title="Мои боты" subtitle="Загрузка...">
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              border: '4px solid var(--border)',
+              borderTop: '4px solid var(--primary)',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }}
+          />
+        </div>
+      </DashboardPage>
+    );
+  }
+
+  const totalBots = bots.length;
+  const totalProjects = projects.length;
+
   const canCreate = hasAccessToAction(user?.role, 'bot_create');
 
   return (
     <DashboardPage
       title="Мои боты"
-      subtitle={`Всего ботов: ${filteredBots.length}`}
+      subtitle={`${totalBots} ботов в ${totalProjects} ${totalProjects === 1 ? 'проекте' : 'проектах'}`}
       actions={
         canCreate ? (
           <button
@@ -526,28 +548,7 @@ export default function BotsPage() {
           >
             <option value="all">Все статусы</option>
             <option value="active">Активен</option>
-            <option value="paused">Приостановлен</option>
-            <option value="error">Ошибка</option>
-          </select>
-
-          {/* Фильтр по каналу */}
-          <select
-            value={channelFilter}
-            onChange={e => setChannelFilter(e.target.value as any)}
-            style={{
-              padding: '10px 14px',
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: '6px',
-              fontSize: '14px',
-              color: 'var(--text)',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
-          >
-            <option value="all">Все каналы</option>
-            <option value="telegram">Telegram</option>
-            <option value="whatsapp">WhatsApp</option>
+            <option value="paused">Неактивен</option>
           </select>
         </div>
       </Card>
@@ -621,8 +622,8 @@ export default function BotsPage() {
         </Card>
       )}
 
-      {/* Список ботов */}
-      {filteredBots.length === 0 ? (
+      {/* Список проектов с ботами */}
+      {projects.length === 0 ? (
         <EmptyState
           icon="🤖"
           title="Ботов пока нет"
@@ -637,46 +638,181 @@ export default function BotsPage() {
           }
         />
       ) : (
-        <>
-          {/* Выбрать все */}
-          <div style={{ marginBottom: '16px' }}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                cursor: 'pointer',
-                width: 'fit-content',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={selectedBots.length === filteredBots.length}
-                onChange={handleSelectAll}
-                style={{
-                  width: '18px',
-                  height: '18px',
-                  cursor: 'pointer',
-                  accentColor: 'var(--primary)',
-                }}
-              />
-              <span style={{ fontSize: '14px', fontWeight: 500 }}>Выбрать все</span>
-            </label>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {projects.map(project => {
+            const filteredProjectBots = getFilteredBots(project.bots);
+            const isExpanded = expandedProjects.has(project.owner_id);
 
-          {/* Карточки ботов */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {filteredBots.map(bot => (
-              <BotCard
-                key={bot.id}
-                bot={bot}
-                isSelected={selectedBots.includes(bot.id)}
-                onSelect={handleSelectBot}
-                onAction={handleBotAction}
-              />
-            ))}
-          </div>
-        </>
+            if (filteredProjectBots.length === 0 && searchQuery) {
+              return null; // Пропускаем проекты без ботов при поиске
+            }
+
+            return (
+              <Card key={project.owner_id} style={{ padding: '0' }}>
+                {/* Заголовок проекта */}
+                <div
+                  style={{
+                    padding: '20px',
+                    borderBottom: '1px solid var(--border)',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                  onClick={() => toggleProject(project.owner_id)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                    <div
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '8px',
+                        background: project.is_own
+                          ? 'rgba(255, 210, 76, 0.2)'
+                          : 'rgba(59, 130, 246, 0.2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <BotIcon
+                        size={20}
+                        style={{
+                          color: project.is_own ? 'var(--primary)' : '#3b82f6',
+                        }}
+                      />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '4px' }}>
+                        {getProjectName(project)}
+                      </h3>
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        {!project.is_own && (
+                          <>
+                            <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                              {project.owner_email}
+                            </span>
+                            {project.team_role && (
+                              <span
+                                style={{
+                                  padding: '2px 8px',
+                                  background: 'var(--card)',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                {getProjectRole(project.team_role)}
+                              </span>
+                            )}
+                          </>
+                        )}
+                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                          {filteredProjectBots.length}{' '}
+                          {filteredProjectBots.length === 1 ? 'бот' : 'ботов'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {isExpanded ? (
+                    <ChevronUp size={20} style={{ color: 'var(--text-muted)' }} />
+                  ) : (
+                    <ChevronDown size={20} style={{ color: 'var(--text-muted)' }} />
+                  )}
+                </div>
+
+                {/* Список ботов проекта */}
+                {isExpanded && filteredProjectBots.length > 0 && (
+                  <div
+                    style={{
+                      padding: '16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '12px',
+                    }}
+                  >
+                    {filteredProjectBots.map(bot => (
+                      <div
+                        key={bot.id}
+                        style={{
+                          padding: '16px',
+                          background: 'var(--card)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--border)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedBots.includes(bot.id)}
+                          onChange={() => handleSelectBot(bot.id)}
+                          style={{
+                            width: '18px',
+                            height: '18px',
+                            cursor: 'pointer',
+                            accentColor: 'var(--primary)',
+                          }}
+                        />
+                        <div
+                          style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '8px',
+                            background: 'rgba(255, 210, 76, 0.1)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <BotIcon size={24} style={{ color: 'var(--primary)' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '4px' }}>
+                            {bot.title}
+                          </h4>
+                          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                            @{bot.username}
+                          </p>
+                        </div>
+                        <div
+                          style={{
+                            padding: '4px 12px',
+                            background: bot.is_active
+                              ? 'rgba(16, 185, 129, 0.2)'
+                              : 'rgba(107, 114, 128, 0.2)',
+                            color: bot.is_active ? '#10b981' : '#6b7280',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {bot.is_active ? 'Активен' : 'Неактивен'}
+                        </div>
+                        <button
+                          onClick={() => handleBotAction('edit', bot.id)}
+                          style={{
+                            padding: '8px',
+                            background: 'transparent',
+                            border: '1px solid var(--border)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Edit size={16} style={{ color: 'var(--text)' }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
       )}
     </DashboardPage>
   );

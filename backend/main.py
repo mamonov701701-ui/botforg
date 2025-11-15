@@ -26,6 +26,7 @@ from backend.routers import user_template as user_template_router
 from backend.routers import platform_admin as platform_admin_router
 from backend.routers import user_security as user_security_router
 from backend.routers import my_roles as my_roles_router
+from backend.routers import team as team_router
 from backend.settings import settings
 
 app = FastAPI()
@@ -44,13 +45,21 @@ app.add_middleware(SecurityMiddleware)
 
 # Настройка CORS - разрешаем localhost + туннели
 allowed_origins = [settings.FRONTEND_ORIGIN, settings.FRONTEND_URL]
+
+# В dev режиме добавляем localhost варианты
 if settings.ENVIRONMENT == "development":
-    # В dev режиме разрешаем туннельные домены
-    allowed_origins.append("*")
+    allowed_origins.extend([
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+    ])
+    # Убираем дубликаты
+    allowed_origins = list(set(allowed_origins))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if settings.ENVIRONMENT != "development" else ["*"],
+    allow_origins=allowed_origins,  # Всегда используем конкретные origins (нельзя использовать "*" с credentials)
     allow_credentials=True,  # Important for OAuth cookies
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +88,7 @@ app.include_router(scenario_router.router)
 app.include_router(platform_admin_router.router)
 app.include_router(user_security_router.router)
 app.include_router(my_roles_router.router)
+app.include_router(team_router.router, prefix="/api/team")
 
 
 @app.get("/health")

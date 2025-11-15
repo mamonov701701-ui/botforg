@@ -38,6 +38,11 @@ export default defineConfig({
         target: 'http://localhost:8001',
         changeOrigin: true,
       },
+      '/bots': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        secure: false,
+      },
       '/scenarios': {
         target: 'http://localhost:8001',
         changeOrigin: true,

@@ -12,6 +12,7 @@ import {
   ArrowUp,
   ArrowDown,
   Settings,
+  Edit,
 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import {
@@ -22,8 +23,12 @@ import {
   removeTeamMember,
   getAvailableRoles,
   updateUserBaseRole,
+  assignBaseRole,
+  updateBaseRole,
+  deleteBaseRole,
   type User,
   type PlatformRole,
+  type BaseRoleListItem,
 } from '../../../api/platformAdmin';
 import { ROLES, ROLE_NAMES } from '../../../constants/roles';
 import { toast } from '../../../utils/toast';
@@ -178,11 +183,12 @@ export default function BFTeamPage() {
   };
 
   const handleDeleteRole = async (roleId: number) => {
-    if (!confirm('Вы уверены, что хотите удалить эту роль? Это действие нельзя отменить.')) return;
+    if (!confirm('Вы уверены, что хотите удалить эту BF-роль? Это действие нельзя отменить.'))
+      return;
 
     try {
       await deletePlatformRole(roleId);
-      toast.success('Роль успешно удалена!');
+      toast.success('BF-роль успешно удалена!');
       await loadData(); // Обновляем список, но участник остается в списке
     } catch (error: any) {
       console.error('Failed to delete role:', error);
@@ -191,28 +197,23 @@ export default function BFTeamPage() {
     }
   };
 
-  const handleRemoveTeamMember = async (userId: number, userName: string, hasRoles: boolean) => {
-    if (!hasRoles) {
-      alert('У этого пользователя нет BF-ролей. Удалять нечего.');
-      return;
-    }
-
+  const handleRemoveTeamMember = async (userId: number, userName: string) => {
     if (
       !confirm(
-        `Вы уверены, что хотите удалить "${userName}" из команды?\n\nВсе BF-роли этого пользователя будут удалены. Это действие нельзя отменить.`
+        `Вы уверены, что хотите удалить "${userName}" из команды?\n\nВсе BF-роли этого пользователя будут удалены, базовая роль будет изменена на "user". Это действие нельзя отменить.`
       )
     )
       return;
 
     try {
       await removeTeamMember(userId);
-      alert('Участник успешно удален из команды!');
+      toast.success('Участник успешно удален из команды!');
       await loadData();
     } catch (error: any) {
       console.error('Failed to remove team member:', error);
       const errorMsg =
         error.response?.data?.detail || error.message || 'Ошибка при удалении участника';
-      alert(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
@@ -508,46 +509,25 @@ export default function BFTeamPage() {
                           Настройка
                         </button>
 
-                        {/* Кнопка удаления участника (всегда видна) */}
+                        {/* Кнопка удаления участника (всегда активна) */}
                         <button
-                          onClick={() =>
-                            handleRemoveTeamMember(
-                              user.id,
-                              user.name || user.email,
-                              user.platform_roles.length > 0
-                            )
-                          }
+                          onClick={() => handleRemoveTeamMember(user.id, user.name || user.email)}
                           style={{
                             padding: '8px',
-                            background:
-                              user.platform_roles.length > 0
-                                ? 'rgba(239, 68, 68, 0.1)'
-                                : 'rgba(107, 114, 128, 0.1)',
-                            color: user.platform_roles.length > 0 ? '#ef4444' : '#6b7280',
-                            border:
-                              user.platform_roles.length > 0
-                                ? '1px solid rgba(239, 68, 68, 0.3)'
-                                : '1px solid rgba(107, 114, 128, 0.2)',
+                            background: 'rgba(239, 68, 68, 0.1)',
+                            color: '#ef4444',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
                             borderRadius: '6px',
                             cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
-                            opacity: user.platform_roles.length > 0 ? 1 : 0.5,
                           }}
-                          title={
-                            user.platform_roles.length > 0
-                              ? 'Удалить участника из команды'
-                              : 'У пользователя нет BF-ролей'
-                          }
+                          title="Удалить участника из команды"
                           onMouseEnter={e => {
-                            if (user.platform_roles.length > 0) {
-                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
-                            }
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
                           }}
                           onMouseLeave={e => {
-                            if (user.platform_roles.length > 0) {
-                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                            }
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
                           }}
                         >
                           <Trash2 size={16} />
@@ -580,11 +560,28 @@ export default function BFTeamPage() {
         <AssignRoleModal
           user={selectedUser}
           availableRoles={availableRoles}
-          onAssign={handleAssignRole}
+          onAssign={async (userId, roleName, expiresInDays) => {
+            await handleAssignRole(userId, roleName, expiresInDays);
+            // Обновляем данные пользователя после назначения роли
+            const updatedUsers = await getAllUsers(searchQuery, true);
+            const updatedUser = updatedUsers.find(u => u.id === selectedUser.id);
+            if (updatedUser) {
+              setSelectedUser(updatedUser);
+            }
+          }}
           onUpdateBaseRole={handleUpdateBaseRole}
           onClose={() => {
             setShowAssignModal(false);
             setSelectedUser(null);
+          }}
+          onRefresh={async () => {
+            await loadData();
+            // Обновляем данные пользователя в модальном окне
+            const updatedUsers = await getAllUsers(searchQuery, true);
+            const updatedUser = updatedUsers.find(u => u.id === selectedUser.id);
+            if (updatedUser) {
+              setSelectedUser(updatedUser);
+            }
           }}
         />
       )}
@@ -797,6 +794,7 @@ interface AssignRoleModalProps {
   onAssign: (userId: number, roleName: string, expiresInDays?: number) => void;
   onUpdateBaseRole: (userId: number, role: string) => Promise<void>;
   onClose: () => void;
+  onRefresh: () => Promise<void>;
 }
 
 function AssignRoleModal({
@@ -805,35 +803,193 @@ function AssignRoleModal({
   onAssign,
   onUpdateBaseRole,
   onClose,
+  onRefresh,
 }: AssignRoleModalProps) {
   const [selectedRole, setSelectedRole] = useState('');
   const [expiresInDays, setExpiresInDays] = useState<number | ''>('');
   const [baseRole, setBaseRole] = useState(user.role);
   const [isUpdatingBaseRole, setIsUpdatingBaseRole] = useState(false);
+  const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
+  const [editExpiresInDays, setEditExpiresInDays] = useState<number | ''>('');
+  const [currentUser, setCurrentUser] = useState(user);
+  const [activeTab, setActiveTab] = useState<'bf-roles' | 'base-role'>('bf-roles');
+  const [selectedBaseRole, setSelectedBaseRole] = useState('');
+  const [baseRoleExpiresInDays, setBaseRoleExpiresInDays] = useState<number | ''>('');
+  const [editingBaseRoleId, setEditingBaseRoleId] = useState<number | null>(null);
+  const [editBaseRoleExpiresInDays, setEditBaseRoleExpiresInDays] = useState<number | ''>('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Обновляем текущего пользователя при изменении пропса user
+  useEffect(() => {
+    setCurrentUser(user);
+    setBaseRole(user.role);
+    // Отладочный вывод для проверки данных
+    if (user.base_roles) {
+      console.log('Base roles loaded:', user.base_roles);
+    }
+  }, [user]);
+
+  // Функция для расчета оставшихся дней
+  const getDaysRemaining = (expiresAt: string | null): string => {
+    if (!expiresAt) return 'Бессрочно';
+    const expires = new Date(expiresAt);
+    const now = new Date();
+    const diffMs = expires.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return 'Истекла';
+    if (diffDays === 0) return 'Истекает сегодня';
+    if (diffDays === 1) return 'Остался 1 день';
+    return `Осталось ${diffDays} дней`;
+  };
+
+  // Функция для форматирования даты
+  const formatDate = (dateString: string | null): string => {
+    if (!dateString) return 'Бессрочно';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) return;
 
-    onAssign(user.id, selectedRole, expiresInDays ? Number(expiresInDays) : undefined);
+    await onAssign(currentUser.id, selectedRole, expiresInDays ? Number(expiresInDays) : undefined);
+    setSelectedRole('');
+    setExpiresInDays('');
   };
 
   const handleBaseRoleChange = async (newRole: string) => {
-    if (newRole === user.role) return;
+    if (newRole === currentUser.role) return;
 
     setIsUpdatingBaseRole(true);
     try {
-      await onUpdateBaseRole(user.id, newRole);
+      await onUpdateBaseRole(currentUser.id, newRole);
       setBaseRole(newRole);
       toast.success('Базовая роль успешно изменена!');
+      // Обновляем данные пользователя
+      await onRefresh();
     } catch (error: any) {
       console.error('Failed to update base role:', error);
       const errorMsg =
         error.response?.data?.detail || error.message || 'Ошибка при изменении базовой роли';
       toast.error(errorMsg);
-      setBaseRole(user.role); // Откатываем изменение
+      setBaseRole(currentUser.role); // Откатываем изменение
     } finally {
       setIsUpdatingBaseRole(false);
+    }
+  };
+
+  const handleStartEditRole = (role: PlatformRole) => {
+    setEditingRoleId(role.id);
+    if (role.expires_at) {
+      const expires = new Date(role.expires_at);
+      const now = new Date();
+      const diffMs = expires.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      setEditExpiresInDays(diffDays > 0 ? diffDays : '');
+    } else {
+      setEditExpiresInDays('');
+    }
+  };
+
+  const handleSaveRoleExpiration = async (roleId: number) => {
+    try {
+      const expires_at = editExpiresInDays
+        ? new Date(Date.now() + Number(editExpiresInDays) * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+
+      await updatePlatformRole(roleId, { expires_at });
+      toast.success('Срок действия роли обновлен!');
+      setEditingRoleId(null);
+      setEditExpiresInDays('');
+      // Обновляем данные пользователя
+      await onRefresh();
+    } catch (error: any) {
+      console.error('Failed to update role expiration:', error);
+      const errorMsg =
+        error.response?.data?.detail || error.message || 'Ошибка при обновлении срока действия';
+      toast.error(errorMsg);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingRoleId(null);
+    setEditExpiresInDays('');
+  };
+
+  const handleStartEditBaseRole = (role: BaseRoleListItem) => {
+    setEditingBaseRoleId(role.id);
+    if (role.expires_at) {
+      const expires = new Date(role.expires_at);
+      const now = new Date();
+      const diffMs = expires.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      setEditBaseRoleExpiresInDays(diffDays > 0 ? diffDays : '');
+    } else {
+      setEditBaseRoleExpiresInDays('');
+    }
+  };
+
+  const handleSaveBaseRoleExpiration = async (roleId: number) => {
+    try {
+      const expires_at = editBaseRoleExpiresInDays
+        ? new Date(
+            Date.now() + Number(editBaseRoleExpiresInDays) * 24 * 60 * 60 * 1000
+          ).toISOString()
+        : null;
+
+      await updateBaseRole(roleId, { expires_at });
+      toast.success('Срок действия роли обновлен!');
+      setEditingBaseRoleId(null);
+      setEditBaseRoleExpiresInDays('');
+      await onRefresh();
+    } catch (error: any) {
+      console.error('Failed to update base role expiration:', error);
+      const errorMsg =
+        error.response?.data?.detail || error.message || 'Ошибка при обновлении срока действия';
+      toast.error(errorMsg);
+    }
+  };
+
+  const handleDeleteBaseRole = async (roleId: number) => {
+    if (!confirm('Вы уверены, что хотите удалить эту базовую роль?')) return;
+
+    try {
+      await deleteBaseRole(roleId);
+      toast.success('Базовая роль успешно удалена!');
+      await onRefresh();
+    } catch (error: any) {
+      console.error('Failed to delete base role:', error);
+      const errorMsg = error.response?.data?.detail || error.message || 'Ошибка при удалении роли';
+      toast.error(errorMsg);
+    }
+  };
+
+  const handleSubmitBaseRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedBaseRole) return;
+
+    try {
+      await assignBaseRole({
+        user_id: currentUser.id,
+        role_name: selectedBaseRole,
+        expires_at: baseRoleExpiresInDays
+          ? new Date(Date.now() + Number(baseRoleExpiresInDays) * 24 * 60 * 60 * 1000).toISOString()
+          : null,
+      });
+      toast.success('Базовая роль успешно назначена!');
+      setSelectedBaseRole('');
+      setBaseRoleExpiresInDays('');
+      await onRefresh();
+    } catch (error: any) {
+      console.error('Failed to assign base role:', error);
+      const errorMsg =
+        error.response?.data?.detail || error.message || 'Ошибка при назначении базовой роли';
+      toast.error(errorMsg);
     }
   };
 
@@ -865,158 +1021,687 @@ function AssignRoleModal({
         }}
         onClick={e => e.stopPropagation()}
       >
-        <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>Настройки ролей</h2>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '24px' }}>
-          Участник: <strong>{user.name || user.email}</strong> (ID: {user.public_id || user.id})
-        </p>
-
-        {/* Базовая роль */}
         <div
           style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: '8px',
+          }}
+        >
+          <h2 style={{ fontSize: '24px', margin: 0 }}>Настройки ролей</h2>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '8px',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              color: 'var(--text-muted)',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'var(--card)';
+              e.currentTarget.style.color = 'var(--text)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = 'var(--text-muted)';
+            }}
+            title="Закрыть"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '20px', marginTop: '8px' }}>
+          Участник: <strong>{currentUser.name || currentUser.email}</strong> (ID:{' '}
+          {currentUser.public_id || currentUser.id})
+        </p>
+
+        {/* Вкладки */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '8px',
             marginBottom: '24px',
-            paddingBottom: '24px',
             borderBottom: '1px solid var(--border)',
           }}
         >
-          <label
+          <button
+            onClick={() => setActiveTab('bf-roles')}
             style={{
-              display: 'block',
-              marginBottom: '8px',
+              padding: '12px 20px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom:
+                activeTab === 'bf-roles' ? '2px solid var(--primary)' : '2px solid transparent',
+              color: activeTab === 'bf-roles' ? 'var(--text)' : 'var(--text-muted)',
               fontSize: '14px',
-              fontWeight: 600,
+              fontWeight: activeTab === 'bf-roles' ? 600 : 400,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            BF-роли
+          </button>
+          <button
+            onClick={() => setActiveTab('base-role')}
+            style={{
+              padding: '12px 20px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom:
+                activeTab === 'base-role' ? '2px solid var(--primary)' : '2px solid transparent',
+              color: activeTab === 'base-role' ? 'var(--text)' : 'var(--text-muted)',
+              fontSize: '14px',
+              fontWeight: activeTab === 'base-role' ? 600 : 400,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
             }}
           >
             Базовая роль в проекте
-          </label>
-          <select
-            value={baseRole}
-            onChange={e => handleBaseRoleChange(e.target.value)}
-            disabled={isUpdatingBaseRole}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: 'var(--card)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              color: 'var(--text)',
-              fontSize: '14px',
-              opacity: isUpdatingBaseRole ? 0.6 : 1,
-              cursor: isUpdatingBaseRole ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {Object.values(ROLES).map(role => (
-              <option key={role} value={role}>
-                {ROLE_NAMES[role] || role}
-              </option>
-            ))}
-          </select>
-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
-            Базовая роль определяет доступ к функциям платформы
-          </p>
+          </button>
         </div>
 
-        {/* BF-роли */}
-        <form onSubmit={handleSubmit}>
-          <h3 style={{ fontSize: '18px', marginBottom: '16px' }}>BF-роли платформы</h3>
-          <div style={{ marginBottom: '20px' }}>
-            <label
-              style={{
-                display: 'block',
-                marginBottom: '8px',
-                fontSize: '14px',
-                fontWeight: 600,
-              }}
-            >
-              Добавить BF-роль
-            </label>
-            <select
-              value={selectedRole}
-              onChange={e => setSelectedRole(e.target.value)}
-              required
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                color: 'var(--text)',
-                fontSize: '14px',
-              }}
-            >
-              <option value="">Выберите роль...</option>
-              {availableRoles.map(role => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Контент вкладки BF-роли */}
+        {activeTab === 'bf-roles' && (
+          <div>
+            {/* Существующие BF-роли */}
+            {currentUser.platform_roles && currentUser.platform_roles.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '16px', marginBottom: '12px', fontWeight: 600 }}>
+                  Назначенные BF-роли
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {currentUser.platform_roles.map(role => (
+                    <div
+                      key={role.id}
+                      style={{
+                        padding: '12px',
+                        background: 'var(--card)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div
+                          style={{
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            marginBottom: '4px',
+                            color: role.is_active ? 'var(--text)' : 'var(--text-muted)',
+                          }}
+                        >
+                          {role.role_name}
+                          {!role.is_active && (
+                            <span
+                              style={{
+                                marginLeft: '8px',
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                              }}
+                            >
+                              (неактивна)
+                            </span>
+                          )}
+                        </div>
+                        {editingRoleId === role.id ? (
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: '8px',
+                              alignItems: 'center',
+                              marginTop: '8px',
+                            }}
+                          >
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="Дней до истечения"
+                              value={editExpiresInDays}
+                              onChange={e =>
+                                setEditExpiresInDays(e.target.value ? Number(e.target.value) : '')
+                              }
+                              style={{
+                                flex: 1,
+                                padding: '8px',
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '6px',
+                                color: 'var(--text)',
+                                fontSize: '13px',
+                              }}
+                            />
+                            <button
+                              onClick={() => handleSaveRoleExpiration(role.id)}
+                              style={{
+                                padding: '8px 12px',
+                                background: 'var(--primary)',
+                                color: '#000',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Сохранить
+                            </button>
+                            <button
+                              onClick={handleCancelEdit}
+                              style={{
+                                padding: '8px 12px',
+                                background: 'var(--card)',
+                                color: 'var(--text)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            <div>
+                              <Clock size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                              {getDaysRemaining(role.expires_at)}
+                            </div>
+                            {role.expires_at && (
+                              <div style={{ marginTop: '4px' }}>
+                                До: {formatDate(role.expires_at)}
+                              </div>
+                            )}
+                            {role.granted_at && (
+                              <div style={{ marginTop: '4px' }}>
+                                Назначена: {formatDate(role.granted_at)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {editingRoleId !== role.id && (
+                          <button
+                            onClick={() => handleStartEditRole(role)}
+                            style={{
+                              padding: '6px',
+                              background: 'transparent',
+                              border: '1px solid var(--border)',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              color: 'var(--text)',
+                            }}
+                            title="Изменить срок действия"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            if (
+                              !confirm(
+                                'Вы уверены, что хотите удалить эту BF-роль? Это действие нельзя отменить.'
+                              )
+                            )
+                              return;
 
-          <div style={{ marginBottom: '24px' }}>
-            <label
-              style={{
-                display: 'block',
-                marginBottom: '8px',
-                fontSize: '14px',
-                fontWeight: 600,
-              }}
-            >
-              Срок действия (дней, необязательно)
-            </label>
-            <input
-              type="number"
-              min="1"
-              placeholder="Бессрочно"
-              value={expiresInDays}
-              onChange={e => setExpiresInDays(e.target.value ? Number(e.target.value) : '')}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: 'var(--card)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                color: 'var(--text)',
-                fontSize: '14px',
-              }}
-            />
-          </div>
+                            try {
+                              await deletePlatformRole(role.id);
+                              toast.success('BF-роль успешно удалена!');
+                              await onRefresh();
+                            } catch (error: any) {
+                              console.error('Failed to delete role:', error);
+                              const errorMsg =
+                                error.response?.data?.detail ||
+                                error.message ||
+                                'Ошибка при удалении роли';
+                              toast.error(errorMsg);
+                            }
+                          }}
+                          style={{
+                            padding: '6px',
+                            background: 'transparent',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            color: '#ef4444',
+                          }}
+                          title="Удалить роль"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button
-              type="submit"
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: 'var(--primary)',
-                color: '#000',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Сохранить
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              style={{
-                flex: 1,
-                padding: '12px',
-                background: 'var(--card)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              Отмена
-            </button>
+            {/* Форма добавления BF-роли */}
+            <form onSubmit={handleSubmit}>
+              <h3 style={{ fontSize: '16px', marginBottom: '16px', fontWeight: 600 }}>
+                {currentUser.platform_roles && currentUser.platform_roles.length > 0
+                  ? 'Добавить BF-роль'
+                  : 'Назначить BF-роль'}
+              </h3>
+              <div style={{ marginBottom: '20px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                  }}
+                >
+                  Выберите роль
+                </label>
+                <select
+                  value={selectedRole}
+                  onChange={e => setSelectedRole(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '14px',
+                  }}
+                >
+                  <option value="">Выберите роль...</option>
+                  {availableRoles
+                    .filter(
+                      role =>
+                        !currentUser.platform_roles?.some(
+                          pr => pr.role_name === role && pr.is_active
+                        )
+                    )
+                    .map(role => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                  }}
+                >
+                  Срок действия (дней, необязательно)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Бессрочно"
+                  value={expiresInDays}
+                  onChange={e => setExpiresInDays(e.target.value ? Number(e.target.value) : '')}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: 'var(--primary)',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Сохранить
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: 'var(--card)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        )}
+
+        {/* Контент вкладки Базовая роль */}
+        {activeTab === 'base-role' && (
+          <div>
+            {/* Существующие базовые роли */}
+            {currentUser.base_roles && currentUser.base_roles.length > 0 && (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '16px', marginBottom: '12px', fontWeight: 600 }}>
+                  Назначенные базовые роли
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {currentUser.base_roles.map(role => (
+                    <div
+                      key={role.id}
+                      style={{
+                        padding: '12px',
+                        background: 'var(--card)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div
+                          style={{
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            marginBottom: '4px',
+                            color: role.is_active ? 'var(--text)' : 'var(--text-muted)',
+                          }}
+                        >
+                          {ROLE_NAMES[role.role_name as keyof typeof ROLE_NAMES] || role.role_name}
+                          {!role.is_active && (
+                            <span
+                              style={{
+                                marginLeft: '8px',
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                              }}
+                            >
+                              (неактивна)
+                            </span>
+                          )}
+                          {currentUser.role === role.role_name && role.is_active && (
+                            <span
+                              style={{
+                                marginLeft: '8px',
+                                fontSize: '12px',
+                                color: 'var(--primary)',
+                                fontWeight: 600,
+                              }}
+                            >
+                              (текущая)
+                            </span>
+                          )}
+                        </div>
+                        {editingBaseRoleId === role.id ? (
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: '8px',
+                              alignItems: 'center',
+                              marginTop: '8px',
+                            }}
+                          >
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder="Дней до истечения"
+                              value={editBaseRoleExpiresInDays}
+                              onChange={e =>
+                                setEditBaseRoleExpiresInDays(
+                                  e.target.value ? Number(e.target.value) : ''
+                                )
+                              }
+                              style={{
+                                flex: 1,
+                                padding: '8px',
+                                background: 'var(--surface)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '6px',
+                                color: 'var(--text)',
+                                fontSize: '13px',
+                              }}
+                            />
+                            <button
+                              onClick={() => handleSaveBaseRoleExpiration(role.id)}
+                              style={{
+                                padding: '8px 12px',
+                                background: 'var(--primary)',
+                                color: '#000',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Сохранить
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingBaseRoleId(null);
+                                setEditBaseRoleExpiresInDays('');
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                background: 'var(--card)',
+                                color: 'var(--text)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            <div>
+                              <Clock size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                              {getDaysRemaining(role.expires_at)}
+                            </div>
+                            {role.expires_at && (
+                              <div style={{ marginTop: '4px' }}>
+                                До: {formatDate(role.expires_at)}
+                              </div>
+                            )}
+                            {role.granted_at && (
+                              <div style={{ marginTop: '4px' }}>
+                                Назначена: {formatDate(role.granted_at)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {editingBaseRoleId !== role.id && (
+                          <button
+                            onClick={() => handleStartEditBaseRole(role)}
+                            style={{
+                              padding: '6px',
+                              background: 'transparent',
+                              border: '1px solid var(--border)',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              color: 'var(--text)',
+                            }}
+                            title="Изменить срок действия"
+                          >
+                            <Edit size={14} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteBaseRole(role.id)}
+                          style={{
+                            padding: '6px',
+                            background: 'transparent',
+                            border: '1px solid rgba(239, 68, 68, 0.3)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            color: '#ef4444',
+                          }}
+                          title="Удалить роль"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Форма добавления базовой роли */}
+            <form onSubmit={handleSubmitBaseRole}>
+              <h3 style={{ fontSize: '16px', marginBottom: '16px', fontWeight: 600 }}>
+                {currentUser.base_roles && currentUser.base_roles.length > 0
+                  ? 'Добавить базовую роль'
+                  : 'Назначить базовую роль'}
+              </h3>
+              <div style={{ marginBottom: '20px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                  }}
+                >
+                  Выберите роль
+                </label>
+                <select
+                  value={selectedBaseRole}
+                  onChange={e => setSelectedBaseRole(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '14px',
+                  }}
+                >
+                  <option value="">Выберите роль...</option>
+                  {Object.values(ROLES)
+                    .filter(
+                      role =>
+                        !currentUser.base_roles?.some(br => br.role_name === role && br.is_active)
+                    )
+                    .map(role => (
+                      <option key={role} value={role}>
+                        {ROLE_NAMES[role] || role}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label
+                  style={{
+                    display: 'block',
+                    marginBottom: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                  }}
+                >
+                  Срок действия (дней, необязательно)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Бессрочно"
+                  value={baseRoleExpiresInDays}
+                  onChange={e =>
+                    setBaseRoleExpiresInDays(e.target.value ? Number(e.target.value) : '')
+                  }
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  type="submit"
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: 'var(--primary)',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Сохранить
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    background: 'var(--card)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );

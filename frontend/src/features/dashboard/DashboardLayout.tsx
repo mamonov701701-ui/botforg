@@ -10,6 +10,7 @@ import {
   Shield,
   Settings,
   LogOut,
+  Workflow,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { hasAccessToSection, ROLE_NAMES, type SectionKey } from '../../constants/roles';
@@ -25,6 +26,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Главная', path: '/dashboard', icon: Home },
   { id: 'bots', label: 'Мои боты', path: '/dashboard/bots', icon: Bot },
+  { id: 'scenarios', label: 'Сценарии', path: '/dashboard/scenarios', icon: Workflow },
   { id: 'templates', label: 'Шаблоны', path: '/dashboard/templates', icon: FileText },
   { id: 'balance', label: 'Баланс', path: '/dashboard/balance', icon: Wallet },
   { id: 'analytics', label: 'Аналитика', path: '/dashboard/analytics', icon: BarChart3 },

@@ -7,6 +7,11 @@ from backend.models.bot import Bot
 from backend.models.bot_template import BotTemplate
 from backend.models.user import User as UserModel
 from backend.models.user_template import UserTemplate
+from backend.utils.bot_access import (
+    check_bot_access,
+    check_bot_edit_permission,
+    get_accessible_bot_owner_ids,
+)
 from backend.schemas.bot_template import (
     BotTemplateCreate,
     BotTemplateListOut,
@@ -28,16 +33,12 @@ async def create_bot_template(
 ):
     """Создание привязки бота к пользовательскому шаблону"""
 
-    # Проверяем, что бот существует и принадлежит пользователю
-    bot = (
-        db.query(Bot)
-        .filter(Bot.id == bot_template.bot_id, Bot.owner_id == current_user.id)
-        .first()
-    )
-    if not bot:
+    # Проверяем доступ к боту и право на редактирование
+    bot = check_bot_access(bot_template.bot_id, current_user.id, db)
+    if not check_bot_edit_permission(bot, current_user.id, db):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bot not found or access denied",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Your role does not allow managing bot templates"
         )
 
     # Проверяем, что пользовательский шаблон существует и принадлежит пользователю (если указан)
@@ -93,9 +94,10 @@ async def get_bot_templates(
 ):
     """Получение списка привязок ботов к шаблонам для текущего пользователя"""
 
-    # Получаем все привязки для ботов, принадлежащих пользователю
+    # Получаем все привязки для ботов пользователя и команд
+    owner_ids = get_accessible_bot_owner_ids(current_user.id, db)
     bot_templates = (
-        db.query(BotTemplate).join(Bot).filter(Bot.owner_id == current_user.id).all()
+        db.query(BotTemplate).join(Bot).filter(Bot.owner_id.in_(owner_ids)).all()
     )
 
     return {"total": len(bot_templates), "items": bot_templates}
@@ -109,19 +111,17 @@ async def get_bot_template(
 ):
     """Получение конкретной привязки бота к шаблону"""
 
-    bot_template = (
-        db.query(BotTemplate)
-        .join(Bot)
-        .filter(BotTemplate.id == bot_template_id, Bot.owner_id == current_user.id)
-        .first()
-    )
-
+    bot_template = db.query(BotTemplate).filter(BotTemplate.id == bot_template_id).first()
+    
     if not bot_template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bot template binding not found",
         )
-
+    
+    # Проверяем доступ к боту
+    check_bot_access(bot_template.bot_id, current_user.id, db)
+    
     return bot_template
 
 
@@ -134,17 +134,20 @@ async def update_bot_template(
 ):
     """Обновление привязки бота к шаблону"""
 
-    bot_template = (
-        db.query(BotTemplate)
-        .join(Bot)
-        .filter(BotTemplate.id == bot_template_id, Bot.owner_id == current_user.id)
-        .first()
-    )
-
+    bot_template = db.query(BotTemplate).filter(BotTemplate.id == bot_template_id).first()
+    
     if not bot_template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bot template binding not found",
+        )
+    
+    # Проверяем доступ к боту и право на редактирование
+    bot = check_bot_access(bot_template.bot_id, current_user.id, db)
+    if not check_bot_edit_permission(bot, current_user.id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Your role does not allow managing bot templates"
         )
 
     # Обновляем только указанные поля
@@ -170,17 +173,20 @@ async def delete_bot_template(
 ):
     """Удаление (деактивация) привязки бота к шаблону"""
 
-    bot_template = (
-        db.query(BotTemplate)
-        .join(Bot)
-        .filter(BotTemplate.id == bot_template_id, Bot.owner_id == current_user.id)
-        .first()
-    )
-
+    bot_template = db.query(BotTemplate).filter(BotTemplate.id == bot_template_id).first()
+    
     if not bot_template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bot template binding not found",
+        )
+    
+    # Проверяем доступ к боту и право на редактирование
+    bot = check_bot_access(bot_template.bot_id, current_user.id, db)
+    if not check_bot_edit_permission(bot, current_user.id, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Your role does not allow managing bot templates"
         )
 
     # Soft delete - деактивируем привязку

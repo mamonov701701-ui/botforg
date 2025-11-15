@@ -97,6 +97,13 @@ class BotOut(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    owner_id: int
+    # Информация о владельце (для группировки по проектам)
+    owner_name: Optional[str] = None
+    owner_email: Optional[str] = None
+    owner_public_id: Optional[int] = None
+    # Роль пользователя в проекте владельца (если не владелец)
+    team_role: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

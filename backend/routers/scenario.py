@@ -12,6 +12,7 @@ from backend.dependencies.auth import get_current_user
 from backend.models.user import User
 from backend.models.scenario import Scenario
 from backend.models.bot import Bot
+from backend.utils.bot_access import check_bot_access, check_bot_edit_permission
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -74,10 +75,8 @@ def get_bot_scenarios(
     """
     Получить все сценарии конкретного бота
     """
-    # Проверяем что бот принадлежит пользователю
-    bot = db.query(Bot).filter(Bot.id == bot_id, Bot.owner_id == current_user.id).first()
-    if not bot:
-        raise HTTPException(status_code=404, detail="Бот не найден")
+    # Проверяем доступ к боту (владелец или участник команды)
+    bot = check_bot_access(bot_id, current_user.id, db)
     
     scenarios = (
         db.query(Scenario)
@@ -124,14 +123,15 @@ def create_scenario(
     """
     Создать новый сценарий (в боте или в библиотеке)
     """
-    # Если bot_id указан - проверяем владение
+    # Если bot_id указан - проверяем доступ
     if scenario_data.bot_id:
-        bot = db.query(Bot).filter(
-            Bot.id == scenario_data.bot_id,
-            Bot.owner_id == current_user.id
-        ).first()
-        if not bot:
-            raise HTTPException(status_code=404, detail="Бот не найден")
+        bot = check_bot_access(scenario_data.bot_id, current_user.id, db)
+        # Проверяем право на редактирование
+        if not check_bot_edit_permission(bot, current_user.id, db):
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: Your role does not allow creating scenarios"
+            )
         
         # Если это главный сценарий - снимаем флаг с других
         if scenario_data.is_main:
@@ -287,10 +287,13 @@ def add_from_library(
     """
     Добавить сценарий из библиотеки в конкретный бот
     """
-    # Проверяем владение ботом
-    bot = db.query(Bot).filter(Bot.id == bot_id, Bot.owner_id == current_user.id).first()
-    if not bot:
-        raise HTTPException(status_code=404, detail="Бот не найден")
+    # Проверяем доступ к боту и право на редактирование
+    bot = check_bot_access(bot_id, current_user.id, db)
+    if not check_bot_edit_permission(bot, current_user.id, db):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Your role does not allow adding scenarios"
+        )
     
     # Находим сценарий в библиотеке
     library_scenario = db.query(Scenario).filter(
