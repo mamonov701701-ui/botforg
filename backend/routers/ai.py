@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Optional
 
-from backend.auth.dependencies import get_current_user
+from backend.auth.deps import get_current_user
 from backend.models.user import User
 from backend.services.ai_service import ai_service, AIMessage, AIRequest, AIResponse
 

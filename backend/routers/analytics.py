@@ -1,203 +1,143 @@
-from datetime import datetime
+"""
+Analytics Router for BotForg
+Provides analytics and dashboard endpoints
+"""
 
-from backend.database import SessionLocal
-from backend.dependencies.auth import get_current_user
-from backend.models.bot_user_state import BotUserState
-from backend.models.payment import Payment
-from backend.models.template import Template
-from backend.models.user import User as UserModel
+from datetime import datetime, timedelta
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+
+from backend.auth.deps import get_current_user
+from backend.database import get_db
+from backend.models.user import User
+from backend.services.analytics_service import get_analytics_service
 from sqlalchemy.orm import Session
 
-router = APIRouter()
+
+router = APIRouter(prefix="/analytics", tags=["Analytics"])
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-@router.get("/analytics/templates")
-def analytics_templates(
-    db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)
-):
-    templates = db.query(Template).filter(Template.user_id == current_user.id).all()
-    result = []
-    for tpl in templates:
-        launches = (
-            db.query(BotUserState)
-            .filter(BotUserState.bot.has(template_id=tpl.id))
-            .count()
-        )
-        completions = (
-            db.query(BotUserState)
-            .filter(
-                BotUserState.bot.has(template_id=tpl.id),
-                BotUserState.current_node_id == None,
-            )
-            .count()
-        )
-        payments_count = (
-            db.query(Payment)
-            .filter(Payment.template_id == tpl.id, Payment.status == "paid")
-            .count()
-        )
-        payments_sum = (
-            db.query(func.sum(Payment.amount))
-            .filter(Payment.template_id == tpl.id, Payment.status == "paid")
-            .scalar()
-            or 0
-        )
-        result.append(
-            {
-                "id": tpl.id,
-                "name": tpl.name,
-                "launches": launches,
-                "completions": completions,
-                "payments_count": payments_count,
-                "payments_sum": payments_sum,
-            }
-        )
-    return result
-
-
-@router.get("/analytics/template/{id}")
-def analytics_template(
-    id: int,
+@router.get("/dashboard")
+async def get_dashboard(
+    days: int = Query(default=7, ge=1, le=90),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user),
 ):
-    tpl = (
-        db.query(Template)
-        .filter(Template.id == id, Template.user_id == current_user.id)
-        .first()
+    """
+    Get dashboard data for current user.
+    Returns summary stats and daily breakdown.
+    """
+    analytics = get_analytics_service(db)
+    return analytics.get_dashboard_data(current_user.id, days)
+
+
+@router.get("/bot/{bot_id}")
+async def get_bot_analytics(
+    bot_id: int,
+    start_date: Optional[str] = Query(default=None),
+    end_date: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get analytics for a specific bot.
+    Requires bot ownership or team membership.
+    """
+    from backend.models.bot import Bot
+    from backend.utils.bot_access import check_bot_access
+    
+    # Check access
+    check_bot_access(bot_id, current_user.id, db)
+    
+    # Parse dates
+    start = datetime.fromisoformat(start_date) if start_date else None
+    end = datetime.fromisoformat(end_date) if end_date else None
+    
+    analytics = get_analytics_service(db)
+    return analytics.get_bot_stats(bot_id, start, end)
+
+
+@router.get("/user")
+async def get_user_analytics(
+    start_date: Optional[str] = Query(default=None),
+    end_date: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get analytics for current user's activity.
+    """
+    # Parse dates
+    start = datetime.fromisoformat(start_date) if start_date else None
+    end = datetime.fromisoformat(end_date) if end_date else None
+    
+    analytics = get_analytics_service(db)
+    return analytics.get_user_stats(current_user.id, start, end)
+
+
+@router.post("/event")
+async def track_event(
+    event_type: str,
+    event_name: str,
+    payload: Optional[dict] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Track a custom event.
+    """
+    analytics = get_analytics_service(db)
+    event = analytics.track_event(
+        event_type=event_type,
+        event_name=event_name,
+        user_id=current_user.id,
+        payload=payload,
     )
-    if not tpl:
-        raise HTTPException(status_code=404, detail="Шаблон не найден")
-    launches = (
-        db.query(BotUserState).filter(BotUserState.bot.has(template_id=tpl.id)).count()
+    return {"id": event.id, "created_at": event.created_at}
+
+
+@router.get("/executions/{bot_id}")
+async def get_bot_executions(
+    bot_id: int,
+    status: Optional[str] = Query(default=None),
+    limit: int = Query(default=50, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get recent scenario executions for a bot.
+    """
+    from backend.models.event import ScenarioExecution
+    from backend.utils.bot_access import check_bot_access
+    
+    # Check access
+    check_bot_access(bot_id, current_user.id, db)
+    
+    # Query executions
+    query = db.query(ScenarioExecution).filter(
+        ScenarioExecution.bot_id == bot_id
     )
-    completions = (
-        db.query(BotUserState)
-        .filter(
-            BotUserState.bot.has(template_id=tpl.id),
-            BotUserState.current_node_id == None,
-        )
-        .count()
-    )
-    payments = (
-        db.query(Payment)
-        .filter(Payment.template_id == tpl.id, Payment.status == "paid")
-        .all()
-    )
-    payments_sum = sum(p.amount for p in payments)
-    unique_users = (
-        db.query(BotUserState.telegram_user_id)
-        .filter(BotUserState.bot.has(template_id=tpl.id))
-        .distinct()
-        .count()
-    )
-    # Среднее время прохождения
-    times = []
-    for state in db.query(BotUserState).filter(
-        BotUserState.bot.has(template_id=tpl.id)
-    ):
-        hist = state.history or []
-        if len(hist) >= 2:
-            t0 = datetime.fromisoformat(hist[0]["entered_at"])
-            t1 = datetime.fromisoformat(hist[-1]["entered_at"])
-            times.append((t1 - t0).total_seconds())
-    avg_time = int(sum(times) / len(times)) if times else 0
-    # Топ-5 точек выхода
-    exit_nodes = {}
-    for state in db.query(BotUserState).filter(
-        BotUserState.bot.has(template_id=tpl.id)
-    ):
-        if state.current_node_id:
-            exit_nodes[state.current_node_id] = (
-                exit_nodes.get(state.current_node_id, 0) + 1
-            )
-    top_exits = sorted(exit_nodes.items(), key=lambda x: -x[1])[:5]
+    
+    if status:
+        query = query.filter(ScenarioExecution.status == status)
+    
+    executions = query.order_by(
+        ScenarioExecution.started_at.desc()
+    ).limit(limit).all()
+    
     return {
-        "id": tpl.id,
-        "name": tpl.name,
-        "launches": launches,
-        "completions": completions,
-        "payments_count": len(payments),
-        "payments_sum": payments_sum,
-        "unique_users": unique_users,
-        "avg_time": avg_time,
-        "top_exits": top_exits,
-        "payments": [
+        "total": len(executions),
+        "items": [
             {
-                "id": p.id,
-                "amount": p.amount,
-                "currency": p.currency,
-                "status": p.status,
-                "created_at": p.created_at,
+                "id": ex.id,
+                "scenario_id": ex.scenario_id,
+                "status": ex.status,
+                "started_at": ex.started_at.isoformat() if ex.started_at else None,
+                "completed_at": ex.completed_at.isoformat() if ex.completed_at else None,
+                "duration_ms": ex.duration_ms,
+                "nodes_visited": len(ex.nodes_visited) if ex.nodes_visited else 0,
+                "error_message": ex.error_message,
             }
-            for p in payments
-        ],
+            for ex in executions
+        ]
     }
-
-
-@router.get("/analytics/payments")
-def analytics_payments(
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user),
-    start_date: str = Query(None),
-    end_date: str = Query(None),
-    bot_id: int = Query(None),
-    template_id: int = Query(None),
-):
-    q = db.query(Payment).join(Template).filter(Template.user_id == current_user.id)
-    if start_date:
-        q = q.filter(Payment.created_at >= datetime.fromisoformat(start_date))
-    if end_date:
-        q = q.filter(Payment.created_at <= datetime.fromisoformat(end_date))
-    if bot_id:
-        q = q.filter(Payment.bot_id == bot_id)
-    if template_id:
-        q = q.filter(Payment.template_id == template_id)
-    payments = q.all()
-    return [
-        {
-            "id": p.id,
-            "amount": p.amount,
-            "currency": p.currency,
-            "status": p.status,
-            "created_at": p.created_at,
-            "bot_id": p.bot_id,
-            "template_id": p.template_id,
-        }
-        for p in payments
-    ]
-
-
-@router.get("/analytics/stats/{template_id}")
-def analytics_stats(
-    template_id: int,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user),
-):
-    tpl = (
-        db.query(Template)
-        .filter(Template.id == template_id, Template.user_id == current_user.id)
-        .first()
-    )
-    if not tpl:
-        raise HTTPException(status_code=404, detail="Шаблон не найден")
-    nodes = (tpl.content or {}).get("nodes", [])
-    node_stats = {n["id"]: {"label": n["data"]["label"], "count": 0} for n in nodes}
-    for state in db.query(BotUserState).filter(
-        BotUserState.bot.has(template_id=tpl.id)
-    ):
-        hist = state.history or []
-        for h in hist:
-            if h["node_id"] in node_stats:
-                node_stats[h["node_id"]]["count"] += 1
-    return node_stats
