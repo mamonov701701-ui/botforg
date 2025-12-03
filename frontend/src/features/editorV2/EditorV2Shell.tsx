@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, useEffect } from 'react';
+import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -311,49 +311,78 @@ function InnerEditor() {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
 
+  // Флаги для предотвращения циклов синхронизации
+  const isSyncingFromZustand = useRef(false);
+  const lastZustandNodesRef = useRef<string>('');
+  const lastZustandEdgesRef = useRef<string>('');
+
   // Односторонняя синхронизация: из Zustand -> useNodesState только если Zustand содержит БОЛЬШЕ узлов
   // или совсем другой набор (при импорте)
   useEffect(() => {
-    // Сравниваем по длине и ID узлов
+    if (isSyncingFromZustand.current) return;
+
     const zustandIds = zustandNodes
       .map(n => n.id)
       .sort()
       .join(',');
+
+    // Проверяем изменились ли zustand nodes
+    if (lastZustandNodesRef.current === zustandIds) return;
+
+    lastZustandNodesRef.current = zustandIds;
+
     const currentIds = nodes
       .map(n => n.id)
       .sort()
       .join(',');
 
-    // Обновляем только если:
-    // 1. Zustand содержит больше узлов (добавлен через Zustand API)
-    // 2. Или узлы полностью отличаются (импорт сценария)
-    if (zustandNodes.length > nodes.length || (zustandIds !== currentIds && zustandIds !== '')) {
+    // Обновляем только если узлы отличаются
+    if (zustandIds !== currentIds) {
+      isSyncingFromZustand.current = true;
       setNodes(zustandNodes);
+      setTimeout(() => {
+        isSyncingFromZustand.current = false;
+      }, 100);
     }
-  }, [zustandNodes, nodes, setNodes]);
+  }, [zustandNodes]);
 
   // Синхронизация edges из Zustand -> React Flow
   useEffect(() => {
+    if (isSyncingFromZustand.current) return;
+
     const zustandEdgeIds = zustandEdges
       .map(e => e.id)
       .sort()
       .join(',');
+
+    // Проверяем изменились ли zustand edges
+    if (lastZustandEdgesRef.current === zustandEdgeIds) return;
+
+    lastZustandEdgesRef.current = zustandEdgeIds;
+
     const currentEdgeIds = edges
       .map(e => e.id)
       .sort()
       .join(',');
 
     // Обновляем edges если они отличаются
-    if (zustandEdges.length !== edges.length || zustandEdgeIds !== currentEdgeIds) {
+    if (zustandEdgeIds !== currentEdgeIds) {
+      isSyncingFromZustand.current = true;
       setEdges(zustandEdges);
+      setTimeout(() => {
+        isSyncingFromZustand.current = false;
+      }, 100);
     }
-  }, [zustandEdges, edges, setEdges]);
+  }, [zustandEdges]);
 
   // Обработчики изменений для ReactFlow
   const onNodesChange = useCallback(
     (changes: any) => {
       // Сначала применяем изменения локально в React Flow
       onNodesChangeInternal(changes);
+
+      // НЕ синхронизируем обратно если мы сами синхронизируем из Zustand
+      if (isSyncingFromZustand.current) return;
 
       // Синхронизируем только важные изменения в Zustand (position, select, remove)
       // НЕ синхронизируем 'dimensions' и 'add' - они вызовут цикл
@@ -387,6 +416,9 @@ function InnerEditor() {
   const onEdgesChange = useCallback(
     (changes: any) => {
       onEdgesChangeInternal(changes);
+
+      // НЕ синхронизируем обратно если мы сами синхронизируем из Zustand
+      if (isSyncingFromZustand.current) return;
 
       // Синхронизируем удаление edges в Zustand
       const removeChanges = changes.filter((c: any) => c.type === 'remove');
