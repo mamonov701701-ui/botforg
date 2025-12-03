@@ -311,69 +311,78 @@ function InnerEditor() {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
 
-  // Флаги для предотвращения циклов синхронизации
-  const isSyncingFromZustand = useRef(false);
-  const lastZustandNodesRef = useRef<string>('');
-  const lastZustandEdgesRef = useRef<string>('');
+  // Ref для отслеживания синхронизации - НЕ ИСПОЛЬЗОВАТЬ useState (вызовет ререндер)
+  const syncLockRef = useRef(0);
+  const pendingSyncRef = useRef(false);
 
-  // Односторонняя синхронизация: из Zustand -> useNodesState только если Zustand содержит БОЛЬШЕ узлов
-  // или совсем другой набор (при импорте)
-  useEffect(() => {
-    if (isSyncingFromZustand.current) return;
+  // Функция для безопасной синхронизации из Zustand в React Flow
+  const syncNodesFromZustand = useCallback(() => {
+    if (pendingSyncRef.current) return;
 
-    const zustandIds = zustandNodes
-      .map(n => n.id)
-      .sort()
-      .join(',');
+    const zustandIds = new Set(zustandNodes.map(n => n.id));
+    const currentIds = new Set(nodes.map(n => n.id));
 
-    // Проверяем изменились ли zustand nodes
-    if (lastZustandNodesRef.current === zustandIds) return;
+    // Проверяем нужна ли синхронизация
+    let needsSync = false;
+    if (zustandIds.size !== currentIds.size) {
+      needsSync = true;
+    } else {
+      for (const id of zustandIds) {
+        if (!currentIds.has(id)) {
+          needsSync = true;
+          break;
+        }
+      }
+    }
 
-    lastZustandNodesRef.current = zustandIds;
-
-    const currentIds = nodes
-      .map(n => n.id)
-      .sort()
-      .join(',');
-
-    // Обновляем только если узлы отличаются
-    if (zustandIds !== currentIds) {
-      isSyncingFromZustand.current = true;
+    if (needsSync) {
+      pendingSyncRef.current = true;
+      syncLockRef.current = Date.now();
       setNodes(zustandNodes);
-      setTimeout(() => {
-        isSyncingFromZustand.current = false;
-      }, 100);
+      // Разблокируем через RAF + небольшой таймаут для надёжности
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          pendingSyncRef.current = false;
+        }, 50);
+      });
     }
-  }, [zustandNodes]);
+  }, [zustandNodes, nodes, setNodes]);
 
-  // Синхронизация edges из Zustand -> React Flow
+  // Синхронизация nodes: Zustand -> React Flow
   useEffect(() => {
-    if (isSyncingFromZustand.current) return;
+    syncNodesFromZustand();
+  }, [zustandNodes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const zustandEdgeIds = zustandEdges
-      .map(e => e.id)
-      .sort()
-      .join(',');
+  // Синхронизация edges: Zustand -> React Flow
+  useEffect(() => {
+    if (pendingSyncRef.current) return;
 
-    // Проверяем изменились ли zustand edges
-    if (lastZustandEdgesRef.current === zustandEdgeIds) return;
+    const zustandEdgeIds = new Set(zustandEdges.map(e => e.id));
+    const currentEdgeIds = new Set(edges.map(e => e.id));
 
-    lastZustandEdgesRef.current = zustandEdgeIds;
-
-    const currentEdgeIds = edges
-      .map(e => e.id)
-      .sort()
-      .join(',');
-
-    // Обновляем edges если они отличаются
-    if (zustandEdgeIds !== currentEdgeIds) {
-      isSyncingFromZustand.current = true;
-      setEdges(zustandEdges);
-      setTimeout(() => {
-        isSyncingFromZustand.current = false;
-      }, 100);
+    let needsSync = false;
+    if (zustandEdgeIds.size !== currentEdgeIds.size) {
+      needsSync = true;
+    } else {
+      for (const id of zustandEdgeIds) {
+        if (!currentEdgeIds.has(id)) {
+          needsSync = true;
+          break;
+        }
+      }
     }
-  }, [zustandEdges]);
+
+    if (needsSync) {
+      pendingSyncRef.current = true;
+      syncLockRef.current = Date.now();
+      setEdges(zustandEdges);
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          pendingSyncRef.current = false;
+        }, 50);
+      });
+    }
+  }, [zustandEdges]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Обработчики изменений для ReactFlow
   const onNodesChange = useCallback(
@@ -381,27 +390,30 @@ function InnerEditor() {
       // Сначала применяем изменения локально в React Flow
       onNodesChangeInternal(changes);
 
-      // НЕ синхронизируем обратно если мы сами синхронизируем из Zustand
-      if (isSyncingFromZustand.current) return;
+      // Блокируем обратную синхронизацию на 200ms после синхронизации из Zustand
+      const timeSinceSync = Date.now() - syncLockRef.current;
+      if (timeSinceSync < 200) return;
 
-      // Синхронизируем только важные изменения в Zustand (position, select, remove)
-      // НЕ синхронизируем 'dimensions' и 'add' - они вызовут цикл
-      const importantChanges = changes.filter(
-        (c: any) => c.type === 'position' || c.type === 'select' || c.type === 'remove'
+      // Синхронизируем только position и remove (НЕ dimensions, НЕ select)
+      const positionChanges = changes.filter(
+        (c: any) => c.type === 'position' && c.dragging === false && c.position
       );
+      const removeChanges = changes.filter((c: any) => c.type === 'remove');
 
-      if (importantChanges.length > 0) {
+      if (positionChanges.length > 0 || removeChanges.length > 0) {
         setZustandNodes(currentNodes => {
           let updated = [...currentNodes];
 
-          importantChanges.forEach((change: any) => {
+          positionChanges.forEach((change: any) => {
             const index = updated.findIndex((n: Node) => n.id === change.id);
-
-            if (change.type === 'position' && change.position && index !== -1) {
+            if (index !== -1 && change.position) {
               updated[index] = { ...updated[index], position: change.position };
-            } else if (change.type === 'select' && index !== -1) {
-              updated[index] = { ...updated[index], selected: change.selected };
-            } else if (change.type === 'remove' && index !== -1) {
+            }
+          });
+
+          removeChanges.forEach((change: any) => {
+            const index = updated.findIndex((n: Node) => n.id === change.id);
+            if (index !== -1) {
               updated.splice(index, 1);
             }
           });
@@ -417,8 +429,9 @@ function InnerEditor() {
     (changes: any) => {
       onEdgesChangeInternal(changes);
 
-      // НЕ синхронизируем обратно если мы сами синхронизируем из Zustand
-      if (isSyncingFromZustand.current) return;
+      // Блокируем обратную синхронизацию на 200ms после синхронизации из Zustand
+      const timeSinceSync = Date.now() - syncLockRef.current;
+      if (timeSinceSync < 200) return;
 
       // Синхронизируем удаление edges в Zustand
       const removeChanges = changes.filter((c: any) => c.type === 'remove');
