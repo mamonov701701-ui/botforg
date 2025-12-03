@@ -308,140 +308,62 @@ function InnerEditor() {
   const syncFromEditor = useScenarioStore(state => state.syncFromEditor);
 
   // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
+  // React Flow управляет своим внутренним state, Zustand используется ТОЛЬКО для добавления новых блоков
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
 
-  // Ref для отслеживания синхронизации - НЕ ИСПОЛЬЗОВАТЬ useState (вызовет ререндер)
-  const syncLockRef = useRef(0);
-  const pendingSyncRef = useRef(false);
+  // Ref для отслеживания последних ID из Zustand (для добавления новых узлов)
+  const lastZustandNodeIdsRef = useRef<Set<string>>(new Set());
+  const lastZustandEdgeIdsRef = useRef<Set<string>>(new Set());
 
-  // Функция для безопасной синхронизации из Zustand в React Flow
-  const syncNodesFromZustand = useCallback(() => {
-    if (pendingSyncRef.current) return;
-
-    const zustandIds = new Set(zustandNodes.map(n => n.id));
-    const currentIds = new Set(nodes.map(n => n.id));
-
-    // Проверяем нужна ли синхронизация
-    let needsSync = false;
-    if (zustandIds.size !== currentIds.size) {
-      needsSync = true;
-    } else {
-      for (const id of zustandIds) {
-        if (!currentIds.has(id)) {
-          needsSync = true;
-          break;
-        }
-      }
-    }
-
-    if (needsSync) {
-      pendingSyncRef.current = true;
-      syncLockRef.current = Date.now();
-      setNodes(zustandNodes);
-      // Разблокируем через RAF + небольшой таймаут для надёжности
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          pendingSyncRef.current = false;
-        }, 50);
-      });
-    }
-  }, [zustandNodes, nodes, setNodes]);
-
-  // Синхронизация nodes: Zustand -> React Flow
+  // ОДНОСТОРОННЯЯ синхронизация: Zustand -> React Flow (только для НОВЫХ узлов)
   useEffect(() => {
-    syncNodesFromZustand();
-  }, [zustandNodes]); // eslint-disable-line react-hooks/exhaustive-deps
+    const currentZustandIds = new Set(zustandNodes.map(n => n.id));
+    const lastIds = lastZustandNodeIdsRef.current;
 
-  // Синхронизация edges: Zustand -> React Flow
+    // Находим НОВЫЕ узлы, которых не было раньше
+    const newNodes = zustandNodes.filter(n => !lastIds.has(n.id));
+
+    if (newNodes.length > 0) {
+      // Добавляем только новые узлы к существующим
+      setNodes(currentNodes => [...currentNodes, ...newNodes]);
+    }
+
+    // Обновляем ref для следующего сравнения
+    lastZustandNodeIdsRef.current = currentZustandIds;
+  }, [zustandNodes, setNodes]);
+
+  // ОДНОСТОРОННЯЯ синхронизация edges: Zustand -> React Flow (только для НОВЫХ edges)
   useEffect(() => {
-    if (pendingSyncRef.current) return;
+    const currentZustandIds = new Set(zustandEdges.map(e => e.id));
+    const lastIds = lastZustandEdgeIdsRef.current;
 
-    const zustandEdgeIds = new Set(zustandEdges.map(e => e.id));
-    const currentEdgeIds = new Set(edges.map(e => e.id));
+    // Находим НОВЫЕ edges
+    const newEdges = zustandEdges.filter(e => !lastIds.has(e.id));
 
-    let needsSync = false;
-    if (zustandEdgeIds.size !== currentEdgeIds.size) {
-      needsSync = true;
-    } else {
-      for (const id of zustandEdgeIds) {
-        if (!currentEdgeIds.has(id)) {
-          needsSync = true;
-          break;
-        }
-      }
+    if (newEdges.length > 0) {
+      setEdges(currentEdges => [...currentEdges, ...newEdges]);
     }
 
-    if (needsSync) {
-      pendingSyncRef.current = true;
-      syncLockRef.current = Date.now();
-      setEdges(zustandEdges);
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          pendingSyncRef.current = false;
-        }, 50);
-      });
-    }
-  }, [zustandEdges]); // eslint-disable-line react-hooks/exhaustive-deps
+    lastZustandEdgeIdsRef.current = currentZustandIds;
+  }, [zustandEdges, setEdges]);
 
-  // Обработчики изменений для ReactFlow
+  // Обработчики изменений для ReactFlow - БЕЗ синхронизации обратно в Zustand
+  // Zustand используется только как "входная точка" для добавления блоков
   const onNodesChange = useCallback(
     (changes: any) => {
-      // Сначала применяем изменения локально в React Flow
       onNodesChangeInternal(changes);
-
-      // Блокируем обратную синхронизацию на 200ms после синхронизации из Zustand
-      const timeSinceSync = Date.now() - syncLockRef.current;
-      if (timeSinceSync < 200) return;
-
-      // Синхронизируем только position и remove (НЕ dimensions, НЕ select)
-      const positionChanges = changes.filter(
-        (c: any) => c.type === 'position' && c.dragging === false && c.position
-      );
-      const removeChanges = changes.filter((c: any) => c.type === 'remove');
-
-      if (positionChanges.length > 0 || removeChanges.length > 0) {
-        setZustandNodes(currentNodes => {
-          let updated = [...currentNodes];
-
-          positionChanges.forEach((change: any) => {
-            const index = updated.findIndex((n: Node) => n.id === change.id);
-            if (index !== -1 && change.position) {
-              updated[index] = { ...updated[index], position: change.position };
-            }
-          });
-
-          removeChanges.forEach((change: any) => {
-            const index = updated.findIndex((n: Node) => n.id === change.id);
-            if (index !== -1) {
-              updated.splice(index, 1);
-            }
-          });
-
-          return updated;
-        });
-      }
+      // НЕ синхронизируем обратно в Zustand - React Flow управляет position/dimensions
     },
-    [onNodesChangeInternal, setZustandNodes]
+    [onNodesChangeInternal]
   );
 
   const onEdgesChange = useCallback(
     (changes: any) => {
       onEdgesChangeInternal(changes);
-
-      // Блокируем обратную синхронизацию на 200ms после синхронизации из Zustand
-      const timeSinceSync = Date.now() - syncLockRef.current;
-      if (timeSinceSync < 200) return;
-
-      // Синхронизируем удаление edges в Zustand
-      const removeChanges = changes.filter((c: any) => c.type === 'remove');
-      if (removeChanges.length > 0) {
-        setZustandEdges(currentEdges => {
-          return currentEdges.filter(edge => !removeChanges.some((c: any) => c.id === edge.id));
-        });
-      }
+      // НЕ синхронизируем обратно в Zustand
     },
-    [onEdgesChangeInternal, setZustandEdges]
+    [onEdgesChangeInternal]
   );
 
   const { setAllValidationResults } = useValidationStore();
