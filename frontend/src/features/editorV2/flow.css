@@ -657,7 +657,25 @@ g[data-connection-line='true'] path {
 
 /* Визуальная индикация при перетаскивании блока над холстом */
 .react-flow__pane.drag-over {
-  background-color: rgba(255, 193, 7, 0.05) !important;
+  background-color: rgba(59, 130, 246, 0.05) !important;
+}
+
+.react-flow__pane.drag-over::before {
+  content: '📦 Отпустите, чтобы добавить блок';
+  position: fixed;
+  top: 120px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(59, 130, 246, 0.4);
+  z-index: 10000;
+  pointer-events: none;
+  animation: bounce-in 0.3s ease;
 }
 
 .react-flow__pane.drag-over::after {
@@ -667,18 +685,95 @@ g[data-connection-line='true'] path {
   left: 0;
   right: 0;
   bottom: 0;
-  border: 2px dashed rgba(255, 193, 7, 0.5);
+  border: 3px dashed rgba(59, 130, 246, 0.6);
+  border-radius: 8px;
   pointer-events: none;
   animation: pulse-border 1.5s ease-in-out infinite;
+  background:
+    linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+@keyframes bounce-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 @keyframes pulse-border {
   0%,
   100% {
     opacity: 0.5;
+    border-color: rgba(59, 130, 246, 0.6);
   }
   50% {
     opacity: 1;
+    border-color: rgba(99, 102, 241, 0.8);
+  }
+}
+
+/* Snap to grid indication */
+.react-flow__node.snapping {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.6) !important;
+}
+
+/* Context menu styles */
+.context-menu {
+  position: fixed;
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 8px 0;
+  min-width: 180px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 10000;
+  animation: fade-in 0.15s ease;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  color: #e5e7eb;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.context-menu-item:hover {
+  background: rgba(59, 130, 246, 0.2);
+  color: #fff;
+}
+
+.context-menu-item.danger {
+  color: #ef4444;
+}
+
+.context-menu-item.danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #333;
+  margin: 4px 0;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 

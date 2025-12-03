@@ -1,5 +1,16 @@
 import React, { useMemo, useEffect, useState } from 'react';
 import { Node } from 'reactflow';
+import {
+  AlertCircle,
+  CheckCircle,
+  HelpCircle,
+  Info,
+  Copy,
+  Trash2,
+  Eye,
+  Save,
+  X,
+} from 'lucide-react';
 import { useEditorStore } from '../../../stores/editorStore';
 import { useValidationStore } from '../../../stores/validationStore';
 import { validateNodeSettings } from '../../../utils/schemaValidation';
@@ -13,6 +24,54 @@ interface Props {
   onDuplicate: () => void;
 }
 
+// Tooltip component
+const Tooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => {
+  const [show, setShow] = useState(false);
+
+  return (
+    <div
+      style={{ position: 'relative', display: 'inline-flex' }}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {children}
+      {show && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '8px 12px',
+            background: '#1f2937',
+            border: '1px solid #374151',
+            borderRadius: 6,
+            fontSize: 12,
+            color: '#e5e7eb',
+            whiteSpace: 'nowrap',
+            zIndex: 100,
+            marginBottom: 8,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+          }}
+        >
+          {text}
+          <div
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              borderWidth: 6,
+              borderStyle: 'solid',
+              borderColor: '#1f2937 transparent transparent transparent',
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function BlockSettingsPanel({
   selectedNode,
   onClose,
@@ -24,6 +83,8 @@ export default function BlockSettingsPanel({
   const showToast = useEditorStore(state => state.showToast);
   const setValidationResult = useValidationStore(state => state.setValidationResult);
   const [hasChanges, setHasChanges] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
 
   // Find block definition from catalog
   const block = useMemo(
@@ -34,6 +95,7 @@ export default function BlockSettingsPanel({
   // Reset changes when node changes
   useEffect(() => {
     setHasChanges(false);
+    setShowHelp(false);
   }, [selectedNode.id]);
 
   // Validate on mount and when settings change
@@ -97,7 +159,29 @@ export default function BlockSettingsPanel({
     console.log('Settings:', selectedNode.data.settings);
     console.log('Full Node:', selectedNode);
     console.groupEnd();
+    showToast('Данные блока выведены в консоль (F12)', 'info');
   };
+
+  // Toggle field expansion
+  const toggleFieldExpand = (fieldName: string) => {
+    setExpandedFields(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(fieldName)) {
+        newSet.delete(fieldName);
+      } else {
+        newSet.add(fieldName);
+      }
+      return newSet;
+    });
+  };
+
+  // Count validation errors
+  const validationErrors = useMemo(() => {
+    if (!block?.configSchema) return 0;
+    return block.configSchema.filter(field =>
+      validateField(field, selectedNode.data.settings?.[field.name])
+    ).length;
+  }, [block, selectedNode.data.settings]);
 
   // Специальная обработка для системного блока "start"
   if (!block) {
@@ -112,8 +196,22 @@ export default function BlockSettingsPanel({
             color: '#e2e8f0',
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 12, color: '#10B981' }}>
-            ▶️ Начало
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 24 }}>▶️</span>
+            <div style={{ fontWeight: 800, fontSize: 18, color: '#10B981' }}>Начало</div>
+            <button
+              onClick={onClose}
+              style={{
+                marginLeft: 'auto',
+                background: 'transparent',
+                border: 'none',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                padding: 4,
+              }}
+            >
+              <X size={20} />
+            </button>
           </div>
           <div style={{ opacity: 0.7, marginBottom: 12, fontSize: 14 }}>
             Системный блок - точка входа сценария
@@ -125,10 +223,16 @@ export default function BlockSettingsPanel({
               borderRadius: 8,
               fontSize: 13,
               opacity: 0.8,
+              display: 'flex',
+              gap: 8,
+              alignItems: 'flex-start',
             }}
           >
-            Это специальный системный блок, с которого начинается выполнение сценария. Он не требует
-            настройки и создается автоматически.
+            <Info size={16} style={{ color: '#3b82f6', flexShrink: 0, marginTop: 2 }} />
+            <span>
+              Это специальный системный блок, с которого начинается выполнение сценария. Он не
+              требует настройки и создается автоматически.
+            </span>
           </div>
         </div>
       );
@@ -144,9 +248,28 @@ export default function BlockSettingsPanel({
           color: '#e2e8f0',
         }}
       >
-        <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 12 }}>❌ Блок не найден</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <AlertCircle size={24} color="#ef4444" />
+          <div style={{ fontWeight: 800, fontSize: 18 }}>Блок не найден</div>
+          <button
+            onClick={onClose}
+            style={{
+              marginLeft: 'auto',
+              background: 'transparent',
+              border: 'none',
+              color: '#9ca3af',
+              cursor: 'pointer',
+              padding: 4,
+            }}
+          >
+            <X size={20} />
+          </button>
+        </div>
         <div style={{ opacity: 0.7, marginBottom: 8 }}>
-          ID блока: {selectedNode.data.blockId || 'не указан'}
+          ID блока:{' '}
+          <code style={{ background: '#1f2937', padding: '2px 6px', borderRadius: 4 }}>
+            {selectedNode.data.blockId || 'не указан'}
+          </code>
         </div>
         <div style={{ opacity: 0.7, fontSize: 13 }}>
           Блок не найден в каталоге. Возможно, он был удалён или изменён.
@@ -180,38 +303,114 @@ export default function BlockSettingsPanel({
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 20 }}>{block.icon || '📦'}</span>
               <div style={{ fontWeight: 800, fontSize: 18 }}>{block.title}</div>
+              {/* Validation status badge */}
+              {block.configSchema && block.configSchema.length > 0 && (
+                <Tooltip
+                  text={validationErrors > 0 ? `${validationErrors} ошибок` : 'Всё заполнено'}
+                >
+                  {validationErrors > 0 ? (
+                    <AlertCircle size={16} color="#ef4444" />
+                  ) : (
+                    <CheckCircle size={16} color="#22c55e" />
+                  )}
+                </Tooltip>
+              )}
             </div>
             <div style={{ opacity: 0.7, fontSize: 13, lineHeight: 1.4, marginBottom: 4 }}>
               {block.description}
             </div>
-            <div style={{ opacity: 0.5, fontSize: 11 }}>ID: {selectedNode.id}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ opacity: 0.5, fontSize: 11 }}>ID: {selectedNode.id}</span>
+              {hasChanges && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    padding: '2px 6px',
+                    background: 'rgba(251, 191, 36, 0.2)',
+                    color: '#fbbf24',
+                    borderRadius: 4,
+                    fontWeight: 600,
+                  }}
+                >
+                  Не сохранено
+                </span>
+              )}
+            </div>
           </div>
-          {/* Кнопка закрытия */}
-          <button
-            onClick={onClose}
+          {/* Header buttons */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            <Tooltip text="Справка">
+              <button
+                onClick={() => setShowHelp(!showHelp)}
+                style={{
+                  background: showHelp ? '#3b82f6' : 'transparent',
+                  border: 'none',
+                  color: showHelp ? '#fff' : '#9ca3af',
+                  cursor: 'pointer',
+                  padding: 6,
+                  borderRadius: 4,
+                  display: 'flex',
+                }}
+              >
+                <HelpCircle size={18} />
+              </button>
+            </Tooltip>
+            <Tooltip text="Закрыть">
+              <button
+                onClick={onClose}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#9ca3af',
+                  cursor: 'pointer',
+                  padding: 6,
+                  borderRadius: 4,
+                  display: 'flex',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = '#252540';
+                  e.currentTarget.style.color = '#fff';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#9ca3af';
+                }}
+              >
+                <X size={18} />
+              </button>
+            </Tooltip>
+          </div>
+        </div>
+
+        {/* Help panel */}
+        {showHelp && (
+          <div
             style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#9ca3af',
-              fontSize: 20,
-              cursor: 'pointer',
-              padding: 4,
-              lineHeight: 1,
-              borderRadius: 4,
-            }}
-            title="Закрыть панель"
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#252540';
-              e.currentTarget.style.color = '#fff';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-              e.currentTarget.style.color = '#9ca3af';
+              marginTop: 12,
+              padding: 12,
+              background: '#1f2937',
+              borderRadius: 8,
+              fontSize: 12,
+              lineHeight: 1.5,
+              animation: 'fadeIn 0.2s ease',
             }}
           >
-            ×
-          </button>
-        </div>
+            <div style={{ fontWeight: 700, marginBottom: 8, color: '#3b82f6' }}>
+              💡 Как использовать этот блок
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 16, opacity: 0.9 }}>
+              <li>Заполните все обязательные поля (отмечены *)</li>
+              <li>Изменения сохраняются автоматически при вводе</li>
+              <li>Нажмите «Сохранить» для проверки валидности</li>
+              <li>Используйте 🔍 для отладки данных в консоли</li>
+            </ul>
+            {block.planAccess && (
+              <div style={{ marginTop: 8, opacity: 0.7 }}>
+                📋 Доступен в тарифах: {block.planAccess.join(', ')}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Form Fields */}
@@ -223,26 +422,93 @@ export default function BlockSettingsPanel({
         }}
       >
         {block.configSchema && block.configSchema.length > 0 ? (
-          block.configSchema.map(field => (
-            <FieldRenderer
-              key={field.name}
-              field={field}
-              value={selectedNode.data.settings?.[field.name] ?? field.default}
-              onChange={v => handleFieldChange(field.name, v)}
-              error={validateField(field, selectedNode.data.settings?.[field.name])}
-            />
-          ))
+          block.configSchema.map(field => {
+            const error = validateField(field, selectedNode.data.settings?.[field.name]);
+            const isExpanded = expandedFields.has(field.name);
+
+            return (
+              <div
+                key={field.name}
+                style={{
+                  marginBottom: 16,
+                  padding: 12,
+                  background: error ? 'rgba(239, 68, 68, 0.1)' : 'rgba(30, 41, 59, 0.5)',
+                  borderRadius: 8,
+                  border: error ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid transparent',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                {/* Field header with description toggle */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 8,
+                  }}
+                >
+                  <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>
+                    {field.label || field.name}
+                    {field.required && <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>}
+                  </span>
+                  {field.description && (
+                    <button
+                      onClick={() => toggleFieldExpand(field.name)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#6b7280',
+                        padding: 2,
+                        display: 'flex',
+                      }}
+                    >
+                      <Info size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Field description */}
+                {field.description && isExpanded && (
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: '#9ca3af',
+                      marginBottom: 8,
+                      padding: '6px 8px',
+                      background: '#1f2937',
+                      borderRadius: 4,
+                      animation: 'fadeIn 0.2s ease',
+                    }}
+                  >
+                    {field.description}
+                  </div>
+                )}
+
+                {/* Field input */}
+                <FieldRenderer
+                  field={field}
+                  value={selectedNode.data.settings?.[field.name] ?? field.default}
+                  onChange={v => handleFieldChange(field.name, v)}
+                  error={error}
+                />
+              </div>
+            );
+          })
         ) : (
           <div
             style={{
-              padding: 16,
+              padding: 24,
               background: '#1a1a2e',
               borderRadius: 8,
               textAlign: 'center',
-              opacity: 0.6,
             }}
           >
-            <div style={{ fontSize: 13 }}>У этого блока нет настраиваемых параметров</div>
+            <CheckCircle size={32} color="#22c55e" style={{ marginBottom: 12 }} />
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
+              Настройки не требуются
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>Этот блок работает автоматически</div>
           </div>
         )}
       </div>
@@ -250,98 +516,124 @@ export default function BlockSettingsPanel({
       {/* Footer Actions */}
       <div
         style={{
-          padding: 16,
+          padding: 12,
           borderTop: '1px solid #1f2937',
           display: 'flex',
           gap: 8,
-          flexWrap: 'wrap',
         }}
       >
-        {/* Кнопка Сохранить - всегда видна */}
+        {/* Save button */}
         <button
           onClick={handleSave}
           style={{
             flex: 1,
-            minWidth: 120,
             padding: '10px 12px',
             borderRadius: 8,
             background: hasChanges ? '#22c55e' : '#374151',
             color: '#fff',
             border: 'none',
             fontWeight: 600,
-            fontSize: 14,
+            fontSize: 13,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
-            transition: 'background 0.2s ease',
+            transition: 'all 0.2s ease',
           }}
-          title={hasChanges ? 'Сохранить изменения' : 'Настройки сохранены'}
+          onMouseEnter={e => {
+            if (hasChanges) e.currentTarget.style.background = '#16a34a';
+          }}
+          onMouseLeave={e => {
+            if (hasChanges) e.currentTarget.style.background = '#22c55e';
+          }}
         >
-          <span>💾</span>
-          <span>Сохранить</span>
+          <Save size={16} />
+          {hasChanges ? 'Сохранить' : 'Сохранено'}
         </button>
 
-        {/* Кнопка Inspect */}
-        <button
-          onClick={handleInspect}
-          style={{
-            width: 44,
-            borderRadius: 8,
-            background: '#3b82f6',
-            border: 'none',
-            color: '#fff',
-            fontWeight: 800,
-            fontSize: 18,
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-          title="Посмотреть данные блока в консоли"
-        >
-          🔍
-        </button>
-
-        {/* Кнопка Дублировать */}
-        {onDuplicate && (
+        {/* Action buttons */}
+        <Tooltip text="Инспектор (консоль)">
           <button
-            onClick={onDuplicate}
+            onClick={handleInspect}
             style={{
-              width: 44,
+              width: 40,
+              height: 40,
               borderRadius: 8,
-              background: '#6366f1',
+              background: '#3b82f6',
               border: 'none',
               color: '#fff',
-              fontWeight: 800,
-              fontSize: 18,
               cursor: 'pointer',
-              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s',
             }}
-            title="Дублировать блок"
+            onMouseEnter={e => (e.currentTarget.style.background = '#2563eb')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#3b82f6')}
           >
-            📋
+            <Eye size={18} />
           </button>
+        </Tooltip>
+
+        {onDuplicate && (
+          <Tooltip text="Дублировать">
+            <button
+              onClick={onDuplicate}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 8,
+                background: '#6366f1',
+                border: 'none',
+                color: '#fff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#4f46e5')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#6366f1')}
+            >
+              <Copy size={18} />
+            </button>
+          </Tooltip>
         )}
 
-        {/* Кнопка Удалить */}
-        <button
-          onClick={onDelete}
-          style={{
-            width: 44,
-            borderRadius: 8,
-            background: '#ef4444',
-            border: 'none',
-            color: '#fff',
-            fontWeight: 800,
-            fontSize: 18,
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-          title="Удалить блок"
-        >
-          🗑
-        </button>
+        <Tooltip text="Удалить">
+          <button
+            onClick={onDelete}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 8,
+              background: '#ef4444',
+              border: 'none',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'background 0.2s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#dc2626')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#ef4444')}
+          >
+            <Trash2 size={18} />
+          </button>
+        </Tooltip>
       </div>
+
+      {/* CSS for animations */}
+      <style>
+        {`
+          @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}
+      </style>
     </div>
   );
 }

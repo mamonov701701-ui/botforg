@@ -27,6 +27,7 @@ from backend.routers import platform_admin as platform_admin_router
 from backend.routers import user_security as user_security_router
 from backend.routers import my_roles as my_roles_router
 from backend.routers import team as team_router
+from backend.routers import ai as ai_router
 from backend.settings import settings
 
 app = FastAPI()
@@ -89,6 +90,7 @@ app.include_router(platform_admin_router.router)
 app.include_router(user_security_router.router)
 app.include_router(my_roles_router.router)
 app.include_router(team_router.router, prefix="/api/team")
+app.include_router(ai_router.router)
 
 
 @app.get("/health")
