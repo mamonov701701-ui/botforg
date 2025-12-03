@@ -321,12 +321,17 @@ function InnerEditor() {
     const currentZustandIds = new Set(zustandNodes.map(n => n.id));
     const lastIds = lastZustandNodeIdsRef.current;
 
-    // Находим НОВЫЕ узлы, которых не было раньше
+    // Находим НОВЫЕ узлы, которых не было раньше в Zustand
     const newNodes = zustandNodes.filter(n => !lastIds.has(n.id));
 
     if (newNodes.length > 0) {
-      // Добавляем только новые узлы к существующим
-      setNodes(currentNodes => [...currentNodes, ...newNodes]);
+      // Добавляем только новые узлы, которых ЕЩЁ НЕТ в React Flow
+      setNodes(currentNodes => {
+        const currentNodeIds = new Set(currentNodes.map(n => n.id));
+        const trulyNewNodes = newNodes.filter(n => !currentNodeIds.has(n.id));
+        if (trulyNewNodes.length === 0) return currentNodes;
+        return [...currentNodes, ...trulyNewNodes];
+      });
     }
 
     // Обновляем ref для следующего сравнения
@@ -338,11 +343,17 @@ function InnerEditor() {
     const currentZustandIds = new Set(zustandEdges.map(e => e.id));
     const lastIds = lastZustandEdgeIdsRef.current;
 
-    // Находим НОВЫЕ edges
+    // Находим НОВЫЕ edges, которых не было раньше в Zustand
     const newEdges = zustandEdges.filter(e => !lastIds.has(e.id));
 
     if (newEdges.length > 0) {
-      setEdges(currentEdges => [...currentEdges, ...newEdges]);
+      // Добавляем только новые edges, которых ЕЩЁ НЕТ в React Flow
+      setEdges(currentEdges => {
+        const currentEdgeIds = new Set(currentEdges.map(e => e.id));
+        const trulyNewEdges = newEdges.filter(e => !currentEdgeIds.has(e.id));
+        if (trulyNewEdges.length === 0) return currentEdges;
+        return [...currentEdges, ...trulyNewEdges];
+      });
     }
 
     lastZustandEdgeIdsRef.current = currentZustandIds;
@@ -698,12 +709,18 @@ function InnerEditor() {
     const nodeToDelete = nodes.find(n => n.id === selectedNodeId);
     const nodeTitle = nodeToDelete?.data?.title || 'Блок';
 
+    // Удаляем узел и связанные edges из React Flow
+    setNodes(ns => ns.filter(n => n.id !== selectedNodeId));
     setEdges(es => es.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId));
+
+    // Также удаляем из Zustand для синхронизации ref
     setZustandNodes(ns => ns.filter(n => n.id !== selectedNodeId));
+    lastZustandNodeIdsRef.current.delete(selectedNodeId);
+
     setSelectedNodeId(undefined);
     setIsPanelVisible(false);
     showToast(`Блок "${nodeTitle}" удалён`, 'success');
-  }, [selectedNodeId, nodes, setEdges, setZustandNodes, showToast]);
+  }, [selectedNodeId, nodes, setNodes, setEdges, setZustandNodes, showToast]);
 
   const handleDuplicateNode = useCallback(() => {
     if (!selectedNode) return;
@@ -873,8 +890,8 @@ function InnerEditor() {
   const handleDeleteEdgeRef = React.useRef<(edgeId: string) => void>();
 
   handleDeleteEdgeRef.current = (edgeId: string) => {
+    // Удаляем только из React Flow (не из Zustand)
     setEdges(eds => eds.filter(e => e.id !== edgeId));
-    setZustandEdges(eds => eds.filter(e => e.id !== edgeId));
     showToast('Соединение удалено', 'success');
   };
 
@@ -906,15 +923,13 @@ function InnerEditor() {
         },
       };
 
-      // Добавляем в React Flow
+      // Добавляем ТОЛЬКО в React Flow (не в Zustand, чтобы избежать дубликатов)
+      // Zustand edges используются только для загрузки/сохранения сценария
       setEdges(eds => addEdge(newEdge, eds));
-
-      // Синхронизируем в Zustand
-      setZustandEdges(eds => addEdge(newEdge, eds));
 
       showToast('Соединение создано', 'success');
     },
-    [setEdges, setZustandEdges, showToast, handleDeleteEdge]
+    [setEdges, showToast, handleDeleteEdge]
   );
 
   // Handle drag over canvas - улучшаем визуальную обратную связь
