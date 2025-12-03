@@ -112,13 +112,13 @@ async def get_bot_template(
     """Получение конкретной привязки бота к шаблону"""
 
     bot_template = db.query(BotTemplate).filter(BotTemplate.id == bot_template_id).first()
-    
+
     if not bot_template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bot template binding not found",
         )
-    
+
     # Проверяем доступ к боту
     check_bot_access(bot_template.bot_id, current_user.id, db)
     
@@ -135,7 +135,7 @@ async def update_bot_template(
     """Обновление привязки бота к шаблону"""
 
     bot_template = db.query(BotTemplate).filter(BotTemplate.id == bot_template_id).first()
-    
+
     if not bot_template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -174,7 +174,7 @@ async def delete_bot_template(
     """Удаление (деактивация) привязки бота к шаблону"""
 
     bot_template = db.query(BotTemplate).filter(BotTemplate.id == bot_template_id).first()
-    
+
     if not bot_template:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

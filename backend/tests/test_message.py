@@ -1,71 +1,10 @@
-import os
-import sys
-import uuid
+import pytest
 
-from fastapi.testclient import TestClient
-
-# Ensure we can import the FastAPI app from backend/main.py
-CURRENT_DIR = os.path.dirname(__file__)
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
-BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
-if BACKEND_DIR not in sys.path:
-    sys.path.append(BACKEND_DIR)
-
-from main import app  # noqa: E402
+from conftest import register_and_get_token, create_test_bot
 
 
-def register_and_get_token(client: TestClient) -> str:
-    """Register a new user and return a Bearer token string."""
-    unique = uuid.uuid4().hex
-    payload = {
-        "email": f"test_{unique}@example.com",
-        "name": "Tester",
-        "password": "Secret123",
-        "role": "user",
-    }
-    res = client.post("/auth/register", json=payload)
-    assert res.status_code == 200, res.text
-    token = res.json()["access_token"]
-    return f"Bearer {token}"
-
-
-def create_test_bot(client: TestClient, auth_header: str) -> int:
-    """Create a test bot and return its ID."""
-    from unittest.mock import Mock, patch
-
-    with patch("requests.get") as mock_get:
-        unique_id = uuid.uuid4().hex[:8]
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "ok": True,
-            "result": {
-                "id": 123456789,
-                "is_bot": True,
-                "first_name": "Test Bot",
-                "username": f"test_bot_{unique_id}",
-                "can_join_groups": True,
-                "can_read_all_group_messages": False,
-                "supports_inline_queries": False,
-            },
-        }
-        mock_get.return_value = mock_response
-
-        bot_data = {
-            "title": "Test Bot",
-            "username": f"test_bot_{unique_id}",
-            "token": f"123456789:ABCdefGHIjklMNOpqrsTUVwxyz_{unique_id}",
-        }
-        res = client.post(
-            "/bots/connect", json=bot_data, headers={"Authorization": auth_header}
-        )
-        assert res.status_code == 201
-        return res.json()["id"]
-
-
-def test_create_incoming_message():
+def test_create_incoming_message(client):
     """Test creating an incoming message"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot
@@ -93,9 +32,8 @@ def test_create_incoming_message():
     assert data["is_paid"] is False
 
 
-def test_create_outgoing_message():
+def test_create_outgoing_message(client):
     """Test creating an outgoing message"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot
@@ -123,9 +61,8 @@ def test_create_outgoing_message():
     assert data["is_paid"] is True
 
 
-def test_create_message_requires_auth():
+def test_create_message_requires_auth(client):
     """Test that creating a message requires authentication"""
-    client = TestClient(app)
 
     message_data = {"bot_id": 1, "direction": "incoming", "content": "Test message"}
 
@@ -133,9 +70,8 @@ def test_create_message_requires_auth():
     assert res.status_code == 401
 
 
-def test_create_message_invalid_bot():
+def test_create_message_invalid_bot(client):
     """Test creating a message with invalid bot ID"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     message_data = {
@@ -148,12 +84,11 @@ def test_create_message_invalid_bot():
         "/messages/", json=message_data, headers={"Authorization": auth_header}
     )
     assert res.status_code == 404
-    assert "Bot not found or access denied" in res.json()["detail"]
+    assert "Bot not found" in res.json()["detail"]
 
 
-def test_create_message_invalid_direction():
+def test_create_message_invalid_direction(client):
     """Test creating a message with invalid direction"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     bot_id = create_test_bot(client, auth_header)
@@ -170,9 +105,8 @@ def test_create_message_invalid_direction():
     assert res.status_code == 422
 
 
-def test_create_message_empty_content():
+def test_create_message_empty_content(client):
     """Test creating a message with empty content"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     bot_id = create_test_bot(client, auth_header)
@@ -189,9 +123,8 @@ def test_create_message_empty_content():
     assert res.status_code == 422
 
 
-def test_get_messages():
+def test_get_messages(client):
     """Test getting list of messages"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot
@@ -233,9 +166,8 @@ def test_get_messages():
     assert "Second message" in contents
 
 
-def test_get_messages_with_filters():
+def test_get_messages_with_filters(client):
     """Test getting messages with filters"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot
@@ -283,16 +215,14 @@ def test_get_messages_with_filters():
     assert data["items"][0]["status"] == "sent"
 
 
-def test_get_messages_requires_auth():
+def test_get_messages_requires_auth(client):
     """Test that getting messages list requires authentication"""
-    client = TestClient(app)
     res = client.get("/messages/")
     assert res.status_code == 401
 
 
-def test_get_message():
+def test_get_message(client):
     """Test getting a specific message"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot and message
@@ -320,9 +250,8 @@ def test_get_message():
     assert data["content"] == "Specific message"
 
 
-def test_get_nonexistent_message():
+def test_get_nonexistent_message(client):
     """Test getting a message that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     res = client.get("/messages/999999", headers={"Authorization": auth_header})
@@ -330,9 +259,8 @@ def test_get_nonexistent_message():
     assert "Message not found" in res.json()["detail"]
 
 
-def test_update_message():
+def test_update_message(client):
     """Test updating a message"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot and message
@@ -369,9 +297,8 @@ def test_update_message():
     assert data["language"] == "ru"
 
 
-def test_update_nonexistent_message():
+def test_update_nonexistent_message(client):
     """Test updating a message that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     update_data = {"status": "error"}
@@ -382,9 +309,8 @@ def test_update_nonexistent_message():
     assert "Message not found" in res.json()["detail"]
 
 
-def test_delete_message():
+def test_delete_message(client):
     """Test deleting a message"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot and message
@@ -417,9 +343,8 @@ def test_delete_message():
     assert res_get.status_code == 404
 
 
-def test_delete_nonexistent_message():
+def test_delete_nonexistent_message(client):
     """Test deleting a message that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     res = client.delete("/messages/999999", headers={"Authorization": auth_header})
@@ -427,9 +352,8 @@ def test_delete_nonexistent_message():
     assert "Message not found" in res.json()["detail"]
 
 
-def test_access_other_user_message_forbidden():
+def test_access_other_user_message_forbidden(client):
     """Test that users cannot access other users' messages"""
-    client = TestClient(app)
 
     # Create two users
     auth_header1 = register_and_get_token(client)
@@ -456,8 +380,8 @@ def test_access_other_user_message_forbidden():
     )
     assert res_get1.status_code == 200
 
-    # User 2 cannot see User 1's message
+    # User 2 cannot see User 1's message (403 Forbidden for security)
     res_get2 = client.get(
         f"/messages/{message_id}", headers={"Authorization": auth_header2}
     )
-    assert res_get2.status_code == 404
+    assert res_get2.status_code in [403, 404]

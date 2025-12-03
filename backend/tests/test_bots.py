@@ -1,37 +1,17 @@
-import os
-import sys
+"""
+Tests for bot management endpoints.
+"""
 import uuid
 from unittest.mock import Mock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
-# Ensure we can import the FastAPI app from backend/main.py
-CURRENT_DIR = os.path.dirname(__file__)
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
-BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
-if BACKEND_DIR not in sys.path:
-    sys.path.append(BACKEND_DIR)
-
-from main import app  # noqa: E402
-
-
-def register_and_get_token(client: TestClient) -> str:
-    """Register a new user and return a Bearer token string."""
-    unique = uuid.uuid4().hex
-    payload = {
-        "email": f"test_{unique}@example.com",
-        "name": "Tester",
-        "password": "Secret123",
-        "role": "user",
-    }
-    res = client.post("/auth/register", json=payload)
-    assert res.status_code == 200, res.text
-    token = res.json()["access_token"]
-    return f"Bearer {token}"
+from conftest import register_and_get_token
 
 
 @patch("requests.get")
-def test_connect_valid_bot(mock_get):
+def test_connect_valid_bot(mock_get, client):
     """Test connecting a valid bot with mocked Telegram API"""
     unique_id = uuid.uuid4().hex[:8]
     # Mock successful Telegram API response
@@ -51,7 +31,6 @@ def test_connect_valid_bot(mock_get):
     }
     mock_get.return_value = mock_response
 
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     bot_data = {
@@ -73,7 +52,7 @@ def test_connect_valid_bot(mock_get):
 
 
 @patch("requests.get")
-def test_reject_invalid_token(mock_get):
+def test_reject_invalid_token(mock_get, client):
     """Test rejecting invalid bot token"""
     # Mock failed Telegram API response
     mock_response = Mock()
@@ -85,7 +64,6 @@ def test_reject_invalid_token(mock_get):
     }
     mock_get.return_value = mock_response
 
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     bot_data = {
@@ -102,10 +80,8 @@ def test_reject_invalid_token(mock_get):
     assert "Invalid Telegram bot token" in res.json()["detail"]
 
 
-def test_connect_bot_requires_auth():
+def test_connect_bot_requires_auth(client):
     """Test that connecting a bot requires authentication"""
-    client = TestClient(app)
-
     bot_data = {
         "title": "Test Bot",
         "username": "test_bot",
@@ -117,7 +93,7 @@ def test_connect_bot_requires_auth():
 
 
 @patch("requests.get")
-def test_username_mismatch(mock_get):
+def test_username_mismatch(mock_get, client):
     """Test rejecting bot when username doesn't match Telegram API"""
     # Mock successful Telegram API response with different username
     mock_response = Mock()
@@ -136,7 +112,6 @@ def test_username_mismatch(mock_get):
     }
     mock_get.return_value = mock_response
 
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     bot_data = {
@@ -153,7 +128,7 @@ def test_username_mismatch(mock_get):
 
 
 @patch("requests.get")
-def test_get_bots_list(mock_get):
+def test_get_bots_list(mock_get, client):
     """Test getting list of user's bots"""
     unique_id = uuid.uuid4().hex[:8]
     # Mock successful Telegram API response for bot creation
@@ -173,7 +148,6 @@ def test_get_bots_list(mock_get):
     }
     mock_get.return_value = mock_response
 
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a bot first
@@ -197,15 +171,14 @@ def test_get_bots_list(mock_get):
     assert data["items"][0]["username"] == f"test_bot_{unique_id}"
 
 
-def test_get_bots_requires_auth():
+def test_get_bots_requires_auth(client):
     """Test that getting bots list requires authentication"""
-    client = TestClient(app)
     res = client.get("/bots/")
     assert res.status_code == 401
 
 
 @patch("requests.get")
-def test_patch_bot(mock_get):
+def test_patch_bot(mock_get, client):
     """Test updating bot title and is_active"""
     unique_id = uuid.uuid4().hex[:8]
     # Mock successful Telegram API response for bot creation
@@ -225,7 +198,6 @@ def test_patch_bot(mock_get):
     }
     mock_get.return_value = mock_response
 
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a bot first
@@ -253,7 +225,7 @@ def test_patch_bot(mock_get):
 
 @patch("requests.get")
 @patch("requests.post")
-def test_delete_bot(mock_post, mock_get):
+def test_delete_bot(mock_post, mock_get, client):
     """Test deactivating a bot (soft delete)"""
     unique_id = uuid.uuid4().hex[:8]
     # Mock successful Telegram API response for bot creation
@@ -279,7 +251,6 @@ def test_delete_bot(mock_post, mock_get):
     mock_post_response.json.return_value = {"ok": True}
     mock_post.return_value = mock_post_response
 
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a bot first
@@ -309,9 +280,8 @@ def test_delete_bot(mock_post, mock_get):
     assert res_get.json()["is_active"] is False
 
 
-def test_delete_nonexistent_bot():
+def test_delete_nonexistent_bot(client):
     """Test deleting a bot that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     res = client.delete("/bots/999999", headers={"Authorization": auth_header})
@@ -319,9 +289,8 @@ def test_delete_nonexistent_bot():
     assert "Bot not found" in res.json()["detail"]
 
 
-def test_update_nonexistent_bot():
+def test_update_nonexistent_bot(client):
     """Test updating a bot that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     update_data = {"title": "New Title"}
@@ -332,9 +301,8 @@ def test_update_nonexistent_bot():
     assert "Bot not found" in res.json()["detail"]
 
 
-def test_get_nonexistent_bot():
+def test_get_nonexistent_bot(client):
     """Test getting a bot that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     res = client.get("/bots/999999", headers={"Authorization": auth_header})

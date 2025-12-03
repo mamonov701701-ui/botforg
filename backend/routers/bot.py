@@ -237,7 +237,7 @@ async def update_bot(
 ):
     """Обновление бота"""
     bot = check_bot_access(bot_id, current_user.id, db)
-    
+
     # Проверяем право на редактирование
     if not check_bot_edit_permission(bot, current_user.id, db):
         raise HTTPException(
@@ -266,7 +266,7 @@ async def delete_bot(
 ):
     """Деактивация бота (soft delete)"""
     bot = check_bot_access(bot_id, current_user.id, db)
-    
+
     # Только владелец может удалять бота
     if not check_bot_delete_permission(bot, current_user.id):
         raise HTTPException(
@@ -345,7 +345,7 @@ async def update_bot_graph(
 ):
     """Обновление графа бота (узлы и связи)"""
     bot = check_bot_access(bot_id, current_user.id, db)
-    
+
     # Проверяем право на редактирование
     if not check_bot_edit_permission(bot, current_user.id, db):
         raise HTTPException(

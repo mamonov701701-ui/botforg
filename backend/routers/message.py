@@ -143,12 +143,12 @@ async def get_message(
 
     # Получаем сообщение и проверяем доступ через бота
     message = db.query(Message).filter(Message.id == message_id).first()
-    
+
     if not message:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
         )
-    
+
     # Проверяем доступ к боту
     check_bot_access(message.bot_id, current_user.id, db)
     
@@ -166,7 +166,7 @@ async def update_message(
 
     # Получаем сообщение и проверяем доступ через бота
     message = db.query(Message).filter(Message.id == message_id).first()
-    
+
     if not message:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"
@@ -203,7 +203,7 @@ async def delete_message(
 
     # Получаем сообщение и проверяем доступ через бота
     message = db.query(Message).filter(Message.id == message_id).first()
-    
+
     if not message:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Message not found"

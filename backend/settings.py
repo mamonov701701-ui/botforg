@@ -7,12 +7,14 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # JWT settings
-    SECRET_KEY: str  # REQUIRED: Must be set in environment (min 32 chars)
+    # For development/testing, defaults are provided. In production, set via environment!
+    SECRET_KEY: str = "dev-secret-key-change-in-production-32chars"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # OAuth JWT settings (for session cookies)
-    JWT_SECRET: str  # REQUIRED: Must be set in environment (min 32 chars, different from SECRET_KEY)
+    # For development/testing, defaults are provided. In production, set via environment!
+    JWT_SECRET: str = "dev-jwt-secret-key-change-in-production-32"
     SESSION_SECRET: str = ""  # Optional: Separate session secret (recommended)
     ENVIRONMENT: str = "development"
 

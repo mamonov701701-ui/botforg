@@ -1,71 +1,17 @@
-import os
-import sys
+"""
+Tests for billing and quota management.
+"""
 import uuid
+from unittest.mock import Mock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
-# Ensure we can import the FastAPI app from backend/main.py
-CURRENT_DIR = os.path.dirname(__file__)
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
-BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
-if BACKEND_DIR not in sys.path:
-    sys.path.append(BACKEND_DIR)
-
-from main import app  # noqa: E402
+from conftest import register_and_get_token, create_test_bot
 
 
-def register_and_get_token(client: TestClient) -> str:
-    """Register a new user and return a Bearer token string."""
-    unique = uuid.uuid4().hex
-    payload = {
-        "email": f"test_{unique}@example.com",
-        "name": "Tester",
-        "password": "Secret123",
-        "role": "user",
-    }
-    res = client.post("/auth/register", json=payload)
-    assert res.status_code == 200, res.text
-    token = res.json()["access_token"]
-    return f"Bearer {token}"
-
-
-def create_test_bot(client: TestClient, auth_header: str) -> int:
-    """Create a test bot and return its ID."""
-    from unittest.mock import Mock, patch
-
-    with patch("requests.get") as mock_get:
-        unique_id = uuid.uuid4().hex[:8]
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
-            "ok": True,
-            "result": {
-                "id": 123456789,
-                "is_bot": True,
-                "first_name": "Test Bot",
-                "username": f"test_bot_{unique_id}",
-                "can_join_groups": True,
-                "can_read_all_group_messages": False,
-                "supports_inline_queries": False,
-            },
-        }
-        mock_get.return_value = mock_response
-
-        bot_data = {
-            "title": "Test Bot",
-            "username": f"test_bot_{unique_id}",
-            "token": f"123456789:ABCdefGHIjklMNOpqrsTUVwxyz_{unique_id}",
-        }
-        res = client.post(
-            "/bots/connect", json=bot_data, headers={"Authorization": auth_header}
-        )
-        assert res.status_code == 201
-        return res.json()["id"]
-
-
-def test_create_free_message():
+def test_create_free_message(client):
     """Test creating a free message within quota"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot
@@ -95,9 +41,8 @@ def test_create_free_message():
     assert billing_data["items"][0]["price"] == "0.00"
 
 
-def test_create_paid_message():
+def test_create_paid_message(client):
     """Test creating a paid message when quota exceeded"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot
@@ -133,9 +78,8 @@ def test_create_paid_message():
     assert billing_data["items"][0]["price"] == "1.00"
 
 
-def test_quota_limit_enforcement():
+def test_quota_limit_enforcement(client):
     """Test that quota limits are enforced correctly"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot
@@ -187,9 +131,8 @@ def test_quota_limit_enforcement():
     assert res3.json()["is_paid"] is True
 
 
-def test_get_billing_records():
+def test_get_billing_records(client):
     """Test getting billing records list"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot and message
@@ -212,16 +155,14 @@ def test_get_billing_records():
     assert data["items"][0]["direction"] == "incoming"
 
 
-def test_get_billing_records_requires_auth():
+def test_get_billing_records_requires_auth(client):
     """Test that getting billing records requires authentication"""
-    client = TestClient(app)
     res = client.get("/billing/")
     assert res.status_code == 401
 
 
-def test_get_summary():
+def test_get_summary(client):
     """Test getting user quota summary"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Get summary (should create default quota if not exists)
@@ -248,16 +189,14 @@ def test_get_summary():
     assert data2["used_messages"] == 1
 
 
-def test_get_summary_requires_auth():
+def test_get_summary_requires_auth(client):
     """Test that getting summary requires authentication"""
-    client = TestClient(app)
     res = client.get("/billing/summary")
     assert res.status_code == 401
 
 
-def test_register_message_billing():
+def test_register_message_billing(client):
     """Test manual registration of message billing"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot and message first
@@ -294,9 +233,8 @@ def test_register_message_billing():
     assert data["price"] == "2.50"
 
 
-def test_register_billing_for_other_user_forbidden():
+def test_register_billing_for_other_user_forbidden(client):
     """Test that users cannot create billing records for other users"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Try to create billing record for another user
@@ -318,9 +256,8 @@ def test_register_billing_for_other_user_forbidden():
     assert data["user_id"] != 999  # Проверяем, что user_id не равен переданному
 
 
-def test_update_user_quota():
+def test_update_user_quota(client):
     """Test updating user quota"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create initial quota by getting summary
@@ -338,9 +275,8 @@ def test_update_user_quota():
     assert data["used_messages"] == 10
 
 
-def test_update_nonexistent_quota():
+def test_update_nonexistent_quota(client):
     """Test updating quota that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Try to update quota without creating it first
@@ -354,10 +290,8 @@ def test_update_nonexistent_quota():
     assert data["monthly_limit"] == 500
 
 
-def test_access_other_user_billing_forbidden():
+def test_access_other_user_billing_forbidden(client):
     """Test that users cannot access other users' billing records"""
-    client = TestClient(app)
-
     # Create two users
     auth_header1 = register_and_get_token(client)
     auth_header2 = register_and_get_token(client)
@@ -385,9 +319,8 @@ def test_access_other_user_billing_forbidden():
     assert res2.json()["total"] == 0  # No records for User 2
 
 
-def test_correct_pricing_calculation():
+def test_correct_pricing_calculation(client):
     """Test that pricing is calculated correctly"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create test bot

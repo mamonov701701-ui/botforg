@@ -72,7 +72,7 @@ async def register(
     user = User(
         email=email,
         name=data.name or email.split("@")[0],
-        password_hash=hash_password(data.password),
+        hashed_password=hash_password(data.password),
     )
     db.add(user)
     db.commit()

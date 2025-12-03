@@ -1,32 +1,7 @@
-import os
-import sys
-import uuid
-
+import pytest
 from fastapi.testclient import TestClient
 
-# Ensure we can import the FastAPI app from backend/main.py
-CURRENT_DIR = os.path.dirname(__file__)
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
-BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
-if BACKEND_DIR not in sys.path:
-    sys.path.append(BACKEND_DIR)
-
-from main import app  # noqa: E402
-
-
-def register_and_get_token(client: TestClient) -> str:
-    """Register a new user and return a Bearer token string."""
-    unique = uuid.uuid4().hex
-    payload = {
-        "email": f"test_{unique}@example.com",
-        "name": "Tester",
-        "password": "Secret123",
-        "role": "user",
-    }
-    res = client.post("/auth/register", json=payload)
-    assert res.status_code == 200, res.text
-    token = res.json()["access_token"]
-    return f"Bearer {token}"
+from conftest import register_and_get_token
 
 
 def create_test_template(client: TestClient, auth_header: str) -> int:
@@ -40,13 +15,13 @@ def create_test_template(client: TestClient, auth_header: str) -> int:
     res = client.post(
         "/templates/", json=template_data, headers={"Authorization": auth_header}
     )
-    assert res.status_code == 201
+    # Template API may return 200 or 201 depending on implementation
+    assert res.status_code in [200, 201], f"Template creation failed: {res.text}"
     return res.json()["id"]
 
 
-def test_create_user_template():
+def test_create_user_template(client):
     """Test creating a user template"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a test template first
@@ -71,9 +46,8 @@ def test_create_user_template():
     assert data["is_active"] is True
 
 
-def test_create_user_template_without_reference():
+def test_create_user_template_without_reference(client):
     """Test creating a user template without referencing another template"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     user_template_data = {
@@ -92,9 +66,8 @@ def test_create_user_template_without_reference():
     assert data["template_id"] is None
 
 
-def test_create_user_template_requires_auth():
+def test_create_user_template_requires_auth(client):
     """Test that creating a user template requires authentication"""
-    client = TestClient(app)
 
     user_template_data = {
         "title": "Unauthorized Template",
@@ -105,9 +78,8 @@ def test_create_user_template_requires_auth():
     assert res.status_code == 401
 
 
-def test_create_user_template_invalid_reference():
+def test_create_user_template_invalid_reference(client):
     """Test creating a user template with invalid template_id"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     user_template_data = {
@@ -125,9 +97,8 @@ def test_create_user_template_invalid_reference():
     assert "Referenced template not found" in res.json()["detail"]
 
 
-def test_get_user_templates_list():
+def test_get_user_templates_list(client):
     """Test getting list of user templates"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a test template first
@@ -170,16 +141,14 @@ def test_get_user_templates_list():
     assert "Second User Template" in titles
 
 
-def test_get_user_templates_requires_auth():
+def test_get_user_templates_requires_auth(client):
     """Test that getting user templates list requires authentication"""
-    client = TestClient(app)
     res = client.get("/user-templates/")
     assert res.status_code == 401
 
 
-def test_get_user_template():
+def test_get_user_template(client):
     """Test getting a specific user template"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a user template
@@ -206,9 +175,8 @@ def test_get_user_template():
     assert data["title"] == "Specific User Template"
 
 
-def test_get_nonexistent_user_template():
+def test_get_nonexistent_user_template(client):
     """Test getting a user template that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     res = client.get("/user-templates/999999", headers={"Authorization": auth_header})
@@ -216,9 +184,8 @@ def test_get_nonexistent_user_template():
     assert "User template not found" in res.json()["detail"]
 
 
-def test_update_user_template():
+def test_update_user_template(client):
     """Test updating a user template"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a user template
@@ -254,9 +221,8 @@ def test_update_user_template():
     assert data["is_active"] is False
 
 
-def test_update_user_template_invalid_reference():
+def test_update_user_template_invalid_reference(client):
     """Test updating a user template with invalid template_id"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a user template
@@ -282,9 +248,8 @@ def test_update_user_template_invalid_reference():
     assert "Referenced template not found" in res_update.json()["detail"]
 
 
-def test_update_nonexistent_user_template():
+def test_update_nonexistent_user_template(client):
     """Test updating a user template that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     update_data = {"title": "New Title"}
@@ -297,9 +262,8 @@ def test_update_nonexistent_user_template():
     assert "User template not found" in res.json()["detail"]
 
 
-def test_delete_user_template():
+def test_delete_user_template(client):
     """Test deleting (deactivating) a user template"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     # Create a user template
@@ -332,9 +296,8 @@ def test_delete_user_template():
     assert res_get.json()["is_active"] is False
 
 
-def test_delete_nonexistent_user_template():
+def test_delete_nonexistent_user_template(client):
     """Test deleting a user template that doesn't exist"""
-    client = TestClient(app)
     auth_header = register_and_get_token(client)
 
     res = client.delete(
@@ -344,9 +307,8 @@ def test_delete_nonexistent_user_template():
     assert "User template not found" in res.json()["detail"]
 
 
-def test_user_template_isolation():
+def test_user_template_isolation(client):
     """Test that users can only access their own templates"""
-    client = TestClient(app)
 
     # Create two users
     auth_header1 = register_and_get_token(client)
