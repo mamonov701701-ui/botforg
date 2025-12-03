@@ -1,0 +1,56 @@
+version: '3.8'
+
+# Development docker-compose overlay
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  # PostgreSQL - expose port for local development
+  postgres:
+    ports:
+      - "5432:5432"
+
+  # Redis - expose port for local development
+  redis:
+    ports:
+      - "6379:6379"
+
+  # Backend with hot-reload
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__
+      - /app/.pytest_cache
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+    command: ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8001"]
+
+  # Frontend with hot-reload
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      - NODE_ENV=development
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+  # Adminer for database management (dev only)
+  adminer:
+    image: adminer:latest
+    container_name: botforg-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - botforg-network
+
