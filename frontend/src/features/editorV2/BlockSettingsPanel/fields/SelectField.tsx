@@ -1,12 +1,20 @@
 import React from 'react';
 import { FieldProps } from './types';
 
+// Опция может быть строкой или объектом с value и label
+type SelectOption = string | { value: string; label: string };
+
 export const SelectField: React.FC<FieldProps> = ({ field, value, onChange, error }) => {
+  // Нормализуем опции для единого формата
+  const normalizeOption = (opt: SelectOption): { value: string; label: string } => {
+    if (typeof opt === 'string') {
+      return { value: opt, label: opt };
+    }
+    return opt;
+  };
+
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
-        {field.label} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
-      </label>
+    <div>
       <select
         value={value || ''}
         onChange={e => onChange(e.target.value || null)}
@@ -22,11 +30,14 @@ export const SelectField: React.FC<FieldProps> = ({ field, value, onChange, erro
         }}
       >
         <option value="">-- Выберите --</option>
-        {field.options?.map(opt => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
+        {(field.options as SelectOption[] | undefined)?.map(opt => {
+          const { value: optValue, label: optLabel } = normalizeOption(opt);
+          return (
+            <option key={optValue} value={optValue}>
+              {optLabel}
+            </option>
+          );
+        })}
       </select>
       {error && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>{error}</div>}
     </div>

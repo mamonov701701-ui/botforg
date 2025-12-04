@@ -65,6 +65,14 @@ class ScenarioOut(BaseModel):
         from_attributes = True
 
 
+class ScenarioNodeOut(BaseModel):
+    """Блок внутри сценария для выбора в UI"""
+    id: str
+    title: str
+    block_type: str
+    icon: Optional[str] = None
+
+
 # Получить все сценарии бота
 @router.get("/bot/{bot_id}", response_model=List[ScenarioOut])
 def get_bot_scenarios(
@@ -273,6 +281,46 @@ def save_to_library(
     db.refresh(library_scenario)
     
     return library_scenario
+
+
+# Получить список блоков внутри сценария
+@router.get("/{scenario_id}/nodes", response_model=List[ScenarioNodeOut])
+def get_scenario_nodes(
+    scenario_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Получить список блоков внутри сценария для выбора в UI.
+    Возвращает список узлов с их названиями и типами.
+    """
+    scenario = db.query(Scenario).filter(
+        Scenario.id == scenario_id
+    ).first()
+    
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    
+    # Проверяем доступ: либо владелец, либо сценарий в публичной библиотеке
+    if scenario.user_id != current_user.id and not scenario.is_standard:
+        # Если сценарий привязан к боту - проверяем доступ к боту
+        if scenario.bot_id:
+            check_bot_access(scenario.bot_id, current_user.id, db)
+        else:
+            raise HTTPException(status_code=403, detail="Доступ запрещён")
+    
+    nodes = []
+    if scenario.content and "nodes" in scenario.content:
+        for node in scenario.content["nodes"]:
+            node_data = node.get("data", {})
+            nodes.append(ScenarioNodeOut(
+                id=node.get("id", ""),
+                title=node_data.get("title", node_data.get("blockId", "Блок")),
+                block_type=node_data.get("blockId", "unknown"),
+                icon=node_data.get("icon")
+            ))
+    
+    return nodes
 
 
 # Добавить сценарий из библиотеки в бот

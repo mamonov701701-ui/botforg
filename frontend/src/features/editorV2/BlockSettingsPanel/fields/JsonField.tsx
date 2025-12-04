@@ -23,10 +23,7 @@ export const JsonField: React.FC<FieldProps> = ({ field, value, onChange, error 
   };
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
-        {field.label} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
-      </label>
+    <div>
       <textarea
         value={jsonString}
         onChange={e => handleChange(e.target.value)}

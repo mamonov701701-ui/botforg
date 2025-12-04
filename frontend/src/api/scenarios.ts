@@ -124,3 +124,20 @@ export async function addFromLibrary(
   const url = `/scenarios/library/${libraryScenarioId}/add-to-bot?${params.toString()}`;
   return api.post(url);
 }
+
+/**
+ * Блок внутри сценария
+ */
+export interface ScenarioNode {
+  id: string;
+  title: string;
+  block_type: string;
+  icon?: string;
+}
+
+/**
+ * Получить список блоков внутри сценария
+ */
+export async function getScenarioNodes(scenarioId: number): Promise<ScenarioNode[]> {
+  return api.get(`/scenarios/${scenarioId}/nodes`);
+}

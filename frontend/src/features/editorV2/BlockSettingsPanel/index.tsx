@@ -22,25 +22,46 @@ interface Props {
   onClose: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onUpdateNode?: (nodeId: string, updates: Partial<Node>) => void;
 }
 
 // Tooltip component
 const Tooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => {
   const [show, setShow] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const buttonRef = React.useRef<HTMLDivElement>(null);
+
+  const updatePosition = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setPosition({
+        top: rect.top - 40,
+        left: rect.left + rect.width / 2,
+      });
+    }
+  };
+
+  const handleMouseEnter = () => {
+    setShow(true);
+    updatePosition();
+  };
 
   return (
-    <div
-      style={{ position: 'relative', display: 'inline-flex' }}
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      {children}
+    <>
+      <div
+        ref={buttonRef}
+        style={{ position: 'relative', display: 'inline-flex' }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setShow(false)}
+      >
+        {children}
+      </div>
       {show && (
         <div
           style={{
-            position: 'absolute',
-            bottom: '100%',
-            left: '50%',
+            position: 'fixed',
+            top: position.top,
+            left: position.left,
             transform: 'translateX(-50%)',
             padding: '8px 12px',
             background: '#1f2937',
@@ -49,9 +70,9 @@ const Tooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, 
             fontSize: 12,
             color: '#e5e7eb',
             whiteSpace: 'nowrap',
-            zIndex: 100,
-            marginBottom: 8,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            zIndex: 100000,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            pointerEvents: 'none',
           }}
         >
           {text}
@@ -68,7 +89,7 @@ const Tooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, 
           />
         </div>
       )}
-    </div>
+    </>
   );
 };
 
@@ -77,14 +98,16 @@ export default function BlockSettingsPanel({
   onClose,
   onDelete,
   onDuplicate,
+  onUpdateNode,
 }: Props) {
   const catalog = useEditorStore(state => state.catalog);
-  const setNodes = useEditorStore(state => state.setNodes);
+  const setNodesZustand = useEditorStore(state => state.setNodes);
   const showToast = useEditorStore(state => state.showToast);
   const setValidationResult = useValidationStore(state => state.setValidationResult);
   const [hasChanges, setHasChanges] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Find block definition from catalog
   const block = useMemo(
@@ -96,6 +119,7 @@ export default function BlockSettingsPanel({
   useEffect(() => {
     setHasChanges(false);
     setShowHelp(false);
+    setShowAdvanced(false);
   }, [selectedNode.id]);
 
   // Validate on mount and when settings change
@@ -109,22 +133,37 @@ export default function BlockSettingsPanel({
   // Handle field change - updates node.data.settings
   const handleFieldChange = (fieldName: string, value: any) => {
     setHasChanges(true);
-    setNodes(nodes =>
-      nodes.map(n =>
-        n.id === selectedNode.id
-          ? {
-              ...n,
-              data: {
-                ...n.data,
-                settings: {
-                  ...n.data.settings,
-                  [fieldName]: value,
+
+    // Используем переданный onUpdateNode если доступен (из React Flow),
+    // иначе используем Zustand (для обратной совместимости)
+    if (onUpdateNode) {
+      onUpdateNode(selectedNode.id, {
+        data: {
+          ...selectedNode.data,
+          settings: {
+            ...selectedNode.data.settings,
+            [fieldName]: value,
+          },
+        },
+      });
+    } else {
+      setNodesZustand(nodes =>
+        nodes.map(n =>
+          n.id === selectedNode.id
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  settings: {
+                    ...n.data.settings,
+                    [fieldName]: value,
+                  },
                 },
-              },
-            }
-          : n
-      )
-    );
+              }
+            : n
+        )
+      );
+    }
   };
 
   // Handle save - показывает подтверждение (изменения уже применены)
@@ -422,79 +461,219 @@ export default function BlockSettingsPanel({
         }}
       >
         {block.configSchema && block.configSchema.length > 0 ? (
-          block.configSchema.map(field => {
-            const error = validateField(field, selectedNode.data.settings?.[field.name]);
-            const isExpanded = expandedFields.has(field.name);
+          <>
+            {/* Основные поля */}
+            {block.configSchema
+              .filter(f => !f.isAdvanced)
+              .map(field => {
+                const error = validateField(field, selectedNode.data.settings?.[field.name]);
+                const isExpanded = expandedFields.has(field.name);
 
-            return (
-              <div
-                key={field.name}
-                style={{
-                  marginBottom: 16,
-                  padding: 12,
-                  background: error ? 'rgba(239, 68, 68, 0.1)' : 'rgba(30, 41, 59, 0.5)',
-                  borderRadius: 8,
-                  border: error ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid transparent',
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                {/* Field header with description toggle */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    marginBottom: 8,
-                  }}
-                >
-                  <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>
-                    {field.label || field.name}
-                    {field.required && <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>}
-                  </span>
-                  {field.description && (
-                    <button
-                      onClick={() => toggleFieldExpand(field.name)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: '#6b7280',
-                        padding: 2,
-                        display: 'flex',
-                      }}
-                    >
-                      <Info size={14} />
-                    </button>
-                  )}
-                </div>
-
-                {/* Field description */}
-                {field.description && isExpanded && (
+                return (
                   <div
+                    key={field.name}
                     style={{
-                      fontSize: 11,
-                      color: '#9ca3af',
-                      marginBottom: 8,
-                      padding: '6px 8px',
-                      background: '#1f2937',
-                      borderRadius: 4,
-                      animation: 'fadeIn 0.2s ease',
+                      marginBottom: 16,
+                      padding: 12,
+                      background: error ? 'rgba(239, 68, 68, 0.1)' : 'rgba(30, 41, 59, 0.5)',
+                      borderRadius: 8,
+                      border: error ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid transparent',
+                      transition: 'all 0.2s ease',
                     }}
                   >
-                    {field.description}
+                    {/* Field header with description toggle */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>
+                        {field.label || field.name}
+                        {field.required && (
+                          <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>
+                        )}
+                      </span>
+                      {field.description && (
+                        <button
+                          onClick={() => toggleFieldExpand(field.name)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#6b7280',
+                            padding: 2,
+                            display: 'flex',
+                          }}
+                        >
+                          <Info size={14} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Field description */}
+                    {field.description && isExpanded && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#9ca3af',
+                          marginBottom: 8,
+                          padding: '6px 8px',
+                          background: '#1f2937',
+                          borderRadius: 4,
+                          animation: 'fadeIn 0.2s ease',
+                        }}
+                      >
+                        {field.description}
+                      </div>
+                    )}
+
+                    {/* Field input */}
+                    <FieldRenderer
+                      field={field}
+                      value={selectedNode.data.settings?.[field.name] ?? field.default}
+                      onChange={v => handleFieldChange(field.name, v)}
+                      error={error}
+                      allSettings={selectedNode.data.settings}
+                    />
+                  </div>
+                );
+              })}
+
+            {/* Расширенные настройки */}
+            {block.configSchema.some(f => f.isAdvanced) && (
+              <div style={{ marginBottom: 16 }}>
+                <button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    background: showAdvanced ? '#1a1a2e' : 'transparent',
+                    border: '1px solid #374151',
+                    borderRadius: 8,
+                    color: '#9ca3af',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = '#1a1a2e';
+                    e.currentTarget.style.borderColor = '#3b82f6';
+                  }}
+                  onMouseLeave={e => {
+                    if (!showAdvanced) e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.borderColor = '#374151';
+                  }}
+                >
+                  <span>⚙️ Расширенные настройки</span>
+                  <span
+                    style={{
+                      transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0)',
+                      transition: 'transform 0.2s',
+                    }}
+                  >
+                    ▼
+                  </span>
+                </button>
+
+                {showAdvanced && (
+                  <div style={{ marginTop: 12, animation: 'fadeIn 0.2s ease' }}>
+                    {block.configSchema
+                      .filter(f => f.isAdvanced)
+                      .map(field => {
+                        const error = validateField(
+                          field,
+                          selectedNode.data.settings?.[field.name]
+                        );
+                        const isExpanded = expandedFields.has(field.name);
+
+                        return (
+                          <div
+                            key={field.name}
+                            style={{
+                              marginBottom: 12,
+                              padding: 12,
+                              background: error
+                                ? 'rgba(239, 68, 68, 0.1)'
+                                : 'rgba(30, 41, 59, 0.5)',
+                              borderRadius: 8,
+                              border: error
+                                ? '1px solid rgba(239, 68, 68, 0.3)'
+                                : '1px solid transparent',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            {/* Field header */}
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                marginBottom: 8,
+                              }}
+                            >
+                              <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>
+                                {field.label || field.name}
+                                {field.required && (
+                                  <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>
+                                )}
+                              </span>
+                              {field.description && (
+                                <button
+                                  onClick={() => toggleFieldExpand(field.name)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: '#6b7280',
+                                    padding: 2,
+                                    display: 'flex',
+                                  }}
+                                >
+                                  <Info size={14} />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Field description */}
+                            {field.description && isExpanded && (
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: '#9ca3af',
+                                  marginBottom: 8,
+                                  padding: '6px 8px',
+                                  background: '#1f2937',
+                                  borderRadius: 4,
+                                  animation: 'fadeIn 0.2s ease',
+                                }}
+                              >
+                                {field.description}
+                              </div>
+                            )}
+
+                            {/* Field input */}
+                            <FieldRenderer
+                              field={field}
+                              value={selectedNode.data.settings?.[field.name] ?? field.default}
+                              onChange={v => handleFieldChange(field.name, v)}
+                              error={error}
+                              allSettings={selectedNode.data.settings}
+                            />
+                          </div>
+                        );
+                      })}
                   </div>
                 )}
-
-                {/* Field input */}
-                <FieldRenderer
-                  field={field}
-                  value={selectedNode.data.settings?.[field.name] ?? field.default}
-                  onChange={v => handleFieldChange(field.name, v)}
-                  error={error}
-                />
               </div>
-            );
-          })
+            )}
+          </>
         ) : (
           <div
             style={{

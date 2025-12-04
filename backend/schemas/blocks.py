@@ -1,4 +1,4 @@
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -17,7 +17,24 @@ VALID_FIELD_TYPES = [
     "file",
     "datetime",
     "duration",
+    "scenario_select",  # Выбор сценария из списка
+    "node_select",      # Выбор блока внутри сценария
+    "button_list",      # Список кнопок для сообщений
+    "media_upload",     # Загрузка медиа-файла или URL
 ]
+
+
+class SelectOption(BaseModel):
+    """Опция для select с label и value"""
+    value: str
+    label: str
+
+
+class FieldDependsOn(BaseModel):
+    """Условие зависимости поля от другого"""
+    field: str
+    value: Any
+    invert: Optional[bool] = Field(default=False, description="Инвертировать условие")
 
 
 class BlockConfigField(BaseModel):
@@ -28,8 +45,19 @@ class BlockConfigField(BaseModel):
     label: str = Field(..., description="Отображаемое название")
     required: bool = Field(default=False, description="Обязательное ли поле")
     default: Optional[Any] = Field(default=None, description="Значение по умолчанию")
-    options: Optional[List[str]] = Field(
+    description: Optional[str] = Field(default=None, description="Описание поля")
+    placeholder: Optional[str] = Field(default=None, description="Placeholder для input")
+    # Опции могут быть строками или объектами с value и label
+    options: Optional[List[Union[str, SelectOption]]] = Field(
         default=None, description="Варианты для select/multiselect"
+    )
+    # Условная видимость поля
+    dependsOn: Optional[FieldDependsOn] = Field(
+        default=None, description="Условие зависимости от другого поля"
+    )
+    # Расширенная настройка (показывается в collapsible секции)
+    isAdvanced: Optional[bool] = Field(
+        default=False, description="Является ли поле расширенной настройкой"
     )
 
     @field_validator("type")

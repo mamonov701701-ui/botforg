@@ -1,3 +1,10 @@
+export interface SelectOptionObject {
+  value: string;
+  label: string;
+}
+
+export type SelectOption = string | SelectOptionObject;
+
 export interface BlockConfigField {
   name: string;
   type:
@@ -11,11 +18,23 @@ export interface BlockConfigField {
     | 'image'
     | 'file'
     | 'datetime'
-    | 'duration';
+    | 'duration'
+    | 'scenario_select' // Выбор сценария из списка
+    | 'node_select' // Выбор блока внутри сценария
+    | 'button_list' // Список кнопок для сообщений
+    | 'media_upload'; // Загрузка медиа-файла или URL
   label: string;
   required: boolean;
   default?: any;
-  options?: string[];
+  options?: SelectOption[];
+  description?: string;
+  placeholder?: string;
+  dependsOn?: {
+    field: string;
+    value: any;
+    invert?: boolean; // Инвертировать условие (показывать когда НЕ равно)
+  };
+  isAdvanced?: boolean; // Показывать в секции "Расширенные настройки"
 }
 
 export interface BlockCatalogItem {

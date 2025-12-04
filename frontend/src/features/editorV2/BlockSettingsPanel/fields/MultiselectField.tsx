@@ -12,10 +12,7 @@ export const MultiselectField: React.FC<FieldProps> = ({ field, value, onChange,
   };
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
-        {field.label} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
-      </label>
+    <div>
       <div
         style={{
           padding: 8,

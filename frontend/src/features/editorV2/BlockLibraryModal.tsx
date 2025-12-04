@@ -27,6 +27,7 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
     useEditorStore();
   const [activeTab, setActiveTab] = useState<string>('basic');
   const [selectedBlock, setSelectedBlock] = useState<BlockCatalogItem | null>(null);
+  const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Load catalog on mount
   useEffect(() => {
@@ -40,8 +41,23 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
     if (!isOpen) {
       setSelectedBlock(null);
       setActiveTab('basic');
+      setSearchQuery('');
+      // Очищаем timeout
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
+        setHoverTimeout(null);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, setSearchQuery, hoverTimeout]);
+
+  // Cleanup timeout при размонтировании
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout) {
+        clearTimeout(hoverTimeout);
+      }
+    };
+  }, [hoverTimeout]);
 
   // Filter blocks by active tab and search
   const filteredBlocks = useMemo(() => {
@@ -53,6 +69,28 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
     // Position will be calculated by parent (viewport center or near selected node)
     onAddBlock(block);
     onClose();
+  };
+
+  const handleBlockHover = (block: BlockCatalogItem) => {
+    // Очищаем предыдущий timeout
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+    }
+
+    // Устанавливаем новый timeout для плавного preview
+    const timeout = setTimeout(() => {
+      setSelectedBlock(block);
+    }, 200); // 200ms задержка
+
+    setHoverTimeout(timeout);
+  };
+
+  const handleBlockLeave = () => {
+    // Очищаем timeout если мышь ушла до его срабатывания
+    if (hoverTimeout) {
+      clearTimeout(hoverTimeout);
+      setHoverTimeout(null);
+    }
   };
 
   if (!isOpen) return null;
@@ -78,8 +116,9 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
           background: '#0b1b2a',
           borderRadius: 16,
           padding: 0,
-          maxWidth: 900,
-          width: '90%',
+          maxWidth: 1000,
+          width: '92%',
+          height: '85vh',
           maxHeight: '85vh',
           display: 'flex',
           flexDirection: 'column',
@@ -279,15 +318,21 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
         <div
           style={{
             flex: 1,
-            overflowY: 'auto',
+            overflow: 'hidden',
             padding: 24,
             display: 'grid',
-            gridTemplateColumns: selectedBlock ? '1fr 320px' : '1fr',
+            gridTemplateColumns: '1fr 320px',
             gap: 24,
+            minHeight: 0,
           }}
         >
           {/* Blocks List */}
-          <div>
+          <div
+            style={{
+              overflowY: 'auto',
+              height: '100%',
+            }}
+          >
             {filteredBlocks.length === 0 ? (
               <div
                 style={{
@@ -310,6 +355,8 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
                   gap: 16,
+                  alignContent: 'start',
+                  padding: '4px',
                 }}
               >
                 {filteredBlocks.map(block => (
@@ -317,21 +364,22 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                     key={block.id}
                     onClick={() => handleBlockClick(block)}
                     onMouseEnter={e => {
-                      setSelectedBlock(block);
+                      handleBlockHover(block);
                       // Visual hover effect
                       const r = parseInt(block.color.slice(1, 3), 16);
                       const g = parseInt(block.color.slice(3, 5), 16);
                       const b = parseInt(block.color.slice(5, 7), 16);
-                      if (selectedBlock?.id !== block.id) {
-                        e.currentTarget.style.boxShadow = `0 4px 16px rgba(${r}, ${g}, ${b}, 0.4)`;
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                      }
+                      e.currentTarget.style.boxShadow = `0 4px 16px rgba(${r}, ${g}, ${b}, 0.4)`;
+                      e.currentTarget.style.transform = 'translateY(-2px)';
                     }}
                     onMouseLeave={e => {
-                      if (selectedBlock?.id !== block.id) {
-                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                      }
+                      handleBlockLeave();
+                      // Reset visual hover effect
+                      e.currentTarget.style.boxShadow =
+                        selectedBlock?.id === block.id
+                          ? `0 4px 16px ${block.color}40`
+                          : '0 2px 8px rgba(0, 0, 0, 0.2)';
+                      e.currentTarget.style.transform = 'translateY(0)';
                     }}
                     style={{
                       background: selectedBlock?.id === block.id ? '#1a1a2e' : '#0f1729',
@@ -340,15 +388,13 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                       padding: 16,
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      transform: selectedBlock?.id === block.id ? 'scale(1.02)' : 'scale(1)',
                       boxShadow:
                         selectedBlock?.id === block.id
                           ? `0 4px 16px ${block.color}40`
                           : '0 2px 8px rgba(0, 0, 0, 0.2)',
                       display: 'flex',
                       flexDirection: 'column',
-                      minHeight: '120px',
-                      maxHeight: '200px',
+                      height: '140px',
                       boxSizing: 'border-box',
                       overflow: 'hidden',
                     }}
@@ -404,108 +450,138 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
             )}
           </div>
 
-          {/* Preview Panel */}
-          {selectedBlock && (
-            <div
-              style={{
-                background: '#0f1729',
-                border: '1px solid #374151',
-                borderRadius: 12,
-                padding: 20,
-                position: 'sticky',
-                top: 0,
-                maxHeight: 'calc(85vh - 200px)',
-                overflowY: 'auto',
-              }}
-            >
+          {/* Preview Panel - всегда в DOM, но скрыт если блок не выбран */}
+          <div
+            style={{
+              background: '#0f1729',
+              border: '1px solid #374151',
+              borderRadius: 12,
+              padding: 20,
+              height: '100%',
+              overflowY: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {selectedBlock ? (
+              <>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    marginBottom: 16,
+                    paddingBottom: 16,
+                    borderBottom: '1px solid #374151',
+                  }}
+                >
+                  <span style={{ fontSize: 32 }}>{selectedBlock.icon}</span>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
+                      {selectedBlock.title}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>ID: {selectedBlock.id}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 8 }}>
+                    Описание
+                  </div>
+                  <div style={{ color: '#fff', fontSize: 13, lineHeight: 1.6 }}>
+                    {selectedBlock.description}
+                  </div>
+                </div>
+
+                {selectedBlock.configSchema && selectedBlock.configSchema.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div
+                      style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 8 }}
+                    >
+                      Параметры
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {selectedBlock.configSchema.slice(0, 5).map((param, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            background: '#1a1a2e',
+                            padding: 8,
+                            borderRadius: 6,
+                            fontSize: 12,
+                          }}
+                        >
+                          <div style={{ color: '#fff', fontWeight: 600 }}>
+                            {param.label || param.name}
+                          </div>
+                          <div style={{ color: '#9ca3af', fontSize: 11 }}>
+                            {param.type} {param.required ? '(обязательно)' : '(опционально)'}
+                          </div>
+                        </div>
+                      ))}
+                      {selectedBlock.configSchema.length > 5 && (
+                        <div style={{ color: '#9ca3af', fontSize: 11, textAlign: 'center' }}>
+                          и ещё {selectedBlock.configSchema.length - 5}...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => handleBlockClick(selectedBlock)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: selectedBlock.color,
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.opacity = '0.9';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.opacity = '1';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  Добавить блок
+                </button>
+              </>
+            ) : (
+              // Placeholder когда блок не выбран
               <div
                 style={{
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  gap: 12,
-                  marginBottom: 16,
-                  paddingBottom: 16,
-                  borderBottom: '1px solid #374151',
+                  justifyContent: 'center',
+                  height: '100%',
+                  minHeight: 300,
+                  color: '#6b7280',
+                  textAlign: 'center',
+                  padding: 20,
                 }}
               >
-                <span style={{ fontSize: 32 }}>{selectedBlock.icon}</span>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
-                    {selectedBlock.title}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#9ca3af' }}>ID: {selectedBlock.id}</div>
+                <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>👈</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
+                  Предпросмотр блока
+                </div>
+                <div style={{ fontSize: 12, lineHeight: 1.6, opacity: 0.7 }}>
+                  Наведите курсор на любой блок слева,
+                  <br />
+                  чтобы увидеть его подробное описание
+                  <br />и список параметров
                 </div>
               </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 8 }}>
-                  Описание
-                </div>
-                <div style={{ color: '#fff', fontSize: 13, lineHeight: 1.6 }}>
-                  {selectedBlock.description}
-                </div>
-              </div>
-
-              {selectedBlock.configSchema && selectedBlock.configSchema.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', marginBottom: 8 }}>
-                    Параметры
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {selectedBlock.configSchema.slice(0, 5).map((param, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          background: '#1a1a2e',
-                          padding: 8,
-                          borderRadius: 6,
-                          fontSize: 12,
-                        }}
-                      >
-                        <div style={{ color: '#fff', fontWeight: 600 }}>
-                          {param.label || param.name}
-                        </div>
-                        <div style={{ color: '#9ca3af', fontSize: 11 }}>
-                          {param.type} {param.required ? '(обязательно)' : '(опционально)'}
-                        </div>
-                      </div>
-                    ))}
-                    {selectedBlock.configSchema.length > 5 && (
-                      <div style={{ color: '#9ca3af', fontSize: 11, textAlign: 'center' }}>
-                        и ещё {selectedBlock.configSchema.length - 5}...
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={() => handleBlockClick(selectedBlock)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  background: selectedBlock.color,
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.opacity = '0.9';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.opacity = '1';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                Добавить блок
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

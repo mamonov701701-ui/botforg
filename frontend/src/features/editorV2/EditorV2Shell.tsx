@@ -18,6 +18,8 @@ import ReactFlow, {
   getBezierPath,
   useEdgesState,
   useNodesState,
+  NodeChange,
+  EdgeChange,
 } from 'reactflow';
 import { nanoid } from 'nanoid';
 import 'reactflow/dist/style.css';
@@ -79,10 +81,20 @@ const ConnectionLine = ({
 const CustomNode = React.memo(({ data, id, selected }: any) => {
   const title = data?.title ?? 'Блок';
   const isStartNode = data?.blockId === 'start';
+  const isMessageNode = data?.blockId === 'message';
   const borderColor = data?.color || '#2f6dff';
 
-  // Get validation status
-  const validation = useValidationStore(state => state.getNodeValidation(id));
+  // Получаем кнопки для блока message
+  const buttons = isMessageNode && data?.settings?.buttons ? data.settings.buttons : [];
+  const hasButtons = buttons.length > 0;
+
+  // Get validation status - мемоизированный селектор
+  // Используем useMemo чтобы селектор не пересоздавался
+  const validationSelector = useMemo(
+    () => (state: { getNodeValidation: (id: string) => any }) => state.getNodeValidation(id),
+    [id]
+  );
+  const validation = useValidationStore(validationSelector);
   const isInvalid = validation && !validation.isValid;
 
   return (
@@ -118,6 +130,7 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
       {/* Для стартового блока - только 2 Handle (сверху и снизу) */}
       {isStartNode ? (
         <>
+          {/* Top - входящий (зелёный) */}
           <Handle
             id="top"
             type="target"
@@ -134,13 +147,14 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             }}
             className="react-flow__handle-visible"
           />
+          {/* Bottom - исходящий (оранжевый) */}
           <Handle
             id="bottom"
             type="source"
             position={Position.Bottom}
             isConnectable={true}
             style={{
-              background: '#00ff00',
+              background: '#FFB300',
               width: 19.4,
               height: 19.4,
               border: '3px solid #fff',
@@ -151,10 +165,33 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             className="react-flow__handle-visible"
           />
         </>
-      ) : (
-        /* Для остальных блоков - 4 Handle (со всех сторон) - source и target */
+      ) : isMessageNode && hasButtons ? (
+        /* Для блока message с кнопками - только входной хэндл сверху,
+           выходы будут от самих кнопок */
         <>
-          {/* Top - входящие соединения */}
+          {/* Top - входящий (зелёный) */}
+          <Handle
+            id="top"
+            type="target"
+            position={Position.Top}
+            isConnectable={true}
+            style={{
+              background: '#00ff00',
+              width: 19.4,
+              height: 19.4,
+              border: '3px solid #fff',
+              top: -9.7,
+              zIndex: 10000,
+              transition: 'all 0.2s ease',
+            }}
+            className="react-flow__handle-visible"
+          />
+        </>
+      ) : (
+        /* Для остальных блоков - 4 Handle (со всех сторон)
+           Зелёный = входящий (target), Оранжевый = исходящий (source) */
+        <>
+          {/* Top - входящий (зелёный) */}
           <Handle
             id="top"
             type="target"
@@ -172,14 +209,14 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             className="react-flow__handle-visible"
           />
 
-          {/* Right - исходящие соединения */}
+          {/* Right - исходящий (оранжевый) */}
           <Handle
             id="right"
             type="source"
             position={Position.Right}
             isConnectable={true}
             style={{
-              background: '#00ff00',
+              background: '#FFB300',
               width: 19.4,
               height: 19.4,
               border: '3px solid #fff',
@@ -190,14 +227,14 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             className="react-flow__handle-visible"
           />
 
-          {/* Bottom - исходящие соединения */}
+          {/* Bottom - исходящий (оранжевый) */}
           <Handle
             id="bottom"
             type="source"
             position={Position.Bottom}
             isConnectable={true}
             style={{
-              background: '#00ff00',
+              background: '#FFB300',
               width: 19.4,
               height: 19.4,
               border: '3px solid #fff',
@@ -208,7 +245,7 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             className="react-flow__handle-visible"
           />
 
-          {/* Left - входящие соединения */}
+          {/* Left - входящий (зелёный) */}
           <Handle
             id="left"
             type="target"
@@ -283,6 +320,138 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
           {title}
         </div>
       </div>
+
+      {/* Preview текста сообщения - увеличенный и более читаемый */}
+      {isMessageNode && data?.settings?.text && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            color: '#1f2937',
+            lineHeight: 1.5,
+            maxHeight: '48px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            wordBreak: 'break-word',
+            opacity: 0.85,
+            fontWeight: 400,
+          }}
+          title={data.settings.text}
+        >
+          {data.settings.text}
+        </div>
+      )}
+
+      {/* Кнопки для блока message с хэндлами на границе блока */}
+      {hasButtons && (
+        <div
+          style={{
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: '2px solid rgba(0, 0, 0, 0.08)',
+            marginLeft: -18,
+            marginRight: -18,
+            paddingLeft: 0,
+            paddingRight: 0,
+            width: 'calc(100% + 36px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            position: 'relative',
+          }}
+        >
+          {buttons.slice(0, 5).map((button: any, index: number) => (
+            <div
+              key={index}
+              style={{
+                position: 'relative',
+                display: 'block',
+                width: '100%',
+                minWidth: 0,
+                background: 'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '12px 20px',
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#ffffff',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                textAlign: 'center',
+                opacity: 1,
+                boxSizing: 'border-box',
+                zIndex: 1,
+                pointerEvents: 'auto',
+              }}
+              title={button.label || `Кнопка ${index + 1}`}
+              onMouseEnter={e => {
+                e.currentTarget.style.background =
+                  'linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)';
+                e.currentTarget.style.boxShadow =
+                  '0 4px 8px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(37, 99, 235, 0.4)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background =
+                  'linear-gradient(180deg, #3b82f6 0%, #2563eb 100%)';
+                e.currentTarget.style.boxShadow =
+                  '0 2px 4px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.1)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <span
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  display: 'block',
+                }}
+              >
+                {button.label || `Кнопка ${index + 1}`}
+              </span>
+
+              {/* Хэндл для каждой кнопки - на ПРАВОЙ ГРАНИЦЕ БЛОКА NODE */}
+              <Handle
+                id={`button_${index}`}
+                type="source"
+                position={Position.Right}
+                isConnectable={true}
+                style={{
+                  background: '#FFB300',
+                  width: 19.4,
+                  height: 19.4,
+                  border: '3px solid #fff',
+                  right: -11.7,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 10001,
+                  position: 'absolute',
+                  boxShadow: '0 2px 6px rgba(255, 179, 0, 0.5)',
+                  cursor: 'crosshair',
+                }}
+                className="react-flow__handle-visible"
+              />
+            </div>
+          ))}
+          {buttons.length > 5 && (
+            <div
+              style={{
+                fontSize: 11,
+                color: '#6b7280',
+                textAlign: 'center',
+                padding: '4px 0',
+                fontWeight: 500,
+              }}
+            >
+              +{buttons.length - 5} ещё
+            </div>
+          )}
+        </div>
+      )}
       {/* Visual shows icon + title, no settings content */}
     </div>
   );
@@ -306,6 +475,7 @@ function InnerEditor() {
 
   // Scenario store для работы со сценариями
   const syncFromEditor = useScenarioStore(state => state.syncFromEditor);
+  const scenarios = useScenarioStore(state => state.scenarios);
 
   // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
   // React Flow управляет своим внутренним state, Zustand используется ТОЛЬКО для добавления новых блоков
@@ -362,17 +532,26 @@ function InnerEditor() {
   // Обработчики изменений для ReactFlow - БЕЗ синхронизации обратно в Zustand
   // Zustand используется только как "входная точка" для добавления блоков
   const onNodesChange = useCallback(
-    (changes: any) => {
-      onNodesChangeInternal(changes);
-      // НЕ синхронизируем обратно в Zustand - React Flow управляет position/dimensions
+    (changes: NodeChange[]) => {
+      // Фильтруем изменения dimensions, которые могут вызывать лишние ре-рендеры
+      const filteredChanges = changes.filter(change => {
+        // Пропускаем изменения dimensions если размеры не изменились значительно
+        if (change.type === 'dimensions' && 'dimensions' in change) {
+          return true; // Оставляем, ReactFlow нужны dimensions
+        }
+        return true;
+      });
+
+      if (filteredChanges.length > 0) {
+        onNodesChangeInternal(filteredChanges);
+      }
     },
     [onNodesChangeInternal]
   );
 
   const onEdgesChange = useCallback(
-    (changes: any) => {
+    (changes: EdgeChange[]) => {
       onEdgesChangeInternal(changes);
-      // НЕ синхронизируем обратно в Zustand
     },
     [onEdgesChangeInternal]
   );
@@ -389,6 +568,11 @@ function InnerEditor() {
   const [isBlockLibraryOpen, setIsBlockLibraryOpen] = useState(false);
   const { setViewport, screenToFlowPosition, getViewport, fitView } = useReactFlow();
   const reactFlowWrapper = React.useRef<HTMLDivElement>(null);
+
+  // Ref для debounce валидации
+  const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Ref для отслеживания, идёт ли начальная загрузка
+  const isInitialLoadRef = useRef(true);
 
   // КРИТИЧНО: Следим за видимостью узлов и восстанавливаем её, если React Flow скрывает
   React.useEffect(() => {
@@ -685,17 +869,42 @@ function InnerEditor() {
     }
   }, []);
 
-  // Validate all nodes
-  const runValidation = useCallback(() => {
-    const results = validateAllNodesWithSchema(nodes, catalog);
-    setAllValidationResults(results);
-    return results;
-  }, [nodes, catalog, setAllValidationResults]);
+  // Validate all nodes - стабильная функция без зависимости от nodes
+  const runValidation = useCallback(
+    (nodesToValidate?: Node[]) => {
+      const targetNodes = nodesToValidate ?? nodes;
+      // Передаём scenarios для валидации блоков go_to_scenario
+      const results = validateAllNodesWithSchema(targetNodes, catalog, scenarios);
+      setAllValidationResults(results);
+      return results;
+    },
+    [catalog, setAllValidationResults, scenarios]
+  );
 
-  // Auto-validate on nodes change
+  // Auto-validate on nodes change с debounce чтобы избежать бесконечного цикла
   useEffect(() => {
-    runValidation();
-  }, [nodes, runValidation]);
+    // Пропускаем начальную загрузку чтобы избежать лишних рендеров
+    if (isInitialLoadRef.current && nodes.length === 0) {
+      return;
+    }
+    isInitialLoadRef.current = false;
+
+    // Очищаем предыдущий timeout
+    if (validationTimeoutRef.current) {
+      clearTimeout(validationTimeoutRef.current);
+    }
+
+    // Debounce валидацию на 100ms чтобы избежать каскадных обновлений
+    validationTimeoutRef.current = setTimeout(() => {
+      runValidation(nodes);
+    }, 100);
+
+    return () => {
+      if (validationTimeoutRef.current) {
+        clearTimeout(validationTimeoutRef.current);
+      }
+    };
+  }, [nodes.length]); // Зависим только от длины, не от самих nodes
 
   const selectedNode = useMemo(
     () => nodes.find(n => n.id === selectedNodeId),
@@ -863,11 +1072,32 @@ function InnerEditor() {
     setViewport({ x: 0, y: 0, zoom: 0.6 }, { duration: 0 });
   }, [setViewport]);
 
-  // Синхронизация изменений с scenarioStore
+  // Ref для debounce синхронизации со scenarioStore
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Синхронизация изменений с scenarioStore (с debounce)
   useEffect(() => {
-    // При изменении nodes/edges синхронизируем с scenarioStore
-    syncFromEditor();
-  }, [zustandNodes, zustandEdges, syncFromEditor]);
+    // Пропускаем если нет данных
+    if (zustandNodes.length === 0 && zustandEdges.length === 0) {
+      return;
+    }
+
+    // Очищаем предыдущий timeout
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+
+    // Debounce синхронизацию на 200ms
+    syncTimeoutRef.current = setTimeout(() => {
+      syncFromEditor();
+    }, 200);
+
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, [zustandNodes.length, zustandEdges.length]); // Зависим только от длины
 
   // Типы узлов и рёбер
   const nodeTypes = useMemo(
@@ -903,9 +1133,35 @@ function InnerEditor() {
   // Создание соединения
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge = {
-        ...params,
-        id: `${params.source}-${params.target}`,
+      // Валидация параметров соединения
+      if (!params.source || !params.target) {
+        console.warn('Invalid connection params:', params);
+        return;
+      }
+
+      // ID включает source, sourceHandle, target, targetHandle для поддержки множественных соединений
+      // между разными Handle одних и тех же блоков
+      const edgeId = `${params.source}_${params.sourceHandle || 'default'}-${params.target}_${params.targetHandle || 'default'}`;
+
+      // Проверяем, не существует ли уже такое соединение
+      const existingEdge = edges.find(e => e.id === edgeId);
+      if (existingEdge) {
+        showToast('Такое соединение уже существует', 'warning');
+        return;
+      }
+
+      // Запрещаем самосоединение (соединение блока с самим собой)
+      if (params.source === params.target) {
+        showToast('Нельзя соединить блок с самим собой', 'warning');
+        return;
+      }
+
+      const newEdge: Edge = {
+        id: edgeId,
+        source: params.source,
+        target: params.target,
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle,
         type: 'default',
         animated: false,
         data: {
@@ -925,11 +1181,11 @@ function InnerEditor() {
 
       // Добавляем ТОЛЬКО в React Flow (не в Zustand, чтобы избежать дубликатов)
       // Zustand edges используются только для загрузки/сохранения сценария
-      setEdges(eds => addEdge(newEdge, eds));
+      setEdges(eds => [...eds, newEdge]);
 
       showToast('Соединение создано', 'success');
     },
-    [setEdges, showToast, handleDeleteEdge]
+    [edges, setEdges, showToast, handleDeleteEdge]
   );
 
   // Handle drag over canvas - улучшаем визуальную обратную связь
@@ -1502,27 +1758,6 @@ function InnerEditor() {
               height: '100%',
             }}
           >
-            <button
-              onClick={() => {
-                setIsPanelVisible(false);
-                setSelectedNodeId(undefined);
-              }}
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 8,
-                background: '#1f2937',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 4,
-                padding: '4px 8px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                zIndex: 10,
-              }}
-            >
-              ✕ Закрыть
-            </button>
             <BlockSettingsPanel
               selectedNode={selectedNode}
               onClose={() => {
@@ -1531,6 +1766,9 @@ function InnerEditor() {
               }}
               onDelete={handleDeleteNode}
               onDuplicate={handleDuplicateNode}
+              onUpdateNode={(nodeId, updates) => {
+                setNodes(nodes => nodes.map(n => (n.id === nodeId ? { ...n, ...updates } : n)));
+              }}
             />
           </aside>
         )}

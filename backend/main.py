@@ -5,7 +5,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
+from pathlib import Path
 
 from backend.auth import email_routes
 from backend.auth import routes as oauth_routes
@@ -29,6 +31,7 @@ from backend.routers import my_roles as my_roles_router
 from backend.routers import team as team_router
 from backend.routers import ai as ai_router
 from backend.routers import analytics as analytics_router
+from backend.routers import media as media_router
 from backend.settings import settings
 
 app = FastAPI()
@@ -93,6 +96,12 @@ app.include_router(my_roles_router.router)
 app.include_router(team_router.router, prefix="/api/team")
 app.include_router(ai_router.router)
 app.include_router(analytics_router.router)
+app.include_router(media_router.router, prefix="/media")
+
+# Настройка раздачи статических файлов для загруженных медиа
+UPLOAD_DIR = Path("uploads/media")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/health")

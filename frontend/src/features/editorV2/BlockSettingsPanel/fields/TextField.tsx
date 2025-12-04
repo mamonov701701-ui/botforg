@@ -3,15 +3,12 @@ import { FieldProps } from './types';
 
 export const TextField: React.FC<FieldProps> = ({ field, value, onChange, error }) => {
   return (
-    <div style={{ marginBottom: 16 }}>
-      <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 600 }}>
-        {field.label} {field.required && <span style={{ color: '#ef4444' }}>*</span>}
-      </label>
+    <div>
       <textarea
         value={value || ''}
         onChange={e => onChange(e.target.value)}
-        placeholder={field.label}
-        rows={4}
+        placeholder={field.placeholder || field.label}
+        rows={6}
         style={{
           width: '100%',
           padding: '10px 12px',

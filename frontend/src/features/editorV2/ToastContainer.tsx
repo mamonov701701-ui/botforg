@@ -37,12 +37,13 @@ const ToastContainer: React.FC = () => {
     <div
       style={{
         position: 'fixed',
-        top: 80,
+        top: 20,
         right: 20,
-        zIndex: 9999,
+        zIndex: 99999,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
+        pointerEvents: 'none', // Не блокируем клики на элементы под ним
       }}
     >
       {toasts.map(toast => (
@@ -55,11 +56,12 @@ const ToastContainer: React.FC = () => {
             padding: '12px 16px',
             minWidth: 300,
             maxWidth: 400,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
             display: 'flex',
             alignItems: 'flex-start',
             gap: 12,
             animation: 'slideIn 0.3s ease',
+            pointerEvents: 'auto', // Включаем клики на самих toast
           }}
         >
           <span style={{ fontSize: 20 }}>{getToastIcon(toast.type)}</span>
@@ -91,6 +93,22 @@ const ToastContainer: React.FC = () => {
           </button>
         </div>
       ))}
+
+      {/* CSS for animations */}
+      <style>
+        {`
+          @keyframes slideIn {
+            from {
+              opacity: 0;
+              transform: translateX(100px);
+            }
+            to {
+              opacity: 1;
+              transform: translateX(0);
+            }
+          }
+        `}
+      </style>
     </div>
   );
 };

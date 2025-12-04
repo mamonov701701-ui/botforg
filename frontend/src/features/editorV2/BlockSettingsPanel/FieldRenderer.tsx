@@ -8,16 +8,35 @@ import { SelectField } from './fields/SelectField';
 import { MultiselectField } from './fields/MultiselectField';
 import { JsonField } from './fields/JsonField';
 import { DurationField } from './fields/DurationField';
+import { ScenarioSelectField } from './fields/ScenarioSelectField';
+import { NodeSelectField } from './fields/NodeSelectField';
+import { ButtonListField } from './fields/ButtonListField';
+import { MediaUploadField } from './fields/MediaUploadField';
 
 interface Props {
   field: BlockConfigField;
   value: any;
   onChange: (value: any) => void;
   error?: string;
+  // Дополнительные данные для специальных полей
+  allSettings?: Record<string, any>;
 }
 
 export const FieldRenderer: React.FC<Props> = props => {
-  switch (props.field.type) {
+  const { field, allSettings } = props;
+
+  // Проверка dependsOn - если поле зависит от другого и условие не выполнено, не показываем
+  if (field.dependsOn && allSettings) {
+    const dependentValue = allSettings[field.dependsOn.field];
+    const conditionMet = dependentValue === field.dependsOn.value;
+    const shouldShow = field.dependsOn.invert ? !conditionMet : conditionMet;
+
+    if (!shouldShow) {
+      return null;
+    }
+  }
+
+  switch (field.type) {
     case 'string':
       return <StringField {...props} />;
     case 'text':
@@ -34,6 +53,21 @@ export const FieldRenderer: React.FC<Props> = props => {
       return <JsonField {...props} />;
     case 'duration':
       return <DurationField {...props} />;
+    case 'scenario_select':
+      return <ScenarioSelectField {...props} />;
+    case 'node_select':
+      // Передаём ID выбранного сценария для загрузки его блоков
+      return <NodeSelectField {...props} scenarioId={allSettings?.targetScenarioId} />;
+    case 'button_list':
+      return <ButtonListField {...props} />;
+    case 'media_upload':
+      return (
+        <MediaUploadField
+          {...props}
+          mediaSource={allSettings?.mediaSource as 'upload' | 'url'}
+          mediaType={allSettings?.mediaType as 'none' | 'image' | 'gif' | 'video'}
+        />
+      );
     case 'datetime':
     case 'image':
     case 'file':
@@ -48,8 +82,8 @@ export const FieldRenderer: React.FC<Props> = props => {
             fontSize: 13,
           }}
         >
-          <div style={{ fontWeight: 600, marginBottom: 4 }}>{props.field.label}</div>
-          <div>Тип поля "{props.field.type}" скоро будет доступен...</div>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{field.label}</div>
+          <div>Тип поля "{field.type}" скоро будет доступен...</div>
         </div>
       );
     default:
@@ -64,7 +98,7 @@ export const FieldRenderer: React.FC<Props> = props => {
             fontSize: 13,
           }}
         >
-          Неизвестный тип поля: {props.field.type}
+          Неизвестный тип поля: {field.type}
         </div>
       );
   }
