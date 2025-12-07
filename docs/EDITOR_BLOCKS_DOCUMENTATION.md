@@ -43,7 +43,8 @@ interface BlockCatalogItem {
 interface BlockConfigField {
   name: string;     // Имя поля в settings
   type: 'string' | 'text' | 'number' | 'boolean' | 'select' | 
-        'multiselect' | 'json' | 'image' | 'file' | 'datetime' | 'duration';
+        'multiselect' | 'json' | 'image' | 'file' | 'datetime' | 'duration' |
+        'media_upload' | 'media_list' | 'button_list' | 'scenario_select' | 'node_select';
   label: string;    // Отображаемое название
   required: boolean;
   default?: any;
@@ -421,6 +422,11 @@ const newNode: Node = {
 | `duration` | Длительность | DurationPicker | Пауза, таймаут |
 | `image` | Загрузка изображения | FileUpload | — |
 | `file` | Загрузка файла | FileUpload | Вложения |
+| `media_upload` | Загрузка одного медиа-файла (изображение/GIF/видео) или URL | MediaUploadField | Медиа для блока сообщения (устаревший) |
+| `media_list` | Список медиа-файлов (несколько изображений/GIF/видео) | MediaListField | Множественные медиа для блока сообщения |
+| `button_list` | Список кнопок для сообщений | ButtonListField | Кнопки в блоке сообщения |
+| `scenario_select` | Выбор сценария из списка | ScenarioSelectField | Переход к другому сценарию |
+| `node_select` | Выбор блока внутри сценария | NodeSelectField | Переход к конкретному блоку |
 
 ---
 
@@ -436,6 +442,11 @@ const newNode: Node = {
 ### 9.2 Особенности блоков
 
 - **Стартовый блок (`start`):** только top (target) и bottom (source)
+- **Блок сообщения (`message`) без кнопок:** top (target) и right (source)
+- **Блок сообщения (`message`) с кнопками:** 
+  - top (target) — входной handle
+  - Для каждой кнопки: `button_${index}` (source) на правой границе блока
+  - Стандартный right handle скрывается при наличии кнопок
 - **Остальные блоки:** 4 Handle — по одному на каждой стороне
 
 ### 9.3 Логика ID соединений
@@ -444,8 +455,18 @@ const newNode: Node = {
 // Уникальный ID для поддержки множественных соединений
 const edgeId = `${source}_${sourceHandle || 'default'}-${target}_${targetHandle || 'default'}`;
 
-// Пример: "nodeA_bottom-nodeB_top"
+// Примеры:
+// "nodeA_bottom-nodeB_top" - обычное соединение
+// "messageNode_button_0-targetNode_left" - соединение от кнопки
 ```
+
+### 9.4 Валидация edges при загрузке
+
+При загрузке сценария все edges валидируются на корректность handles:
+
+- Проверяется существование source и target узлов
+- Для handles кнопок (`button_0`, `button_1`, ...) проверяется, что соответствующая кнопка существует в настройках узла
+- Некорректные edges автоматически удаляются при загрузке
 
 ### 9.4 Валидация соединений
 

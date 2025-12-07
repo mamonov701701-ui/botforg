@@ -233,7 +233,13 @@
   - Text field: "Текст сообщения" (required)
   - Select field: "Режим парсинга"
   - Boolean field: "Отключить превью ссылок"
+  - Select field: "Тип медиа" (none, image, gif, video)
+  - Media list field: "Медиа-файлы" (если mediaType != none)
+  - Button list field: "Кнопки" (опционально)
+  - String field: "Название блока" (можно изменить, иконка остается)
 - [ ] Close button (X) visible in top-right
+- [ ] Panel closes when clicking on empty canvas area
+- [ ] Panel stays open when clicking on the same node again
 
 **Success Criteria**: Panel displays correct fields ✅
 
@@ -293,17 +299,33 @@ Test each field type by finding a block that uses it:
 
 1. Select "Сообщение" node
 2. Type "Test message" in "Текст сообщения" field
-3. Click "Inspect" button (or open console)
-4. Check console for logged settings
+3. Change "Название блока" to "Мое сообщение"
+4. Select "Тип медиа" = "image"
+5. Add multiple images via "Медиа-файлы" (upload or URL)
+6. Click "Inspect" button (or open console)
+7. Check console for logged settings
 
 **Verify**:
 
+- [ ] Settings update in real-time
+- [ ] Node title changes to "Мое сообщение" (icon remains unchanged)
+- [ ] Media previews appear in the node (200px width, 100px height, maintains aspect ratio)
+- [ ] Message text preview appears below media in the node
 - [ ] Console shows updated settings:
   ```json
   {
     "text": "Test message",
     "parseMode": "Plain",
-    "disablePreview": false
+    "disablePreview": false,
+    "mediaType": "image",
+    "mediaList": [
+      {
+        "url": "http://...",
+        "type": "image",
+        "source": "upload",
+        "fileName": "image.jpg"
+      }
+    ]
   }
   ```
 - [ ] No data appears outside `node.data.settings`

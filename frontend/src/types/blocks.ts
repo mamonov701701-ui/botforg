@@ -22,7 +22,8 @@ export interface BlockConfigField {
     | 'scenario_select' // Выбор сценария из списка
     | 'node_select' // Выбор блока внутри сценария
     | 'button_list' // Список кнопок для сообщений
-    | 'media_upload'; // Загрузка медиа-файла или URL
+    | 'media_upload' // Загрузка медиа-файла или URL
+    | 'media_list'; // Список медиа-файлов (несколько)
   label: string;
   required: boolean;
   default?: any;

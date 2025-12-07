@@ -12,6 +12,7 @@ import { ScenarioSelectField } from './fields/ScenarioSelectField';
 import { NodeSelectField } from './fields/NodeSelectField';
 import { ButtonListField } from './fields/ButtonListField';
 import { MediaUploadField } from './fields/MediaUploadField';
+import { MediaListField } from './fields/MediaListField';
 
 interface Props {
   field: BlockConfigField;
@@ -65,6 +66,13 @@ export const FieldRenderer: React.FC<Props> = props => {
         <MediaUploadField
           {...props}
           mediaSource={allSettings?.mediaSource as 'upload' | 'url'}
+          mediaType={allSettings?.mediaType as 'none' | 'image' | 'gif' | 'video'}
+        />
+      );
+    case 'media_list':
+      return (
+        <MediaListField
+          {...props}
           mediaType={allSettings?.mediaType as 'none' | 'image' | 'gif' | 'video'}
         />
       );

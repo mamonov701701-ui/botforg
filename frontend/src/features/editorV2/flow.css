@@ -35,6 +35,7 @@
   position: relative !important;
   z-index: 1 !important;
   transform-origin: 0 0 !important; /* Правильная точка трансформации */
+  isolation: isolate !important; /* Создаем новый stacking context для правильной работы z-index */
 }
 
 .react-flow__container {
@@ -44,17 +45,21 @@
   z-index: 1 !important;
 }
 
-/* Стили для Background (сетка с точками) - ДОЛЖЕН БЫТЬ ПОВЕРХ Pane */
+/* Стили для Background (сетка с точками) - ДОЛЖЕН БЫТЬ ПОВЕРХ Pane, НО ПОД УЗЛАМИ */
 .react-flow__background {
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
   width: 100% !important;
   height: 100% !important;
-  z-index: 2 !important; /* Поверх pane, но под узлами */
+  z-index: 0 !important; /* КРИТИЧНО: НИЖЕ узлов (z-index: 10) и pane (z-index: 1) */
   pointer-events: none !important;
   opacity: 1 !important;
   visibility: visible !important;
+  /* Убеждаемся, что background не создает stacking context, который может перекрыть узлы */
+  isolation: auto !important;
+  /* КРИТИЧНО: Убеждаемся, что background не может перекрыть узлы */
+  mix-blend-mode: normal !important;
 }
 
 /* SVG паттерн для точек */
@@ -67,6 +72,12 @@
   position: absolute !important;
   top: 0 !important;
   left: 0 !important;
+  z-index: 0 !important; /* КРИТИЧНО: Должен быть НИЖЕ узлов (z-index: 10) */
+  pointer-events: none !important; /* Не должен перехватывать события */
+  /* Убеждаемся, что SVG не создает stacking context */
+  isolation: auto !important;
+  /* КРИТИЧНО: Убеждаемся, что SVG не может перекрыть узлы */
+  mix-blend-mode: normal !important;
 }
 
 .react-flow__background pattern {
@@ -102,7 +113,9 @@
   opacity: 1 !important;
   visibility: visible !important;
   display: block !important;
+  /* КРИТИЧНО: Контейнер узла должен быть прозрачным, фон задается в CustomNode */
   background: transparent !important;
+  background-color: transparent !important;
   /* Убираем любые возможные box-shadow или другие эффекты */
   box-shadow: none !important;
   /* КРИТИЧНО: Убираем все контуры и обводки у узлов */
@@ -110,6 +123,8 @@
   border: none !important;
   /* Разрешаем handles выходить за границы блока */
   overflow: visible !important;
+  /* Создаем новый stacking context для узла */
+  isolation: isolate !important;
 }
 
 /* Внутренний div блока (CustomNode) не должен перекрывать handles */
@@ -117,6 +132,9 @@
   position: relative !important;
   z-index: 1 !important; /* Низкий z-index, чтобы handles были выше */
   overflow: visible !important; /* Разрешаем handles выходить за границы */
+  /* КРИТИЧНО: Фон задается через inline стили в CustomNode (background: '#fff') */
+  /* НЕ устанавливаем background здесь, чтобы не создавать белый квадрат */
+  /* Inline стили из CustomNode имеют приоритет и уже устанавливают белый фон */
 }
 
 /* КРИТИЧНО: Переопределяем visibility для ВСЕХ узлов, чтобы первый узел тоже был виден */
@@ -182,7 +200,9 @@ div.react-flow__node[data-testid] {
   display: flex !important;
   width: auto !important;
   height: auto !important;
-  /* Фон задается через inline стили - inline стили имеют более высокий приоритет */
+  /* КРИТИЧНО: Фон задается через inline стили в CustomNode (background: '#fff') */
+  /* НЕ устанавливаем background здесь, чтобы не создавать белый квадрат */
+  /* Inline стили из CustomNode имеют приоритет и уже устанавливают белый фон */
 }
 
 /* Если белый фон все еще виден за блоком, явно убираем у всех, кроме первого div с inline стилем */
@@ -786,4 +806,14 @@ g[data-connection-line='true'] path {
     transform: translateX(0);
     opacity: 1;
   }
+}
+
+/* Элементы управления (Controls) - должны быть ниже блоков */
+.react-flow__controls {
+  z-index: 4 !important; /* Ниже узлов (z-index: 10), но выше background (z-index: 2) */
+}
+
+/* Мини-карта (MiniMap) - должна быть ниже блоков */
+.react-flow__minimap {
+  z-index: 4 !important; /* Ниже узлов (z-index: 10), но выше background (z-index: 2) */
 }

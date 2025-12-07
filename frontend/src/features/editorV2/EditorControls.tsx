@@ -122,7 +122,12 @@ const EditorControls: React.FC<EditorControlsProps> = ({
       await saveCurrentScenario();
       showToast('Сценарий сохранён', 'success');
     } catch (error: any) {
-      showToast(error.message || 'Ошибка при сохранении', 'error');
+      // Обработка ошибок авторизации
+      if (error.status === 401) {
+        showToast('Для сохранения сценариев необходимо войти в систему', 'error');
+      } else {
+        showToast(error.message || 'Ошибка при сохранении', 'error');
+      }
     }
   };
 
@@ -151,7 +156,12 @@ const EditorControls: React.FC<EditorControlsProps> = ({
       showToast(`Сценарий "${data.name}" сохранён в библиотеку`, 'success');
       setIsSaveToLibraryOpen(false);
     } catch (error: any) {
-      showToast(error.message || 'Ошибка при сохранении', 'error');
+      // Обработка ошибок авторизации
+      if (error.status === 401) {
+        showToast('Для сохранения в библиотеку необходимо войти в систему', 'error');
+      } else {
+        showToast(error.message || 'Ошибка при сохранении', 'error');
+      }
     }
   };
 

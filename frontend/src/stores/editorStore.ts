@@ -110,16 +110,20 @@ export const useEditorStore = create<EditorStore>()(
       setSearchQuery: query => set({ searchQuery: query }),
 
       loadCatalog: async (plan?: PlanType, role?: RoleType) => {
-        const currentPlan = plan || get().plan;
-        const currentRole = role || get().role;
-
+        // Параметры plan и role больше не используются на бэкенде
+        // Бэкенд автоматически использует данные авторизованного пользователя
         set({ isLoading: true });
         try {
-          const catalog = await fetchBlocksCatalog(currentPlan, currentRole);
+          const catalog = await fetchBlocksCatalog();
           set({ catalog, isLoading: false });
         } catch (error: any) {
           console.error('Failed to load catalog:', error);
-          get().showToast('Не удалось загрузить блоки. Попробуйте позже.', 'error');
+          // Если ошибка авторизации - показываем соответствующее сообщение
+          if (error.status === 401) {
+            get().showToast('Для доступа к библиотеке блоков необходимо войти в систему', 'error');
+          } else {
+            get().showToast('Не удалось загрузить блоки. Попробуйте позже.', 'error');
+          }
           set({ isLoading: false, catalog: [] });
         }
       },

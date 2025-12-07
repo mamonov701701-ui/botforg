@@ -166,6 +166,38 @@ export default function BlockSettingsPanel({
     }
   };
 
+  // Handle title change - updates node.data.title (but keeps icon unchanged)
+  const handleTitleChange = (newTitle: string) => {
+    setHasChanges(true);
+
+    // Используем переданный onUpdateNode если доступен (из React Flow),
+    // иначе используем Zustand (для обратной совместимости)
+    if (onUpdateNode) {
+      onUpdateNode(selectedNode.id, {
+        data: {
+          ...selectedNode.data,
+          title: newTitle,
+          // Иконка остается неизменной - не трогаем data.icon
+        },
+      });
+    } else {
+      setNodesZustand(nodes =>
+        nodes.map(n =>
+          n.id === selectedNode.id
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  title: newTitle,
+                  // Иконка остается неизменной - не трогаем data.icon
+                },
+              }
+            : n
+        )
+      );
+    }
+  };
+
   // Handle save - показывает подтверждение (изменения уже применены)
   const handleSave = () => {
     if (block) {
@@ -340,8 +372,10 @@ export default function BlockSettingsPanel({
         >
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 20 }}>{block.icon || '📦'}</span>
-              <div style={{ fontWeight: 800, fontSize: 18 }}>{block.title}</div>
+              <span style={{ fontSize: 20 }}>{selectedNode.data.icon || block.icon || '📦'}</span>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>
+                {selectedNode.data.title || block.title}
+              </div>
               {/* Validation status badge */}
               {block.configSchema && block.configSchema.length > 0 && (
                 <Tooltip
@@ -460,6 +494,64 @@ export default function BlockSettingsPanel({
           padding: 16,
         }}
       >
+        {/* Поле для редактирования названия блока - всегда первое */}
+        <div
+          style={{
+            marginBottom: 16,
+            padding: 12,
+            background: 'rgba(30, 41, 59, 0.5)',
+            borderRadius: 8,
+            border: '1px solid transparent',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              marginBottom: 8,
+            }}
+          >
+            <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>Название блока</span>
+          </div>
+          <input
+            type="text"
+            value={selectedNode.data.title || block.title || ''}
+            onChange={e => handleTitleChange(e.target.value)}
+            placeholder={block.title || 'Введите название'}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              background: '#1f2937',
+              border: '1px solid #374151',
+              borderRadius: 6,
+              color: '#e5e7eb',
+              fontSize: 14,
+              outline: 'none',
+              transition: 'all 0.2s ease',
+            }}
+            onFocus={e => {
+              e.currentTarget.style.borderColor = '#3b82f6';
+              e.currentTarget.style.background = '#252540';
+            }}
+            onBlur={e => {
+              e.currentTarget.style.borderColor = '#374151';
+              e.currentTarget.style.background = '#1f2937';
+            }}
+          />
+          <div
+            style={{
+              fontSize: 11,
+              color: '#9ca3af',
+              marginTop: 6,
+              opacity: 0.7,
+            }}
+          >
+            Иконка блока остаётся неизменной
+          </div>
+        </div>
+
         {block.configSchema && block.configSchema.length > 0 ? (
           <>
             {/* Основные поля */}

@@ -10,11 +10,10 @@ export async function fetchBlocksCatalog(
   plan?: string,
   role?: string
 ): Promise<BlockCatalogItem[]> {
-  const params = new URLSearchParams();
-  if (plan) params.set('plan', plan);
-  if (role) params.set('role', role);
-
-  const url = `/blocks${params.toString() ? '?' + params : ''}`;
+  // Параметры plan и role теперь игнорируются на бэкенде
+  // Бэкенд автоматически использует данные авторизованного пользователя
+  // Оставляем параметры для обратной совместимости, но они не используются
+  const url = '/blocks';
   return get(url);
 }
 

@@ -58,29 +58,11 @@
         "description": "Можно прикрепить картинку, GIF или видео к сообщению"
       },
       {
-        "name": "mediaSource",
-        "type": "select",
-        "label": "Источник медиа",
+        "name": "mediaList",
+        "type": "media_list",
+        "label": "Медиа-файлы",
         "required": false,
-        "options": [
-          {"value": "upload", "label": "Загрузить файл"},
-          {"value": "url", "label": "Ссылка (URL)"}
-        ],
-        "default": "upload",
-        "description": "Выберите способ добавления медиа",
-        "dependsOn": {
-          "field": "mediaType",
-          "value": "none",
-          "invert": true
-        }
-      },
-      {
-        "name": "mediaUrl",
-        "type": "media_upload",
-        "label": "Медиа-файл",
-        "required": false,
-        "placeholder": "https://example.com/image.jpg",
-        "description": "Загрузите файл с устройства или укажите ссылку",
+        "description": "Добавьте один или несколько медиа-файлов (изображения, GIF, видео)",
         "dependsOn": {
           "field": "mediaType",
           "value": "none",

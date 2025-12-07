@@ -197,9 +197,13 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
           isSaving: false,
           lastSaved: new Date(),
         }));
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to save scenario:', error);
         set({ isSaving: false });
+        // Пробрасываем ошибку дальше для обработки в UI
+        if (error.status === 401) {
+          throw new Error('Для сохранения сценариев необходимо войти в систему');
+        }
         throw error;
       }
     },

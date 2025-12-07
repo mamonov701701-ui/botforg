@@ -22,9 +22,32 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [urlInput, setUrlInput] = useState(value || '');
 
+  // Стабильный ID для input, который не меняется при рендерах
+  // Используем useMemo чтобы обновлялся при изменении mediaType
+  const inputId = React.useMemo(
+    () => `media-upload-${mediaType}-${Math.random().toString(36).substr(2, 9)}`,
+    [mediaType]
+  );
+
+  // Проверка, что ref установлен после монтирования (только в dev режиме)
+  React.useEffect(() => {
+    if (import.meta.env.DEV && mediaSource !== 'url' && !fileInputRef.current) {
+      console.error('File input ref not set in upload mode!');
+    }
+  }, [mediaSource]);
+
+  // Синхронизируем urlInput с value
+  React.useEffect(() => {
+    if (mediaSource === 'url') {
+      setUrlInput(value || '');
+    }
+  }, [value, mediaSource]);
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     // Проверка типа файла
     const validTypes: Record<string, string[]> = {
@@ -36,12 +59,20 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
     const allowedTypes = validTypes[mediaType] || [];
     if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
       setUploadError(`Неподдерживаемый тип файла: ${file.type}`);
+      // Сбрасываем input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       return;
     }
 
     // Проверка размера (50MB)
     if (file.size > 50 * 1024 * 1024) {
       setUploadError('Файл слишком большой. Максимум: 50MB');
+      // Сбрасываем input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       return;
     }
 
@@ -50,14 +81,20 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
 
     try {
       const result = await uploadMedia(file);
+
       // Формируем полный URL
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      const fullUrl = `${API_URL}${result.url}`;
+      const fullUrl = result.url.startsWith('http') ? result.url : `${API_URL}${result.url}`;
       onChange(fullUrl);
       setUploadError(null);
     } catch (err: any) {
       console.error('Upload error:', err);
-      setUploadError(err.response?.data?.detail || 'Ошибка загрузки файла');
+      const errorMessage = err?.message || err?.response?.data?.detail || 'Ошибка загрузки файла';
+      setUploadError(errorMessage);
+      // Сбрасываем input при ошибке
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } finally {
       setUploading(false);
     }
@@ -78,7 +115,10 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
     }
   };
 
-  if (mediaSource === 'url') {
+  // Определяем режим: если явно 'url', иначе 'upload' (по умолчанию)
+  const isUrlMode = mediaSource === 'url';
+
+  if (isUrlMode) {
     // Режим ввода URL
     return (
       <div style={{ width: '100%' }}>
@@ -134,12 +174,14 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
     );
   }
 
-  // Режим загрузки файла
+  // Режим загрузки файла (по умолчанию или когда mediaSource === 'upload')
   return (
     <div style={{ width: '100%' }}>
       <input
         ref={fileInputRef}
         type="file"
+        id={inputId}
+        key={inputId} // Добавляем key для принудительного пересоздания при изменении mediaType
         accept={
           mediaType === 'image'
             ? 'image/jpeg,image/png,image/webp'
@@ -147,16 +189,59 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
               ? 'image/gif'
               : mediaType === 'video'
                 ? 'video/mp4,video/mpeg,video/quicktime'
-                : '*'
+                : 'image/*,video/*'
         }
         onChange={handleFileSelect}
         style={{ display: 'none' }}
       />
 
       {!value ? (
-        // Кнопка выбора файла
+        // Кнопка для выбора файла - используем прямой вызов click()
         <button
-          onClick={() => fileInputRef.current?.click()}
+          type="button"
+          onClick={e => {
+            // Прямой вызов click() на file input
+            if (fileInputRef.current) {
+              try {
+                // Временно делаем input видимым для некоторых браузеров
+                const originalDisplay = fileInputRef.current.style.display;
+                fileInputRef.current.style.display = 'block';
+                fileInputRef.current.style.position = 'absolute';
+                fileInputRef.current.style.opacity = '0';
+                fileInputRef.current.style.width = '1px';
+                fileInputRef.current.style.height = '1px';
+
+                fileInputRef.current.click();
+
+                // Возвращаем скрытие
+                setTimeout(() => {
+                  if (fileInputRef.current) {
+                    fileInputRef.current.style.display = originalDisplay;
+                    fileInputRef.current.style.position = '';
+                    fileInputRef.current.style.opacity = '';
+                    fileInputRef.current.style.width = '';
+                    fileInputRef.current.style.height = '';
+                  }
+                }, 100);
+              } catch (err) {
+                if (import.meta.env.DEV) {
+                  console.error('Error clicking file input:', err);
+                }
+              }
+            } else {
+              // Запасной вариант через getElementById
+              const inputElement = document.getElementById(inputId);
+              if (inputElement) {
+                try {
+                  (inputElement as HTMLInputElement).click();
+                } catch (err) {
+                  if (import.meta.env.DEV) {
+                    console.error('Error clicking input element:', err);
+                  }
+                }
+              }
+            }
+          }}
           disabled={uploading}
           style={{
             width: '100%',
@@ -174,6 +259,7 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
             gap: 8,
             transition: 'all 0.2s ease',
             opacity: uploading ? 0.6 : 1,
+            userSelect: 'none',
           }}
           onMouseEnter={e => {
             if (!uploading && !error) {
@@ -190,7 +276,7 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
           {uploading ? 'Загрузка...' : 'Выбрать файл'}
         </button>
       ) : (
-        // Показываем загруженный файл
+        // Показываем загруженный файл с превью
         <div
           style={{
             padding: 12,
@@ -198,51 +284,126 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
             borderRadius: 8,
             background: 'rgba(34, 197, 94, 0.1)',
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: 'column',
             gap: 12,
           }}
         >
-          <CheckCircle size={20} color="#22c55e" />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 500,
-                color: '#22c55e',
-                marginBottom: 4,
-              }}
-            >
-              Файл загружен
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <CheckCircle size={20} color="#22c55e" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: '#22c55e',
+                  marginBottom: 4,
+                }}
+              >
+                Файл загружен
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: '#9ca3af',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+                title={value}
+              >
+                {value.split('/').pop() || value}
+              </div>
             </div>
-            <div
+            <button
+              onClick={handleClear}
               style={{
-                fontSize: 11,
-                color: '#9ca3af',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#6b7280',
+                padding: 4,
+                display: 'flex',
+                alignItems: 'center',
               }}
-              title={value}
+              onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}
             >
-              {value}
-            </div>
+              <X size={16} />
+            </button>
           </div>
-          <button
-            onClick={handleClear}
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: '#6b7280',
-              padding: 4,
-              display: 'flex',
-              alignItems: 'center',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}
-          >
-            <X size={16} />
-          </button>
+
+          {/* Превью изображения */}
+          {(mediaType === 'image' || mediaType === 'gif') && value && (
+            <div
+              style={{
+                width: '100%',
+                borderRadius: 6,
+                overflow: 'hidden',
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                background: '#1e293b',
+              }}
+            >
+              <img
+                src={value}
+                alt="Превью"
+                style={{
+                  width: '100%',
+                  height: 'auto',
+                  maxHeight: '200px',
+                  objectFit: 'contain',
+                  display: 'block',
+                }}
+                onError={e => {
+                  // Если изображение не загрузилось, скрываем превью
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
+          )}
+
+          {/* Для видео показываем иконку */}
+          {mediaType === 'video' && value && (
+            <div
+              style={{
+                width: '100%',
+                height: '120px',
+                borderRadius: 6,
+                overflow: 'hidden',
+                border: '1px solid rgba(34, 197, 94, 0.3)',
+                background: '#1e293b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 48,
+                  color: '#22c55e',
+                  opacity: 0.5,
+                }}
+              >
+                ▶
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 8,
+                  left: 8,
+                  right: 8,
+                  fontSize: 10,
+                  color: '#9ca3af',
+                  textAlign: 'center',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Видео файл
+              </div>
+            </div>
+          )}
         </div>
       )}
 

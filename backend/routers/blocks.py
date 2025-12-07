@@ -7,7 +7,9 @@ from backend.schemas.blocks import (
     VALID_ROLES,
     BlockCatalogItem,
 )
-from fastapi import APIRouter, HTTPException, Query
+from backend.dependencies.auth import get_current_user
+from backend.models.user import User
+from fastapi import APIRouter, HTTPException, Query, Depends
 
 router = APIRouter(prefix="/blocks", tags=["Blocks"])
 
@@ -51,41 +53,56 @@ def get_blocks(
         description=f"Filter by role ({', '.join(VALID_ROLES)})",
         pattern=f"^({'|'.join(VALID_ROLES)})$",
     ),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Получение каталога блоков с фильтрацией по тарифу и роли.
+    Требует авторизации.
 
-    - **plan**: фильтр по тарифу (free, pro, enterprise)
-    - **role**: фильтр по роли (owner, admin, manager_template, developer, support, viewer)
+    - **plan**: фильтр по тарифу (free, pro, enterprise). Если не указан, используется "free" по умолчанию.
+    - **role**: фильтр по роли. Если не указан, используется роль текущего пользователя.
 
-    Если фильтры не указаны, возвращаются все блоки.
-    Если указаны оба фильтра, применяются оба (AND логика).
+    Блоки фильтруются автоматически по тарифу и роли пользователя.
     """
     # Загружаем каталог
     blocks = load_blocks_catalog()
 
-    # Применяем фильтры
-    filtered_blocks = blocks
+    # Определяем plan пользователя (по умолчанию "free", можно расширить логику)
+    user_plan = plan or "free"
+    
+    # Определяем role пользователя из его данных
+    # Маппинг ролей из модели User в роли блоков
+    role_mapping = {
+        "owner": "owner",
+        "admin": "admin",
+        "developer": "developer",
+        "templates_manager": "manager_template",
+        "support": "support",
+        "viewer": "viewer",
+        "user": "viewer",  # Обычные пользователи имеют права viewer
+    }
+    user_role = role or role_mapping.get(current_user.role, "viewer")
 
-    if plan:
-        # Фильтруем по плану: блок доступен, если plan входит в planAccess
-        filtered_blocks = [
-            block for block in filtered_blocks if plan in block.planAccess
-        ]
+    # Фильтруем блоки по плану пользователя
+    filtered_blocks = [
+        block for block in blocks if user_plan in block.planAccess
+    ]
 
-    if role:
-        # Фильтруем по роли: блок доступен, если role входит в permissions
-        filtered_blocks = [
-            block for block in filtered_blocks if role in block.permissions
-        ]
+    # Фильтруем блоки по роли пользователя
+    filtered_blocks = [
+        block for block in filtered_blocks if user_role in block.permissions
+    ]
 
     return filtered_blocks
 
 
 @router.get("/categories", response_model=List[str])
-def get_categories():
+def get_categories(
+    current_user: User = Depends(get_current_user),
+):
     """
     Получение списка всех доступных категорий блоков.
+    Требует авторизации.
     """
     blocks = load_blocks_catalog()
     categories = list(set(block.category for block in blocks))
