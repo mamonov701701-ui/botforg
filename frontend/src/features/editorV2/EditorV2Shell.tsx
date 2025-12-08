@@ -2014,7 +2014,15 @@ function InnerEditor() {
       <EditorControls
         onExport={handleExport}
         onSave={handleSave}
-        onOpenBlockLibrary={() => setIsBlockLibraryOpen(true)}
+        onOpenBlockLibrary={() => {
+          if (!user) {
+            showToast('Для доступа к библиотеке блоков необходимо войти в систему', 'error');
+            const { openAuth } = useUiStore.getState();
+            openAuth(window.location.pathname);
+            return;
+          }
+          setIsBlockLibraryOpen(true);
+        }}
       />
 
       {/* Block Library Modal */}
