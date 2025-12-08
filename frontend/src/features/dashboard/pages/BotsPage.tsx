@@ -14,6 +14,9 @@ import {
   Bot as BotIcon,
   ChevronDown,
   ChevronUp,
+  Mail,
+  Phone,
+  Tag,
 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
@@ -27,6 +30,8 @@ import {
   getProjectRole,
   type Bot,
 } from '../../../api/bot';
+import { get } from '../../../api/client';
+import { get } from '../../../api/client';
 
 interface BotCardProps {
   bot: Bot;
@@ -125,13 +130,7 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
-                cursor: 'pointer',
               }}
-              onClick={e => {
-                e.stopPropagation();
-                navigate(`/dashboard/bots/${bot.id}/contacts`);
-              }}
-              title="Просмотреть пользователей"
             >
               <Users size={14} /> {bot.usersCount || 0}
             </span>
@@ -165,6 +164,128 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
               Обновлён {formatDate(bot.updated_at)}
             </span>
           </div>
+
+          {/* Пользователи бота (раскрывающийся список) */}
+          {bot.usersCount > 0 && (
+            <div
+              style={{
+                marginTop: '12px',
+                borderTop: '1px solid var(--border)',
+                paddingTop: '12px',
+              }}
+            >
+              <button
+                onClick={e => {
+                  e.stopPropagation();
+                  toggleBotExpanded(bot.id);
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '8px 12px',
+                  background: 'transparent',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  color: 'var(--text)',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Users size={14} />
+                  Пользователи ({bot.usersCount})
+                </span>
+                {expandedBotId === bot.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              {expandedBotId === bot.id && botContacts[bot.id] && (
+                <div
+                  style={{
+                    marginTop: '12px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                  }}
+                >
+                  {botContacts[bot.id].map((contact: any) => (
+                    <div
+                      key={contact.id}
+                      style={{
+                        padding: '12px',
+                        background: 'var(--card)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        <strong>
+                          {contact.name || `Пользователь ${contact.telegram_user_id}`}
+                        </strong>
+                        <span
+                          style={{
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            background: contact.status === 'active' ? '#10b98120' : '#6b728020',
+                            color: contact.status === 'active' ? '#10b981' : '#6b7280',
+                          }}
+                        >
+                          {contact.status === 'active' ? 'Активен' : contact.status}
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '12px',
+                          fontSize: '12px',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        {contact.email && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Mail size={12} /> {contact.email}
+                          </span>
+                        )}
+                        {contact.phone && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Phone size={12} /> {contact.phone}
+                          </span>
+                        )}
+                        {contact.tags && contact.tags.length > 0 && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Tag size={12} /> {contact.tags.map((t: any) => t.name).join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {bot.usersCount > (botContacts[bot.id]?.length || 0) && (
+                    <div
+                      style={{
+                        textAlign: 'center',
+                        fontSize: '12px',
+                        color: 'var(--text-muted)',
+                        padding: '8px',
+                      }}
+                    >
+                      Показано {botContacts[bot.id]?.length || 0} из {bot.usersCount}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -384,6 +505,8 @@ export default function BotsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'paused'>('all');
   const [selectedBots, setSelectedBots] = useState<number[]>([]);
+  const [expandedBotId, setExpandedBotId] = useState<number | null>(null);
+  const [botContacts, setBotContacts] = useState<Record<number, any[]>>({});
 
   // Загружаем боты
   useEffect(() => {
@@ -429,6 +552,26 @@ export default function BotsPage() {
       }
       return newSet;
     });
+  };
+
+  const loadBotContacts = async (botId: number) => {
+    if (botContacts[botId]) return; // Уже загружены
+
+    try {
+      const response = await get(`/bots/${botId}/contacts?page_size=10`);
+      setBotContacts(prev => ({ ...prev, [botId]: response.items }));
+    } catch (error) {
+      console.error('Failed to load contacts:', error);
+    }
+  };
+
+  const toggleBotExpanded = (botId: number) => {
+    if (expandedBotId === botId) {
+      setExpandedBotId(null);
+    } else {
+      setExpandedBotId(botId);
+      loadBotContacts(botId);
+    }
   };
 
   const handleSelectBot = (id: number) => {

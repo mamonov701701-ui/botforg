@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bot,
@@ -16,6 +16,8 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction, hasAccessToSection } from '../../../constants/roles';
+import { getDashboardData } from '../../../api/analytics';
+import { getBots } from '../../../api/bot';
 
 interface KPICardProps {
   icon: React.ComponentType<{ size?: number; className?: string }>;
@@ -226,6 +228,25 @@ function ActivityFeed() {
 export default function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [botsData, setBotsData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        setLoading(true);
+        const [dashboard, bots] = await Promise.all([getDashboardData(7), getBots()]);
+        setDashboardData(dashboard);
+        setBotsData(bots);
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
 
   const quickActions = [
     {
@@ -262,18 +283,41 @@ export default function HomePage() {
         <KPICard
           icon={Bot}
           label="Активные боты"
-          value={5}
-          change="+2 за месяц"
-          changeType="positive"
+          value={loading ? '...' : dashboardData?.summary?.active_bots || 0}
+          change={loading ? '' : `Всего: ${dashboardData?.summary?.total_bots || 0}`}
+          changeType="neutral"
+          isLoading={loading}
         />
         <KPICard
           icon={Users}
-          label="Новые пользователи"
-          value={143}
-          change="+12% за неделю"
-          changeType="positive"
+          label="Всего пользователей"
+          value={
+            loading
+              ? '...'
+              : botsData?.items?.reduce(
+                  (sum: number, bot: any) => sum + (bot.usersCount || 0),
+                  0
+                ) || 0
+          }
+          change={loading ? '' : `в ${botsData?.items?.length || 0} ботах`}
+          changeType="neutral"
+          isLoading={loading}
         />
-        <KPICard icon={MessageCircle} label="Сообщения" value="2.4K" change="+340 за сегодня" />
+        <KPICard
+          icon={MessageCircle}
+          label="Сообщения"
+          value={
+            loading
+              ? '...'
+              : botsData?.items?.reduce(
+                  (sum: number, bot: any) => sum + (bot.messagesCount || 0),
+                  0
+                ) || 0
+          }
+          change={loading ? '' : `Всего отправлено`}
+          changeType="neutral"
+          isLoading={loading}
+        />
         <KPICard
           icon={Wallet}
           label="Выручка"

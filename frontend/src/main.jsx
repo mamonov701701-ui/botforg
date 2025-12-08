@@ -19,7 +19,6 @@ import HealthBanner from './components/HealthBanner';
 import DashboardLayout from './features/dashboard/DashboardLayout';
 import HomePage from './features/dashboard/pages/HomePage';
 import BotsPage from './features/dashboard/pages/BotsPage';
-import BotContactsPage from './features/dashboard/pages/BotContactsPage';
 import ScenariosPage from './features/dashboard/pages/ScenariosPage';
 import TemplatesPage from './features/dashboard/pages/TemplatesPage';
 import BalancePage from './features/dashboard/pages/BalancePage';
@@ -53,7 +52,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           >
             <Route index element={<HomePage />} />
             <Route path="bots" element={<BotsPage />} />
-            <Route path="bots/:botId/contacts" element={<BotContactsPage />} />
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="templates" element={<TemplatesPage />} />
             <Route path="balance" element={<BalancePage />} />
