@@ -25,18 +25,23 @@ export default defineConfig({
       '/blocks': {
         target: 'http://localhost:8001',
         changeOrigin: true,
+        secure: false,
       },
       '/auth': {
         target: 'http://localhost:8001',
         changeOrigin: true,
+        secure: false,
       },
-      '/me': {
+      '^/me$': {
         target: 'http://localhost:8001',
         changeOrigin: true,
+        secure: false,
+        rewrite: path => path,
       },
       '/api': {
         target: 'http://localhost:8001',
         changeOrigin: true,
+        secure: false,
       },
       '/bots': {
         target: 'http://localhost:8001',
@@ -46,6 +51,12 @@ export default defineConfig({
       '/scenarios': {
         target: 'http://localhost:8001',
         changeOrigin: true,
+        secure: false,
+      },
+      '/analytics': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        secure: false,
       },
     },
   },

@@ -2,7 +2,7 @@
  * Unified HTTP client with timeout, error handling, and credentials
  */
 
-const API_TIMEOUT = 10000; // 10 seconds
+const API_TIMEOUT = 30000; // 30 seconds - увеличен для отладки
 
 export class ApiError extends Error {
   constructor(
@@ -20,7 +20,8 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
 
   try {
     // Всегда используем прокси (не baseURL)
-    const url = path;
+    // Убеждаемся, что путь начинается с /
+    const url = path.startsWith('/') ? path : `/${path}`;
 
     // Логируем запрос для отладки (только в dev режиме)
     if (import.meta.env.DEV) {
