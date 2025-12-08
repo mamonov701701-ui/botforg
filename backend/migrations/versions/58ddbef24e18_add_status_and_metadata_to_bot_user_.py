@@ -22,41 +22,71 @@ def upgrade() -> None:
     """Upgrade schema."""
     import random
     
-    # Добавляем public_id (BigInteger, unique, not null, indexed)
-    op.add_column('bot_user_states', sa.Column('public_id', sa.BigInteger(), nullable=True))
-    
-    # Генерируем public_id для существующих записей
     conn = op.get_bind()
-    result = conn.execute(sa.text("SELECT id FROM bot_user_states"))
-    rows = result.fetchall()
-    used_ids = set()
-    for row in rows:
-        # Генерируем уникальный ID
-        while True:
-            public_id = random.randint(100000000000, 999999999999)
-            if public_id not in used_ids:
-                used_ids.add(public_id)
-                break
-        conn.execute(sa.text(f"UPDATE bot_user_states SET public_id = {public_id} WHERE id = {row[0]}"))
+    is_sqlite = conn.dialect.name == 'sqlite'
     
-    # Делаем public_id NOT NULL и уникальным
-    op.alter_column('bot_user_states', 'public_id', nullable=False)
-    op.create_unique_constraint('uq_bot_user_states_public_id', 'bot_user_states', ['public_id'])
-    op.create_index('ix_bot_user_states_public_id', 'bot_user_states', ['public_id'])
+    # Проверяем существование колонок (для SQLite)
+    def column_exists(table_name, column_name):
+        """Проверка существования колонки в SQLite"""
+        if not is_sqlite:
+            return False
+        result = conn.execute(sa.text(f"PRAGMA table_info({table_name})"))
+        columns = [row[1] for row in result.fetchall()]
+        return column_name in columns
     
-    # Добавляем channel (String(20), default='telegram')
-    op.add_column('bot_user_states', sa.Column('channel', sa.String(length=20), server_default='telegram', nullable=False))
+    # Добавляем public_id если не существует
+    if not column_exists('bot_user_states', 'public_id'):
+        op.add_column('bot_user_states', sa.Column('public_id', sa.BigInteger(), nullable=True))
+        
+        # Генерируем public_id для существующих записей
+        result = conn.execute(sa.text("SELECT id FROM bot_user_states"))
+        rows = result.fetchall()
+        used_ids = set()
+        for row in rows:
+            while True:
+                public_id = random.randint(100000000000, 999999999999)
+                if public_id not in used_ids:
+                    used_ids.add(public_id)
+                    break
+            conn.execute(sa.text(f"UPDATE bot_user_states SET public_id = {public_id} WHERE id = {row[0]}"))
+        conn.commit()
+        
+        # Для SQLite создаем уникальный индекс, для других БД - constraint
+        if is_sqlite:
+            op.create_index('ix_bot_user_states_public_id', 'bot_user_states', ['public_id'], unique=True)
+        else:
+            op.alter_column('bot_user_states', 'public_id', nullable=False)
+            op.create_unique_constraint('uq_bot_user_states_public_id', 'bot_user_states', ['public_id'])
+            op.create_index('ix_bot_user_states_public_id', 'bot_user_states', ['public_id'])
     
-    # Добавляем status (String(20), default='active', indexed)
-    op.add_column('bot_user_states', sa.Column('status', sa.String(length=20), server_default='active', nullable=False))
-    op.create_index('ix_bot_user_states_status', 'bot_user_states', ['status'])
+    # Добавляем channel если не существует
+    if not column_exists('bot_user_states', 'channel'):
+        if is_sqlite:
+            op.add_column('bot_user_states', sa.Column('channel', sa.String(length=20), nullable=True, server_default='telegram'))
+            # Обновляем существующие записи
+            conn.execute(sa.text("UPDATE bot_user_states SET channel = 'telegram' WHERE channel IS NULL"))
+            conn.commit()
+        else:
+            op.add_column('bot_user_states', sa.Column('channel', sa.String(length=20), server_default='telegram', nullable=False))
     
-    # Добавляем last_interaction_at (DateTime, nullable, indexed)
-    op.add_column('bot_user_states', sa.Column('last_interaction_at', sa.DateTime(), nullable=True))
-    op.create_index('ix_bot_user_states_last_interaction_at', 'bot_user_states', ['last_interaction_at'])
+    # Добавляем status если не существует
+    if not column_exists('bot_user_states', 'status'):
+        if is_sqlite:
+            op.add_column('bot_user_states', sa.Column('status', sa.String(length=20), nullable=True, server_default='active'))
+            # Обновляем существующие записи
+            conn.execute(sa.text("UPDATE bot_user_states SET status = 'active' WHERE status IS NULL"))
+            conn.commit()
+        else:
+            op.add_column('bot_user_states', sa.Column('status', sa.String(length=20), server_default='active', nullable=False))
+        op.create_index('ix_bot_user_states_status', 'bot_user_states', ['status'])
     
-    # Устанавливаем last_interaction_at = updated_at для существующих записей
-    op.execute(sa.text("UPDATE bot_user_states SET last_interaction_at = updated_at WHERE last_interaction_at IS NULL"))
+    # Добавляем last_interaction_at если не существует
+    if not column_exists('bot_user_states', 'last_interaction_at'):
+        op.add_column('bot_user_states', sa.Column('last_interaction_at', sa.DateTime(), nullable=True))
+        op.create_index('ix_bot_user_states_last_interaction_at', 'bot_user_states', ['last_interaction_at'])
+        # Устанавливаем last_interaction_at = updated_at для существующих записей
+        conn.execute(sa.text("UPDATE bot_user_states SET last_interaction_at = updated_at WHERE last_interaction_at IS NULL"))
+        conn.commit()
 
 
 def downgrade() -> None:
