@@ -125,9 +125,15 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
+                cursor: 'pointer',
               }}
+              onClick={e => {
+                e.stopPropagation();
+                navigate(`/dashboard/bots/${bot.id}/contacts`);
+              }}
+              title="Просмотреть пользователей"
             >
-              <Users size={14} /> {bot.usersCount}
+              <Users size={14} /> {bot.usersCount || 0}
             </span>
             <span
               style={{
@@ -138,7 +144,7 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
                 gap: '4px',
               }}
             >
-              <MessageCircle size={14} /> {bot.messagesCount}
+              <MessageCircle size={14} /> {bot.messagesCount || 0}
             </span>
           </div>
 
@@ -156,7 +162,7 @@ function BotCard({ bot, isSelected, onSelect, onAction }: BotCardProps) {
               {statusColors[bot.status].label}
             </span>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Обновлён {formatDate(bot.updatedAt)}
+              Обновлён {formatDate(bot.updated_at)}
             </span>
           </div>
         </div>

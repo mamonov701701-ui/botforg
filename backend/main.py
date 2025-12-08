@@ -33,6 +33,7 @@ from backend.routers import ai as ai_router
 from backend.routers import analytics as analytics_router
 from backend.routers import media as media_router
 from backend.routers import bot_tags as bot_tags_router
+from backend.routers import bot_contacts as bot_contacts_router
 from backend.settings import settings
 
 app = FastAPI()
@@ -99,6 +100,7 @@ app.include_router(ai_router.router)
 app.include_router(analytics_router.router)
 app.include_router(media_router.router, prefix="/media")
 app.include_router(bot_tags_router.router)
+app.include_router(bot_contacts_router.router)
 
 # Настройка раздачи статических файлов для загруженных медиа
 UPLOAD_DIR = Path("uploads/media")

@@ -193,6 +193,56 @@ async def get_bots(
     for tm in team_members:
         team_roles[tm.owner_id] = tm.role
     
+    # Получаем статистику по ботам (количество пользователей и сообщений)
+    from backend.models.bot_user_state import BotUserState
+    from backend.models.message import Message
+    from sqlalchemy import func
+    
+    # Получаем BotInstance для каждого бота (связь через user_id и token/username)
+    bot_instance_map = {}
+    bot_instances = db.query(BotInstance).filter(BotInstance.user_id.in_(owner_ids)).all()
+    for bi in bot_instances:
+        # Связываем BotInstance с Bot по token или username
+        for bot in bots:
+            if bot.token == bi.token or (bot.username and bi.username and bot.username == bi.username):
+                bot_instance_map[bot.id] = bi.id
+                break
+    
+    # Подсчитываем количество пользователей для каждого бота
+    bot_users_count = {}
+    bot_messages_count = {}
+    
+    if bot_instance_map:
+        bot_instance_ids = list(bot_instance_map.values())
+        
+        # Подсчет пользователей по bot_instance_id (bot_id в BotUserState ссылается на BotInstance.id)
+        users_stats = db.query(
+            BotUserState.bot_id,
+            func.count(BotUserState.id).label('count')
+        ).filter(
+            BotUserState.bot_id.in_(bot_instance_ids)
+        ).group_by(BotUserState.bot_id).all()
+        
+        for bot_instance_id, count in users_stats:
+            # Находим соответствующий bot.id
+            for bot_id, bi_id in bot_instance_map.items():
+                if bi_id == bot_instance_id:
+                    bot_users_count[bot_id] = count
+                    break
+        
+        # Подсчет сообщений по bot_id (Message.bot_id ссылается на Bot.id)
+        bot_ids_list = [b.id for b in bots]
+        if bot_ids_list:
+            messages_stats = db.query(
+                Message.bot_id,
+                func.count(Message.id).label('count')
+            ).filter(
+                Message.bot_id.in_(bot_ids_list)
+            ).group_by(Message.bot_id).all()
+            
+            for bot_id, count in messages_stats:
+                bot_messages_count[bot_id] = count
+    
     # Формируем ответ с информацией о владельцах
     bot_items = []
     for bot in bots:
@@ -212,6 +262,9 @@ async def get_bots(
             owner_email=owner_data.get("email"),
             owner_public_id=owner_data.get("public_id"),
             team_role=team_role,
+            channel="telegram",  # По умолчанию telegram
+            usersCount=bot_users_count.get(bot.id, 0),
+            messagesCount=bot_messages_count.get(bot.id, 0),
         ))
     
     return {"total": len(bot_items), "items": bot_items}

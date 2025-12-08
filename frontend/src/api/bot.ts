@@ -19,6 +19,12 @@ export interface Bot {
   owner_public_id: number | null;
   // Роль пользователя в проекте владельца (если не владелец)
   team_role: string | null;
+  // Дополнительные поля для отображения
+  name?: string; // Алиас для title
+  channel?: string; // Канал бота (telegram, whatsapp и т.д.)
+  status?: string; // Статус бота (active, paused, error)
+  usersCount?: number; // Количество пользователей бота
+  messagesCount?: number; // Количество сообщений
 }
 
 export interface BotListResponse {

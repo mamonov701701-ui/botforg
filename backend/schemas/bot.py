@@ -104,8 +104,23 @@ class BotOut(BaseModel):
     owner_public_id: Optional[int] = None
     # Роль пользователя в проекте владельца (если не владелец)
     team_role: Optional[str] = None
+    # Дополнительные поля для отображения
+    name: Optional[str] = None  # Алиас для title (для совместимости с фронтендом)
+    channel: Optional[str] = "telegram"  # Канал бота
+    status: Optional[str] = None  # Статус бота (active/paused/error)
+    usersCount: Optional[int] = 0  # Количество пользователей бота
+    messagesCount: Optional[int] = 0  # Количество сообщений
 
     model_config = ConfigDict(from_attributes=True)
+    
+    def __init__(self, **data):
+        # Устанавливаем name = title для совместимости
+        if 'name' not in data and 'title' in data:
+            data['name'] = data['title']
+        # Устанавливаем status на основе is_active
+        if 'status' not in data:
+            data['status'] = 'active' if data.get('is_active', False) else 'paused'
+        super().__init__(**data)
 
 
 class BotListOut(BaseModel):
