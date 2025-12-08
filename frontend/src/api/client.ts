@@ -85,13 +85,13 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
   } catch (error: any) {
     clearTimeout(timeout);
     if (error.name === 'AbortError') {
-      console.error(`Request timeout for ${url}`, error);
+      console.error(`Request timeout for ${path}`, error);
       throw new ApiError('Сервер недоступен. Проверьте соединение или попробуйте позже.', 0);
     }
     if (error instanceof ApiError) {
       throw error;
     }
-    console.error(`Request failed for ${url}:`, error);
+    console.error(`Request failed for ${path}:`, error);
     throw new ApiError('Сервер недоступен. Проверьте соединение или попробуйте позже.', 0);
   }
 }
