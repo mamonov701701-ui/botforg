@@ -155,10 +155,20 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   };
 
   const handleSaveBot = () => {
+    if (!user) {
+      showToast('Для сохранения бота необходимо войти в систему', 'error');
+      openAuth(window.location.pathname);
+      return;
+    }
     setIsSaveBotOpen(true);
   };
 
   const handleSaveToLibrary = () => {
+    if (!user) {
+      showToast('Для сохранения в библиотеку необходимо войти в систему', 'error');
+      openAuth(window.location.pathname);
+      return;
+    }
     setIsSaveToLibraryOpen(true);
   };
 
@@ -253,7 +263,14 @@ const EditorControls: React.FC<EditorControlsProps> = ({
 
         {/* Кнопка "Новый сценарий" */}
         <button
-          onClick={() => setIsNewScenarioOpen(true)}
+          onClick={() => {
+            if (!user) {
+              showToast('Для создания сценариев необходимо войти в систему', 'error');
+              openAuth(window.location.pathname);
+              return;
+            }
+            setIsNewScenarioOpen(true);
+          }}
           style={{
             background: 'transparent',
             color: '#fff',
