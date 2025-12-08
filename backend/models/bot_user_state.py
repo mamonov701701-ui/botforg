@@ -21,6 +21,16 @@ class BotUserState(Base):
     # Статус подписчика
     status = Column(String(20), default="active", nullable=False, index=True)  # active, unsubscribed, banned, inactive
     
+    # CRM-поля
+    name = Column(String(100), nullable=True)  # Имя пользователя
+    email = Column(String(100), nullable=True, index=True)  # Email контакта
+    phone = Column(String(20), nullable=True, index=True)  # Телефон контакта
+    
+    # UTM-метки и точка входа
+    entry_point = Column(String(50), nullable=True)  # Точка входа (код реферальной ссылки, виджет и т.д.)
+    utm_source = Column(String(50), nullable=True)  # UTM Source
+    utm_campaign = Column(String(50), nullable=True)  # UTM Campaign
+    
     # Текущий сценарий и узел
     current_scenario_id = Column(Integer, ForeignKey("scenarios.id"), nullable=True)
     current_node_id = Column(String, nullable=True)
@@ -42,3 +52,8 @@ class BotUserState(Base):
     )
 
     bot = relationship("BotInstance")
+    tags = relationship(
+        "BotTag",
+        secondary="bot_contact_tags",
+        back_populates="contacts"
+    )

@@ -16,6 +16,7 @@ from backend.models.token_blacklist import TokenBlacklist
 from backend.models.billing import BillingRecord, UserQuota
 from backend.models.bonus_account import UserBonusAccount
 from backend.models.bot_user_state import BotUserState
+from backend.models.bot_tag import BotTag, bot_contact_tags
 from backend.models.message import Message
 from backend.models.review import Review
 from backend.models.tag import Tag
@@ -46,6 +47,8 @@ __all__ = [
     "UserQuota",
     "UserBonusAccount",
     "BotUserState",
+    "BotTag",
+    "bot_contact_tags",
     "Message",
     "Review",
     "Tag",

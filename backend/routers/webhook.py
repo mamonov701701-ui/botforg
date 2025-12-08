@@ -119,7 +119,37 @@ async def telegram_webhook(
             state.status = "active"
     
     text = update.get("message", {}).get("text")
-    is_start = text == "/start" or not state
+    is_start = text == "/start" or (text and text.startswith("/start")) or not state
+    
+    # Извлекаем UTM-параметры и entry_point из команды /start
+    entry_point = None
+    utm_source = None
+    utm_campaign = None
+    
+    if text and text.startswith("/start"):
+        # Парсим /start?entry_point=promo1&utm_source=google&utm_campaign=summer
+        parts = text.split(" ", 1)
+        if len(parts) > 1:
+            params_str = parts[1]
+            # Простой парсинг параметров (можно улучшить)
+            params = {}
+            for param in params_str.split("&"):
+                if "=" in param:
+                    key, value = param.split("=", 1)
+                    params[key] = value
+            entry_point = params.get("entry_point") or params.get("ref") or params.get("start")
+            utm_source = params.get("utm_source")
+            utm_campaign = params.get("utm_campaign")
+    
+    # Получаем имя пользователя из Telegram (если доступно)
+    user_name = None
+    if message:
+        user = message.get("from", {})
+        first_name = user.get("first_name")
+        last_name = user.get("last_name")
+        if first_name:
+            user_name = f"{first_name} {last_name}".strip() if last_name else first_name
+    
     if is_start:
         node = find_start_node()
         if not node:
@@ -134,9 +164,23 @@ async def telegram_webhook(
                 bot_id=bot_id,
                 channel="telegram",
                 status="active",
-                last_interaction_at=now
+                last_interaction_at=now,
+                name=user_name,
+                entry_point=entry_point,
+                utm_source=utm_source,
+                utm_campaign=utm_campaign
             )
             db.add(state)
+        else:
+            # Обновляем имя и UTM при повторном /start (если еще не заполнены)
+            if not state.name and user_name:
+                state.name = user_name
+            if not state.entry_point and entry_point:
+                state.entry_point = entry_point
+            if not state.utm_source and utm_source:
+                state.utm_source = utm_source
+            if not state.utm_campaign and utm_campaign:
+                state.utm_campaign = utm_campaign
         state.current_node_id = node["id"]
         state.history = [
             {"node_id": node["id"], "entered_at": str(now)}

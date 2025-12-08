@@ -261,11 +261,15 @@ class ScenarioRuntime:
                 state.status = "active"
         else:
             # Создаём новое
+            # Пытаемся извлечь имя из context, если оно было сохранено
+            name = context.variables.get("name") or context.variables.get("user_name")
+            
             state = BotUserState(
                 bot_id=context.bot_id,
                 telegram_user_id=str(context.user_id),
                 channel="telegram",  # По умолчанию telegram, можно расширить
                 status="active",
+                name=name,
                 current_scenario_id=context.scenario_id,
                 current_node_id=context.current_node_id,
                 context=context.to_dict(),
