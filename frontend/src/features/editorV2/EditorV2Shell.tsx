@@ -32,6 +32,7 @@ import ToastContainer from './ToastContainer';
 import { useEditorStore } from '../../stores/editorStore';
 import { useScenarioStore } from '../../stores/scenarioStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useUiStore } from '../../stores/uiStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { validateAllNodes, debugNodeStructure } from '../../utils/validateNode';
 import { canAccessBlock, getAccessDeniedMessage, logAccessDenied } from '../../utils/accessControl';
@@ -1398,10 +1399,9 @@ function InnerEditor() {
     // Загружаем каталог только если пользователь авторизован
     if (user) {
       loadCatalog();
-    } else {
-      showToast('Для работы с редактором необходимо войти в систему', 'error');
     }
-  }, [loadCatalog, user, showToast]);
+    // Если не авторизован - каталог не загружается, редактор показывается пустым
+  }, [loadCatalog, user]);
 
   // Инициализация nodes и edges из Zustand при монтировании компонента
   useEffect(() => {
@@ -1673,6 +1673,14 @@ function InnerEditor() {
   // Helper function to add block at position
   const addBlockAtPosition = useCallback(
     (block: BlockCatalogItem, position: { x: number; y: number }) => {
+      // Проверка авторизации перед добавлением блока
+      if (!user) {
+        showToast('Для добавления блоков необходимо войти в систему', 'error');
+        const { openAuth } = useUiStore.getState();
+        openAuth(window.location.pathname);
+        return;
+      }
+
       // Get current plan and role from store
       const { plan, role } = useEditorStore.getState();
 
@@ -1855,7 +1863,16 @@ function InnerEditor() {
         }
       }, 100);
     },
-    [selectedNode, nodes, screenToFlowPosition, getViewport, addBlockAtPosition, reactFlowWrapper]
+    [
+      selectedNode,
+      nodes,
+      screenToFlowPosition,
+      getViewport,
+      addBlockAtPosition,
+      reactFlowWrapper,
+      user,
+      showToast,
+    ]
   );
 
   // Обработчики кликов

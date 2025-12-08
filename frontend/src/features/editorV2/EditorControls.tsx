@@ -8,6 +8,8 @@ import SaveToLibraryModal from './SaveToLibraryModal';
 import SaveBotModal from './SaveBotModal';
 import { useScenarioStore } from '../../stores/scenarioStore';
 import { useEditorStore } from '../../stores/editorStore';
+import { useAuthStore } from '../../stores/authStore';
+import { useUiStore } from '../../stores/uiStore';
 
 interface EditorControlsProps {
   onExport?: () => void;
@@ -45,14 +47,18 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   // Editor store для toast
   const { showToast } = useEditorStore();
 
+  // Auth store для проверки авторизации
+  const { user } = useAuthStore();
+  const { openAuth } = useUiStore();
+
   // Модальные окна
   const [isNewScenarioOpen, setIsNewScenarioOpen] = useState(false);
   const [isSaveToLibraryOpen, setIsSaveToLibraryOpen] = useState(false);
   const [isSaveBotOpen, setIsSaveBotOpen] = useState(false);
 
-  // Загрузка сценариев при монтировании
+  // Загрузка сценариев при монтировании (только для авторизованных пользователей)
   useEffect(() => {
-    if (botId) {
+    if (botId && user) {
       const botIdNum = parseInt(botId);
       console.log('🔄 Loading scenarios for bot:', botIdNum);
 
@@ -65,7 +71,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
       disableAutoSave(); // Выключаем при размонтировании
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botId]); // Только botId в зависимостях
+  }, [botId, user]); // botId и user в зависимостях
 
   const handleSelectScenario = (scenarioId: string) => {
     selectScenario(parseInt(scenarioId));
@@ -87,6 +93,12 @@ const EditorControls: React.FC<EditorControlsProps> = ({
 
   // Обработчики для NewScenarioModal
   const handleCreateEmpty = async (name: string, icon: string) => {
+    if (!user) {
+      showToast('Для создания сценариев необходимо войти в систему', 'error');
+      openAuth(window.location.pathname);
+      return;
+    }
+
     try {
       await createScenario({
         name,
@@ -97,7 +109,12 @@ const EditorControls: React.FC<EditorControlsProps> = ({
       showToast(`Сценарий "${name}" создан`, 'success');
       setIsNewScenarioOpen(false);
     } catch (error: any) {
-      showToast(error.message || 'Ошибка при создании', 'error');
+      if (error.status === 401) {
+        showToast('Для создания сценариев необходимо войти в систему', 'error');
+        openAuth(window.location.pathname);
+      } else {
+        showToast(error.message || 'Ошибка при создании', 'error');
+      }
     }
   };
 
@@ -118,6 +135,12 @@ const EditorControls: React.FC<EditorControlsProps> = ({
 
   // Обработчики для SaveDropdown
   const handleQuickSave = async () => {
+    if (!user) {
+      showToast('Для сохранения сценариев необходимо войти в систему', 'error');
+      openAuth(window.location.pathname);
+      return;
+    }
+
     try {
       await saveCurrentScenario();
       showToast('Сценарий сохранён', 'success');
