@@ -242,7 +242,18 @@ export default function AuthModal() {
         }
 
         // Вход
-        await loginEmail(email, password);
+        const loginResponse = await loginEmail(email, password);
+
+        // Проверяем, что токен сохранился
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          console.error('Токен не был сохранен после входа. Ответ сервера:', loginResponse);
+          toast.error('Ошибка: токен не был сохранен. Попробуйте еще раз.');
+          setLoading(false);
+          return;
+        }
+
+        console.log('Токен сохранен, длина:', token.length);
 
         // Сохраняем флаг "запомнить меня"
         if (rememberMe) {
@@ -254,18 +265,35 @@ export default function AuthModal() {
         }
 
         // Получаем данные пользователя
-        const user = await getMe();
-        if (user) {
-          setUser(user);
-          toast.success('Вход выполнен успешно!');
-          closeAuth();
-          if (nextPath) {
-            navigate(nextPath);
+        try {
+          const user = await getMe();
+          if (user) {
+            console.log('Пользователь получен:', user);
+            setUser(user);
+            toast.success('Вход выполнен успешно!');
+            closeAuth();
+            if (nextPath) {
+              navigate(nextPath);
+            } else {
+              navigate('/dashboard');
+            }
           } else {
-            navigate('/dashboard');
+            console.error('getMe вернул null, токен:', token.substring(0, 20) + '...');
+            // Если не удалось получить пользователя, возможно токен невалидный
+            localStorage.removeItem('auth_token');
+            toast.error('Не удалось получить данные пользователя. Проверьте учетные данные.');
           }
-        } else {
-          toast.error('Не удалось получить данные пользователя');
+        } catch (meError: any) {
+          console.error('Ошибка при получении данных пользователя:', meError);
+          if (meError.status === 401) {
+            localStorage.removeItem('auth_token');
+            toast.error('Сессия недействительна. Попробуйте войти еще раз.');
+          } else {
+            toast.error(
+              'Ошибка при получении данных пользователя: ' +
+                (meError.message || 'Неизвестная ошибка')
+            );
+          }
         }
       }
     } catch (error: any) {
