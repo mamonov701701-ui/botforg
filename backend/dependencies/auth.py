@@ -16,7 +16,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/email/login", auto_error=Fa
 
 
 async def get_current_user(
-    request: Request = None,
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ) -> User:
@@ -31,7 +31,7 @@ async def get_current_user(
     if token:
         # Токен из Authorization header
         auth_token = token
-    elif request:
+    else:
         # Пытаемся получить токен из cookie
         auth_token = get_token_from_cookie(request)
         if auth_token:
