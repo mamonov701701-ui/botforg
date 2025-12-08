@@ -22,6 +22,11 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
     // Всегда используем прокси (не baseURL)
     const url = path;
 
+    // Логируем запрос для отладки (только в dev режиме)
+    if (import.meta.env.DEV) {
+      console.log(`[API] ${options.method || 'GET'} ${url}`);
+    }
+
     // Get token from localStorage for Authorization header
     const token = localStorage.getItem('auth_token');
     const headers: Record<string, string> = {
@@ -80,12 +85,14 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
   } catch (error: any) {
     clearTimeout(timeout);
     if (error.name === 'AbortError') {
-      throw new ApiError('Сервер недоступен. Проверьте соединение.', 0);
+      console.error(`Request timeout for ${url}`, error);
+      throw new ApiError('Сервер недоступен. Проверьте соединение или попробуйте позже.', 0);
     }
     if (error instanceof ApiError) {
       throw error;
     }
-    throw new ApiError('Сервер недоступен. Проверьте соединение.', 0);
+    console.error(`Request failed for ${url}:`, error);
+    throw new ApiError('Сервер недоступен. Проверьте соединение или попробуйте позже.', 0);
   }
 }
 

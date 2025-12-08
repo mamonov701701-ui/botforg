@@ -17,15 +17,28 @@ export default function AuthGate({ children }: Props) {
     async function loadUser() {
       try {
         const userData = await getMe();
-        setUser(userData);
-      } catch (error) {
-        console.error('Failed to load user:', error);
-        setUser(null);
+        if (userData) {
+          setUser(userData);
+        } else {
+          // Если getMe вернул null (401), это нормально - пользователь не авторизован
+          setUser(null);
+        }
+      } catch (error: any) {
+        // Игнорируем ошибки сети/таймаута при первой загрузке
+        // Пользователь может быть не авторизован или сервер недоступен
+        if (error.status === 401 || error.status === 0) {
+          setUser(null);
+        } else {
+          console.error('Failed to load user:', error);
+          setUser(null);
+        }
+      } finally {
+        setLoading(false);
       }
     }
 
     loadUser();
-  }, [setUser]);
+  }, [setUser, setLoading]);
 
   useEffect(() => {
     if (!loading && !user) {
