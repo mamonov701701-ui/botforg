@@ -240,25 +240,36 @@ class ScenarioRuntime:
         context: ScenarioContext,
     ) -> None:
         """Сохранить состояние пользователя"""
+        from datetime import datetime, timezone
+        
         # Ищем существующее состояние
         state = self.db.query(BotUserState).filter(
             BotUserState.bot_id == context.bot_id,
-            BotUserState.telegram_user_id == context.user_id,
+            BotUserState.telegram_user_id == str(context.user_id),
         ).first()
+        
+        now = datetime.now(timezone.utc)
         
         if state:
             # Обновляем
             state.current_scenario_id = context.scenario_id
             state.current_node_id = context.current_node_id
             state.context = context.to_dict()
+            state.last_interaction_at = now
+            # Если был inactive, активируем при новом взаимодействии
+            if state.status == "inactive":
+                state.status = "active"
         else:
             # Создаём новое
             state = BotUserState(
                 bot_id=context.bot_id,
-                telegram_user_id=context.user_id,
+                telegram_user_id=str(context.user_id),
+                channel="telegram",  # По умолчанию telegram, можно расширить
+                status="active",
                 current_scenario_id=context.scenario_id,
                 current_node_id=context.current_node_id,
                 context=context.to_dict(),
+                last_interaction_at=now,
             )
             self.db.add(state)
         

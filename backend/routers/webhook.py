@@ -95,6 +95,7 @@ async def telegram_webhook(
             db.commit()
         # Найти state по reference
         if state:
+            state.last_interaction_at = datetime.now(timezone.utc)
             node = find_node(state.current_node_id)
             if node and node["type"] == "payment":
                 next_node = find_node(node["data"]["config"].get("success_node_id"))
@@ -105,6 +106,18 @@ async def telegram_webhook(
                         token, chat_id, next_node, find_edges_from(next_node["id"])
                     )
         return {"ok": True}
+    # Проверяем статус пользователя - если забанен или отписался, не обрабатываем
+    if state and state.status in ("banned", "unsubscribed"):
+        return {"ok": True}
+    
+    # Обновляем last_interaction_at при любом взаимодействии
+    now = datetime.now(timezone.utc)
+    if state:
+        state.last_interaction_at = now
+        # Если был inactive, активируем при новом взаимодействии
+        if state.status == "inactive":
+            state.status = "active"
+    
     text = update.get("message", {}).get("text")
     is_start = text == "/start" or not state
     if is_start:
@@ -116,12 +129,19 @@ async def telegram_webhook(
             )
             return {"ok": True}
         if not state:
-            state = BotUserState(telegram_user_id=telegram_user_id, bot_id=bot_id)
+            state = BotUserState(
+                telegram_user_id=telegram_user_id,
+                bot_id=bot_id,
+                channel="telegram",
+                status="active",
+                last_interaction_at=now
+            )
             db.add(state)
         state.current_node_id = node["id"]
         state.history = [
-            {"node_id": node["id"], "entered_at": str(datetime.now(timezone.utc))}
+            {"node_id": node["id"], "entered_at": str(now)}
         ]
+        state.last_interaction_at = now
         db.commit()
         send_node_message(token, chat_id, node, find_edges_from(node["id"]))
         return {"ok": True}
@@ -192,6 +212,7 @@ async def telegram_webhook(
             next_node = find_node(config.get("success_node_id"))
             if next_node:
                 state.current_node_id = next_node["id"]
+                state.last_interaction_at = datetime.now(timezone.utc)
                 db.commit()
                 send_node_message(
                     token, chat_id, next_node, find_edges_from(next_node["id"])
@@ -261,6 +282,7 @@ async def telegram_webhook(
             json={"chat_id": chat_id, "text": "Сценарий завершён."},
         )
         state.current_node_id = None
+        state.last_interaction_at = datetime.now(timezone.utc)
         db.commit()
         return {"ok": True}
     next_node = find_node(next_edge["target"])
@@ -273,13 +295,16 @@ async def telegram_webhook(
             },
         )
         state.current_node_id = None
+        state.last_interaction_at = datetime.now(timezone.utc)
         db.commit()
         return {"ok": True}
     # Обновляем состояние
+    now = datetime.now(timezone.utc)
     state.current_node_id = next_node["id"]
+    state.last_interaction_at = now
     hist = state.history or []
     hist.append(
-        {"node_id": next_node["id"], "entered_at": str(datetime.now(timezone.utc))}
+        {"node_id": next_node["id"], "entered_at": str(now)}
     )
     state.history = hist
     db.commit()
