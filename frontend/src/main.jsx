@@ -39,7 +39,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="features" element={<Features />} />
           <Route path="auth/verify" element={<VerifyEmail />} />
           <Route path="auth/reset" element={<ResetPassword />} />
-          <Route path="editor/:id" element={<EditorV2Shell />} />
+          <Route
+            path="editor/:id"
+            element={
+              <AuthGate>
+                <EditorV2Shell />
+              </AuthGate>
+            }
+          />
 
           {/* Dashboard routes */}
           <Route

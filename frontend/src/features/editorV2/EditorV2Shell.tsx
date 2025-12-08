@@ -31,6 +31,7 @@ import CustomEdge from './CustomEdge';
 import ToastContainer from './ToastContainer';
 import { useEditorStore } from '../../stores/editorStore';
 import { useScenarioStore } from '../../stores/scenarioStore';
+import { useAuthStore } from '../../stores/authStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { validateAllNodes, debugNodeStructure } from '../../utils/validateNode';
 import { canAccessBlock, getAccessDeniedMessage, logAccessDenied } from '../../utils/accessControl';
@@ -1390,10 +1391,17 @@ function InnerEditor() {
 
   // onNodesChange и onEdgesChange уже определены выше с обертками для логирования
 
-  // Загрузка каталога блоков при монтировании редактора
+  // Проверка авторизации и загрузка каталога блоков
+  const { user } = useAuthStore();
+
   useEffect(() => {
-    loadCatalog();
-  }, [loadCatalog]);
+    // Загружаем каталог только если пользователь авторизован
+    if (user) {
+      loadCatalog();
+    } else {
+      showToast('Для работы с редактором необходимо войти в систему', 'error');
+    }
+  }, [loadCatalog, user, showToast]);
 
   // Инициализация nodes и edges из Zustand при монтировании компонента
   useEffect(() => {

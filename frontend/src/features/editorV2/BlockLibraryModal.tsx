@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useEditorStore } from '../../stores/editorStore';
+import { useAuthStore } from '../../stores/authStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { nanoid } from 'nanoid';
 import { ROLE_NAMES } from '../../constants/roles';
@@ -29,12 +30,15 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
   const [selectedBlock, setSelectedBlock] = useState<BlockCatalogItem | null>(null);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  // Load catalog on mount
+  // Проверка авторизации
+  const { user } = useAuthStore();
+
+  // Load catalog on mount только если пользователь авторизован
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && user) {
       loadCatalog();
     }
-  }, [isOpen, loadCatalog]);
+  }, [isOpen, loadCatalog, user]);
 
   // Reset selection when modal closes
   useEffect(() => {

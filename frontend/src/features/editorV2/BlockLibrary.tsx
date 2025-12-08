@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Star, Clock, ChevronDown, ChevronRight, Search, X } from 'lucide-react';
 import { useEditorStore } from '../../stores/editorStore';
+import { useAuthStore } from '../../stores/authStore';
 import { BlockCatalogItem } from '../../types/blocks';
 
 // Category names mapping
@@ -199,10 +200,15 @@ const BlockLibrary: React.FC = () => {
 
   const [localSearch, setLocalSearch] = useState('');
 
-  // Load catalog on mount
+  // Проверка авторизации
+  const { user } = useAuthStore();
+
+  // Load catalog on mount только если пользователь авторизован
   useEffect(() => {
-    loadCatalog();
-  }, [loadCatalog]);
+    if (user) {
+      loadCatalog();
+    }
+  }, [loadCatalog, user]);
 
   // Sync local search with store
   useEffect(() => {
