@@ -31,7 +31,6 @@ import {
   type Bot,
 } from '../../../api/bot';
 import { get } from '../../../api/client';
-import { get } from '../../../api/client';
 
 interface BotCardProps {
   bot: Bot;

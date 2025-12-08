@@ -53,6 +53,18 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
       }
 
       if (response.status === 401) {
+        // Очищаем токен при 401 ошибке
+        localStorage.removeItem('auth_token');
+        // Пытаемся очистить пользователя из store, если он доступен
+        try {
+          const { useAuthStore } = await import('../stores/authStore');
+          const store = useAuthStore.getState();
+          if (store.clearUser) {
+            store.clearUser();
+          }
+        } catch {
+          // Игнорируем ошибки при импорте store
+        }
         throw new ApiError('Сессия не активна. Войдите заново.', 401);
       }
       if (response.status === 429) {
