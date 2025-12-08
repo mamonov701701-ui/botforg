@@ -1,7 +1,7 @@
 from backend.dependencies.auth import get_current_user
 from backend.database import get_db
 from backend.models.user import User
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -23,7 +23,9 @@ class UserProfile(BaseModel):
 
 @router.get("/me", response_model=UserProfile)
 async def get_me(
-    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """Get current user profile"""
     providers = [account.provider for account in current_user.accounts]

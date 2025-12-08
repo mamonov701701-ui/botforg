@@ -152,6 +152,7 @@ async def connect_bot(
 
 @router.get("/", response_model=BotListOut)
 async def get_bots(
+    request: Request,
     db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)
 ):
     """
