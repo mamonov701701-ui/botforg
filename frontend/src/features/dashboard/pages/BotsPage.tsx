@@ -28,9 +28,13 @@ import {
   groupBotsByProject,
   getProjectName,
   getProjectRole,
+  toggleBotStatus,
+  deleteBot,
   type Bot,
 } from '../../../api/bot';
 import { get } from '../../../api/client';
+import { toast } from '../../../utils/toast';
+import NewBotModal from '../../editorV2/NewBotModal';
 
 interface BotCardProps {
   bot: Bot;
@@ -506,6 +510,7 @@ export default function BotsPage() {
   const [selectedBots, setSelectedBots] = useState<number[]>([]);
   const [expandedBotId, setExpandedBotId] = useState<number | null>(null);
   const [botContacts, setBotContacts] = useState<Record<number, any[]>>({});
+  const [showNewBotModal, setShowNewBotModal] = useState(false);
 
   // Загружаем боты
   useEffect(() => {
@@ -579,9 +584,49 @@ export default function BotsPage() {
     );
   };
 
-  const handleBotAction = (action: string, botId: number) => {
-    console.log(`Action: ${action}, Bot ID: ${botId}`);
-    // TODO: Реализовать действия
+  const handleBotAction = async (action: string, botId: number) => {
+    const bot = bots.find(b => b.id === botId);
+    if (!bot) return;
+
+    try {
+      switch (action) {
+        case 'edit':
+          // Переход в редактор бота - используем правильный путь
+          navigate(`/editor/${botId}`);
+          break;
+
+        case 'toggle':
+        case 'start':
+        case 'stop':
+          // Переключить статус бота
+          const newStatus = action === 'start' ? true : action === 'stop' ? false : !bot.is_active;
+          const updatedBot = await toggleBotStatus(botId, newStatus);
+          // Обновляем локальный state с данными от сервера
+          setBots(prevBots =>
+            prevBots.map(b => (b.id === botId ? { ...b, is_active: updatedBot.is_active } : b))
+          );
+          toast.success(updatedBot.is_active ? 'Бот запущен' : 'Бот остановлен');
+          break;
+
+        case 'delete':
+          if (window.confirm(`Удалить бота "${bot.title}"? Это действие необратимо.`)) {
+            await deleteBot(botId);
+            setBots(prevBots => prevBots.filter(b => b.id !== botId));
+            toast.success('Бот удалён');
+          }
+          break;
+
+        case 'settings':
+          navigate(`/dashboard/bots/${botId}/settings`);
+          break;
+
+        default:
+          console.log(`Unknown action: ${action}`);
+      }
+    } catch (error: any) {
+      console.error(`Failed to ${action} bot:`, error);
+      toast.error(error.message || `Не удалось выполнить действие`);
+    }
   };
 
   const handleBulkAction = (action: string) => {
@@ -620,7 +665,7 @@ export default function BotsPage() {
       actions={
         canCreate ? (
           <button
-            onClick={() => navigate('/dashboard/bots/new')}
+            onClick={() => setShowNewBotModal(true)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -780,7 +825,7 @@ export default function BotsPage() {
             canCreate
               ? {
                   label: 'Создать бота',
-                  onClick: () => navigate('/dashboard/bots/new'),
+                  onClick: () => setShowNewBotModal(true),
                 }
               : undefined
           }
@@ -940,7 +985,27 @@ export default function BotsPage() {
                           {bot.is_active ? 'Активен' : 'Неактивен'}
                         </div>
                         <button
+                          onClick={() => handleBotAction(bot.is_active ? 'stop' : 'start', bot.id)}
+                          title={bot.is_active ? 'Остановить бота' : 'Запустить бота'}
+                          style={{
+                            padding: '8px',
+                            background: 'transparent',
+                            border: '1px solid var(--border)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                        >
+                          {bot.is_active ? (
+                            <Pause size={16} style={{ color: '#ef4444' }} />
+                          ) : (
+                            <Play size={16} style={{ color: '#10b981' }} />
+                          )}
+                        </button>
+                        <button
                           onClick={() => handleBotAction('edit', bot.id)}
+                          title="Открыть редактор"
                           style={{
                             padding: '8px',
                             background: 'transparent',
@@ -953,6 +1018,21 @@ export default function BotsPage() {
                         >
                           <Edit size={16} style={{ color: 'var(--text)' }} />
                         </button>
+                        <button
+                          onClick={() => handleBotAction('delete', bot.id)}
+                          title="Удалить бота"
+                          style={{
+                            padding: '8px',
+                            background: 'transparent',
+                            border: '1px solid var(--border)',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Trash2 size={16} style={{ color: '#ef4444' }} />
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -962,6 +1042,23 @@ export default function BotsPage() {
           })}
         </div>
       )}
+
+      {/* Модальное окно создания бота */}
+      <NewBotModal
+        isOpen={showNewBotModal}
+        onClose={() => setShowNewBotModal(false)}
+        onBotCreated={botId => {
+          // Перезагружаем список ботов
+          getBots().then(data => {
+            setBots(data.items);
+            if (user) {
+              setProjects(groupBotsByProject(data.items, user.id));
+            }
+          });
+          // Переходим в редактор нового бота
+          navigate(`/editor/${botId}`);
+        }}
+      />
     </DashboardPage>
   );
 }

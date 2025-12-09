@@ -5,10 +5,10 @@ from typing import Any, Dict
 import requests
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
-from backend.models.bot import Bot
+from backend.models.bot import Bot, BotInstance
 from backend.models.scenario import Scenario
 from backend.models.user import User as UserModel
-from backend.schemas.bot import BotConnectRequest, BotListOut, BotOut, BotUpdate
+from backend.schemas.bot import BotConnectRequest, BotCreateSimple, BotListOut, BotOut, BotUpdate
 from backend.utils.bot_access import (
     check_bot_access,
     check_bot_edit_permission,
@@ -150,9 +150,60 @@ async def connect_bot(
         )
 
 
+@router.post("/", response_model=BotOut, status_code=status.HTTP_201_CREATED)
+async def create_bot(
+    payload: BotCreateSimple,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """
+    Создание бота без токена (для маркетплейса/шаблонов).
+    Бот создается как шаблон, который можно позже подключить к каналу.
+    """
+    import uuid
+    
+    # Генерируем уникальный placeholder для username и token
+    unique_id = str(uuid.uuid4())[:8]
+    placeholder_username = f"template_{current_user.id}_{unique_id}"
+    placeholder_token = f"placeholder_{unique_id}"
+    
+    # Создаем бота
+    db_bot = Bot(
+        owner_id=current_user.id,
+        title=payload.title,
+        username=placeholder_username,
+        token=placeholder_token,
+        is_active=False,  # Шаблон неактивен по умолчанию
+    )
+    
+    db.add(db_bot)
+    db.commit()
+    db.refresh(db_bot)
+    
+    # Создаем главный сценарий автоматически
+    main_scenario = Scenario(
+        user_id=current_user.id,
+        bot_id=db_bot.id,
+        name="Главный",
+        description="Главный сценарий - точка входа в бот",
+        icon="Home",
+        category="main",
+        is_main=True,
+        is_library=False,
+        is_standard=False,
+        content={"nodes": [], "edges": []},
+        order=0,
+    )
+    db.add(main_scenario)
+    db.commit()
+    
+    logger.info(f"Template bot created: {db_bot.title} (id={db_bot.id}) by user {current_user.email}")
+    
+    return db_bot
+
+
 @router.get("/", response_model=BotListOut)
 async def get_bots(
-    request: Request,
     db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)
 ):
     """

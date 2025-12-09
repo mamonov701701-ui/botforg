@@ -38,7 +38,7 @@ export interface BotListResponse {
  */
 export async function getBots(): Promise<BotListResponse> {
   try {
-    return await api.get('/bots');
+    return await api.get('/bots/');
   } catch (error: any) {
     console.error('Failed to fetch bots:', error);
     throw error;
@@ -53,6 +53,42 @@ export async function getBot(botId: number): Promise<Bot> {
     return await api.get(`/bots/${botId}`);
   } catch (error: any) {
     console.error('Failed to fetch bot:', error);
+    throw error;
+  }
+}
+
+/**
+ * Обновить бота
+ */
+export async function updateBot(botId: number, data: Partial<Bot>): Promise<Bot> {
+  try {
+    return await api.patch(`/bots/${botId}`, data);
+  } catch (error: any) {
+    console.error('Failed to update bot:', error);
+    throw error;
+  }
+}
+
+/**
+ * Переключить статус бота (активен/неактивен)
+ */
+export async function toggleBotStatus(botId: number, isActive: boolean): Promise<Bot> {
+  try {
+    return await api.patch(`/bots/${botId}`, { is_active: isActive });
+  } catch (error: any) {
+    console.error('Failed to toggle bot status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Удалить бота
+ */
+export async function deleteBot(botId: number): Promise<void> {
+  try {
+    await api.delete(`/bots/${botId}`);
+  } catch (error: any) {
+    console.error('Failed to delete bot:', error);
     throw error;
   }
 }

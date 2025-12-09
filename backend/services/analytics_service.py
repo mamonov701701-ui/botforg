@@ -221,8 +221,11 @@ class AnalyticsService:
         days: int = 7,
     ) -> Dict[str, Any]:
         """Get dashboard data for user"""
-        from backend.models.bot import Bot
+        from backend.models.bot import Bot, BotInstance
         from backend.models.scenario import Scenario
+        from backend.models.bot_user_state import BotUserState
+        from backend.models.message import Message
+        from backend.models.bonus_account import UserBonusAccount
         
         end_date = datetime.utcnow()
         start_date = end_date - timedelta(days=days)
@@ -234,17 +237,47 @@ class AnalyticsService:
         # Total bots and scenarios
         total_bots = len(bots)
         active_bots = sum(1 for b in bots if b.is_active)
+        
+        # Get BotInstance IDs for counting users and messages
+        bot_instance_ids = []
+        bot_instances = self.db.query(BotInstance).filter(BotInstance.user_id == user_id).all()
+        bot_instance_ids = [bi.id for bi in bot_instances]
+        
+        # Count total users across all bots
+        total_users = 0
+        if bot_instance_ids:
+            total_users = self.db.query(func.count(BotUserState.id)).filter(
+                BotUserState.bot_id.in_(bot_instance_ids)
+            ).scalar() or 0
+        
+        # Count total messages
+        total_messages = 0
+        if bot_instance_ids:
+            total_messages = self.db.query(func.count(Message.id)).filter(
+                Message.bot_id.in_(bot_instance_ids)
+            ).scalar() or 0
+        
+        # Get user's bonus balance
+        bonus_account = self.db.query(UserBonusAccount).filter(UserBonusAccount.user_id == user_id).first()
+        bonus_balance = bonus_account.available_balance if bonus_account else 0
+        
+        # Total scenarios - count by user_id (scenarios belong to user, not just bots)
         total_scenarios = self.db.query(func.count(Scenario.id)).filter(
-            Scenario.bot_id.in_(bot_ids)
+            Scenario.user_id == user_id
         ).scalar() or 0
         
-        # Executions in period
-        executions = self.db.query(ScenarioExecution).filter(
-            and_(
-                ScenarioExecution.bot_id.in_(bot_ids),
-                ScenarioExecution.started_at >= start_date,
-            )
-        ).all()
+        # Executions in period - get scenario IDs first, then executions
+        scenario_ids = [s.id for s in self.db.query(Scenario.id).filter(Scenario.user_id == user_id).all()]
+        
+        if scenario_ids:
+            executions = self.db.query(ScenarioExecution).filter(
+                and_(
+                    ScenarioExecution.scenario_id.in_(scenario_ids),
+                    ScenarioExecution.started_at >= start_date,
+                )
+            ).all()
+        else:
+            executions = []
         
         # Daily breakdown
         daily_data = {}
@@ -253,6 +286,8 @@ class AnalyticsService:
             daily_data[day] = {"executions": 0, "completions": 0, "failures": 0}
         
         for ex in executions:
+            if not ex.started_at:
+                continue
             day = ex.started_at.strftime("%Y-%m-%d")
             if day in daily_data:
                 daily_data[day]["executions"] += 1
@@ -267,6 +302,9 @@ class AnalyticsService:
                 "active_bots": active_bots,
                 "total_scenarios": total_scenarios,
                 "total_executions": len(executions),
+                "total_users": total_users,
+                "total_messages": total_messages,
+                "bonus_balance": bonus_balance,
             },
             "daily": daily_data,
             "period_days": days,

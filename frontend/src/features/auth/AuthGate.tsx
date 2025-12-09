@@ -15,6 +15,12 @@ export default function AuthGate({ children }: Props) {
 
   useEffect(() => {
     async function loadUser() {
+      // Если пользователь уже установлен, не перезагружаем
+      if (user) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const userData = await getMe();
         if (userData) {
@@ -38,7 +44,7 @@ export default function AuthGate({ children }: Props) {
     }
 
     loadUser();
-  }, [setUser, setLoading]);
+  }, [setUser, setLoading, user]);
 
   useEffect(() => {
     if (!loading && !user) {

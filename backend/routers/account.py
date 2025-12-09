@@ -23,7 +23,6 @@ class UserProfile(BaseModel):
 
 @router.get("/me", response_model=UserProfile)
 async def get_me(
-    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):

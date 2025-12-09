@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from backend.auth.deps import get_current_user
+from backend.dependencies.auth import get_current_user
 from backend.database import get_db
 from backend.models.user import User
 from backend.services.analytics_service import get_analytics_service
@@ -94,6 +94,40 @@ async def track_event(
         payload=payload,
     )
     return {"id": event.id, "created_at": event.created_at}
+
+
+@router.get("/events/recent")
+async def get_recent_events(
+    limit: int = Query(default=10, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get recent events for current user.
+    """
+    from backend.models.event import Event
+    from backend.models.bot import Bot
+    
+    # Get user's bot IDs
+    bot_ids = [b.id for b in db.query(Bot).filter(Bot.owner_id == current_user.id).all()]
+    
+    # Query events for user or their bots
+    events = db.query(Event).filter(
+        (Event.user_id == current_user.id) | (Event.bot_id.in_(bot_ids) if bot_ids else False)
+    ).order_by(Event.created_at.desc()).limit(limit).all()
+    
+    return {
+        "items": [
+            {
+                "id": ev.id,
+                "type": ev.event_type,
+                "name": ev.event_name,
+                "payload": ev.payload,
+                "created_at": ev.created_at.isoformat() if ev.created_at else None,
+            }
+            for ev in events
+        ]
+    }
 
 
 @router.get("/executions/{bot_id}")

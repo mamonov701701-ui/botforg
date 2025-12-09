@@ -38,6 +38,15 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
     // Add Authorization header if token exists
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+      // Логируем наличие токена для отладки
+      if (import.meta.env.DEV) {
+        console.log(`[API] Token found: ${token.substring(0, 20)}...`);
+        console.log(`[API] Request headers:`, { ...headers, Authorization: 'Bearer ***' });
+      }
+    } else {
+      if (import.meta.env.DEV) {
+        console.warn(`[API] No token found for request: ${url}`);
+      }
     }
 
     const response = await fetch(url, {
@@ -46,6 +55,14 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
       signal: controller.signal,
       headers,
     });
+
+    // Логируем ответ для отладки
+    if (import.meta.env.DEV && !response.ok) {
+      console.error(`[API] Request failed: ${response.status} ${response.statusText}`, {
+        url,
+        headers: Object.fromEntries(response.headers.entries()),
+      });
+    }
 
     clearTimeout(timeout);
 
@@ -59,19 +76,21 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
       }
 
       if (response.status === 401) {
-        // Очищаем токен при 401 ошибке
-        localStorage.removeItem('auth_token');
-        // Пытаемся очистить пользователя из store, если он доступен
-        try {
-          const { useAuthStore } = await import('../stores/authStore');
-          const store = useAuthStore.getState();
-          if (store.clearUser) {
-            store.clearUser();
-          }
-        } catch {
-          // Игнорируем ошибки при импорте store
+        // Логируем детали ошибки
+        const tokenExists = !!localStorage.getItem('auth_token');
+        if (import.meta.env.DEV) {
+          console.error(`[API] 401 Unauthorized for ${url}`, {
+            errorMessage,
+            tokenExists,
+            url,
+            hasTokenInRequest: !!token,
+          });
         }
-        throw new ApiError('Сессия не активна. Войдите заново.', 401);
+
+        // НЕ очищаем токен автоматически - пусть пользователь попробует снова
+        // Токен будет очищен только при явном выходе или при ошибке на /me
+        // Это предотвращает потерю токена из-за временных проблем с прокси
+        throw new ApiError(errorMessage || 'Ошибка авторизации', 401);
       }
       if (response.status === 429) {
         throw new ApiError('Слишком много попыток. Попробуйте позже.', 429);

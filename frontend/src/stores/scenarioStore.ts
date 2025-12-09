@@ -84,7 +84,27 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
 
     // Load scenarios
     loadBotScenarios: async (botId: number) => {
-      set({ isLoading: true, currentBotId: botId });
+      // Сбрасываем текущее состояние при переключении бота
+      set({
+        isLoading: true,
+        currentBotId: botId,
+        currentScenarioId: null,
+        scenarios: [],
+        currentState: {
+          id: null,
+          name: '',
+          icon: 'FileText',
+          nodes: [],
+          edges: [],
+          isDirty: false,
+        },
+      });
+
+      // Очищаем редактор
+      const editorStore = useEditorStore.getState();
+      editorStore.setNodes([]);
+      editorStore.setEdges([]);
+
       try {
         const scenarios = await scenarioAPI.getBotScenarios(botId);
         set({ scenarios, isLoading: false });

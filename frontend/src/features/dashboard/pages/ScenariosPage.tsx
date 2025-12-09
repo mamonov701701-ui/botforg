@@ -20,7 +20,6 @@ export default function ScenariosPage() {
   const [selectedProject, setSelectedProject] = useState<number | null>(null);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showLibrary, setShowLibrary] = useState(false);
   const [libraryScenarios, setLibraryScenarios] = useState<Scenario[]>([]);
 
   // Загружаем боты и группируем по проектам
@@ -50,40 +49,9 @@ export default function ScenariosPage() {
     loadBots();
   }, [user, selectedProject]);
 
-  // Загружаем сценарии выбранного проекта
-  useEffect(() => {
-    async function loadScenarios() {
-      if (!selectedProject) return;
-
-      try {
-        const projectBots = projects.find(p => p.owner_id === selectedProject);
-        if (!projectBots) return;
-
-        // Загружаем сценарии для всех ботов проекта
-        const allScenarios: Scenario[] = [];
-        for (const bot of projectBots.bots) {
-          try {
-            const botScenarios = await getBotScenarios(bot.id);
-            allScenarios.push(...botScenarios);
-          } catch (error) {
-            console.error(`Failed to load scenarios for bot ${bot.id}:`, error);
-          }
-        }
-
-        setScenarios(allScenarios);
-      } catch (error) {
-        console.error('Failed to load scenarios:', error);
-      }
-    }
-
-    loadScenarios();
-  }, [selectedProject, projects]);
-
-  // Загружаем сценарии из библиотеки
+  // Загружаем сценарии из библиотеки (только библиотечные сценарии пользователя)
   useEffect(() => {
     async function loadLibraryScenarios() {
-      if (!showLibrary) return;
-
       try {
         const library = await getLibraryScenarios();
         setLibraryScenarios(library);
@@ -93,13 +61,11 @@ export default function ScenariosPage() {
     }
 
     loadLibraryScenarios();
-  }, [showLibrary]);
+  }, []);
 
   const canCreate = hasAccessToAction(user?.role, 'bot_create');
-  const currentProject = projects.find(p => p.owner_id === selectedProject);
-  const displayedScenarios = showLibrary ? libraryScenarios : scenarios;
 
-  const filteredScenarios = displayedScenarios.filter(scenario => {
+  const filteredScenarios = libraryScenarios.filter(scenario => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -129,78 +95,9 @@ export default function ScenariosPage() {
 
   return (
     <DashboardPage
-      title="Сценарии"
-      subtitle={
-        showLibrary
-          ? `Библиотека сценариев (${filteredScenarios.length})`
-          : currentProject
-            ? `${getProjectName(currentProject)} - ${filteredScenarios.length} сценариев`
-            : 'Выберите проект'
-      }
-      actions={
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <button
-            onClick={() => setShowLibrary(!showLibrary)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '10px 20px',
-              background: showLibrary ? 'var(--primary)' : 'var(--card)',
-              color: showLibrary ? '#000' : 'var(--text)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-          >
-            <FolderOpen size={16} />
-            {showLibrary ? 'Сценарии проектов' : 'Библиотека'}
-          </button>
-        </div>
-      }
+      title="Мои сценарии"
+      subtitle={`Библиотека сохранённых сценариев (${filteredScenarios.length})`}
     >
-      {/* Выбор проекта */}
-      {!showLibrary && projects.length > 0 && (
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            {projects.map(project => (
-              <button
-                key={project.owner_id}
-                onClick={() => setSelectedProject(project.owner_id)}
-                style={{
-                  padding: '12px 20px',
-                  background:
-                    selectedProject === project.owner_id ? 'var(--primary)' : 'var(--card)',
-                  color: selectedProject === project.owner_id ? '#000' : 'var(--text)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                }}
-              >
-                <BotIcon size={16} />
-                {getProjectName(project)}
-                {!project.is_own && project.team_role && (
-                  <span style={{ fontSize: '12px', opacity: 0.7 }}>
-                    ({ROLE_NAMES[project.team_role as keyof typeof ROLE_NAMES] || project.team_role}
-                    )
-                  </span>
-                )}
-                <span style={{ fontSize: '12px', opacity: 0.7 }}>
-                  ({project.bots.length} ботов)
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Поиск */}
       <div style={{ marginBottom: '24px' }}>
         <div
@@ -241,14 +138,8 @@ export default function ScenariosPage() {
       {filteredScenarios.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title={showLibrary ? 'Библиотека пуста' : 'Нет сценариев'}
-          description={
-            showLibrary
-              ? 'В библиотеке пока нет доступных сценариев'
-              : selectedProject
-                ? 'В этом проекте пока нет сценариев'
-                : 'Выберите проект для просмотра сценариев'
-          }
+          title="Библиотека пуста"
+          description="Сохраните сценарий в библиотеку из редактора через меню 'Сохранить' → 'В библиотеку'"
         />
       ) : (
         <div

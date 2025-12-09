@@ -64,18 +64,47 @@ GET /bots
 Authorization: Bearer <token>
 ```
 
-### Create Bot
+### Create Bot (for Marketplace/Template)
 ```http
-POST /bots
+POST /bots/
 Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "name": "My Bot",
-  "username": "my_bot",
-  "token": "bot_token_from_telegram"
+  "title": "My Bot Template",
+  "description": "Описание бота"
 }
 ```
+
+**Response:**
+```json
+{
+  "id": 1,
+  "title": "My Bot Template",
+  "username": "template_1_abc12345",
+  "is_active": false,
+  "owner_id": 1,
+  "created_at": "2025-01-09T20:00:00Z",
+  "updated_at": "2025-01-09T20:00:00Z"
+}
+```
+
+**Note:** Этот endpoint создаёт бота-шаблон без токена для маркетплейса. Для подключения к каналу используйте `/bots/connect`.
+
+### Connect Bot to Channel
+```http
+POST /bots/connect
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "token": "bot_token_from_telegram",
+  "channel": "telegram",
+  "title": "My Bot"
+}
+```
+
+**Supported channels:** `telegram`, `whatsapp`, `max`
 
 ### Update Bot
 ```http

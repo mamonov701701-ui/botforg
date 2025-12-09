@@ -16,7 +16,7 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction, hasAccessToSection } from '../../../constants/roles';
-import { getDashboardData } from '../../../api/analytics';
+import { getDashboardData, getRecentEvents } from '../../../api/analytics';
 import { getBots } from '../../../api/bot';
 
 interface KPICardProps {
@@ -95,32 +95,7 @@ interface ActivityEvent {
   link?: string;
 }
 
-function ActivityFeed() {
-  // Моковые данные (позже заменить на API)
-  const events: ActivityEvent[] = [
-    {
-      id: '1',
-      type: 'bot_created',
-      title: 'Создан новый бот',
-      description: 'Бот "Поддержка магазина" успешно создан',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 минут назад
-    },
-    {
-      id: '2',
-      type: 'payment',
-      title: 'Получен платёж',
-      description: 'Новый платёж на сумму 500 ₽',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 часа назад
-    },
-    {
-      id: '3',
-      type: 'review',
-      title: 'Новый отзыв',
-      description: 'Получен отзыв на шаблон "Бот-консультант"',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5), // 5 часов назад
-    },
-  ];
-
+function ActivityFeed({ events }: { events: ActivityEvent[] }) {
   const eventIcons: Record<ActivityEvent['type'], React.ComponentType<{ size?: number }>> = {
     bot_created: Bot,
     bot_updated: RefreshCw,
@@ -230,15 +205,32 @@ export default function HomePage() {
   const { user } = useAuthStore();
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [botsData, setBotsData] = useState<any>(null);
+  const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       try {
         setLoading(true);
-        const [dashboard, bots] = await Promise.all([getDashboardData(7), getBots()]);
+        const [dashboard, bots, recentEvents] = await Promise.all([
+          getDashboardData(7),
+          getBots(),
+          getRecentEvents(10),
+        ]);
         setDashboardData(dashboard);
         setBotsData(bots);
+
+        // Map API events to ActivityEvent format
+        if (recentEvents?.items) {
+          const mappedEvents: ActivityEvent[] = recentEvents.items.map((ev: any) => ({
+            id: String(ev.id),
+            type: mapEventType(ev.type),
+            title: getEventTitle(ev.type, ev.name),
+            description: ev.payload?.description || ev.name || '',
+            timestamp: new Date(ev.created_at),
+          }));
+          setEvents(mappedEvents);
+        }
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       } finally {
@@ -247,6 +239,31 @@ export default function HomePage() {
     }
     loadData();
   }, []);
+
+  // Helper functions for event mapping
+  function mapEventType(type: string): ActivityEvent['type'] {
+    const typeMap: Record<string, ActivityEvent['type']> = {
+      bot_message: 'bot_created',
+      bot_created: 'bot_created',
+      bot_updated: 'bot_updated',
+      payment: 'payment',
+      review: 'review',
+      error: 'error',
+    };
+    return typeMap[type] || 'bot_created';
+  }
+
+  function getEventTitle(type: string, name: string): string {
+    const titles: Record<string, string> = {
+      bot_message: 'Новое сообщение',
+      bot_created: 'Создан бот',
+      bot_updated: 'Бот обновлён',
+      payment: 'Платёж',
+      review: 'Отзыв',
+      error: 'Ошибка',
+    };
+    return titles[type] || name || 'Событие';
+  }
 
   const quickActions = [
     {
@@ -291,41 +308,35 @@ export default function HomePage() {
         <KPICard
           icon={Users}
           label="Всего пользователей"
-          value={
-            loading
-              ? '...'
-              : botsData?.items?.reduce(
-                  (sum: number, bot: any) => sum + (bot.usersCount || 0),
-                  0
-                ) || 0
-          }
-          change={loading ? '' : `в ${botsData?.items?.length || 0} ботах`}
+          value={loading ? '...' : dashboardData?.summary?.total_users || 0}
+          change={loading ? '' : `в ${dashboardData?.summary?.total_bots || 0} ботах`}
           changeType="neutral"
           isLoading={loading}
         />
         <KPICard
           icon={MessageCircle}
           label="Сообщения"
-          value={
-            loading
-              ? '...'
-              : botsData?.items?.reduce(
-                  (sum: number, bot: any) => sum + (bot.messagesCount || 0),
-                  0
-                ) || 0
-          }
+          value={loading ? '...' : dashboardData?.summary?.total_messages || 0}
           change={loading ? '' : `Всего отправлено`}
           changeType="neutral"
           isLoading={loading}
         />
         <KPICard
           icon={Wallet}
-          label="Выручка"
-          value="12 500 ₽"
-          change="+8% за месяц"
-          changeType="positive"
+          label="Бонусный баланс"
+          value={loading ? '...' : `${dashboardData?.summary?.bonus_balance || 0} ₽`}
+          change={loading ? '' : 'Доступно для покупок'}
+          changeType="neutral"
+          isLoading={loading}
         />
-        <KPICard icon={Star} label="Средний рейтинг" value="4.8" change="из 5.0" />
+        <KPICard
+          icon={Star}
+          label="Сценарии"
+          value={loading ? '...' : dashboardData?.summary?.total_scenarios || 0}
+          change={loading ? '' : `Выполнено: ${dashboardData?.summary?.total_executions || 0}`}
+          changeType="neutral"
+          isLoading={loading}
+        />
       </div>
 
       {/* Быстрые действия */}
@@ -381,7 +392,7 @@ export default function HomePage() {
           gap: '24px',
         }}
       >
-        <ActivityFeed />
+        <ActivityFeed events={events} />
       </div>
 
       <style>

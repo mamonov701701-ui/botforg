@@ -25,6 +25,8 @@ export async function getMe() {
     return await get('/me');
   } catch (error: any) {
     if (error.status === 401) {
+      // Очищаем токен только при 401 на /me - это означает что токен невалидный
+      clearToken();
       return null;
     }
     throw error;

@@ -63,6 +63,19 @@ class BotCreate(BotBase):
         return v
 
 
+class BotCreateSimple(BaseModel):
+    """Схема для создания бота без токена (для маркетплейса)"""
+    title: str
+    description: Optional[str] = ""
+    
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v):
+        if len(v) < 1 or len(v) > 100:
+            raise ValueError("Title must be between 1 and 100 characters")
+        return v
+
+
 class BotUpdate(BaseModel):
     title: Optional[str] = None
     webhook_url: Optional[str] = None

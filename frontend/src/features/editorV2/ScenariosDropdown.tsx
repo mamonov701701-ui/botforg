@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ChevronDown,
-  Plus,
   Trash2,
   Home,
   Package,
@@ -37,6 +36,7 @@ interface ScenariosDropdownProps {
   currentScenarioId: string;
   onSelectScenario: (scenarioId: string) => void;
   onDeleteScenario?: (scenarioId: string) => void;
+  isLoading?: boolean;
 }
 
 export default function ScenariosDropdown({
@@ -44,15 +44,16 @@ export default function ScenariosDropdown({
   currentScenarioId,
   onSelectScenario,
   onDeleteScenario,
+  isLoading = false,
 }: ScenariosDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const currentScenario = scenarios.find(s => s.id === currentScenarioId);
 
-  // Если сценарии еще загружаются
-  const isLoading = scenarios.length === 0;
-  const displayName = currentScenario?.name || (isLoading ? 'Загрузка...' : 'Сценарий');
+  // Определяем что показывать
+  const isEmpty = !isLoading && scenarios.length === 0;
+  const displayName = isLoading ? 'Загрузка...' : currentScenario?.name || 'Выберите сценарий';
 
   // Получаем компонент иконки
   const getIconComponent = (iconName?: string): LucideIcon => {
@@ -84,9 +85,8 @@ export default function ScenariosDropdown({
       {/* Кнопка dropdown */}
       <button
         onClick={() => {
-          if (!isLoading) {
-            setIsOpen(!isOpen);
-          }
+          if (isLoading) return;
+          setIsOpen(!isOpen);
         }}
         style={{
           background: '#1a1a2e',
@@ -239,6 +239,18 @@ export default function ScenariosDropdown({
               </div>
             );
           })}
+
+          {/* Если нет сценариев */}
+          {scenarios.length === 0 && (
+            <div
+              style={{ padding: '16px 12px', color: '#6b7280', fontSize: 13, textAlign: 'center' }}
+            >
+              <div style={{ marginBottom: 8 }}>Нет сценариев</div>
+              <div style={{ fontSize: 12, color: '#4b5563' }}>
+                Нажмите "Новый сценарий" чтобы создать
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

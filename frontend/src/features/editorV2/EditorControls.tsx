@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import ScenariosDropdown from './ScenariosDropdown';
+import BotsDropdown from './BotsDropdown';
 import SaveDropdown from './SaveDropdown';
 import NewScenarioModal from './NewScenarioModal';
 import SaveToLibraryModal from './SaveToLibraryModal';
 import SaveBotModal from './SaveBotModal';
+import NewBotModal from './NewBotModal';
 import { useScenarioStore } from '../../stores/scenarioStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
+import { getBots, type Bot } from '../../api/bot';
 
 interface EditorControlsProps {
   onExport?: () => void;
@@ -25,12 +28,18 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   hasUnsavedChanges = false,
 }) => {
   const { id: botId } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  // Bots state
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [isNewBotOpen, setIsNewBotOpen] = useState(false);
 
   // Scenario store
   const {
     scenarios,
     currentScenarioId,
     libraryScenarios,
+    isLoading: scenariosLoading,
     loadBotScenarios,
     loadLibraryScenarios,
     selectScenario,
@@ -56,6 +65,20 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   const [isSaveToLibraryOpen, setIsSaveToLibraryOpen] = useState(false);
   const [isSaveBotOpen, setIsSaveBotOpen] = useState(false);
 
+  // Загрузка ботов при монтировании
+  useEffect(() => {
+    const loadBots = async () => {
+      try {
+        const response = await getBots();
+        setBots(response.items || []);
+      } catch (err) {
+        console.error('Failed to load bots:', err);
+        // Если ошибка авторизации - ничего не делаем, боты загрузятся после входа
+      }
+    };
+    loadBots();
+  }, []);
+
   // Загрузка сценариев при монтировании (только для авторизованных пользователей)
   useEffect(() => {
     if (botId && user) {
@@ -75,6 +98,12 @@ const EditorControls: React.FC<EditorControlsProps> = ({
 
   const handleSelectScenario = (scenarioId: string) => {
     selectScenario(parseInt(scenarioId));
+  };
+
+  // При выборе бота — переходим (useEffect загрузит сценарии при изменении botId)
+  const handleSelectBot = (newBotId: number) => {
+    if (newBotId === (botId ? parseInt(botId) : null)) return; // Уже выбран
+    navigate(`/editor/${newBotId}`);
   };
 
   const handleDeleteScenario = async (scenarioId: string) => {
@@ -138,6 +167,13 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     if (!user) {
       showToast('Для сохранения сценариев необходимо войти в систему', 'error');
       openAuth(window.location.pathname);
+      return;
+    }
+
+    // Проверяем, есть ли выбранный сценарий
+    if (!currentScenarioId) {
+      showToast('Сначала создайте сценарий', 'warning');
+      setIsNewScenarioOpen(true);
       return;
     }
 
@@ -300,13 +336,42 @@ const EditorControls: React.FC<EditorControlsProps> = ({
         {/* Dropdown сценариев */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <label style={{ color: '#9ca3af', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
-            Сценарии:
+            Сценарий:
           </label>
           <ScenariosDropdown
             scenarios={scenariosForDropdown}
             currentScenarioId={currentScenarioId?.toString() || ''}
             onSelectScenario={handleSelectScenario}
             onDeleteScenario={handleDeleteScenario}
+            isLoading={scenariosLoading}
+          />
+        </div>
+
+        {/* Разделитель */}
+        <div
+          style={{
+            width: 1,
+            height: 32,
+            background: '#374151',
+          }}
+        />
+
+        {/* Dropdown ботов */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ color: '#9ca3af', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
+            Бот:
+          </label>
+          <BotsDropdown
+            bots={bots.map(b => ({
+              id: b.id,
+              title: b.title || b.name || `Бот #${b.id}`,
+              username: b.username || '',
+              is_active: b.is_active,
+            }))}
+            currentBotId={botId ? parseInt(botId) : null}
+            onSelectBot={handleSelectBot}
+            onCreateBot={() => setIsNewBotOpen(true)}
+            onCreateFromTemplate={() => navigate('/dashboard/templates')}
           />
         </div>
 
@@ -355,6 +420,17 @@ const EditorControls: React.FC<EditorControlsProps> = ({
         currentBotDescription="Описание бота"
         scenarioCount={scenarios.length}
         hasUnsavedChanges={storeHasUnsaved()}
+      />
+
+      <NewBotModal
+        isOpen={isNewBotOpen}
+        onClose={() => setIsNewBotOpen(false)}
+        onBotCreated={newBotId => {
+          // Обновляем список ботов
+          getBots()
+            .then(response => setBots(response.items || []))
+            .catch(console.error);
+        }}
       />
     </>
   );

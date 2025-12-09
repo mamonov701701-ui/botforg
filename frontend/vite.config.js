@@ -8,9 +8,20 @@ export default defineConfig({
       name: 'disable-host-check',
       configureServer(server) {
         // Отключаем проверку хоста для туннелей
+        // Важно: выполняется ДО прокси, не влияет на проксированные запросы
         server.middlewares.use((req, res, next) => {
-          delete req.headers['host'];
-          req.headers['host'] = 'localhost:5173';
+          // Подменяем host только для статических файлов, не для API
+          if (
+            !req.url.startsWith('/api') &&
+            !req.url.startsWith('/auth') &&
+            !req.url.startsWith('/me') &&
+            !req.url.startsWith('/bots') &&
+            !req.url.startsWith('/analytics') &&
+            !req.url.startsWith('/blocks') &&
+            !req.url.startsWith('/scenarios')
+          ) {
+            req.headers['host'] = 'localhost:5173';
+          }
           next();
         });
       },
@@ -32,11 +43,10 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
-      '^/me$': {
+      '/me': {
         target: 'http://localhost:8001',
         changeOrigin: true,
         secure: false,
-        rewrite: path => path,
       },
       '/api': {
         target: 'http://localhost:8001',

@@ -264,27 +264,48 @@ export default function AuthModal() {
           localStorage.removeItem('rememberedEmail');
         }
 
+        // Небольшая задержка, чтобы токен точно сохранился в localStorage
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        // Проверяем, что токен действительно сохранен
+        const savedToken = localStorage.getItem('auth_token');
+        if (!savedToken) {
+          console.error('Токен не найден в localStorage после сохранения');
+          setLoading(false);
+          toast.error('Ошибка: токен не был сохранен. Попробуйте еще раз.');
+          return;
+        }
+
+        console.log('Токен проверен в localStorage:', savedToken.substring(0, 20) + '...');
+
         // Получаем данные пользователя
         try {
           const user = await getMe();
           if (user) {
             console.log('Пользователь получен:', user);
             setUser(user);
+            setLoading(false);
             toast.success('Вход выполнен успешно!');
             closeAuth();
+            // Навигация после закрытия модалки
             if (nextPath) {
               navigate(nextPath);
             } else {
               navigate('/dashboard');
             }
           } else {
-            console.error('getMe вернул null, токен:', token.substring(0, 20) + '...');
-            // Если не удалось получить пользователя, возможно токен невалидный
+            console.error('getMe вернул null, токен:', savedToken.substring(0, 20) + '...');
+            setLoading(false);
             localStorage.removeItem('auth_token');
             toast.error('Не удалось получить данные пользователя. Проверьте учетные данные.');
           }
         } catch (meError: any) {
           console.error('Ошибка при получении данных пользователя:', meError);
+          console.error(
+            'Токен в localStorage:',
+            savedToken ? savedToken.substring(0, 20) + '...' : 'отсутствует'
+          );
+          setLoading(false);
           if (meError.status === 401) {
             localStorage.removeItem('auth_token');
             toast.error('Сессия недействительна. Попробуйте войти еще раз.');
