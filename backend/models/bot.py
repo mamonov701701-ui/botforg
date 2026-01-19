@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from backend.database import Base
@@ -13,6 +13,7 @@ class Bot(Base):
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)  # Описание бота
     username = Column(String, nullable=False)
     token = Column(String, nullable=False)
     webhook_url = Column(String, nullable=True)
@@ -24,6 +25,14 @@ class Bot(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+    
+    # Поля блокировки бота
+    is_suspended = Column(Boolean, default=False)  # Приостановлен ли бот
+    suspension_type = Column(String, nullable=True)  # warning, temporary, permanent
+    suspension_reason = Column(Text, nullable=True)  # Причина блокировки
+    suspended_at = Column(DateTime, nullable=True)  # Когда заблокирован
+    suspended_until = Column(DateTime, nullable=True)  # До какого времени
+    suspended_by_id = Column(Integer, nullable=True)  # Кто заблокировал
 
     user = relationship("User", back_populates="bots")
 

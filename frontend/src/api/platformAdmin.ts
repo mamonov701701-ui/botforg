@@ -30,6 +30,24 @@ export interface User {
   base_roles: BaseRoleListItem[];
 }
 
+export interface UserListResponse {
+  items: User[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface PlatformStats {
+  total_users: number;
+  total_projects: number;
+  total_bots: number;
+  active_bots: number;
+  total_scenarios: number;
+  total_bot_users: number;
+  total_messages: number;
+}
+
 export interface PlatformRole {
   id: number;
   user_id: number;
@@ -59,16 +77,65 @@ export interface UpdateRoleRequest {
 }
 
 /**
- * Получить список всех пользователей
+ * Получить список всех пользователей с пагинацией
  */
-export async function getAllUsers(search?: string, teamOnly?: boolean): Promise<User[]> {
+export async function getAllUsers(options?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  teamOnly?: boolean;
+  sortBy?: 'id' | 'email' | 'name' | 'role' | 'created_at';
+  sortOrder?: 'asc' | 'desc';
+}): Promise<UserListResponse> {
   const params = new URLSearchParams();
-  if (search) params.append('search', search);
-  if (teamOnly) params.append('team_only', 'true');
 
-  const response = await api.get(`/api/platform-admin/users?${params.toString()}`);
-  // API возвращает массив напрямую
-  return Array.isArray(response) ? response : response.data || [];
+  if (options?.page) params.append('page', options.page.toString());
+  if (options?.pageSize) params.append('page_size', options.pageSize.toString());
+  if (options?.search) params.append('search', options.search);
+  if (options?.teamOnly) params.append('team_only', 'true');
+  if (options?.sortBy) params.append('sort_by', options.sortBy);
+  if (options?.sortOrder) params.append('sort_order', options.sortOrder);
+
+  const url = `/api/platform-admin/users${params.toString() ? `?${params.toString()}` : ''}`;
+  const response = await api.get(url);
+
+  // API возвращает объект с пагинацией
+  let result;
+  if (response?.items && Array.isArray(response.items)) {
+    // Правильный формат ответа
+    result = response;
+  } else if (Array.isArray(response)) {
+    // Если пришел массив (старый формат), оборачиваем
+    result = {
+      items: response,
+      total: response.length,
+      page: 1,
+      page_size: response.length,
+      total_pages: 1,
+    };
+  } else {
+    // Пустой результат
+    result = {
+      items: [],
+      total: 0,
+      page: options?.page || 1,
+      page_size: options?.pageSize || 50,
+      total_pages: 0,
+    };
+  }
+
+  if (import.meta.env.DEV) {
+    console.log(
+      `[getAllUsers] Loaded ${result.items.length} users from ${url} (total: ${result.total})`,
+      {
+        responseType: Array.isArray(response) ? 'array' : typeof response,
+        hasItems: !!response?.items,
+        result,
+      }
+    );
+  }
+
+  return result;
 }
 
 /**
@@ -77,6 +144,95 @@ export async function getAllUsers(search?: string, teamOnly?: boolean): Promise<
 export async function getUserDetail(userId: number): Promise<UserDetail> {
   const response = await api.get(`/api/platform-admin/users/${userId}`);
   return response.data;
+}
+
+/**
+ * Получить статистику платформы
+ */
+export async function getPlatformStats(): Promise<PlatformStats> {
+  try {
+    const response = await api.get('/api/platform-admin/stats');
+
+    if (import.meta.env.DEV) {
+      console.log('[getPlatformStats] Raw response:', response);
+      console.log('[getPlatformStats] Response type:', typeof response);
+      console.log('[getPlatformStats] Has total_users:', 'total_users' in response);
+    }
+
+    // API возвращает данные напрямую (response.json() уже распарсил JSON)
+    // FastAPI с response_model возвращает объект напрямую
+    const result = response as PlatformStats;
+
+    if (import.meta.env.DEV) {
+      console.log('[getPlatformStats] Processed result:', result);
+    }
+
+    return result;
+  } catch (error: any) {
+    console.error('[getPlatformStats] Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Получить расширенную информацию о пользователе (проекты, боты, статистика)
+ */
+export interface UserDetailedInfo {
+  user: {
+    id: number;
+    public_id: number;
+    email: string;
+    name: string | null;
+    role: string;
+    created_at: string | null;
+    platform_roles: Array<{
+      id: number;
+      role_name: string;
+      granted_at: string | null;
+      expires_at: string | null;
+      is_active: boolean;
+    }>;
+  };
+  bots: Array<{
+    id: number;
+    title: string;
+    username: string;
+    is_active: boolean;
+    is_suspended: boolean;
+    suspension_type: 'warning' | 'temporary' | 'permanent' | null;
+    suspension_reason: string | null;
+    created_at: string | null;
+    users_count: number;
+    messages_count: number;
+  }>;
+  scenarios: Array<{
+    id: number;
+    name: string;
+    bot_id: number | null;
+    is_main: boolean;
+    is_library: boolean;
+    created_at: string | null;
+  }>;
+  team_memberships: Array<{
+    owner_id: number;
+    owner_name: string | null;
+    owner_email: string;
+    role: string;
+    bots_count: number;
+  }>;
+  statistics: {
+    total_bots: number;
+    active_bots: number;
+    total_scenarios: number;
+    total_bot_users: number;
+    total_messages: number;
+    team_projects_count: number;
+  };
+}
+
+export async function getUserDetailedInfo(userId: number): Promise<UserDetailedInfo> {
+  const response = await api.get(`/api/platform-admin/users/${userId}/detailed`);
+  return response.data || response;
 }
 
 /**
@@ -159,4 +315,78 @@ export async function updateBaseRole(
  */
 export async function deleteBaseRole(roleId: number): Promise<void> {
   await api.delete(`/api/platform-admin/base-roles/${roleId}`);
+}
+
+// === Suspension Management ===
+
+export interface SuspensionInfo {
+  is_suspended: boolean;
+  suspension_type: 'warning' | 'temporary' | 'permanent' | null;
+  suspension_reason: string | null;
+  suspended_at: string | null;
+  suspended_until: string | null;
+  suspended_by_id: number | null;
+  suspended_by_email: string | null;
+}
+
+export interface SuspendRequest {
+  suspension_type: 'warning' | 'temporary' | 'permanent';
+  reason: string;
+  duration_days?: number; // Required for temporary suspension
+}
+
+/**
+ * Заблокировать пользователя
+ */
+export async function suspendUser(userId: number, data: SuspendRequest): Promise<any> {
+  return api.post(`/api/platform-admin/users/${userId}/suspend`, data);
+}
+
+/**
+ * Снять блокировку с пользователя
+ */
+export async function unsuspendUser(userId: number): Promise<any> {
+  return api.post(`/api/platform-admin/users/${userId}/unsuspend`);
+}
+
+/**
+ * Получить информацию о блокировке пользователя
+ */
+export async function getUserSuspension(userId: number): Promise<SuspensionInfo> {
+  return api.get(`/api/platform-admin/users/${userId}/suspension`);
+}
+
+/**
+ * Заблокировать бота
+ */
+export async function suspendBot(botId: number, data: SuspendRequest): Promise<any> {
+  return api.post(`/api/platform-admin/bots/${botId}/suspend`, data);
+}
+
+/**
+ * Снять блокировку с бота
+ */
+export async function unsuspendBot(botId: number): Promise<any> {
+  return api.post(`/api/platform-admin/bots/${botId}/unsuspend`);
+}
+
+/**
+ * Получить информацию о блокировке бота
+ */
+export async function getBotSuspension(botId: number): Promise<SuspensionInfo> {
+  return api.get(`/api/platform-admin/bots/${botId}/suspension`);
+}
+
+/**
+ * Заблокировать все боты пользователя
+ */
+export async function suspendAllUserBots(userId: number, data: SuspendRequest): Promise<any> {
+  return api.post(`/api/platform-admin/users/${userId}/suspend-all-bots`, data);
+}
+
+/**
+ * Снять блокировку со всех ботов пользователя
+ */
+export async function unsuspendAllUserBots(userId: number): Promise<any> {
+  return api.post(`/api/platform-admin/users/${userId}/unsuspend-all-bots`);
 }

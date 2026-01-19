@@ -78,6 +78,7 @@ class BotCreateSimple(BaseModel):
 
 class BotUpdate(BaseModel):
     title: Optional[str] = None
+    description: Optional[str] = None
     webhook_url: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -89,6 +90,13 @@ class BotUpdate(BaseModel):
                 raise ValueError("Title must be between 1 and 100 characters")
             if re.search(r"<[^>]*>", v):
                 raise ValueError("HTML tags are not allowed in title")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def validate_description(cls, v):
+        if v and len(v) > 500:
+            raise ValueError("Description must be less than 500 characters")
         return v
 
     @field_validator("webhook_url")
@@ -105,6 +113,7 @@ class BotUpdate(BaseModel):
 class BotOut(BaseModel):
     id: int
     title: str
+    description: Optional[str] = None
     username: str
     webhook_url: Optional[str] = None
     is_active: bool

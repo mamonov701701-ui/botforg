@@ -26,6 +26,10 @@ import AnalyticsPage from './features/dashboard/pages/AnalyticsPage';
 import TeamPage from './features/dashboard/pages/TeamPage';
 import BFTeamPage from './features/dashboard/pages/BFTeamPage';
 import SettingsPage from './features/dashboard/pages/SettingsPage';
+import PlatformOverviewPage from './features/dashboard/pages/PlatformOverviewPage';
+import PlatformUsersPage from './features/dashboard/pages/PlatformUsersPage';
+import PlatformAnalyticsPage from './features/dashboard/pages/PlatformAnalyticsPage';
+import UserDetailPage from './features/dashboard/pages/UserDetailPage';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -64,6 +68,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="team" element={<TeamPage />} />
             <Route path="bf-team" element={<BFTeamPage />} />
             <Route path="settings" element={<SettingsPage />} />
+
+            {/* Platform admin routes */}
+            <Route path="platform" element={<PlatformOverviewPage />} />
+            <Route path="platform/users" element={<PlatformUsersPage />} />
+            <Route path="platform/users/:userId" element={<UserDetailPage />} />
+            <Route path="platform/analytics" element={<PlatformAnalyticsPage />} />
+            <Route path="platform/settings" element={<SettingsPage />} />
           </Route>
 
           <Route path="*" element={<NotFound />} />

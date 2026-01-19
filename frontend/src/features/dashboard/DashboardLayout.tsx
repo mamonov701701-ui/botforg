@@ -11,35 +11,124 @@ import {
   Settings,
   LogOut,
   Workflow,
+  Building2,
+  TrendingUp,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { hasAccessToSection, ROLE_NAMES, type SectionKey } from '../../constants/roles';
 import { getMe, logout } from '../../api/auth';
 
+type DashboardMode = 'projects' | 'platform';
+
 interface NavItem {
-  id: SectionKey;
+  id: SectionKey | 'platform_overview' | 'platform_users' | 'platform_analytics';
   label: string;
   path: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
+  mode: DashboardMode; // В каком режиме показывать этот пункт
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Главная', path: '/dashboard', icon: Home },
-  { id: 'bots', label: 'Мои боты', path: '/dashboard/bots', icon: Bot },
-  { id: 'scenarios', label: 'Сценарии', path: '/dashboard/scenarios', icon: Workflow },
-  { id: 'templates', label: 'Шаблоны', path: '/dashboard/templates', icon: FileText },
-  { id: 'balance', label: 'Баланс', path: '/dashboard/balance', icon: Wallet },
-  { id: 'analytics', label: 'Аналитика', path: '/dashboard/analytics', icon: BarChart3 },
-  { id: 'team', label: 'Команда', path: '/dashboard/team', icon: Users },
-  { id: 'bf_team', label: 'BF команда', path: '/dashboard/bf-team', icon: Shield },
-  { id: 'settings', label: 'Настройки', path: '/dashboard/settings', icon: Settings },
+// Пункты меню для режима "Мои проекты"
+const PROJECT_NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard', label: 'Главная', path: '/dashboard', icon: Home, mode: 'projects' },
+  { id: 'bots', label: 'Мои боты', path: '/dashboard/bots', icon: Bot, mode: 'projects' },
+  {
+    id: 'scenarios',
+    label: 'Сценарии',
+    path: '/dashboard/scenarios',
+    icon: Workflow,
+    mode: 'projects',
+  },
+  {
+    id: 'templates',
+    label: 'Шаблоны',
+    path: '/dashboard/templates',
+    icon: FileText,
+    mode: 'projects',
+  },
+  { id: 'balance', label: 'Баланс', path: '/dashboard/balance', icon: Wallet, mode: 'projects' },
+  {
+    id: 'analytics',
+    label: 'Аналитика',
+    path: '/dashboard/analytics',
+    icon: BarChart3,
+    mode: 'projects',
+  },
+  { id: 'team', label: 'Команда', path: '/dashboard/team', icon: Users, mode: 'projects' },
+  {
+    id: 'settings',
+    label: 'Настройки',
+    path: '/dashboard/settings',
+    icon: Settings,
+    mode: 'projects',
+  },
 ];
+
+// Пункты меню для режима "Управление платформой"
+const PLATFORM_NAV_ITEMS: NavItem[] = [
+  {
+    id: 'platform_overview',
+    label: 'Обзор платформы',
+    path: '/dashboard/platform',
+    icon: Home,
+    mode: 'platform',
+  },
+  {
+    id: 'platform_users',
+    label: 'Пользователи и проекты',
+    path: '/dashboard/platform/users',
+    icon: Users,
+    mode: 'platform',
+  },
+  {
+    id: 'platform_analytics',
+    label: 'Платформенная аналитика',
+    path: '/dashboard/platform/analytics',
+    icon: TrendingUp,
+    mode: 'platform',
+  },
+  {
+    id: 'bf_team',
+    label: 'BF команда',
+    path: '/dashboard/bf-team',
+    icon: Shield,
+    mode: 'platform',
+  },
+  {
+    id: 'settings',
+    label: 'Настройки платформы',
+    path: '/dashboard/platform/settings',
+    icon: Settings,
+    mode: 'platform',
+  },
+];
+
+/**
+ * Проверяет, есть ли у пользователя доступ к платформенному режиму
+ */
+function hasPlatformAccess(user: { role: string } | null | undefined): boolean {
+  if (!user) return false;
+  // Доступ только для owner и участников BF команды
+  // Пока проверяем только owner, позже можно добавить проверку platform_roles
+  return user.role === 'owner';
+}
 
 export default function DashboardLayout() {
   const { user, setUser, loading, setLoading, clearUser } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Режим работы: 'projects' (Мои проекты) или 'platform' (Управление платформой)
+  const [dashboardMode, setDashboardMode] = useState<DashboardMode>(() => {
+    const saved = localStorage.getItem('dashboard_mode');
+    return (saved as DashboardMode) || 'projects';
+  });
+
+  // Сохраняем режим в localStorage при изменении
+  useEffect(() => {
+    localStorage.setItem('dashboard_mode', dashboardMode);
+  }, [dashboardMode]);
 
   const handleLogout = async () => {
     try {
@@ -48,7 +137,6 @@ export default function DashboardLayout() {
       navigate('/');
     } catch (error) {
       console.error('Logout failed:', error);
-      // В любом случае очищаем данные пользователя
       clearUser();
       navigate('/');
     }
@@ -72,8 +160,48 @@ export default function DashboardLayout() {
     loadUser();
   }, [user, setUser, setLoading]);
 
+  // Определяем текущие пункты меню в зависимости от режима
+  const currentNavItems = dashboardMode === 'platform' ? PLATFORM_NAV_ITEMS : PROJECT_NAV_ITEMS;
+
   // Фильтруем пункты меню по правам доступа
-  const availableNavItems = NAV_ITEMS.filter(item => hasAccessToSection(user?.role, item.id));
+  const availableNavItems = currentNavItems.filter(item => {
+    // Для платформенных пунктов проверяем дополнительный доступ
+    if (item.mode === 'platform') {
+      return hasPlatformAccess(user);
+    }
+    // Для обычных пунктов используем стандартную проверку
+    if ('id' in item && typeof item.id === 'string' && item.id.startsWith('platform_')) {
+      return hasPlatformAccess(user);
+    }
+    return hasAccessToSection(user?.role, item.id as SectionKey);
+  });
+
+  // Автоматически переключаем режим при переходе на платформенные страницы
+  useEffect(() => {
+    const isPlatformPage =
+      location.pathname.startsWith('/dashboard/platform') ||
+      location.pathname.startsWith('/dashboard/bf-team');
+
+    if (isPlatformPage && dashboardMode !== 'platform' && hasPlatformAccess(user)) {
+      setDashboardMode('platform');
+    } else if (
+      !isPlatformPage &&
+      dashboardMode === 'platform' &&
+      !location.pathname.startsWith('/dashboard/platform') &&
+      !location.pathname.startsWith('/dashboard/bf-team')
+    ) {
+      // Если ушли с платформенных страниц - переключаемся на проекты
+      setDashboardMode('projects');
+    }
+
+    // Если переключились в платформенный режим, но нет доступа - переключаем обратно
+    if (dashboardMode === 'platform' && !hasPlatformAccess(user)) {
+      setDashboardMode('projects');
+      if (isPlatformPage) {
+        navigate('/dashboard');
+      }
+    }
+  }, [location.pathname, dashboardMode, user, navigate]);
 
   // Показываем загрузку пока проверяем пользователя
   if (loading) {
@@ -96,14 +224,7 @@ export default function DashboardLayout() {
             animation: 'spin 1s linear infinite',
           }}
         />
-        <style>
-          {`
-            @keyframes spin {
-              0% { transform: rotate(0deg); }
-              100% { transform: rotate(360deg); }
-            }
-          `}
-        </style>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -153,14 +274,6 @@ export default function DashboardLayout() {
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'var(--primary-hover)';
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'var(--primary)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
             >
               Войти / Зарегистрироваться
             </button>
@@ -176,13 +289,6 @@ export default function DashboardLayout() {
                 fontSize: '16px',
                 fontWeight: 600,
                 cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'var(--surface)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'var(--card)';
               }}
             >
               На главную
@@ -193,14 +299,10 @@ export default function DashboardLayout() {
     );
   }
 
+  const canAccessPlatform = hasPlatformAccess(user);
+
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        color: 'var(--text)',
-      }}
-    >
-      {/* Внутренний контейнер ЛК */}
+    <div style={{ minHeight: '100vh', color: 'var(--text)' }}>
       <div
         style={{
           maxWidth: '1400px',
@@ -261,15 +363,11 @@ export default function DashboardLayout() {
                       color: 'var(--text-muted)',
                       transition: 'color 0.2s',
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
-                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
                     title="Свернуть"
                   >
                     ←
                   </button>
-
                   <div style={{ paddingRight: '24px' }}>
-                    {/* Имя */}
                     <h2
                       style={{
                         fontSize: '16px',
@@ -281,8 +379,6 @@ export default function DashboardLayout() {
                     >
                       {user.name || 'Пользователь'}
                     </h2>
-
-                    {/* Статус (роль) */}
                     <div
                       style={{
                         display: 'inline-block',
@@ -303,8 +399,6 @@ export default function DashboardLayout() {
                         {ROLE_NAMES[user.role as keyof typeof ROLE_NAMES] || user.role}
                       </p>
                     </div>
-
-                    {/* ID */}
                     <p
                       style={{
                         fontSize: '11px',
@@ -339,8 +433,6 @@ export default function DashboardLayout() {
                     color: 'var(--text-muted)',
                     transition: 'color 0.2s',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-muted)')}
                   title="Развернуть"
                 >
                   →
@@ -348,10 +440,132 @@ export default function DashboardLayout() {
               </div>
             )}
 
+            {/* Переключатель режимов (только если есть доступ к платформе) */}
+            {canAccessPlatform && !isSidebarCollapsed && (
+              <div
+                style={{
+                  marginBottom: '24px',
+                  paddingBottom: '16px',
+                  borderBottom: '1px solid var(--border)',
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                    }}
+                  >
+                    Режим работы
+                  </label>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: '4px',
+                      background: 'rgba(15, 23, 42, 0.5)',
+                      borderRadius: '8px',
+                      padding: '4px',
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        setDashboardMode('projects');
+                        if (location.pathname.startsWith('/dashboard/platform')) {
+                          navigate('/dashboard');
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background:
+                          dashboardMode === 'projects' ? 'rgba(255, 210, 76, 0.2)' : 'transparent',
+                        color:
+                          dashboardMode === 'projects' ? 'var(--primary)' : 'var(--text-muted)',
+                        fontSize: '13px',
+                        fontWeight: dashboardMode === 'projects' ? 600 : 400,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                      onMouseEnter={e => {
+                        if (dashboardMode !== 'projects') {
+                          e.currentTarget.style.background = 'rgba(26, 34, 56, 0.5)';
+                          e.currentTarget.style.color = 'var(--text)';
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        if (dashboardMode !== 'projects') {
+                          e.currentTarget.style.background = 'transparent';
+                          e.currentTarget.style.color = 'var(--text-muted)';
+                        }
+                      }}
+                    >
+                      <Building2 size={14} />
+                      <span>Проекты</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDashboardMode('platform');
+                        if (
+                          !location.pathname.startsWith('/dashboard/platform') &&
+                          !location.pathname.startsWith('/dashboard/bf-team')
+                        ) {
+                          navigate('/dashboard/platform');
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        background:
+                          dashboardMode === 'platform' ? 'rgba(255, 210, 76, 0.2)' : 'transparent',
+                        color:
+                          dashboardMode === 'platform' ? 'var(--primary)' : 'var(--text-muted)',
+                        fontSize: '13px',
+                        fontWeight: dashboardMode === 'platform' ? 600 : 400,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                      }}
+                      onMouseEnter={e => {
+                        if (dashboardMode !== 'platform') {
+                          e.currentTarget.style.background = 'rgba(26, 34, 56, 0.5)';
+                          e.currentTarget.style.color = 'var(--text)';
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        if (dashboardMode !== 'platform') {
+                          e.currentTarget.style.background = 'transparent';
+                          e.currentTarget.style.color = 'var(--text-muted)';
+                        }
+                      }}
+                    >
+                      <Shield size={14} />
+                      <span>Платформа</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Навигация */}
             <nav>
               {availableNavItems.map(item => {
-                const isActive = location.pathname === item.path;
+                const isActive =
+                  location.pathname === item.path ||
+                  (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
                 const IconComponent = item.icon;
                 return (
                   <NavLink
@@ -430,12 +644,7 @@ export default function DashboardLayout() {
         </aside>
 
         {/* Основной контент */}
-        <main
-          style={{
-            flex: 1,
-            minWidth: 0, // Для правильного overflow
-          }}
-        >
+        <main style={{ flex: 1, minWidth: 0 }}>
           <Outlet />
         </main>
       </div>

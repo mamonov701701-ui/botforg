@@ -96,6 +96,25 @@ def get_bot_scenarios(
     return scenarios
 
 
+# Получить ВСЕ сценарии текущего пользователя
+@router.get("/my", response_model=List[ScenarioOut])
+def get_my_scenarios(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Получить все сценарии текущего пользователя (включая привязанные к ботам и библиотечные)
+    """
+    scenarios = (
+        db.query(Scenario)
+        .filter(Scenario.user_id == current_user.id)
+        .order_by(Scenario.created_at.desc())
+        .all()
+    )
+    
+    return scenarios
+
+
 # Получить сценарии из библиотеки
 @router.get("/library", response_model=List[ScenarioOut])
 def get_library_scenarios(

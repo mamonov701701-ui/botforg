@@ -59,6 +59,13 @@ export async function getBotScenarios(botId: number): Promise<Scenario[]> {
 }
 
 /**
+ * Получить все сценарии текущего пользователя
+ */
+export async function getMyScenarios(): Promise<Scenario[]> {
+  return api.get('/scenarios/my');
+}
+
+/**
  * Получить сценарии из библиотеки
  */
 export async function getLibraryScenarios(category?: string): Promise<Scenario[]> {

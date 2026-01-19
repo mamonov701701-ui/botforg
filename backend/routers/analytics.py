@@ -175,3 +175,269 @@ async def get_bot_executions(
             for ex in executions
         ]
     }
+
+
+@router.get("/marketing")
+async def get_marketing_analytics(
+    days: int = Query(default=30, ge=1, le=365),
+    bot_id: Optional[int] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get comprehensive marketing analytics for bots.
+    Includes hourly activity, user acquisition, retention, conversion funnels.
+    """
+    from backend.models.bot import Bot, BotInstance
+    from backend.models.bot_user_state import BotUserState
+    from backend.models.message import Message
+    from backend.models.event import ScenarioExecution
+    from sqlalchemy import extract, case
+    
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+    
+    # Get user's bot instances
+    bot_instances_query = db.query(BotInstance).filter(BotInstance.user_id == current_user.id)
+    if bot_id:
+        bot_instances_query = bot_instances_query.filter(BotInstance.bot_id == bot_id)
+    bot_instances = bot_instances_query.all()
+    bot_instance_ids = [bi.id for bi in bot_instances]
+    
+    if not bot_instance_ids:
+        return _empty_marketing_response(days)
+    
+    # ============== Hourly Activity (last 24 hours) ==============
+    hourly_start = end_date - timedelta(hours=24)
+    
+    # Users active per hour (using last_interaction_at)
+    hourly_users = db.query(
+        extract('hour', BotUserState.last_interaction_at).label('hour'),
+        func.count(func.distinct(BotUserState.telegram_user_id)).label('users')
+    ).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.last_interaction_at >= hourly_start,
+        BotUserState.last_interaction_at <= end_date,
+    ).group_by(extract('hour', BotUserState.last_interaction_at)).all()
+    
+    # Get bot_ids (not instances) for Message queries
+    bot_ids = [bi.bot_id for bi in bot_instances]
+    
+    # Messages per hour
+    hourly_messages = db.query(
+        extract('hour', Message.created_at).label('hour'),
+        func.count(Message.id).label('messages')
+    ).filter(
+        Message.bot_id.in_(bot_ids),
+        Message.created_at >= hourly_start,
+        Message.created_at <= end_date,
+    ).group_by(extract('hour', Message.created_at)).all()
+    
+    # Build hourly data (24 hours)
+    hourly_data = []
+    current_hour = end_date.hour
+    for i in range(24):
+        hour = (current_hour - 23 + i) % 24
+        user_count = next((h.users for h in hourly_users if int(h.hour) == hour), 0)
+        msg_count = next((h.messages for h in hourly_messages if int(h.hour) == hour), 0)
+        hourly_data.append({
+            "hour": f"{hour:02d}:00",
+            "hour_num": hour,
+            "users": user_count,
+            "messages": msg_count,
+            "is_now": i == 23,
+        })
+    
+    # ============== Daily User Acquisition ==============
+    # Use created_at as first_seen
+    daily_new_users = db.query(
+        func.date(BotUserState.created_at).label('date'),
+        func.count(BotUserState.id).label('new_users')
+    ).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.created_at >= start_date,
+        BotUserState.created_at <= end_date,
+    ).group_by(func.date(BotUserState.created_at)).all()
+    
+    # Daily active users (using last_interaction_at)
+    daily_active = db.query(
+        func.date(BotUserState.last_interaction_at).label('date'),
+        func.count(func.distinct(BotUserState.telegram_user_id)).label('active_users')
+    ).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.last_interaction_at >= start_date,
+        BotUserState.last_interaction_at <= end_date,
+    ).group_by(func.date(BotUserState.last_interaction_at)).all()
+    
+    # Daily messages (using bot_ids)
+    daily_messages = db.query(
+        func.date(Message.created_at).label('date'),
+        func.count(Message.id).label('messages')
+    ).filter(
+        Message.bot_id.in_(bot_ids),
+        Message.created_at >= start_date,
+        Message.created_at <= end_date,
+    ).group_by(func.date(Message.created_at)).all()
+    
+    # Build daily data
+    daily_data = []
+    for i in range(days):
+        day = (end_date - timedelta(days=days - 1 - i)).date()
+        day_str = day.isoformat()
+        new_users = next((d.new_users for d in daily_new_users if str(d.date) == day_str), 0)
+        active = next((d.active_users for d in daily_active if str(d.date) == day_str), 0)
+        msgs = next((d.messages for d in daily_messages if str(d.date) == day_str), 0)
+        daily_data.append({
+            "date": day_str,
+            "date_short": day.strftime("%d.%m"),
+            "new_users": new_users,
+            "active_users": active,
+            "messages": msgs,
+        })
+    
+    # ============== User Retention ==============
+    # Users who returned after first visit
+    total_users = db.query(func.count(BotUserState.id)).filter(
+        BotUserState.bot_id.in_(bot_instance_ids)
+    ).scalar() or 0
+    
+    # Users active in last 7 days (using last_interaction_at)
+    week_ago = end_date - timedelta(days=7)
+    active_7d = db.query(func.count(func.distinct(BotUserState.telegram_user_id))).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.last_interaction_at >= week_ago,
+    ).scalar() or 0
+    
+    # Users active in last 30 days
+    month_ago = end_date - timedelta(days=30)
+    active_30d = db.query(func.count(func.distinct(BotUserState.telegram_user_id))).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.last_interaction_at >= month_ago,
+    ).scalar() or 0
+    
+    # Returning users - users who have history (meaning they came back)
+    returning_users = db.query(func.count(BotUserState.id)).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.history.isnot(None),
+    ).scalar() or 0
+    
+    retention = {
+        "total_users": total_users,
+        "active_7d": active_7d,
+        "active_30d": active_30d,
+        "returning_users": returning_users,
+        "retention_7d": round((active_7d / total_users * 100) if total_users > 0 else 0, 1),
+        "retention_30d": round((active_30d / total_users * 100) if total_users > 0 else 0, 1),
+        "return_rate": round((returning_users / total_users * 100) if total_users > 0 else 0, 1),
+    }
+    
+    # ============== Message Statistics ==============
+    total_messages = db.query(func.count(Message.id)).filter(
+        Message.bot_id.in_(bot_ids),
+        Message.created_at >= start_date,
+    ).scalar() or 0
+    
+    # Messages by direction (incoming/outgoing)
+    incoming_messages = db.query(func.count(Message.id)).filter(
+        Message.bot_id.in_(bot_ids),
+        Message.created_at >= start_date,
+        Message.direction == 'incoming',
+    ).scalar() or 0
+    
+    outgoing_messages = db.query(func.count(Message.id)).filter(
+        Message.bot_id.in_(bot_ids),
+        Message.created_at >= start_date,
+        Message.direction == 'outgoing',
+    ).scalar() or 0
+    
+    # Average messages per user
+    avg_messages_per_user = round(total_messages / total_users, 1) if total_users > 0 else 0
+    
+    messages_stats = {
+        "total": total_messages,
+        "incoming": incoming_messages,
+        "outgoing": outgoing_messages,
+        "avg_per_user": avg_messages_per_user,
+    }
+    
+    # ============== Peak Activity ==============
+    # Find peak hour
+    peak_hour = max(hourly_data, key=lambda x: x['users'])
+    
+    # Find peak day
+    peak_day = max(daily_data, key=lambda x: x['active_users']) if daily_data else None
+    
+    peaks = {
+        "peak_hour": peak_hour['hour'] if peak_hour else "N/A",
+        "peak_hour_users": peak_hour['users'] if peak_hour else 0,
+        "peak_day": peak_day['date_short'] if peak_day else "N/A",
+        "peak_day_users": peak_day['active_users'] if peak_day else 0,
+    }
+    
+    # ============== Growth Metrics ==============
+    # Compare with previous period
+    prev_start = start_date - timedelta(days=days)
+    prev_end = start_date
+    
+    # Use created_at as first_seen
+    prev_new_users = db.query(func.count(BotUserState.id)).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.created_at >= prev_start,
+        BotUserState.created_at < prev_end,
+    ).scalar() or 0
+    
+    current_new_users = sum(d['new_users'] for d in daily_data)
+    
+    prev_messages = db.query(func.count(Message.id)).filter(
+        Message.bot_id.in_(bot_ids),
+        Message.created_at >= prev_start,
+        Message.created_at < prev_end,
+    ).scalar() or 0
+    
+    def calc_growth(current, previous):
+        if previous == 0:
+            return 100.0 if current > 0 else 0.0
+        return round(((current - previous) / previous) * 100, 1)
+    
+    growth = {
+        "users_growth": calc_growth(current_new_users, prev_new_users),
+        "messages_growth": calc_growth(total_messages, prev_messages),
+        "current_new_users": current_new_users,
+        "previous_new_users": prev_new_users,
+    }
+    
+    # ============== Currently Online ==============
+    # Users active in last 5 minutes (using last_interaction_at)
+    five_min_ago = end_date - timedelta(minutes=5)
+    online_now = db.query(func.count(func.distinct(BotUserState.telegram_user_id))).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.last_interaction_at >= five_min_ago,
+    ).scalar() or 0
+    
+    return {
+        "period_days": days,
+        "hourly": hourly_data,
+        "daily": daily_data,
+        "retention": retention,
+        "messages": messages_stats,
+        "peaks": peaks,
+        "growth": growth,
+        "online_now": online_now,
+    }
+
+
+def _empty_marketing_response(days: int):
+    """Return empty marketing response structure"""
+    return {
+        "period_days": days,
+        "hourly": [{"hour": f"{h:02d}:00", "hour_num": h, "users": 0, "messages": 0, "is_now": False} for h in range(24)],
+        "daily": [],
+        "retention": {
+            "total_users": 0, "active_7d": 0, "active_30d": 0, "returning_users": 0,
+            "retention_7d": 0, "retention_30d": 0, "return_rate": 0,
+        },
+        "messages": {"total": 0, "incoming": 0, "outgoing": 0, "avg_per_user": 0},
+        "peaks": {"peak_hour": "N/A", "peak_hour_users": 0, "peak_day": "N/A", "peak_day_users": 0},
+        "growth": {"users_growth": 0, "messages_growth": 0, "current_new_users": 0, "previous_new_users": 0},
+        "online_now": 0,
+    }

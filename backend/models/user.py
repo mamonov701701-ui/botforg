@@ -1,12 +1,15 @@
 from datetime import datetime, timezone
 import random
 
-from sqlalchemy import Column, DateTime, Integer, String, BigInteger
+from sqlalchemy import Column, DateTime, Integer, String, BigInteger, Boolean, Text
 from sqlalchemy.orm import relationship
 
 from backend.database import Base
 
 ROLES = ["owner", "admin", "developer", "templates_manager", "support", "viewer", "user"]
+
+# Типы блокировок
+SUSPENSION_TYPES = ["warning", "temporary", "permanent"]
 
 
 class User(Base):
@@ -23,6 +26,14 @@ class User(Base):
     password_hash = Column(String, nullable=True)  # Alias for OAuth compatibility
     role = Column(String, default="viewer", nullable=False)
     email_verified_at = Column(DateTime, nullable=True)
+    
+    # Поля блокировки пользователя
+    is_suspended = Column(Boolean, default=False)  # Приостановлен ли аккаунт
+    suspension_type = Column(String, nullable=True)  # warning, temporary, permanent
+    suspension_reason = Column(Text, nullable=True)  # Причина блокировки
+    suspended_at = Column(DateTime, nullable=True)  # Когда заблокирован
+    suspended_until = Column(DateTime, nullable=True)  # До какого времени (для временной)
+    suspended_by_id = Column(Integer, nullable=True)  # Кто заблокировал (admin id)
 
     templates = relationship("Template", back_populates="user", cascade="all, delete")
     ratings = relationship("Rating", back_populates="user", cascade="all, delete")

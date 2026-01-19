@@ -7,6 +7,7 @@ import { ROLE_NAMES } from '../constants/roles';
 export interface Bot {
   id: number;
   title: string;
+  description?: string | null;
   username: string;
   webhook_url: string | null;
   is_active: boolean;

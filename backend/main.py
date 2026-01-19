@@ -123,3 +123,5 @@ def root():
 @app.get("/healthz", tags=["system"])
 def healthz():
     return {"status": "ok"}
+
+# Force reload trigger

@@ -127,14 +127,17 @@ export default function BFTeamPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [usersData, rolesData] = await Promise.all([
-        getAllUsers(searchQuery, true), // Всегда показываем только команду
+      console.log('[BFTeamPage] Loading team data with search:', searchQuery);
+      const [usersResponse, rolesData] = await Promise.all([
+        getAllUsers({ search: searchQuery, teamOnly: true, page: 1, pageSize: 100 }), // Всегда показываем только команду
         getAvailableRoles(),
       ]);
-      setUsers(usersData || []);
+      console.log('[BFTeamPage] Received users response:', usersResponse);
+      setUsers(usersResponse?.items || []);
       setAvailableRoles(rolesData || []);
-    } catch (error) {
-      console.error('Failed to load data:', error);
+    } catch (error: any) {
+      console.error('[BFTeamPage] Failed to load data:', error);
+      toast.error(error?.message || 'Не удалось загрузить данные команды');
       setUsers([]);
       setAvailableRoles([]);
     } finally {
@@ -563,8 +566,13 @@ export default function BFTeamPage() {
           onAssign={async (userId, roleName, expiresInDays) => {
             await handleAssignRole(userId, roleName, expiresInDays);
             // Обновляем данные пользователя после назначения роли
-            const updatedUsers = await getAllUsers(searchQuery, true);
-            const updatedUser = updatedUsers.find(u => u.id === selectedUser.id);
+            const updatedUsersResponse = await getAllUsers({
+              search: searchQuery,
+              teamOnly: true,
+              page: 1,
+              pageSize: 100,
+            });
+            const updatedUser = updatedUsersResponse?.items?.find(u => u.id === selectedUser.id);
             if (updatedUser) {
               setSelectedUser(updatedUser);
             }
@@ -577,8 +585,13 @@ export default function BFTeamPage() {
           onRefresh={async () => {
             await loadData();
             // Обновляем данные пользователя в модальном окне
-            const updatedUsers = await getAllUsers(searchQuery, true);
-            const updatedUser = updatedUsers.find(u => u.id === selectedUser.id);
+            const updatedUsersResponse = await getAllUsers({
+              search: searchQuery,
+              teamOnly: true,
+              page: 1,
+              pageSize: 100,
+            });
+            const updatedUser = updatedUsersResponse?.items?.find(u => u.id === selectedUser.id);
             if (updatedUser) {
               setSelectedUser(updatedUser);
             }
