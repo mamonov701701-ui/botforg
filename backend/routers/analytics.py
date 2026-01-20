@@ -3,10 +3,13 @@ Analytics Router for BotForg
 Provides analytics and dashboard endpoints
 """
 
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
+
+logger = logging.getLogger(__name__)
 
 from backend.dependencies.auth import get_current_user
 from backend.database import get_db
@@ -189,6 +192,9 @@ async def get_marketing_analytics(
     Get comprehensive marketing analytics for bots.
     Includes hourly activity, user acquisition, retention, conversion funnels.
     """
+    import time
+    start_time = time.time()
+    
     from backend.models.bot import Bot, BotInstance
     from backend.models.bot_user_state import BotUserState
     from backend.models.message import Message
@@ -198,41 +204,50 @@ async def get_marketing_analytics(
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
     
-    # Get user's bot instances
-    bot_instances_query = db.query(BotInstance).filter(BotInstance.user_id == current_user.id)
-    if bot_id:
-        bot_instances_query = bot_instances_query.filter(BotInstance.bot_id == bot_id)
-    bot_instances = bot_instances_query.all()
-    bot_instance_ids = [bi.id for bi in bot_instances]
+    logger.info(f"[Marketing Analytics] Starting for user {current_user.id}, days={days}")
     
-    if not bot_instance_ids:
+    # Get user's bots from the main Bot table (for Message queries)
+    bots_query = db.query(Bot).filter(Bot.owner_id == current_user.id)
+    if bot_id:
+        bots_query = bots_query.filter(Bot.id == bot_id)
+    bots = bots_query.all()
+    bot_ids = [b.id for b in bots]  # IDs from 'bots' table for Message queries
+    
+    # Get user's bot instances (for BotUserState queries - legacy model)
+    bot_instances_query = db.query(BotInstance).filter(BotInstance.user_id == current_user.id)
+    bot_instances = bot_instances_query.all()
+    bot_instance_ids = [bi.id for bi in bot_instances]  # IDs from 'bot_instances' for BotUserState
+    
+    # Check if we have any data to query
+    if not bot_ids and not bot_instance_ids:
         return _empty_marketing_response(days)
     
     # ============== Hourly Activity (last 24 hours) ==============
     hourly_start = end_date - timedelta(hours=24)
     
-    # Users active per hour (using last_interaction_at)
-    hourly_users = db.query(
-        extract('hour', BotUserState.last_interaction_at).label('hour'),
-        func.count(func.distinct(BotUserState.telegram_user_id)).label('users')
-    ).filter(
-        BotUserState.bot_id.in_(bot_instance_ids),
-        BotUserState.last_interaction_at >= hourly_start,
-        BotUserState.last_interaction_at <= end_date,
-    ).group_by(extract('hour', BotUserState.last_interaction_at)).all()
+    # Users active per hour (using last_interaction_at) - only if we have bot instances
+    hourly_users = []
+    if bot_instance_ids:
+        hourly_users = db.query(
+            extract('hour', BotUserState.last_interaction_at).label('hour'),
+            func.count(func.distinct(BotUserState.telegram_user_id)).label('users')
+        ).filter(
+            BotUserState.bot_id.in_(bot_instance_ids),
+            BotUserState.last_interaction_at >= hourly_start,
+            BotUserState.last_interaction_at <= end_date,
+        ).group_by(extract('hour', BotUserState.last_interaction_at)).all()
     
-    # Get bot_ids (not instances) for Message queries
-    bot_ids = [bi.bot_id for bi in bot_instances]
-    
-    # Messages per hour
-    hourly_messages = db.query(
-        extract('hour', Message.created_at).label('hour'),
-        func.count(Message.id).label('messages')
-    ).filter(
-        Message.bot_id.in_(bot_ids),
-        Message.created_at >= hourly_start,
-        Message.created_at <= end_date,
-    ).group_by(extract('hour', Message.created_at)).all()
+    # Messages per hour - only if we have bots
+    hourly_messages = []
+    if bot_ids:
+        hourly_messages = db.query(
+            extract('hour', Message.created_at).label('hour'),
+            func.count(Message.id).label('messages')
+        ).filter(
+            Message.bot_id.in_(bot_ids),
+            Message.created_at >= hourly_start,
+            Message.created_at <= end_date,
+        ).group_by(extract('hour', Message.created_at)).all()
     
     # Build hourly data (24 hours)
     hourly_data = []
@@ -250,35 +265,40 @@ async def get_marketing_analytics(
         })
     
     # ============== Daily User Acquisition ==============
-    # Use created_at as first_seen
-    daily_new_users = db.query(
-        func.date(BotUserState.created_at).label('date'),
-        func.count(BotUserState.id).label('new_users')
-    ).filter(
-        BotUserState.bot_id.in_(bot_instance_ids),
-        BotUserState.created_at >= start_date,
-        BotUserState.created_at <= end_date,
-    ).group_by(func.date(BotUserState.created_at)).all()
+    # Use created_at as first_seen - only if we have bot instances
+    daily_new_users = []
+    daily_active = []
+    if bot_instance_ids:
+        daily_new_users = db.query(
+            func.date(BotUserState.created_at).label('date'),
+            func.count(BotUserState.id).label('new_users')
+        ).filter(
+            BotUserState.bot_id.in_(bot_instance_ids),
+            BotUserState.created_at >= start_date,
+            BotUserState.created_at <= end_date,
+        ).group_by(func.date(BotUserState.created_at)).all()
+        
+        # Daily active users (using last_interaction_at)
+        daily_active = db.query(
+            func.date(BotUserState.last_interaction_at).label('date'),
+            func.count(func.distinct(BotUserState.telegram_user_id)).label('active_users')
+        ).filter(
+            BotUserState.bot_id.in_(bot_instance_ids),
+            BotUserState.last_interaction_at >= start_date,
+            BotUserState.last_interaction_at <= end_date,
+        ).group_by(func.date(BotUserState.last_interaction_at)).all()
     
-    # Daily active users (using last_interaction_at)
-    daily_active = db.query(
-        func.date(BotUserState.last_interaction_at).label('date'),
-        func.count(func.distinct(BotUserState.telegram_user_id)).label('active_users')
-    ).filter(
-        BotUserState.bot_id.in_(bot_instance_ids),
-        BotUserState.last_interaction_at >= start_date,
-        BotUserState.last_interaction_at <= end_date,
-    ).group_by(func.date(BotUserState.last_interaction_at)).all()
-    
-    # Daily messages (using bot_ids)
-    daily_messages = db.query(
-        func.date(Message.created_at).label('date'),
-        func.count(Message.id).label('messages')
-    ).filter(
-        Message.bot_id.in_(bot_ids),
-        Message.created_at >= start_date,
-        Message.created_at <= end_date,
-    ).group_by(func.date(Message.created_at)).all()
+    # Daily messages (using bot_ids) - only if we have bots
+    daily_messages = []
+    if bot_ids:
+        daily_messages = db.query(
+            func.date(Message.created_at).label('date'),
+            func.count(Message.id).label('messages')
+        ).filter(
+            Message.bot_id.in_(bot_ids),
+            Message.created_at >= start_date,
+            Message.created_at <= end_date,
+        ).group_by(func.date(Message.created_at)).all()
     
     # Build daily data
     daily_data = []
@@ -296,31 +316,37 @@ async def get_marketing_analytics(
             "messages": msgs,
         })
     
-    # ============== User Retention ==============
-    # Users who returned after first visit
-    total_users = db.query(func.count(BotUserState.id)).filter(
-        BotUserState.bot_id.in_(bot_instance_ids)
-    ).scalar() or 0
+    # ============== User Retention (optimized - single query) ==============
+    total_users = 0
+    active_7d = 0
+    active_30d = 0
+    returning_users = 0
     
-    # Users active in last 7 days (using last_interaction_at)
-    week_ago = end_date - timedelta(days=7)
-    active_7d = db.query(func.count(func.distinct(BotUserState.telegram_user_id))).filter(
-        BotUserState.bot_id.in_(bot_instance_ids),
-        BotUserState.last_interaction_at >= week_ago,
-    ).scalar() or 0
-    
-    # Users active in last 30 days
-    month_ago = end_date - timedelta(days=30)
-    active_30d = db.query(func.count(func.distinct(BotUserState.telegram_user_id))).filter(
-        BotUserState.bot_id.in_(bot_instance_ids),
-        BotUserState.last_interaction_at >= month_ago,
-    ).scalar() or 0
-    
-    # Returning users - users who have history (meaning they came back)
-    returning_users = db.query(func.count(BotUserState.id)).filter(
-        BotUserState.bot_id.in_(bot_instance_ids),
-        BotUserState.history.isnot(None),
-    ).scalar() or 0
+    if bot_instance_ids:
+        week_ago = end_date - timedelta(days=7)
+        month_ago = end_date - timedelta(days=30)
+        
+        # Single query with conditional counts
+        retention_stats = db.query(
+            func.count(BotUserState.id).label('total'),
+            func.count(func.distinct(case(
+                (BotUserState.last_interaction_at >= week_ago, BotUserState.telegram_user_id),
+                else_=None
+            ))).label('active_7d'),
+            func.count(func.distinct(case(
+                (BotUserState.last_interaction_at >= month_ago, BotUserState.telegram_user_id),
+                else_=None
+            ))).label('active_30d'),
+            func.sum(case((BotUserState.history.isnot(None), 1), else_=0)).label('returned_users'),
+        ).filter(
+            BotUserState.bot_id.in_(bot_instance_ids)
+        ).first()
+        
+        if retention_stats:
+            total_users = retention_stats.total or 0
+            active_7d = retention_stats.active_7d or 0
+            active_30d = retention_stats.active_30d or 0
+            returning_users = retention_stats.returned_users or 0
     
     retention = {
         "total_users": total_users,
@@ -332,24 +358,26 @@ async def get_marketing_analytics(
         "return_rate": round((returning_users / total_users * 100) if total_users > 0 else 0, 1),
     }
     
-    # ============== Message Statistics ==============
-    total_messages = db.query(func.count(Message.id)).filter(
-        Message.bot_id.in_(bot_ids),
-        Message.created_at >= start_date,
-    ).scalar() or 0
+    # ============== Message Statistics (optimized - single query) ==============
+    total_messages = 0
+    incoming_messages = 0
+    outgoing_messages = 0
     
-    # Messages by direction (incoming/outgoing)
-    incoming_messages = db.query(func.count(Message.id)).filter(
-        Message.bot_id.in_(bot_ids),
-        Message.created_at >= start_date,
-        Message.direction == 'incoming',
-    ).scalar() or 0
-    
-    outgoing_messages = db.query(func.count(Message.id)).filter(
-        Message.bot_id.in_(bot_ids),
-        Message.created_at >= start_date,
-        Message.direction == 'outgoing',
-    ).scalar() or 0
+    if bot_ids:
+        # Single query with conditional counts
+        msg_stats = db.query(
+            func.count(Message.id).label('total'),
+            func.sum(case((Message.direction == 'incoming', 1), else_=0)).label('incoming'),
+            func.sum(case((Message.direction == 'outgoing', 1), else_=0)).label('outgoing'),
+        ).filter(
+            Message.bot_id.in_(bot_ids),
+            Message.created_at >= start_date,
+        ).first()
+        
+        if msg_stats:
+            total_messages = msg_stats.total or 0
+            incoming_messages = msg_stats.incoming or 0
+            outgoing_messages = msg_stats.outgoing or 0
     
     # Average messages per user
     avg_messages_per_user = round(total_messages / total_users, 1) if total_users > 0 else 0
@@ -363,7 +391,7 @@ async def get_marketing_analytics(
     
     # ============== Peak Activity ==============
     # Find peak hour
-    peak_hour = max(hourly_data, key=lambda x: x['users'])
+    peak_hour = max(hourly_data, key=lambda x: x['users']) if hourly_data else None
     
     # Find peak day
     peak_day = max(daily_data, key=lambda x: x['active_users']) if daily_data else None
@@ -381,19 +409,23 @@ async def get_marketing_analytics(
     prev_end = start_date
     
     # Use created_at as first_seen
-    prev_new_users = db.query(func.count(BotUserState.id)).filter(
-        BotUserState.bot_id.in_(bot_instance_ids),
-        BotUserState.created_at >= prev_start,
-        BotUserState.created_at < prev_end,
-    ).scalar() or 0
+    prev_new_users = 0
+    if bot_instance_ids:
+        prev_new_users = db.query(func.count(BotUserState.id)).filter(
+            BotUserState.bot_id.in_(bot_instance_ids),
+            BotUserState.created_at >= prev_start,
+            BotUserState.created_at < prev_end,
+        ).scalar() or 0
     
     current_new_users = sum(d['new_users'] for d in daily_data)
     
-    prev_messages = db.query(func.count(Message.id)).filter(
-        Message.bot_id.in_(bot_ids),
-        Message.created_at >= prev_start,
-        Message.created_at < prev_end,
-    ).scalar() or 0
+    prev_messages = 0
+    if bot_ids:
+        prev_messages = db.query(func.count(Message.id)).filter(
+            Message.bot_id.in_(bot_ids),
+            Message.created_at >= prev_start,
+            Message.created_at < prev_end,
+        ).scalar() or 0
     
     def calc_growth(current, previous):
         if previous == 0:
@@ -409,11 +441,16 @@ async def get_marketing_analytics(
     
     # ============== Currently Online ==============
     # Users active in last 5 minutes (using last_interaction_at)
-    five_min_ago = end_date - timedelta(minutes=5)
-    online_now = db.query(func.count(func.distinct(BotUserState.telegram_user_id))).filter(
-        BotUserState.bot_id.in_(bot_instance_ids),
-        BotUserState.last_interaction_at >= five_min_ago,
-    ).scalar() or 0
+    online_now = 0
+    if bot_instance_ids:
+        five_min_ago = end_date - timedelta(minutes=5)
+        online_now = db.query(func.count(func.distinct(BotUserState.telegram_user_id))).filter(
+            BotUserState.bot_id.in_(bot_instance_ids),
+            BotUserState.last_interaction_at >= five_min_ago,
+        ).scalar() or 0
+    
+    elapsed = time.time() - start_time
+    logger.info(f"[Marketing Analytics] Completed in {elapsed:.2f}s")
     
     return {
         "period_days": days,

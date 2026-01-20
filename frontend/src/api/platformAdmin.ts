@@ -390,3 +390,81 @@ export async function suspendAllUserBots(userId: number, data: SuspendRequest): 
 export async function unsuspendAllUserBots(userId: number): Promise<any> {
   return api.post(`/api/platform-admin/users/${userId}/unsuspend-all-bots`);
 }
+
+// === Platform Analytics ===
+
+export interface HourlyData {
+  hour: string;
+  hour_num: number;
+  users: number;
+  messages: number;
+  is_now: boolean;
+}
+
+export interface DailyData {
+  date: string;
+  date_short: string;
+  new_bot_users: number;
+  active_users: number;
+  messages: number;
+  new_platform_users: number;
+}
+
+export interface RetentionData {
+  total_users: number;
+  active_7d: number;
+  active_30d: number;
+  returning_users: number;
+  retention_7d: number;
+  retention_30d: number;
+  return_rate: number;
+}
+
+export interface MessagesStats {
+  total: number;
+  incoming: number;
+  outgoing: number;
+  avg_per_user: number;
+}
+
+export interface PeaksData {
+  peak_hour: string;
+  peak_hour_users: number;
+  peak_day: string;
+  peak_day_users: number;
+}
+
+export interface GrowthData {
+  users_growth: number;
+  messages_growth: number;
+  current_new_users: number;
+  previous_new_users: number;
+}
+
+export interface PlatformSummary {
+  total_users: number;
+  total_bots: number;
+  active_bots: number;
+  total_scenarios: number;
+  total_bot_users: number;
+  total_messages: number;
+}
+
+export interface PlatformAnalyticsData {
+  period_days: number;
+  summary: PlatformSummary;
+  hourly: HourlyData[];
+  daily: DailyData[];
+  retention: RetentionData;
+  messages: MessagesStats;
+  peaks: PeaksData;
+  growth: GrowthData;
+  online_now: number;
+}
+
+/**
+ * Получить платформенную аналитику
+ */
+export async function getPlatformAnalytics(days: number = 30): Promise<PlatformAnalyticsData> {
+  return api.get(`/api/platform-admin/analytics?days=${days}`);
+}
