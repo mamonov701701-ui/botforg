@@ -20,6 +20,7 @@
   --primary: #ffd24c;
   --primary-hover: #ffc107;
   --primary-bg: rgba(255, 210, 76, 0.1);
+  --text-on-primary: #000000; /* Черный текст на желтом фоне для читаемости */
 
   /* Status */
   --success: #10b981;
