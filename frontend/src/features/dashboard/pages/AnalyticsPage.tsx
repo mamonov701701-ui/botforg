@@ -138,11 +138,15 @@ export default function AnalyticsPage() {
     try {
       setLoading(true);
       const days = period === 'custom' ? calculateCustomDays() : periodDays[period];
+      console.log('[AnalyticsPage] Loading data with days:', days, 'selectedBotId:', selectedBotId);
       const [analyticsData, botsData, marketingData] = await Promise.all([
         getDashboardData(days),
         getBots(),
         getMarketingAnalytics(days, selectedBotId),
       ]);
+      console.log('[AnalyticsPage] Dashboard data:', analyticsData);
+      console.log('[AnalyticsPage] Marketing data:', marketingData);
+      console.log('[AnalyticsPage] Marketing retention:', marketingData?.retention);
       setData(analyticsData);
       setBots(botsData.items || []);
       setMarketing(marketingData);

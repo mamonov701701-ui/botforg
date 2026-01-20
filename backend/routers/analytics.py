@@ -6,6 +6,7 @@ Provides analytics and dashboard endpoints
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 
 from backend.dependencies.auth import get_current_user
 from backend.database import get_db
