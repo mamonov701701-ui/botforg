@@ -519,6 +519,8 @@ export default function AnalyticsPage() {
         }));
         return renderBarChart(barData, maxVal);
       }
+      // Fallback to line if unsupported type
+      return renderLineChart(points, maxVal);
     }
 
     // Hourly Messages
@@ -544,6 +546,13 @@ export default function AnalyticsPage() {
         }));
         return renderLineChart(points, maxVal, '#3b82f6', true);
       }
+      // Fallback to bar if unsupported type
+      const barData = hourlyData.map(h => ({
+        label: h.hour.slice(0, 2),
+        value: h.messages,
+        color: h.is_now ? '#22c55e' : '#3b82f6',
+      }));
+      return renderBarChart(barData, maxVal, '#3b82f6');
     }
 
     // Daily New Users
@@ -564,6 +573,9 @@ export default function AnalyticsPage() {
         }));
         return renderLineChart(points, maxVal, '#10b981');
       }
+      // Fallback to bar if unsupported type
+      const barData = dailyData.map(d => ({ label: d.date_short, value: d.new_users }));
+      return renderBarChart(barData, maxVal, '#10b981');
     }
 
     // Daily Active Users
@@ -584,6 +596,14 @@ export default function AnalyticsPage() {
         const barData = dailyData.map(d => ({ label: d.date_short, value: d.active_users }));
         return renderBarChart(barData, maxVal, '#8b5cf6');
       }
+      // Fallback to line if unsupported type
+      const points = dailyData.map((d, i) => ({
+        x: (i / Math.max(dailyData.length - 1, 1)) * 100,
+        y: 100 - (d.active_users / maxVal) * 100,
+        label: d.date_short,
+        value: d.active_users,
+      }));
+      return renderLineChart(points, maxVal, '#8b5cf6');
     }
 
     // Daily Messages
@@ -604,9 +624,12 @@ export default function AnalyticsPage() {
         }));
         return renderLineChart(points, maxVal, '#f59e0b', true);
       }
+      // Fallback to bar if unsupported type
+      const barData = dailyData.map(d => ({ label: d.date_short, value: d.messages }));
+      return renderBarChart(barData, maxVal, '#f59e0b');
     }
 
-    // Retention Pie
+    // Retention
     if (widget.dataKey === 'retention') {
       const ret = marketing.retention;
       const total = ret.total_users;
@@ -625,6 +648,28 @@ export default function AnalyticsPage() {
           percent: 100 - ret.retention_30d,
         },
       ];
+
+      if (widget.type === 'pie') {
+        return renderPieChart(segments);
+      }
+      if (widget.type === 'bar') {
+        const maxVal = Math.max(...segments.map(s => s.value), 1);
+        return renderBarChart(
+          segments.map(s => ({ label: s.label, value: s.value, color: s.color })),
+          maxVal
+        );
+      }
+      if (widget.type === 'line') {
+        const maxVal = Math.max(...segments.map(s => s.value), 1);
+        const points = segments.map((s, i) => ({
+          x: (i / Math.max(segments.length - 1, 1)) * 100,
+          y: 100 - (s.value / maxVal) * 100,
+          label: s.label,
+          value: s.value,
+        }));
+        return renderLineChart(points, maxVal);
+      }
+      // Fallback to pie
       return renderPieChart(segments);
     }
 
@@ -646,6 +691,28 @@ export default function AnalyticsPage() {
           percent: total > 0 ? (msgs.outgoing / total) * 100 : 0,
         },
       ];
+
+      if (widget.type === 'pie') {
+        return renderPieChart(segments);
+      }
+      if (widget.type === 'bar') {
+        const maxVal = Math.max(...segments.map(s => s.value), 1);
+        return renderBarChart(
+          segments.map(s => ({ label: s.label, value: s.value, color: s.color })),
+          maxVal
+        );
+      }
+      if (widget.type === 'line') {
+        const maxVal = Math.max(...segments.map(s => s.value), 1);
+        const points = segments.map((s, i) => ({
+          x: (i / Math.max(segments.length - 1, 1)) * 100,
+          y: 100 - (s.value / maxVal) * 100,
+          label: s.label,
+          value: s.value,
+        }));
+        return renderLineChart(points, maxVal);
+      }
+      // Fallback to pie
       return renderPieChart(segments);
     }
 
@@ -666,6 +733,28 @@ export default function AnalyticsPage() {
           percent: total > 0 ? (inactiveBots / total) * 100 : 0,
         },
       ];
+
+      if (widget.type === 'pie') {
+        return renderPieChart(segments);
+      }
+      if (widget.type === 'bar') {
+        const maxVal = Math.max(...segments.map(s => s.value), 1);
+        return renderBarChart(
+          segments.map(s => ({ label: s.label, value: s.value, color: s.color })),
+          maxVal
+        );
+      }
+      if (widget.type === 'line') {
+        const maxVal = Math.max(...segments.map(s => s.value), 1);
+        const points = segments.map((s, i) => ({
+          x: (i / Math.max(segments.length - 1, 1)) * 100,
+          y: 100 - (s.value / maxVal) * 100,
+          label: s.label,
+          value: s.value,
+        }));
+        return renderLineChart(points, maxVal);
+      }
+      // Fallback to pie
       return renderPieChart(segments);
     }
 
