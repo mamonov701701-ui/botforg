@@ -7,7 +7,7 @@ import SiteLayout from './layouts/SiteLayout';
 import EditorV2Shell from './features/editorV2/EditorV2Shell';
 import Home from './pages/Home';
 import Pricing from './pages/Pricing';
-import Templates from './pages/Templates';
+import MarketplacePage from './pages/MarketplacePage';
 import Features from './pages/Features';
 import NotFound from './pages/NotFound';
 import AuthGate from './features/auth/AuthGate';
@@ -45,7 +45,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/" element={<SiteLayout />}>
           <Route index element={<Home />} />
           <Route path="pricing" element={<Pricing />} />
-          <Route path="templates" element={<Templates />} />
+          <Route path="market" element={<MarketplacePage />} />
           <Route path="features" element={<Features />} />
           <Route path="auth/verify" element={<VerifyEmail />} />
           <Route path="auth/reset" element={<ResetPassword />} />

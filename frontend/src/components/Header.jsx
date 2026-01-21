@@ -79,7 +79,7 @@ export default function Header({ openAuthModal }) {
           BF агент
         </Link>
         <Link
-          to="/templates"
+          to="/market"
           className="nav-link"
           style={{
             color: '#ffffff',
@@ -97,7 +97,7 @@ export default function Header({ openAuthModal }) {
             e.target.style.transform = 'scale(1)';
           }}
         >
-          Шаблоны
+          Маркет
         </Link>
         <Link
           to="/features"
