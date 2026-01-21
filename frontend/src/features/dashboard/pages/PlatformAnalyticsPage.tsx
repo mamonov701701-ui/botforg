@@ -489,6 +489,51 @@ export default function PlatformAnalyticsPage() {
 
   // ============== Widget Rendering ==============
 
+  // Helper to convert time series to pie chart (aggregate by period)
+  const convertToPieData = (
+    points: { label: string; value: number }[],
+    colors: string[]
+  ): { label: string; value: number; color: string }[] => {
+    // For hourly data - aggregate by time of day
+    if (points.length === 24) {
+      const morning = points.slice(6, 12).reduce((sum, p) => sum + p.value, 0);
+      const day = points.slice(12, 18).reduce((sum, p) => sum + p.value, 0);
+      const evening = points.slice(18, 24).reduce((sum, p) => sum + p.value, 0);
+      const night = [...points.slice(0, 6)].reduce((sum, p) => sum + p.value, 0);
+      return [
+        { label: 'Утро (6-12)', value: morning, color: colors[0] || '#f59e0b' },
+        { label: 'День (12-18)', value: day, color: colors[1] || '#22c55e' },
+        { label: 'Вечер (18-24)', value: evening, color: colors[2] || '#3b82f6' },
+        { label: 'Ночь (0-6)', value: night, color: colors[3] || '#8b5cf6' },
+      ];
+    }
+    // For daily data - show top days or weekly aggregation
+    if (points.length > 7) {
+      // Show last 7 days as pie
+      const lastWeek = points.slice(-7);
+      return lastWeek.map((p, i) => ({
+        label: p.label,
+        value: p.value,
+        color: colors[i % colors.length] || `hsl(${(i * 360) / 7}, 70%, 50%)`,
+      }));
+    }
+    // For small datasets - show all
+    return points.map((p, i) => ({
+      label: p.label,
+      value: p.value,
+      color: colors[i % colors.length] || `hsl(${(i * 360) / points.length}, 70%, 50%)`,
+    }));
+  };
+
+  // Helper to convert pie data to bar/line format
+  const convertToTimeSeriesData = (
+    segments: { label: string; value: number; color: string }[]
+  ): { label: string; value: number }[] => {
+    return segments.map(s => ({ label: s.label, value: s.value }));
+  };
+
+  const pieColors = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#64748b'];
+
   const renderWidget = (widget: Widget) => {
     if (!data || !widget.visible) return null;
 
@@ -504,10 +549,15 @@ export default function PlatformAnalyticsPage() {
           isNow: h.is_now,
         }));
         const max = Math.max(...points.map(p => p.value), 1);
-        content =
-          widget.type === 'bar'
-            ? renderBarChart(points, max, '#3b82f6')
-            : renderLineChart(points, max, '#3b82f6');
+        if (widget.type === 'pie') {
+          content = renderPieChart(
+            convertToPieData(points, ['#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6'])
+          );
+        } else if (widget.type === 'bar') {
+          content = renderBarChart(points, max, '#3b82f6');
+        } else {
+          content = renderLineChart(points, max, '#3b82f6');
+        }
         break;
       }
       case 'hourly_messages': {
@@ -519,10 +569,15 @@ export default function PlatformAnalyticsPage() {
           isNow: h.is_now,
         }));
         const max = Math.max(...points.map(p => p.value), 1);
-        content =
-          widget.type === 'line'
-            ? renderLineChart(points, max, '#8b5cf6')
-            : renderBarChart(points, max, '#8b5cf6');
+        if (widget.type === 'pie') {
+          content = renderPieChart(
+            convertToPieData(points, ['#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6'])
+          );
+        } else if (widget.type === 'line') {
+          content = renderLineChart(points, max, '#8b5cf6');
+        } else {
+          content = renderBarChart(points, max, '#8b5cf6');
+        }
         break;
       }
       case 'daily_new_users': {
@@ -533,10 +588,13 @@ export default function PlatformAnalyticsPage() {
           value: d.new_bot_users,
         }));
         const max = Math.max(...points.map(p => p.value), 1);
-        content =
-          widget.type === 'line'
-            ? renderLineChart(points, max, '#22c55e')
-            : renderBarChart(points, max, '#22c55e');
+        if (widget.type === 'pie') {
+          content = renderPieChart(convertToPieData(points, pieColors));
+        } else if (widget.type === 'line') {
+          content = renderLineChart(points, max, '#22c55e');
+        } else {
+          content = renderBarChart(points, max, '#22c55e');
+        }
         break;
       }
       case 'daily_platform_users': {
@@ -547,10 +605,13 @@ export default function PlatformAnalyticsPage() {
           value: d.new_platform_users,
         }));
         const max = Math.max(...points.map(p => p.value), 1);
-        content =
-          widget.type === 'bar'
-            ? renderBarChart(points, max, '#f59e0b')
-            : renderLineChart(points, max, '#f59e0b');
+        if (widget.type === 'pie') {
+          content = renderPieChart(convertToPieData(points, pieColors));
+        } else if (widget.type === 'bar') {
+          content = renderBarChart(points, max, '#f59e0b');
+        } else {
+          content = renderLineChart(points, max, '#f59e0b');
+        }
         break;
       }
       case 'daily_active': {
@@ -561,10 +622,13 @@ export default function PlatformAnalyticsPage() {
           value: d.active_users,
         }));
         const max = Math.max(...points.map(p => p.value), 1);
-        content =
-          widget.type === 'bar'
-            ? renderBarChart(points, max, '#06b6d4')
-            : renderLineChart(points, max, '#06b6d4');
+        if (widget.type === 'pie') {
+          content = renderPieChart(convertToPieData(points, pieColors));
+        } else if (widget.type === 'bar') {
+          content = renderBarChart(points, max, '#06b6d4');
+        } else {
+          content = renderLineChart(points, max, '#06b6d4');
+        }
         break;
       }
       case 'daily_messages': {
@@ -575,10 +639,13 @@ export default function PlatformAnalyticsPage() {
           value: d.messages,
         }));
         const max = Math.max(...points.map(p => p.value), 1);
-        content =
-          widget.type === 'line'
-            ? renderLineChart(points, max, '#ec4899')
-            : renderBarChart(points, max, '#ec4899');
+        if (widget.type === 'pie') {
+          content = renderPieChart(convertToPieData(points, pieColors));
+        } else if (widget.type === 'line') {
+          content = renderLineChart(points, max, '#ec4899');
+        } else {
+          content = renderBarChart(points, max, '#ec4899');
+        }
         break;
       }
       case 'retention': {
@@ -586,7 +653,7 @@ export default function PlatformAnalyticsPage() {
           { label: 'Активны 7д', value: data.retention.active_7d, color: '#22c55e' },
           {
             label: 'Активны 30д',
-            value: data.retention.active_30d - data.retention.active_7d,
+            value: Math.max(0, data.retention.active_30d - data.retention.active_7d),
             color: '#3b82f6',
           },
           {
@@ -595,7 +662,21 @@ export default function PlatformAnalyticsPage() {
             color: '#64748b',
           },
         ];
-        content = renderPieChart(segments);
+        if (widget.type === 'pie') {
+          content = renderPieChart(segments);
+        } else {
+          const barData = convertToTimeSeriesData(segments);
+          const max = Math.max(...barData.map(p => p.value), 1);
+          if (widget.type === 'bar') {
+            content = renderBarChart(barData, max, '#22c55e');
+          } else {
+            content = renderLineChart(
+              barData.map((p, i) => ({ x: i, y: p.value, ...p })),
+              max,
+              '#22c55e'
+            );
+          }
+        }
         break;
       }
       case 'messages_direction': {
@@ -603,7 +684,21 @@ export default function PlatformAnalyticsPage() {
           { label: 'Входящие', value: data.messages.incoming, color: '#22c55e' },
           { label: 'Исходящие', value: data.messages.outgoing, color: '#3b82f6' },
         ];
-        content = renderPieChart(segments);
+        if (widget.type === 'pie') {
+          content = renderPieChart(segments);
+        } else {
+          const barData = convertToTimeSeriesData(segments);
+          const max = Math.max(...barData.map(p => p.value), 1);
+          if (widget.type === 'bar') {
+            content = renderBarChart(barData, max, '#22c55e');
+          } else {
+            content = renderLineChart(
+              barData.map((p, i) => ({ x: i, y: p.value, ...p })),
+              max,
+              '#22c55e'
+            );
+          }
+        }
         break;
       }
     }

@@ -495,6 +495,74 @@ export default function AnalyticsPage() {
 
   // ============== Render Widget ==============
 
+  // Helper to convert hourly/daily data to pie chart segments
+  const convertHourlyToPie = (
+    hourlyData: { hour: string; users?: number; messages?: number }[],
+    valueKey: 'users' | 'messages'
+  ) => {
+    if (hourlyData.length !== 24) {
+      // If not 24 hours, just show sum as single segment
+      const total = hourlyData.reduce((sum, h) => sum + ((h as any)[valueKey] || 0), 0);
+      return [{ label: 'Всего', value: total, color: '#3b82f6', percent: 100 }];
+    }
+    const morning = hourlyData
+      .slice(6, 12)
+      .reduce((sum, h) => sum + ((h as any)[valueKey] || 0), 0);
+    const day = hourlyData.slice(12, 18).reduce((sum, h) => sum + ((h as any)[valueKey] || 0), 0);
+    const evening = hourlyData
+      .slice(18, 24)
+      .reduce((sum, h) => sum + ((h as any)[valueKey] || 0), 0);
+    const night = hourlyData.slice(0, 6).reduce((sum, h) => sum + ((h as any)[valueKey] || 0), 0);
+    const total = morning + day + evening + night;
+    return [
+      {
+        label: 'Утро (6-12)',
+        value: morning,
+        color: '#f59e0b',
+        percent: total > 0 ? (morning / total) * 100 : 0,
+      },
+      {
+        label: 'День (12-18)',
+        value: day,
+        color: '#22c55e',
+        percent: total > 0 ? (day / total) * 100 : 0,
+      },
+      {
+        label: 'Вечер (18-24)',
+        value: evening,
+        color: '#3b82f6',
+        percent: total > 0 ? (evening / total) * 100 : 0,
+      },
+      {
+        label: 'Ночь (0-6)',
+        value: night,
+        color: '#8b5cf6',
+        percent: total > 0 ? (night / total) * 100 : 0,
+      },
+    ];
+  };
+
+  const convertDailyToPie = (
+    dailyData: {
+      date_short: string;
+      new_users?: number;
+      active_users?: number;
+      messages?: number;
+    }[],
+    valueKey: 'new_users' | 'active_users' | 'messages'
+  ) => {
+    const pieColors = ['#22c55e', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#64748b'];
+    // Show last 7 days as pie segments
+    const lastDays = dailyData.slice(-7);
+    const total = lastDays.reduce((sum, d) => sum + ((d as any)[valueKey] || 0), 0);
+    return lastDays.map((d, i) => ({
+      label: d.date_short,
+      value: (d as any)[valueKey] || 0,
+      color: pieColors[i % pieColors.length],
+      percent: total > 0 ? (((d as any)[valueKey] || 0) / total) * 100 : 0,
+    }));
+  };
+
   const renderWidget = (widget: Widget) => {
     if (!marketing) return null;
 
@@ -510,6 +578,9 @@ export default function AnalyticsPage() {
         isNow: h.is_now,
       }));
 
+      if (widget.type === 'pie') {
+        return renderPieChart(convertHourlyToPie(hourlyData, 'users'));
+      }
       if (widget.type === 'line') return renderLineChart(points, maxVal);
       if (widget.type === 'bar') {
         const barData = hourlyData.map(h => ({
@@ -519,7 +590,6 @@ export default function AnalyticsPage() {
         }));
         return renderBarChart(barData, maxVal);
       }
-      // Fallback to line if unsupported type
       return renderLineChart(points, maxVal);
     }
 
@@ -528,6 +598,9 @@ export default function AnalyticsPage() {
       const hourlyData = marketing.hourly || [];
       const maxVal = Math.max(...hourlyData.map(h => h.messages), 1);
 
+      if (widget.type === 'pie') {
+        return renderPieChart(convertHourlyToPie(hourlyData, 'messages'));
+      }
       if (widget.type === 'bar') {
         const barData = hourlyData.map(h => ({
           label: h.hour.slice(0, 2),
@@ -546,7 +619,6 @@ export default function AnalyticsPage() {
         }));
         return renderLineChart(points, maxVal, '#3b82f6', true);
       }
-      // Fallback to bar if unsupported type
       const barData = hourlyData.map(h => ({
         label: h.hour.slice(0, 2),
         value: h.messages,
@@ -560,6 +632,9 @@ export default function AnalyticsPage() {
       const dailyData = marketing.daily || [];
       const maxVal = Math.max(...dailyData.map(d => d.new_users), 1);
 
+      if (widget.type === 'pie') {
+        return renderPieChart(convertDailyToPie(dailyData, 'new_users'));
+      }
       if (widget.type === 'bar') {
         const barData = dailyData.map(d => ({ label: d.date_short, value: d.new_users }));
         return renderBarChart(barData, maxVal, '#10b981');
@@ -573,7 +648,6 @@ export default function AnalyticsPage() {
         }));
         return renderLineChart(points, maxVal, '#10b981');
       }
-      // Fallback to bar if unsupported type
       const barData = dailyData.map(d => ({ label: d.date_short, value: d.new_users }));
       return renderBarChart(barData, maxVal, '#10b981');
     }
@@ -583,6 +657,9 @@ export default function AnalyticsPage() {
       const dailyData = marketing.daily || [];
       const maxVal = Math.max(...dailyData.map(d => d.active_users), 1);
 
+      if (widget.type === 'pie') {
+        return renderPieChart(convertDailyToPie(dailyData, 'active_users'));
+      }
       if (widget.type === 'line') {
         const points = dailyData.map((d, i) => ({
           x: (i / Math.max(dailyData.length - 1, 1)) * 100,
@@ -596,7 +673,6 @@ export default function AnalyticsPage() {
         const barData = dailyData.map(d => ({ label: d.date_short, value: d.active_users }));
         return renderBarChart(barData, maxVal, '#8b5cf6');
       }
-      // Fallback to line if unsupported type
       const points = dailyData.map((d, i) => ({
         x: (i / Math.max(dailyData.length - 1, 1)) * 100,
         y: 100 - (d.active_users / maxVal) * 100,
@@ -611,6 +687,9 @@ export default function AnalyticsPage() {
       const dailyData = marketing.daily || [];
       const maxVal = Math.max(...dailyData.map(d => d.messages), 1);
 
+      if (widget.type === 'pie') {
+        return renderPieChart(convertDailyToPie(dailyData, 'messages'));
+      }
       if (widget.type === 'bar') {
         const barData = dailyData.map(d => ({ label: d.date_short, value: d.messages }));
         return renderBarChart(barData, maxVal, '#f59e0b');
@@ -624,7 +703,6 @@ export default function AnalyticsPage() {
         }));
         return renderLineChart(points, maxVal, '#f59e0b', true);
       }
-      // Fallback to bar if unsupported type
       const barData = dailyData.map(d => ({ label: d.date_short, value: d.messages }));
       return renderBarChart(barData, maxVal, '#f59e0b');
     }
