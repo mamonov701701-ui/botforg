@@ -372,57 +372,122 @@ export default function PlatformAnalyticsPage() {
       );
     }
 
+    const showLabels = dataPoints.length <= 14;
+    const labelInterval = Math.ceil(dataPoints.length / 7);
+
     return (
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'flex-end',
-          gap: '2px',
-          height: '180px',
-          padding: '10px 0',
-        }}
-      >
-        {dataPoints.map((p, i) => {
-          const heightPercent = maxVal > 0 ? (p.value / maxVal) * 100 : 0;
-          return (
-            <div
-              key={i}
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                height: '100%',
-                justifyContent: 'flex-end',
-              }}
-              title={`${p.label}: ${p.value}`}
-            >
+      <div style={{ height: '220px' }}>
+        {/* Y-axis max value label */}
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+          Макс: {maxVal}
+        </div>
+        <div style={{ display: 'flex', height: '160px' }}>
+          {/* Y-axis with values */}
+          <div
+            style={{
+              width: '40px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              alignItems: 'flex-end',
+              paddingRight: '8px',
+              fontSize: '10px',
+              color: 'var(--text-muted)',
+            }}
+          >
+            <span>{maxVal}</span>
+            <span>{Math.round((maxVal * 3) / 4)}</span>
+            <span>{Math.round(maxVal / 2)}</span>
+            <span>{Math.round(maxVal / 4)}</span>
+            <span>0</span>
+          </div>
+          {/* Chart area with grid lines and bars */}
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: '2px',
+              borderLeft: '1px solid var(--border)',
+              borderBottom: '1px solid var(--border)',
+              paddingLeft: '4px',
+              position: 'relative',
+            }}
+          >
+            {/* Horizontal grid lines */}
+            {[0.25, 0.5, 0.75].map((ratio, idx) => (
               <div
+                key={idx}
                 style={{
-                  width: '100%',
-                  maxWidth: '20px',
-                  height: `${Math.max(heightPercent, 2)}%`,
-                  background: p.isNow ? '#22c55e' : color,
-                  borderRadius: '2px 2px 0 0',
-                  transition: 'height 0.3s',
-                  opacity: p.isNow ? 1 : 0.8,
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: `${ratio * 100}%`,
+                  height: '1px',
+                  background: 'var(--border)',
+                  opacity: 0.5,
                 }}
               />
-              {i % Math.ceil(dataPoints.length / 8) === 0 && (
-                <span
+            ))}
+            {/* Bars */}
+            {dataPoints.map((p, i) => {
+              const heightPercent = maxVal > 0 ? (p.value / maxVal) * 100 : 0;
+              return (
+                <div
+                  key={i}
                   style={{
-                    fontSize: '9px',
-                    color: 'var(--text-muted)',
-                    marginTop: '4px',
-                    whiteSpace: 'nowrap',
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    height: '100%',
+                    justifyContent: 'flex-end',
+                    position: 'relative',
+                    zIndex: 1,
                   }}
+                  title={`${p.label}: ${p.value}`}
                 >
-                  {p.label}
-                </span>
-              )}
-            </div>
-          );
-        })}
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '24px',
+                      height: `${Math.max(heightPercent, p.value > 0 ? 2 : 0)}%`,
+                      background: p.isNow ? '#22c55e' : color,
+                      borderRadius: '2px 2px 0 0',
+                      transition: 'height 0.3s',
+                      opacity: p.isNow ? 1 : 0.85,
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {/* X-axis labels */}
+        <div
+          style={{
+            marginLeft: '40px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            paddingTop: '6px',
+            fontSize: '10px',
+            color: 'var(--text-muted)',
+          }}
+        >
+          {dataPoints
+            .filter((_, i) => showLabels || i % labelInterval === 0)
+            .map((p, i) => (
+              <span
+                key={i}
+                style={{
+                  color: p.isNow ? '#22c55e' : 'var(--text-muted)',
+                  fontWeight: p.isNow ? 600 : 400,
+                }}
+              >
+                {p.label}
+              </span>
+            ))}
+        </div>
       </div>
     );
   };

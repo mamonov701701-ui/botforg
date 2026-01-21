@@ -331,9 +331,10 @@ export default function AnalyticsPage() {
           Макс: {maxVal}
         </div>
         <div style={{ display: 'flex', height: '160px' }}>
+          {/* Y-axis with values */}
           <div
             style={{
-              width: '35px',
+              width: '40px',
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
@@ -344,9 +345,12 @@ export default function AnalyticsPage() {
             }}
           >
             <span>{maxVal}</span>
+            <span>{Math.round((maxVal * 3) / 4)}</span>
             <span>{Math.round(maxVal / 2)}</span>
+            <span>{Math.round(maxVal / 4)}</span>
             <span>0</span>
           </div>
+          {/* Chart area with grid lines and bars */}
           <div
             style={{
               flex: 1,
@@ -356,17 +360,42 @@ export default function AnalyticsPage() {
               borderLeft: '1px solid var(--border)',
               borderBottom: '1px solid var(--border)',
               paddingLeft: '4px',
+              position: 'relative',
             }}
           >
+            {/* Horizontal grid lines */}
+            {[0.25, 0.5, 0.75].map((ratio, idx) => (
+              <div
+                key={idx}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: `${ratio * 100}%`,
+                  height: '1px',
+                  background: 'var(--border)',
+                  opacity: 0.5,
+                }}
+              />
+            ))}
+            {/* Bars */}
             {dataPoints.map((p, i) => (
               <div
                 key={i}
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  position: 'relative',
+                  zIndex: 1,
+                }}
                 title={`${p.label}: ${p.value}`}
               >
                 <div
                   style={{
                     width: '100%',
+                    maxWidth: '24px',
                     height: `${maxVal > 0 ? (p.value / maxVal) * 100 : 0}%`,
                     background: p.color || color,
                     borderRadius: '2px 2px 0 0',
@@ -378,9 +407,10 @@ export default function AnalyticsPage() {
             ))}
           </div>
         </div>
+        {/* X-axis labels */}
         <div
           style={{
-            marginLeft: '35px',
+            marginLeft: '40px',
             display: 'flex',
             justifyContent: 'space-between',
             paddingTop: '6px',
