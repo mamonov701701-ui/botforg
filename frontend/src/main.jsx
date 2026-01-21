@@ -30,6 +30,7 @@ import PlatformOverviewPage from './features/dashboard/pages/PlatformOverviewPag
 import PlatformUsersPage from './features/dashboard/pages/PlatformUsersPage';
 import PlatformAnalyticsPage from './features/dashboard/pages/PlatformAnalyticsPage';
 import UserDetailPage from './features/dashboard/pages/UserDetailPage';
+import MessagesPage from './features/dashboard/pages/MessagesPage';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -66,6 +67,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="balance" element={<BalancePage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="team" element={<TeamPage />} />
+            <Route path="messages" element={<MessagesPage />} />
             <Route path="bf-team" element={<BFTeamPage />} />
             <Route path="settings" element={<SettingsPage />} />
 

@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
+import { getUnreadCount } from '../api/chat';
 
 export default function Header({ openAuthModal }) {
   const { user } = useAuthStore();
   const { openAuth } = useUiStore();
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const handleAccountClick = e => {
     if (!user) {
@@ -14,6 +16,28 @@ export default function Header({ openAuthModal }) {
     }
     // If user exists, Link will navigate normally
   };
+
+  // Загрузка непрочитанных сообщений
+  useEffect(() => {
+    if (!user) return;
+
+    const loadUnreadCount = async () => {
+      try {
+        const response = await getUnreadCount();
+        setUnreadCount(response.unread_count);
+      } catch (error) {
+        // Игнорируем ошибки (пользователь может быть не авторизован)
+      }
+    };
+
+    // Загружаем сразу
+    loadUnreadCount();
+
+    // И каждые 30 секунд
+    const interval = setInterval(loadUnreadCount, 30000);
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   return (
     <header
@@ -127,6 +151,7 @@ export default function Header({ openAuthModal }) {
             fontWeight: 'normal',
             transition: 'all 0.2s',
             display: 'inline-block',
+            position: 'relative',
           }}
           onMouseEnter={e => {
             e.target.style.color = '#FFC107';
@@ -138,6 +163,29 @@ export default function Header({ openAuthModal }) {
           }}
         >
           Личный кабинет
+          {user && unreadCount > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                top: '-8px',
+                right: '-12px',
+                background: '#ef4444',
+                color: 'white',
+                borderRadius: '10px',
+                padding: '2px 6px',
+                fontSize: '11px',
+                fontWeight: '600',
+                minWidth: '20px',
+                height: '20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+              }}
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </Link>
         <Link
           to="/editor/1"

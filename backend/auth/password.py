@@ -2,7 +2,8 @@ import re
 
 from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Поддержка pbkdf2_sha256 (старые пароли) и bcrypt (новые)
+pwd_context = CryptContext(schemes=["bcrypt", "pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:

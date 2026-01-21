@@ -42,28 +42,6 @@ export default function PlatformOverviewPage() {
       subtitle="Статистика и общая информация о работе платформы"
     >
       {/* Отладочная информация (только в dev режиме) */}
-      {import.meta.env.DEV && !loading && (
-        <Card
-          style={{
-            marginBottom: '24px',
-            padding: '16px',
-            background: 'rgba(255, 210, 76, 0.1)',
-            border: '1px solid rgba(255, 210, 76, 0.3)',
-          }}
-        >
-          <p
-            style={{
-              fontSize: '12px',
-              color: 'var(--text-muted)',
-              margin: 0,
-              fontFamily: 'monospace',
-            }}
-          >
-            DEBUG: {JSON.stringify(stats)}
-          </p>
-        </Card>
-      )}
-
       {/* Статистика */}
       <div
         style={{

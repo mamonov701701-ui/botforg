@@ -38,7 +38,7 @@ import { toast } from '../../../utils/toast';
 
 type PeriodType = '7d' | '30d' | '90d' | 'custom';
 type ChartType = 'bar' | 'line' | 'pie';
-type TabType = 'overview' | 'users' | 'hourly' | 'daily' | 'retention';
+type MainTabType = 'platform' | 'users';
 
 interface Widget {
   id: string;
@@ -146,7 +146,7 @@ export default function PlatformAnalyticsPage() {
   const [period, setPeriod] = useState<PeriodType>('30d');
   const [customDateFrom, setCustomDateFrom] = useState('');
   const [customDateTo, setCustomDateTo] = useState('');
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [mainTab, setMainTab] = useState<MainTabType>('platform');
   const [widgets, setWidgets] = useState<Widget[]>(defaultWidgets);
   const [showFilters, setShowFilters] = useState(false);
   const [showAddChart, setShowAddChart] = useState(false);
@@ -263,10 +263,12 @@ export default function PlatformAnalyticsPage() {
     const width = 100;
     const height = 60;
     const padding = 5;
+    const totalSum = dataPoints.reduce((sum, p) => sum + p.value, 0);
 
     const points = dataPoints.map((p, i) => ({
       x: padding + (i / (dataPoints.length - 1 || 1)) * (width - padding * 2),
       y: height - padding - (maxVal > 0 ? (p.value / maxVal) * (height - padding * 2) : 0),
+      percent: totalSum > 0 ? ((p.value / totalSum) * 100).toFixed(1) : '0',
       ...p,
     }));
 
@@ -274,10 +276,23 @@ export default function PlatformAnalyticsPage() {
     const areaPath = `${linePath} L ${points[points.length - 1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`;
 
     return (
-      <div style={{ position: 'relative', width: '100%', height: '200px' }}>
+      <div style={{ position: 'relative', width: '100%', height: '220px' }}>
+        {/* Header with max and total */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+            marginBottom: '4px',
+          }}
+        >
+          <span>Макс: {maxVal}</span>
+          <span>Всего: {totalSum}</span>
+        </div>
         <svg
           viewBox={`0 0 ${width} ${height}`}
-          style={{ width: '100%', height: '100%' }}
+          style={{ width: '100%', height: 'calc(100% - 20px)' }}
           preserveAspectRatio="none"
         >
           <defs>
@@ -310,10 +325,10 @@ export default function PlatformAnalyticsPage() {
         <div
           style={{
             position: 'absolute',
-            top: 0,
+            top: '20px',
             left: 0,
             width: '100%',
-            height: '100%',
+            height: 'calc(100% - 20px)',
             display: 'flex',
             alignItems: 'flex-end',
           }}
@@ -337,7 +352,7 @@ export default function PlatformAnalyticsPage() {
                   border: '2px solid var(--card-bg)',
                   boxShadow: p.isNow ? '0 0 8px rgba(34, 197, 94, 0.5)' : 'none',
                 }}
-                title={`${p.label}: ${p.value}`}
+                title={`${p.label}: ${p.value} (${p.percent}% от общего)`}
               />
             </div>
           ))}
@@ -381,14 +396,24 @@ export default function PlatformAnalyticsPage() {
 
     const showLabels = dataPoints.length <= 14;
     const labelInterval = Math.ceil(dataPoints.length / 7);
+    const totalSum = dataPoints.reduce((sum, p) => sum + p.value, 0);
 
     return (
-      <div style={{ height: '220px' }}>
-        {/* Y-axis max value label */}
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-          Макс: {maxVal}
+      <div style={{ height: '240px' }}>
+        {/* Header with max and total */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+            marginBottom: '8px',
+          }}
+        >
+          <span>Макс: {maxVal}</span>
+          <span>Всего: {totalSum}</span>
         </div>
-        <div style={{ display: 'flex', height: '160px' }}>
+        <div style={{ display: 'flex', height: '180px' }}>
           {/* Y-axis with values */}
           <div
             style={{
@@ -439,6 +464,7 @@ export default function PlatformAnalyticsPage() {
             {/* Bars */}
             {dataPoints.map((p, i) => {
               const heightPercent = maxVal > 0 ? (p.value / maxVal) * 100 : 0;
+              const percentOfTotal = totalSum > 0 ? ((p.value / totalSum) * 100).toFixed(1) : '0';
               return (
                 <div
                   key={i}
@@ -452,8 +478,22 @@ export default function PlatformAnalyticsPage() {
                     position: 'relative',
                     zIndex: 1,
                   }}
-                  title={`${p.label}: ${p.value}`}
+                  title={`${p.label}: ${p.value} (${percentOfTotal}% от общего)`}
                 >
+                  {/* Value label above bar (show for significant values) */}
+                  {p.value > 0 && heightPercent > 15 && dataPoints.length <= 24 && (
+                    <div
+                      style={{
+                        fontSize: '9px',
+                        color: 'var(--text)',
+                        fontWeight: 600,
+                        marginBottom: '2px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {p.value}
+                    </div>
+                  )}
                   <div
                     style={{
                       width: '100%',
@@ -535,21 +575,41 @@ export default function PlatformAnalyticsPage() {
 
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-        <svg viewBox="0 0 100 100" style={{ width: '150px', height: '150px' }}>
-          {paths.map((p, i) => (
-            <path key={i} d={p.path} fill={p.color} stroke="var(--card-bg)" strokeWidth="1">
-              <title>{`${p.label}: ${p.value} (${p.percentage}%)`}</title>
-            </path>
-          ))}
-        </svg>
+        <div style={{ position: 'relative' }}>
+          <svg viewBox="0 0 100 100" style={{ width: '150px', height: '150px' }}>
+            {paths.map((p, i) => (
+              <path key={i} d={p.path} fill={p.color} stroke="var(--card-bg)" strokeWidth="1">
+                <title>{`${p.label}: ${p.value} (${p.percentage}%)`}</title>
+              </path>
+            ))}
+          </svg>
+          {/* Center total */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text)' }}>{total}</div>
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>всего</div>
+          </div>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {paths.map((p, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div
                 style={{ width: '12px', height: '12px', borderRadius: '2px', background: p.color }}
               />
-              <span style={{ fontSize: '12px', color: 'var(--text)' }}>{p.label}</span>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text)', minWidth: '80px' }}>
+                {p.label}
+              </span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text)' }}>
+                {p.value}
+              </span>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 ({p.percentage}%)
               </span>
             </div>
@@ -890,1020 +950,1184 @@ export default function PlatformAnalyticsPage() {
       title="Платформенная аналитика"
       subtitle="Подробная аналитика и метрики работы всей платформы"
     >
-      {/* Period Selection */}
-      <Card style={{ marginBottom: '24px' }}>
-        <div
+      {/* Main Tabs */}
+      <div
+        style={{
+          display: 'flex',
+          gap: '0',
+          marginBottom: '24px',
+          borderBottom: '2px solid var(--border)',
+        }}
+      >
+        <button
+          onClick={() => setMainTab('platform')}
           style={{
+            padding: '14px 32px',
+            background: 'transparent',
+            border: 'none',
+            borderBottom:
+              mainTab === 'platform' ? '2px solid var(--primary)' : '2px solid transparent',
+            marginBottom: '-2px',
+            color: mainTab === 'platform' ? 'var(--primary)' : 'var(--text-muted)',
+            fontSize: '15px',
+            fontWeight: 600,
+            cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '16px',
+            gap: '8px',
+            transition: 'all 0.2s',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Calendar size={20} style={{ color: 'var(--primary)' }} />
-            <span style={{ fontWeight: 600, color: 'var(--text)' }}>Период:</span>
-            {(['7d', '30d', '90d'] as PeriodType[]).map(p => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                style={{
-                  padding: '8px 16px',
-                  background: period === p ? 'var(--primary)' : 'var(--surface)',
-                  color: period === p ? 'var(--text-on-primary)' : 'var(--text)',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                }}
-              >
-                {p === '7d' ? '7 дней' : p === '30d' ? '30 дней' : '90 дней'}
-              </button>
-            ))}
-            <button
-              onClick={() => setPeriod('custom')}
+          <BarChart3 size={18} />
+          Платформа
+        </button>
+        <button
+          onClick={() => setMainTab('users')}
+          style={{
+            padding: '14px 32px',
+            background: 'transparent',
+            border: 'none',
+            borderBottom:
+              mainTab === 'users' ? '2px solid var(--primary)' : '2px solid transparent',
+            marginBottom: '-2px',
+            color: mainTab === 'users' ? 'var(--primary)' : 'var(--text-muted)',
+            fontSize: '15px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.2s',
+          }}
+        >
+          <Users size={18} />
+          Пользователи
+        </button>
+      </div>
+      {/* Platform Tab Content */}
+      {mainTab === 'platform' && (
+        <>
+          <Card style={{ marginBottom: '24px' }}>
+            <div
               style={{
-                padding: '8px 16px',
-                background: period === 'custom' ? 'var(--primary)' : 'var(--surface)',
-                color: period === 'custom' ? 'var(--text-on-primary)' : 'var(--text)',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              Свой период
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              style={{
-                padding: '8px 16px',
-                background: showFilters ? 'var(--primary)' : 'var(--surface)',
-                color: showFilters ? 'var(--text-on-primary)' : 'var(--text)',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '16px',
               }}
             >
-              <Filter size={16} />
-              Фильтры
-            </button>
-            <button
-              onClick={loadAnalytics}
-              style={{
-                padding: '8px 16px',
-                background: 'var(--surface)',
-                color: 'var(--text)',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <RefreshCw size={16} />
-              Обновить
-            </button>
-          </div>
-        </div>
-
-        {period === 'custom' && (
-          <div style={{ display: 'flex', gap: '16px', marginTop: '16px', flexWrap: 'wrap' }}>
-            <div>
-              <label
-                style={{
-                  fontSize: '12px',
-                  color: 'var(--text-muted)',
-                  display: 'block',
-                  marginBottom: '4px',
-                }}
-              >
-                От
-              </label>
-              <input
-                type="date"
-                value={customDateFrom}
-                onChange={e => setCustomDateFrom(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  color: 'var(--text)',
-                }}
-              />
-            </div>
-            <div>
-              <label
-                style={{
-                  fontSize: '12px',
-                  color: 'var(--text-muted)',
-                  display: 'block',
-                  marginBottom: '4px',
-                }}
-              >
-                До
-              </label>
-              <input
-                type="date"
-                value={customDateTo}
-                onChange={e => setCustomDateTo(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  color: 'var(--text)',
-                }}
-              />
-            </div>
-          </div>
-        )}
-
-        {showFilters && (
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '16px',
-              background: 'var(--surface)',
-              borderRadius: '8px',
-            }}
-          >
-            <h4
-              style={{
-                fontSize: '14px',
-                fontWeight: 600,
-                marginBottom: '12px',
-                color: 'var(--text)',
-              }}
-            >
-              Показывать виджеты:
-            </h4>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {widgets.map(w => (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Calendar size={20} style={{ color: 'var(--primary)' }} />
+                <span style={{ fontWeight: 600, color: 'var(--text)' }}>Период:</span>
+                {(['7d', '30d', '90d'] as PeriodType[]).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setPeriod(p)}
+                    style={{
+                      padding: '8px 16px',
+                      background: period === p ? 'var(--primary)' : 'var(--surface)',
+                      color: period === p ? 'var(--text-on-primary)' : 'var(--text)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {p === '7d' ? '7 дней' : p === '30d' ? '30 дней' : '90 дней'}
+                  </button>
+                ))}
                 <button
-                  key={w.id}
-                  onClick={() => toggleWidget(w.id)}
+                  onClick={() => setPeriod('custom')}
                   style={{
-                    padding: '6px 12px',
-                    background: w.visible ? 'rgba(255, 210, 76, 0.2)' : 'var(--card-bg)',
-                    border: w.visible ? '1px solid var(--primary)' : '1px solid var(--border)',
-                    borderRadius: '6px',
-                    color: w.visible ? 'var(--primary)' : 'var(--text-muted)',
-                    fontSize: '12px',
+                    padding: '8px 16px',
+                    background: period === 'custom' ? 'var(--primary)' : 'var(--surface)',
+                    color: period === 'custom' ? 'var(--text-on-primary)' : 'var(--text)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Свой период
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  style={{
+                    padding: '8px 16px',
+                    background: showFilters ? 'var(--primary)' : 'var(--surface)',
+                    color: showFilters ? 'var(--text-on-primary)' : 'var(--text)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '6px',
                   }}
                 >
-                  {w.visible && <Check size={12} />}
-                  {w.title}
+                  <Filter size={16} />
+                  Фильтры
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </Card>
-
-      {/* Data explanation notice */}
-      {!loading && data && (
-        <Card
-          style={{
-            marginBottom: '16px',
-            padding: '12px 16px',
-            background: 'rgba(59, 130, 246, 0.1)',
-            border: '1px solid rgba(59, 130, 246, 0.2)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-            <Activity size={20} style={{ color: '#3b82f6', marginTop: '2px', flexShrink: 0 }} />
-            <div style={{ fontSize: '13px', color: 'var(--text)' }}>
-              <strong>Важно:</strong> KPI карточки показывают <strong>данные за всё время</strong>.
-              Графики и виджеты отображают активность только{' '}
-              <strong>
-                за выбранный период (
-                {period === '7d'
-                  ? '7'
-                  : period === '30d'
-                    ? '30'
-                    : period === '90d'
-                      ? '90'
-                      : 'указанный'}{' '}
-                дней)
-              </strong>
-              . Если боты не использовались в этот период — графики будут пустыми, но общие цифры
-              актуальны.
-              <br />
-              <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                Пользователей платформы: {data.summary.total_users} | Пользователей ботов за всё
-                время: {data.summary.total_bot_users} | Сообщений за всё время:{' '}
-                {data.summary.total_messages}
-              </span>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {loading ? (
-        <Card>
-          <div style={{ textAlign: 'center', padding: '60px' }}>
-            <RefreshCw
-              size={40}
-              style={{ color: 'var(--primary)', animation: 'spin 1s linear infinite' }}
-            />
-            <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>Загрузка аналитики...</p>
-          </div>
-        </Card>
-      ) : data ? (
-        <>
-          {/* Summary KPI Cards */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: '16px',
-              marginBottom: '24px',
-            }}
-          >
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
+                <button
+                  onClick={loadAnalytics}
                   style={{
-                    padding: '12px',
-                    background: 'rgba(59, 130, 246, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <Users size={24} style={{ color: '#3b82f6' }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-                    Пользователей платформы
-                  </p>
-                  <p
-                    style={{
-                      fontSize: '24px',
-                      fontWeight: 700,
-                      margin: '4px 0',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    {data.summary.total_users}
-                  </p>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
-                    (зарегистрированы на BotForg)
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(255, 210, 76, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <Bot size={24} style={{ color: '#ffd24c' }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>Ботов</p>
-                  <p
-                    style={{
-                      fontSize: '24px',
-                      fontWeight: 700,
-                      margin: '4px 0',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    {data.summary.total_bots}
-                    <span style={{ fontSize: '14px', color: '#22c55e', marginLeft: '8px' }}>
-                      ({data.summary.active_bots} акт.)
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(139, 92, 246, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <Workflow size={24} style={{ color: '#8b5cf6' }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-                    Сценариев
-                  </p>
-                  <p
-                    style={{
-                      fontSize: '24px',
-                      fontWeight: 700,
-                      margin: '4px 0',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    {data.summary.total_scenarios}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(34, 197, 94, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <UserPlus size={24} style={{ color: '#22c55e' }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-                    Пользователей ботов
-                  </p>
-                  <p
-                    style={{
-                      fontSize: '24px',
-                      fontWeight: 700,
-                      margin: '4px 0',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    {data.summary.total_bot_users}
-                  </p>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
-                    (Telegram юзеры, писавшие ботам)
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(236, 72, 153, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <MessageCircle size={24} style={{ color: '#ec4899' }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-                    Сообщений (всего)
-                  </p>
-                  <p
-                    style={{
-                      fontSize: '24px',
-                      fontWeight: 700,
-                      margin: '4px 0',
-                      color: 'var(--text)',
-                    }}
-                  >
-                    {data.summary.total_messages}
-                  </p>
-                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
-                    За период: {data.messages.total}
-                  </p>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div
-                  style={{
-                    padding: '12px',
-                    background: 'rgba(34, 197, 94, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <Zap size={24} style={{ color: '#22c55e' }} />
-                </div>
-                <div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-                    Сейчас онлайн
-                  </p>
-                  <p
-                    style={{ fontSize: '24px', fontWeight: 700, margin: '4px 0', color: '#22c55e' }}
-                  >
-                    {data.online_now}
-                  </p>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Growth & Peaks */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gap: '16px',
-              marginBottom: '24px',
-            }}
-          >
-            <Card>
-              <h4
-                style={{
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  marginBottom: '16px',
-                  color: 'var(--text)',
-                }}
-              >
-                📈 Рост за период
-              </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>Новых пользователей ботов</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>
-                      {data.growth.current_new_users}
-                    </span>
-                    {renderGrowthBadge(data.growth.users_growth)}
-                  </div>
-                </div>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>Сообщений</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>
-                      {data.messages.total}
-                    </span>
-                    {renderGrowthBadge(data.growth.messages_growth)}
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <h4
-                style={{
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  marginBottom: '16px',
-                  color: 'var(--text)',
-                }}
-              >
-                ⏰ Пики активности
-              </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>Пиковый час</span>
-                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>
-                    {data.peaks.peak_hour} ({data.peaks.peak_hour_users} польз.)
-                  </span>
-                </div>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>Пиковый день</span>
-                  <span style={{ fontWeight: 600, color: 'var(--text)' }}>
-                    {data.peaks.peak_day} ({data.peaks.peak_day_users} польз.)
-                  </span>
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <h4
-                style={{
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  marginBottom: '16px',
-                  color: 'var(--text)',
-                }}
-              >
-                🔄 Удержание
-              </h4>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>Retention 7d</span>
-                  <span style={{ fontWeight: 600, color: '#22c55e' }}>
-                    {data.retention.retention_7d}%
-                  </span>
-                </div>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>Retention 30d</span>
-                  <span style={{ fontWeight: 600, color: '#3b82f6' }}>
-                    {data.retention.retention_30d}%
-                  </span>
-                </div>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>Возвращаемость</span>
-                  <span style={{ fontWeight: 600, color: '#8b5cf6' }}>
-                    {data.retention.return_rate}%
-                  </span>
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Charts */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-              gap: '16px',
-              marginBottom: '24px',
-            }}
-          >
-            {widgets.filter(w => w.visible).map(w => renderWidget(w))}
-          </div>
-        </>
-      ) : null}
-
-      {/* User Selector Section */}
-      <Card style={{ marginTop: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-          <Filter size={20} style={{ color: 'var(--primary)' }} />
-          <h3 style={{ fontSize: '18px', fontWeight: 600, margin: 0, color: 'var(--text)' }}>
-            Аналитика по отдельным пользователям
-          </h3>
-        </div>
-
-        {selectedUserIds.length > 0 && (
-          <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {selectedUserIds.map(userId => {
-              const userData = usersData.get(userId);
-              const userName = userData?.user.name || userData?.user.email || `ID: ${userId}`;
-              return (
-                <div
-                  key={userId}
-                  style={{
+                    padding: '8px 16px',
+                    background: 'var(--surface)',
+                    color: 'var(--text)',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    padding: '8px 12px',
-                    background: 'rgba(255, 210, 76, 0.2)',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(255, 210, 76, 0.3)',
+                    gap: '6px',
                   }}
                 >
-                  <Users size={14} style={{ color: 'var(--primary)' }} />
-                  <span style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 500 }}>
-                    {userName}
-                  </span>
-                  <button
-                    onClick={() => handleRemoveUser(userId)}
+                  <RefreshCw size={16} />
+                  Обновить
+                </button>
+              </div>
+            </div>
+
+            {period === 'custom' && (
+              <div style={{ display: 'flex', gap: '16px', marginTop: '16px', flexWrap: 'wrap' }}>
+                <div>
+                  <label
                     style={{
-                      background: 'transparent',
-                      border: 'none',
-                      cursor: 'pointer',
-                      padding: '0',
-                      display: 'flex',
-                      alignItems: 'center',
+                      fontSize: '12px',
                       color: 'var(--text-muted)',
-                    }}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-          <div style={{ position: 'relative', flex: 1 }}>
-            <Search
-              size={18}
-              style={{
-                position: 'absolute',
-                left: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-muted)',
-              }}
-            />
-            <input
-              type="text"
-              placeholder="Поиск пользователей для анализа..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onKeyPress={e => e.key === 'Enter' && handleSearch()}
-              style={{
-                width: '100%',
-                padding: '10px 12px 10px 40px',
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                color: 'var(--text)',
-                fontSize: '14px',
-              }}
-            />
-          </div>
-          <button
-            onClick={handleSearch}
-            style={{
-              padding: '10px 20px',
-              background: 'var(--primary)',
-              color: 'var(--text-on-primary)',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Найти
-          </button>
-        </div>
-
-        {showUserSelector && (
-          <div
-            style={{
-              maxHeight: '300px',
-              overflowY: 'auto',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              padding: '8px',
-            }}
-          >
-            {loadingUsers ? (
-              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
-                Загрузка...
-              </div>
-            ) : users.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
-                Пользователи не найдены
-              </div>
-            ) : (
-              users.map(user => {
-                const isSelected = selectedUserIds.includes(user.id);
-                return (
-                  <div
-                    key={user.id}
-                    onClick={() => handleUserToggle(user.id)}
-                    style={{
-                      padding: '12px',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      background: isSelected ? 'rgba(255, 210, 76, 0.1)' : 'transparent',
-                      border: isSelected
-                        ? '1px solid rgba(255, 210, 76, 0.3)'
-                        : '1px solid transparent',
+                      display: 'block',
                       marginBottom: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      transition: 'all 0.2s',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      {isSelected ? (
-                        <Check size={18} style={{ color: 'var(--primary)' }} />
-                      ) : (
-                        <div
-                          style={{
-                            width: '18px',
-                            height: '18px',
-                            border: '2px solid var(--border)',
-                            borderRadius: '4px',
-                          }}
-                        />
-                      )}
-                      <div>
-                        <p
-                          style={{
-                            fontSize: '14px',
-                            fontWeight: 500,
-                            margin: 0,
-                            color: 'var(--text)',
-                          }}
-                        >
-                          {user.name || 'Без имени'}
-                        </p>
-                        <p
-                          style={{
-                            fontSize: '12px',
-                            color: 'var(--text-muted)',
-                            margin: '2px 0 0 0',
-                          }}
-                        >
-                          {user.email}
-                        </p>
-                      </div>
-                    </div>
+                    От
+                  </label>
+                  <input
+                    type="date"
+                    value={customDateFrom}
+                    onChange={e => setCustomDateFrom(e.target.value)}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      color: 'var(--text)',
+                    }}
+                  />
+                </div>
+                <div>
+                  <label
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--text-muted)',
+                      display: 'block',
+                      marginBottom: '4px',
+                    }}
+                  >
+                    До
+                  </label>
+                  <input
+                    type="date"
+                    value={customDateTo}
+                    onChange={e => setCustomDateTo(e.target.value)}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      color: 'var(--text)',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {showFilters && (
+              <div
+                style={{
+                  marginTop: '16px',
+                  padding: '16px',
+                  background: 'var(--surface)',
+                  borderRadius: '8px',
+                }}
+              >
+                <h4
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    marginBottom: '12px',
+                    color: 'var(--text)',
+                  }}
+                >
+                  Показывать виджеты:
+                </h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {widgets.map(w => (
                     <button
-                      onClick={e => {
-                        e.stopPropagation();
-                        navigate(`/dashboard/platform/users/${user.id}`);
-                      }}
+                      key={w.id}
+                      onClick={() => toggleWidget(w.id)}
                       style={{
-                        padding: '4px 8px',
-                        background: 'rgba(59, 130, 246, 0.1)',
-                        border: 'none',
-                        borderRadius: '4px',
-                        color: '#3b82f6',
+                        padding: '6px 12px',
+                        background: w.visible ? 'rgba(255, 210, 76, 0.2)' : 'var(--card-bg)',
+                        border: w.visible ? '1px solid var(--primary)' : '1px solid var(--border)',
+                        borderRadius: '6px',
+                        color: w.visible ? 'var(--primary)' : 'var(--text-muted)',
                         fontSize: '12px',
                         cursor: 'pointer',
-                        fontWeight: 500,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
                       }}
                     >
-                      Подробнее
+                      {w.visible && <Check size={12} />}
+                      {w.title}
                     </button>
-                  </div>
-                );
-              })
+                  ))}
+                </div>
+              </div>
             )}
-          </div>
-        )}
-      </Card>
+          </Card>
 
-      {/* Selected Users Aggregated Stats */}
-      {selectedUserIds.length > 0 && (
-        <>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '16px',
-              marginTop: '24px',
-              marginBottom: '24px',
-            }}
-          >
-            <Card>
-              <div
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-              >
-                <div>
-                  <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '0 0 8px 0' }}>
-                    Ботов выбранных
-                  </p>
-                  <p style={{ fontSize: '32px', fontWeight: 700, margin: 0, color: 'var(--text)' }}>
-                    {aggregatedStats.total_bots}
-                  </p>
-                </div>
-                <div
-                  style={{
-                    padding: '16px',
-                    background: 'rgba(255, 210, 76, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <BarChart3 size={32} style={{ color: '#ffd24c' }} />
+          {/* Data explanation notice */}
+          {!loading && data && (
+            <Card
+              style={{
+                marginBottom: '16px',
+                padding: '12px 16px',
+                background: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <Activity size={20} style={{ color: '#3b82f6', marginTop: '2px', flexShrink: 0 }} />
+                <div style={{ fontSize: '13px', color: 'var(--text)' }}>
+                  <strong>Важно:</strong> KPI карточки показывают{' '}
+                  <strong>данные за всё время</strong>. Графики и виджеты отображают активность
+                  только{' '}
+                  <strong>
+                    за выбранный период (
+                    {period === '7d'
+                      ? '7'
+                      : period === '30d'
+                        ? '30'
+                        : period === '90d'
+                          ? '90'
+                          : 'указанный'}{' '}
+                    дней)
+                  </strong>
+                  . Если боты не использовались в этот период — графики будут пустыми, но общие
+                  цифры актуальны.
+                  <br />
+                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                    Пользователей платформы: {data.summary.total_users} | Пользователей ботов за всё
+                    время: {data.summary.total_bot_users} | Сообщений за всё время:{' '}
+                    {data.summary.total_messages}
+                  </span>
                 </div>
               </div>
             </Card>
+          )}
 
+          {loading ? (
             <Card>
-              <div
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-              >
-                <div>
-                  <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '0 0 8px 0' }}>
-                    Активных ботов
-                  </p>
-                  <p style={{ fontSize: '32px', fontWeight: 700, margin: 0, color: '#22c55e' }}>
-                    {aggregatedStats.active_bots}
-                  </p>
-                </div>
-                <div
-                  style={{
-                    padding: '16px',
-                    background: 'rgba(34, 197, 94, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <TrendingUp size={32} style={{ color: '#22c55e' }} />
-                </div>
+              <div style={{ textAlign: 'center', padding: '60px' }}>
+                <RefreshCw
+                  size={40}
+                  style={{ color: 'var(--primary)', animation: 'spin 1s linear infinite' }}
+                />
+                <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>
+                  Загрузка аналитики...
+                </p>
               </div>
             </Card>
-
-            <Card>
+          ) : data ? (
+            <>
+              {/* Summary KPI Cards */}
               <div
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '16px',
+                  marginBottom: '24px',
+                }}
               >
-                <div>
-                  <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '0 0 8px 0' }}>
-                    Пользователей ботов
-                  </p>
-                  <p style={{ fontSize: '32px', fontWeight: 700, margin: 0, color: 'var(--text)' }}>
-                    {aggregatedStats.total_bot_users}
-                  </p>
-                </div>
-                <div
-                  style={{
-                    padding: '16px',
-                    background: 'rgba(59, 130, 246, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <Users size={32} style={{ color: '#3b82f6' }} />
-                </div>
-              </div>
-            </Card>
-
-            <Card>
-              <div
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-              >
-                <div>
-                  <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '0 0 8px 0' }}>
-                    Всего сообщений
-                  </p>
-                  <p style={{ fontSize: '32px', fontWeight: 700, margin: 0, color: 'var(--text)' }}>
-                    {aggregatedStats.total_messages}
-                  </p>
-                </div>
-                <div
-                  style={{
-                    padding: '16px',
-                    background: 'rgba(139, 92, 246, 0.1)',
-                    borderRadius: '12px',
-                  }}
-                >
-                  <MessageCircle size={32} style={{ color: '#8b5cf6' }} />
-                </div>
-              </div>
-            </Card>
-          </div>
-
-          {/* Individual User Cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {selectedUserIds.map(userId => {
-              const userData = usersData.get(userId);
-              if (!userData) return null;
-
-              return (
-                <Card key={userId}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: '16px',
-                    }}
-                  >
-                    <div>
-                      <h4
-                        style={{
-                          fontSize: '18px',
-                          fontWeight: 600,
-                          margin: '0 0 4px 0',
-                          color: 'var(--text)',
-                        }}
-                      >
-                        {userData.user.name || userData.user.email}
-                      </h4>
-                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-                        {userData.user.email}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => navigate(`/dashboard/platform/users/${userId}`)}
+                <Card>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div
                       style={{
-                        padding: '8px 16px',
+                        padding: '12px',
                         background: 'rgba(59, 130, 246, 0.1)',
-                        border: 'none',
-                        borderRadius: '8px',
-                        color: '#3b82f6',
-                        fontSize: '14px',
-                        cursor: 'pointer',
-                        fontWeight: 500,
+                        borderRadius: '12px',
                       }}
                     >
-                      Подробнее
-                    </button>
-                  </div>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                      gap: '12px',
-                    }}
-                  >
-                    <div>
-                      <p
-                        style={{
-                          fontSize: '12px',
-                          color: 'var(--text-muted)',
-                          margin: '0 0 4px 0',
-                        }}
-                      >
-                        Ботов
-                      </p>
-                      <p
-                        style={{
-                          fontSize: '20px',
-                          fontWeight: 700,
-                          margin: 0,
-                          color: 'var(--text)',
-                        }}
-                      >
-                        {userData.statistics.total_bots} ({userData.statistics.active_bots}{' '}
-                        активных)
-                      </p>
+                      <Users size={24} style={{ color: '#3b82f6' }} />
                     </div>
                     <div>
-                      <p
-                        style={{
-                          fontSize: '12px',
-                          color: 'var(--text-muted)',
-                          margin: '0 0 4px 0',
-                        }}
-                      >
-                        Сценариев
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                        Пользователей платформы
                       </p>
                       <p
                         style={{
-                          fontSize: '20px',
+                          fontSize: '24px',
                           fontWeight: 700,
-                          margin: 0,
+                          margin: '4px 0',
                           color: 'var(--text)',
                         }}
                       >
-                        {userData.statistics.total_scenarios}
+                        {data.summary.total_users}
                       </p>
-                    </div>
-                    <div>
-                      <p
-                        style={{
-                          fontSize: '12px',
-                          color: 'var(--text-muted)',
-                          margin: '0 0 4px 0',
-                        }}
-                      >
-                        Пользователей
-                      </p>
-                      <p
-                        style={{
-                          fontSize: '20px',
-                          fontWeight: 700,
-                          margin: 0,
-                          color: 'var(--text)',
-                        }}
-                      >
-                        {userData.statistics.total_bot_users}
-                      </p>
-                    </div>
-                    <div>
-                      <p
-                        style={{
-                          fontSize: '12px',
-                          color: 'var(--text-muted)',
-                          margin: '0 0 4px 0',
-                        }}
-                      >
-                        Сообщений
-                      </p>
-                      <p
-                        style={{
-                          fontSize: '20px',
-                          fontWeight: 700,
-                          margin: 0,
-                          color: 'var(--text)',
-                        }}
-                      >
-                        {userData.statistics.total_messages}
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
+                        (зарегистрированы на BotForg)
                       </p>
                     </div>
                   </div>
                 </Card>
-              );
-            })}
-          </div>
-        </>
-      )}
 
+                <Card>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div
+                      style={{
+                        padding: '12px',
+                        background: 'rgba(255, 210, 76, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <Bot size={24} style={{ color: '#ffd24c' }} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                        Ботов
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '24px',
+                          fontWeight: 700,
+                          margin: '4px 0',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        {data.summary.total_bots}
+                        <span style={{ fontSize: '14px', color: '#22c55e', marginLeft: '8px' }}>
+                          ({data.summary.active_bots} акт.)
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div
+                      style={{
+                        padding: '12px',
+                        background: 'rgba(139, 92, 246, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <Workflow size={24} style={{ color: '#8b5cf6' }} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                        Сценариев
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '24px',
+                          fontWeight: 700,
+                          margin: '4px 0',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        {data.summary.total_scenarios}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div
+                      style={{
+                        padding: '12px',
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <UserPlus size={24} style={{ color: '#22c55e' }} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                        Пользователей ботов
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '24px',
+                          fontWeight: 700,
+                          margin: '4px 0',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        {data.summary.total_bot_users}
+                      </p>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
+                        (Telegram юзеры, писавшие ботам)
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div
+                      style={{
+                        padding: '12px',
+                        background: 'rgba(236, 72, 153, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <MessageCircle size={24} style={{ color: '#ec4899' }} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                        Сообщений (всего)
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '24px',
+                          fontWeight: 700,
+                          margin: '4px 0',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        {data.summary.total_messages}
+                      </p>
+                      <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
+                        За период: {data.messages.total}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div
+                      style={{
+                        padding: '12px',
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <Zap size={24} style={{ color: '#22c55e' }} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                        Сейчас онлайн
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '24px',
+                          fontWeight: 700,
+                          margin: '4px 0',
+                          color: '#22c55e',
+                        }}
+                      >
+                        {data.online_now}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Growth & Peaks */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gap: '16px',
+                  marginBottom: '24px',
+                }}
+              >
+                <Card>
+                  <h4
+                    style={{
+                      fontSize: '16px',
+                      fontWeight: 600,
+                      marginBottom: '16px',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    📈 Рост за период
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>Новых пользователей ботов</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text)' }}>
+                          {data.growth.current_new_users}
+                        </span>
+                        {renderGrowthBadge(data.growth.users_growth)}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>Сообщений</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text)' }}>
+                          {data.messages.total}
+                        </span>
+                        {renderGrowthBadge(data.growth.messages_growth)}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <h4
+                    style={{
+                      fontSize: '16px',
+                      fontWeight: 600,
+                      marginBottom: '16px',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    ⏰ Пики активности
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>Пиковый час</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text)' }}>
+                        {data.peaks.peak_hour} ({data.peaks.peak_hour_users} польз.)
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>Пиковый день</span>
+                      <span style={{ fontWeight: 600, color: 'var(--text)' }}>
+                        {data.peaks.peak_day} ({data.peaks.peak_day_users} польз.)
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <h4
+                    style={{
+                      fontSize: '16px',
+                      fontWeight: 600,
+                      marginBottom: '16px',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    🔄 Удержание
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>Retention 7d</span>
+                      <span style={{ fontWeight: 600, color: '#22c55e' }}>
+                        {data.retention.retention_7d}%
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>Retention 30d</span>
+                      <span style={{ fontWeight: 600, color: '#3b82f6' }}>
+                        {data.retention.retention_30d}%
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <span style={{ color: 'var(--text-muted)' }}>Возвращаемость</span>
+                      <span style={{ fontWeight: 600, color: '#8b5cf6' }}>
+                        {data.retention.return_rate}%
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Charts */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+                  gap: '16px',
+                  marginBottom: '24px',
+                }}
+              >
+                {widgets.filter(w => w.visible).map(w => renderWidget(w))}
+              </div>
+            </>
+          ) : null}
+        </>
+      )}{' '}
+      {/* End of Platform Tab */}
+      {/* Users Tab Content */}
+      {mainTab === 'users' && (
+        <>
+          {/* User Selector Section */}
+          <Card>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}
+            >
+              <Search size={20} style={{ color: 'var(--primary)' }} />
+              <h3 style={{ fontSize: '18px', fontWeight: 600, margin: 0, color: 'var(--text)' }}>
+                Поиск и анализ пользователей
+              </h3>
+            </div>
+
+            {selectedUserIds.length > 0 && (
+              <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {selectedUserIds.map(userId => {
+                  const userData = usersData.get(userId);
+                  const userName = userData?.user.name || userData?.user.email || `ID: ${userId}`;
+                  return (
+                    <div
+                      key={userId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '8px 12px',
+                        background: 'rgba(255, 210, 76, 0.2)',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 210, 76, 0.3)',
+                      }}
+                    >
+                      <Users size={14} style={{ color: 'var(--primary)' }} />
+                      <span style={{ fontSize: '13px', color: 'var(--text)', fontWeight: 500 }}>
+                        {userName}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveUser(userId)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
+                <Search
+                  size={18}
+                  style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Поиск пользователей для анализа..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleSearch()}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 40px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+              <button
+                onClick={handleSearch}
+                style={{
+                  padding: '10px 20px',
+                  background: 'var(--primary)',
+                  color: 'var(--text-on-primary)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Найти
+              </button>
+            </div>
+
+            {showUserSelector && (
+              <div
+                style={{
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                }}
+              >
+                {loadingUsers ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                    Загрузка...
+                  </div>
+                ) : users.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-muted)' }}>
+                    Пользователи не найдены
+                  </div>
+                ) : (
+                  users.map(user => {
+                    const isSelected = selectedUserIds.includes(user.id);
+                    return (
+                      <div
+                        key={user.id}
+                        onClick={() => handleUserToggle(user.id)}
+                        style={{
+                          padding: '12px',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          background: isSelected ? 'rgba(255, 210, 76, 0.1)' : 'transparent',
+                          border: isSelected
+                            ? '1px solid rgba(255, 210, 76, 0.3)'
+                            : '1px solid transparent',
+                          marginBottom: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          {isSelected ? (
+                            <Check size={18} style={{ color: 'var(--primary)' }} />
+                          ) : (
+                            <div
+                              style={{
+                                width: '18px',
+                                height: '18px',
+                                border: '2px solid var(--border)',
+                                borderRadius: '4px',
+                              }}
+                            />
+                          )}
+                          <div>
+                            <p
+                              style={{
+                                fontSize: '14px',
+                                fontWeight: 500,
+                                margin: 0,
+                                color: 'var(--text)',
+                              }}
+                            >
+                              {user.name || 'Без имени'}
+                            </p>
+                            <p
+                              style={{
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                                margin: '2px 0 0 0',
+                              }}
+                            >
+                              {user.email}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            navigate(`/dashboard/platform/users/${user.id}`);
+                          }}
+                          style={{
+                            padding: '4px 8px',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            border: 'none',
+                            borderRadius: '4px',
+                            color: '#3b82f6',
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                          }}
+                        >
+                          Подробнее
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </Card>
+
+          {/* Selected Users Aggregated Stats */}
+          {selectedUserIds.length > 0 && (
+            <>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '16px',
+                  marginTop: '24px',
+                  marginBottom: '24px',
+                }}
+              >
+                <Card>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div>
+                      <p
+                        style={{
+                          fontSize: '14px',
+                          color: 'var(--text-muted)',
+                          margin: '0 0 8px 0',
+                        }}
+                      >
+                        Ботов выбранных
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '32px',
+                          fontWeight: 700,
+                          margin: 0,
+                          color: 'var(--text)',
+                        }}
+                      >
+                        {aggregatedStats.total_bots}
+                      </p>
+                    </div>
+                    <div
+                      style={{
+                        padding: '16px',
+                        background: 'rgba(255, 210, 76, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <BarChart3 size={32} style={{ color: '#ffd24c' }} />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div>
+                      <p
+                        style={{
+                          fontSize: '14px',
+                          color: 'var(--text-muted)',
+                          margin: '0 0 8px 0',
+                        }}
+                      >
+                        Активных ботов
+                      </p>
+                      <p style={{ fontSize: '32px', fontWeight: 700, margin: 0, color: '#22c55e' }}>
+                        {aggregatedStats.active_bots}
+                      </p>
+                    </div>
+                    <div
+                      style={{
+                        padding: '16px',
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <TrendingUp size={32} style={{ color: '#22c55e' }} />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div>
+                      <p
+                        style={{
+                          fontSize: '14px',
+                          color: 'var(--text-muted)',
+                          margin: '0 0 8px 0',
+                        }}
+                      >
+                        Пользователей ботов
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '32px',
+                          fontWeight: 700,
+                          margin: 0,
+                          color: 'var(--text)',
+                        }}
+                      >
+                        {aggregatedStats.total_bot_users}
+                      </p>
+                    </div>
+                    <div
+                      style={{
+                        padding: '16px',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <Users size={32} style={{ color: '#3b82f6' }} />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div>
+                      <p
+                        style={{
+                          fontSize: '14px',
+                          color: 'var(--text-muted)',
+                          margin: '0 0 8px 0',
+                        }}
+                      >
+                        Всего сообщений
+                      </p>
+                      <p
+                        style={{
+                          fontSize: '32px',
+                          fontWeight: 700,
+                          margin: 0,
+                          color: 'var(--text)',
+                        }}
+                      >
+                        {aggregatedStats.total_messages}
+                      </p>
+                    </div>
+                    <div
+                      style={{
+                        padding: '16px',
+                        background: 'rgba(139, 92, 246, 0.1)',
+                        borderRadius: '12px',
+                      }}
+                    >
+                      <MessageCircle size={32} style={{ color: '#8b5cf6' }} />
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Individual User Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {selectedUserIds.map(userId => {
+                  const userData = usersData.get(userId);
+                  if (!userData) return null;
+
+                  return (
+                    <Card key={userId}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: '16px',
+                        }}
+                      >
+                        <div>
+                          <h4
+                            style={{
+                              fontSize: '18px',
+                              fontWeight: 600,
+                              margin: '0 0 4px 0',
+                              color: 'var(--text)',
+                            }}
+                          >
+                            {userData.user.name || userData.user.email}
+                          </h4>
+                          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
+                            {userData.user.email}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => navigate(`/dashboard/platform/users/${userId}`)}
+                          style={{
+                            padding: '8px 16px',
+                            background: 'rgba(59, 130, 246, 0.1)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            color: '#3b82f6',
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                          }}
+                        >
+                          Подробнее
+                        </button>
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                          gap: '12px',
+                        }}
+                      >
+                        <div>
+                          <p
+                            style={{
+                              fontSize: '12px',
+                              color: 'var(--text-muted)',
+                              margin: '0 0 4px 0',
+                            }}
+                          >
+                            Ботов
+                          </p>
+                          <p
+                            style={{
+                              fontSize: '20px',
+                              fontWeight: 700,
+                              margin: 0,
+                              color: 'var(--text)',
+                            }}
+                          >
+                            {userData.statistics.total_bots} ({userData.statistics.active_bots}{' '}
+                            активных)
+                          </p>
+                        </div>
+                        <div>
+                          <p
+                            style={{
+                              fontSize: '12px',
+                              color: 'var(--text-muted)',
+                              margin: '0 0 4px 0',
+                            }}
+                          >
+                            Сценариев
+                          </p>
+                          <p
+                            style={{
+                              fontSize: '20px',
+                              fontWeight: 700,
+                              margin: 0,
+                              color: 'var(--text)',
+                            }}
+                          >
+                            {userData.statistics.total_scenarios}
+                          </p>
+                        </div>
+                        <div>
+                          <p
+                            style={{
+                              fontSize: '12px',
+                              color: 'var(--text-muted)',
+                              margin: '0 0 4px 0',
+                            }}
+                          >
+                            Пользователей
+                          </p>
+                          <p
+                            style={{
+                              fontSize: '20px',
+                              fontWeight: 700,
+                              margin: 0,
+                              color: 'var(--text)',
+                            }}
+                          >
+                            {userData.statistics.total_bot_users}
+                          </p>
+                        </div>
+                        <div>
+                          <p
+                            style={{
+                              fontSize: '12px',
+                              color: 'var(--text-muted)',
+                              margin: '0 0 4px 0',
+                            }}
+                          >
+                            Сообщений
+                          </p>
+                          <p
+                            style={{
+                              fontSize: '20px',
+                              fontWeight: 700,
+                              margin: 0,
+                              color: 'var(--text)',
+                            }}
+                          >
+                            {userData.statistics.total_messages}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </>
+      )}{' '}
+      {/* End of Users Tab */}
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }

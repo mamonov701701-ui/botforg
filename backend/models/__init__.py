@@ -26,6 +26,11 @@ from backend.models.scenario import Scenario, ScenarioVersion
 from backend.models.platform_role import PlatformRole
 from backend.models.bf_team_member import BFTeamMember
 from backend.models.base_role import BaseRole
+from backend.models.chat import (
+    Friendship, UserStatus, ChatRoom, ChatParticipant, 
+    ChatMessage, MessageReaction, BlockedUser,
+    FriendshipStatus, UserOnlineStatus, MessageType, ChatRoomType
+)
 
 __all__ = [
     "User",
@@ -60,4 +65,15 @@ __all__ = [
     "PlatformRole",
     "BFTeamMember",
     "BaseRole",
+    "Friendship",
+    "UserStatus",
+    "ChatRoom",
+    "ChatParticipant",
+    "ChatMessage",
+    "MessageReaction",
+    "BlockedUser",
+    "FriendshipStatus",
+    "UserOnlineStatus",
+    "MessageType",
+    "ChatRoomType",
 ]

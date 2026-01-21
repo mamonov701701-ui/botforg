@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   Home,
@@ -13,6 +13,7 @@ import {
   Workflow,
   Building2,
   TrendingUp,
+  MessageCircle,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { hasAccessToSection, ROLE_NAMES, type SectionKey } from '../../constants/roles';
@@ -55,6 +56,13 @@ const PROJECT_NAV_ITEMS: NavItem[] = [
     mode: 'projects',
   },
   { id: 'team', label: 'Команда', path: '/dashboard/team', icon: Users, mode: 'projects' },
+  {
+    id: 'messages',
+    label: 'Сообщения',
+    path: '/dashboard/messages',
+    icon: MessageCircle,
+    mode: 'projects',
+  },
   {
     id: 'settings',
     label: 'Настройки',
@@ -125,9 +133,15 @@ export default function DashboardLayout() {
     return (saved as DashboardMode) || 'projects';
   });
 
+  // Принудительное обновление для перерендера списка навигации
+  const [, forceUpdate] = useState({});
+
   // Сохраняем режим в localStorage при изменении
   useEffect(() => {
+    console.log('[DashboardLayout] dashboardMode changed to:', dashboardMode);
     localStorage.setItem('dashboard_mode', dashboardMode);
+    // Принудительно обновляем компонент при смене режима
+    forceUpdate({});
   }, [dashboardMode]);
 
   const handleLogout = async () => {
@@ -161,20 +175,25 @@ export default function DashboardLayout() {
   }, [user, setUser, setLoading]);
 
   // Определяем текущие пункты меню в зависимости от режима
-  const currentNavItems = dashboardMode === 'platform' ? PLATFORM_NAV_ITEMS : PROJECT_NAV_ITEMS;
+  const currentNavItems = useMemo(
+    () => (dashboardMode === 'platform' ? PLATFORM_NAV_ITEMS : PROJECT_NAV_ITEMS),
+    [dashboardMode]
+  );
 
   // Фильтруем пункты меню по правам доступа
-  const availableNavItems = currentNavItems.filter(item => {
-    // Для платформенных пунктов проверяем дополнительный доступ
-    if (item.mode === 'platform') {
-      return hasPlatformAccess(user);
-    }
-    // Для обычных пунктов используем стандартную проверку
-    if ('id' in item && typeof item.id === 'string' && item.id.startsWith('platform_')) {
-      return hasPlatformAccess(user);
-    }
-    return hasAccessToSection(user?.role, item.id as SectionKey);
-  });
+  const availableNavItems = useMemo(() => {
+    return currentNavItems.filter(item => {
+      // Для платформенных пунктов проверяем дополнительный доступ
+      if (item.mode === 'platform') {
+        return hasPlatformAccess(user);
+      }
+      // Для обычных пунктов используем стандартную проверку
+      if ('id' in item && typeof item.id === 'string' && item.id.startsWith('platform_')) {
+        return hasPlatformAccess(user);
+      }
+      return hasAccessToSection(user?.role, item.id as SectionKey);
+    });
+  }, [currentNavItems, user]);
 
   // Автоматически переключаем режим при переходе на платформенные страницы
   useEffect(() => {
@@ -182,26 +201,30 @@ export default function DashboardLayout() {
       location.pathname.startsWith('/dashboard/platform') ||
       location.pathname.startsWith('/dashboard/bf-team');
 
+    console.log(
+      '[useEffect] location:',
+      location.pathname,
+      'isPlatformPage:',
+      isPlatformPage,
+      'dashboardMode:',
+      dashboardMode
+    );
+
+    // Автоматическое переключение режима только при переходе на платформенные страницы
     if (isPlatformPage && dashboardMode !== 'platform' && hasPlatformAccess(user)) {
+      console.log('[useEffect] Auto-switching to PLATFORM');
       setDashboardMode('platform');
-    } else if (
-      !isPlatformPage &&
-      dashboardMode === 'platform' &&
-      !location.pathname.startsWith('/dashboard/platform') &&
-      !location.pathname.startsWith('/dashboard/bf-team')
-    ) {
-      // Если ушли с платформенных страниц - переключаемся на проекты
-      setDashboardMode('projects');
     }
 
     // Если переключились в платформенный режим, но нет доступа - переключаем обратно
     if (dashboardMode === 'platform' && !hasPlatformAccess(user)) {
+      console.log('[useEffect] No platform access, switching to PROJECTS');
       setDashboardMode('projects');
       if (isPlatformPage) {
         navigate('/dashboard');
       }
     }
-  }, [location.pathname, dashboardMode, user, navigate]);
+  }, [location.pathname, user, navigate]); // ← УБРАЛ dashboardMode из зависимостей!
 
   // Показываем загрузку пока проверяем пользователя
   if (loading) {
@@ -472,8 +495,14 @@ export default function DashboardLayout() {
                   >
                     <button
                       onClick={() => {
+                        console.log('[CLICK] Switching to PROJECTS from:', location.pathname);
                         setDashboardMode('projects');
-                        if (location.pathname.startsWith('/dashboard/platform')) {
+                        // Если находимся на платформенных страницах - переходим на главную проектов
+                        if (
+                          location.pathname.startsWith('/dashboard/platform') ||
+                          location.pathname.startsWith('/dashboard/bf-team')
+                        ) {
+                          console.log('[CLICK] Navigating to /dashboard');
                           navigate('/dashboard');
                         }
                       }}
@@ -513,11 +542,13 @@ export default function DashboardLayout() {
                     </button>
                     <button
                       onClick={() => {
+                        console.log('[CLICK] Switching to PLATFORM from:', location.pathname);
                         setDashboardMode('platform');
                         if (
                           !location.pathname.startsWith('/dashboard/platform') &&
                           !location.pathname.startsWith('/dashboard/bf-team')
                         ) {
+                          console.log('[CLICK] Navigating to /dashboard/platform');
                           navigate('/dashboard/platform');
                         }
                       }}
@@ -561,7 +592,7 @@ export default function DashboardLayout() {
             )}
 
             {/* Навигация */}
-            <nav>
+            <nav key={`${dashboardMode}-${location.pathname}`}>
               {availableNavItems.map(item => {
                 const isActive =
                   location.pathname === item.path ||

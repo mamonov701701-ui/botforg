@@ -1,3 +1,4 @@
+# Chat module enabled - 2026-01-21
 import os
 import sys
 
@@ -33,6 +34,7 @@ from backend.routers import ai as ai_router
 from backend.routers import analytics as analytics_router
 from backend.routers import media as media_router
 from backend.routers import bot_tags as bot_tags_router
+from backend.routers import chat as chat_router
 from backend.routers import bot_contacts as bot_contacts_router
 from backend.settings import settings
 
@@ -101,6 +103,7 @@ app.include_router(analytics_router.router)
 app.include_router(media_router.router, prefix="/media")
 app.include_router(bot_tags_router.router)
 app.include_router(bot_contacts_router.router)
+app.include_router(chat_router.router)
 
 # Настройка раздачи статических файлов для загруженных медиа
 UPLOAD_DIR = Path("uploads/media")
@@ -124,4 +127,4 @@ def root():
 def healthz():
     return {"status": "ok"}
 
-# Force reload trigger
+# Force reload trigger - chat enabled 2026-01-21 14:25

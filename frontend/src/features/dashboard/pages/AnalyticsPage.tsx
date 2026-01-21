@@ -22,6 +22,12 @@ import {
   ArrowDown,
   Zap,
   Target,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Mail,
+  Phone,
+  Link2,
 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
@@ -30,15 +36,18 @@ import { hasAccessToAction } from '../../../constants/roles';
 import {
   getDashboardData,
   getMarketingAnalytics,
+  getBotUsers,
   type DashboardData,
   type MarketingAnalytics,
+  type BotUser,
+  type BotUsersFilters,
 } from '../../../api/analytics';
 import { getBots, type Bot as BotType } from '../../../api/bot';
 import { toast } from '../../../utils/toast';
 
 type PeriodType = '7d' | '30d' | '90d' | 'custom';
 type ChartType = 'bar' | 'line' | 'pie';
-type TabType = 'overview' | 'users' | 'messages' | 'retention' | 'growth';
+type MainTabType = 'overview' | 'users';
 
 interface Widget {
   id: string;
@@ -113,7 +122,24 @@ export default function AnalyticsPage() {
   const [selectedBotId, setSelectedBotId] = useState<number | undefined>(undefined);
   const [widgets, setWidgets] = useState<Widget[]>(defaultWidgets);
   const [showFilters, setShowFilters] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [mainTab, setMainTab] = useState<MainTabType>('overview');
+
+  // Users tab state
+  const [botUsers, setBotUsers] = useState<BotUser[]>([]);
+  const [botUsersFilters, setBotUsersFilters] = useState<BotUsersFilters | null>(null);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersPage, setUsersPage] = useState(1);
+  const [usersTotalPages, setUsersTotalPages] = useState(0);
+  const [usersTotal, setUsersTotal] = useState(0);
+  const [usersSearch, setUsersSearch] = useState('');
+  const [usersStatusFilter, setUsersStatusFilter] = useState<string>('');
+  const [usersChannelFilter, setUsersChannelFilter] = useState<string>('');
+  const [usersBotFilter, setUsersBotFilter] = useState<number | undefined>(undefined);
+  const [usersUtmFilter, setUsersUtmFilter] = useState<string>('');
+  const [usersSortBy, setUsersSortBy] = useState<'created_at' | 'last_interaction_at' | 'name'>(
+    'last_interaction_at'
+  );
+  const [usersSortOrder, setUsersSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const periodDays: Record<PeriodType, number> = {
     '7d': 7,
@@ -125,6 +151,53 @@ export default function AnalyticsPage() {
   useEffect(() => {
     loadData();
   }, [period, customDateFrom, customDateTo, selectedBotId]);
+
+  // Load bot users when switching to users tab or changing filters
+  useEffect(() => {
+    if (mainTab === 'users') {
+      loadBotUsers();
+    }
+  }, [
+    mainTab,
+    usersPage,
+    usersStatusFilter,
+    usersChannelFilter,
+    usersBotFilter,
+    usersUtmFilter,
+    usersSortBy,
+    usersSortOrder,
+  ]);
+
+  const loadBotUsers = async () => {
+    try {
+      setUsersLoading(true);
+      const response = await getBotUsers({
+        page: usersPage,
+        page_size: 50,
+        bot_id: usersBotFilter,
+        status: usersStatusFilter || undefined,
+        channel: usersChannelFilter || undefined,
+        search: usersSearch || undefined,
+        utm_source: usersUtmFilter || undefined,
+        sort_by: usersSortBy,
+        sort_order: usersSortOrder,
+      });
+      setBotUsers(response.items);
+      setBotUsersFilters(response.filters);
+      setUsersTotalPages(response.total_pages);
+      setUsersTotal(response.total);
+    } catch (error: any) {
+      console.error('Failed to load bot users:', error);
+      toast.error('Не удалось загрузить пользователей');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const handleUsersSearch = () => {
+    setUsersPage(1);
+    loadBotUsers();
+  };
 
   const calculateCustomDays = () => {
     if (!customDateFrom || !customDateTo) return 30;
@@ -197,9 +270,11 @@ export default function AnalyticsPage() {
     const pathD = `M ${dataPoints.map(p => `${p.x} ${p.y}`).join(' L ')}`;
     const fillPathD = `${pathD} L 100 100 L 0 100 Z`;
     const timeLabels = dataPoints.filter((_, i) => i % 3 === 0 || i === dataPoints.length - 1);
+    const totalSum = dataPoints.reduce((sum, p) => sum + p.value, 0);
 
     return (
-      <div style={{ height: '220px' }}>
+      <div style={{ height: '240px' }}>
+        {/* Header with max and total */}
         <div
           style={{
             fontSize: '11px',
@@ -210,6 +285,7 @@ export default function AnalyticsPage() {
           }}
         >
           <span>Макс: {maxVal}</span>
+          <span>Всего: {totalSum}</span>
         </div>
         <div style={{ display: 'flex', height: '160px' }}>
           <div
@@ -256,23 +332,26 @@ export default function AnalyticsPage() {
                 vectorEffect="non-scaling-stroke"
               />
             </svg>
-            {dataPoints.map((p, i) => (
-              <div
-                key={i}
-                style={{
-                  position: 'absolute',
-                  left: `${p.x}%`,
-                  top: `${p.y}%`,
-                  transform: 'translate(-50%, -50%)',
-                  width: p.isNow ? '8px' : '5px',
-                  height: p.isNow ? '8px' : '5px',
-                  borderRadius: '50%',
-                  background: p.isNow ? '#22c55e' : color,
-                  cursor: 'pointer',
-                }}
-                title={`${p.label}: ${p.value}${showMessages ? ' сообщ.' : ' польз.'}`}
-              />
-            ))}
+            {dataPoints.map((p, i) => {
+              const percentOfTotal = totalSum > 0 ? ((p.value / totalSum) * 100).toFixed(1) : '0';
+              return (
+                <div
+                  key={i}
+                  style={{
+                    position: 'absolute',
+                    left: `${p.x}%`,
+                    top: `${p.y}%`,
+                    transform: 'translate(-50%, -50%)',
+                    width: p.isNow ? '8px' : '5px',
+                    height: p.isNow ? '8px' : '5px',
+                    borderRadius: '50%',
+                    background: p.isNow ? '#22c55e' : color,
+                    cursor: 'pointer',
+                  }}
+                  title={`${p.label}: ${p.value}${showMessages ? ' сообщ.' : ' польз.'} (${percentOfTotal}% от общего)`}
+                />
+              );
+            })}
           </div>
         </div>
         <div
@@ -324,13 +403,24 @@ export default function AnalyticsPage() {
 
     const showLabels = dataPoints.length <= 14;
     const labelInterval = Math.ceil(dataPoints.length / 7);
+    const totalSum = dataPoints.reduce((sum, p) => sum + p.value, 0);
 
     return (
-      <div style={{ height: '220px' }}>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-          Макс: {maxVal}
+      <div style={{ height: '240px' }}>
+        {/* Header with max and total */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontSize: '11px',
+            color: 'var(--text-muted)',
+            marginBottom: '8px',
+          }}
+        >
+          <span>Макс: {maxVal}</span>
+          <span>Всего: {totalSum}</span>
         </div>
-        <div style={{ display: 'flex', height: '160px' }}>
+        <div style={{ display: 'flex', height: '180px' }}>
           {/* Y-axis with values */}
           <div
             style={{
@@ -379,32 +469,52 @@ export default function AnalyticsPage() {
               />
             ))}
             {/* Bars */}
-            {dataPoints.map((p, i) => (
-              <div
-                key={i}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  position: 'relative',
-                  zIndex: 1,
-                }}
-                title={`${p.label}: ${p.value}`}
-              >
+            {dataPoints.map((p, i) => {
+              const heightPercent = maxVal > 0 ? (p.value / maxVal) * 100 : 0;
+              const percentOfTotal = totalSum > 0 ? ((p.value / totalSum) * 100).toFixed(1) : '0';
+              return (
                 <div
+                  key={i}
                   style={{
-                    width: '100%',
-                    maxWidth: '24px',
-                    height: `${maxVal > 0 ? (p.value / maxVal) * 100 : 0}%`,
-                    background: p.color || color,
-                    borderRadius: '2px 2px 0 0',
-                    minHeight: p.value > 0 ? '2px' : '0',
-                    transition: 'all 0.3s',
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    height: '100%',
+                    justifyContent: 'flex-end',
+                    position: 'relative',
+                    zIndex: 1,
                   }}
-                />
-              </div>
-            ))}
+                  title={`${p.label}: ${p.value} (${percentOfTotal}% от общего)`}
+                >
+                  {/* Value label above bar */}
+                  {p.value > 0 && heightPercent > 15 && dataPoints.length <= 24 && (
+                    <div
+                      style={{
+                        fontSize: '9px',
+                        color: 'var(--text)',
+                        fontWeight: 600,
+                        marginBottom: '2px',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {p.value}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '24px',
+                      height: `${Math.max(heightPercent, p.value > 0 ? 2 : 0)}%`,
+                      background: p.color || color,
+                      borderRadius: '2px 2px 0 0',
+                      minHeight: p.value > 0 ? '2px' : '0',
+                      transition: 'all 0.3s',
+                    }}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
         {/* X-axis labels */}
@@ -979,527 +1089,1154 @@ export default function AnalyticsPage() {
         </div>
       }
     >
-      {/* Filters Panel */}
-      {showFilters && (
-        <Card style={{ marginBottom: '20px', padding: '16px' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
-            {/* Period Selection */}
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '12px',
-                  color: 'var(--text-muted)',
-                  marginBottom: '6px',
-                }}
-              >
-                Период
-              </label>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                {(['7d', '30d', '90d', 'custom'] as PeriodType[]).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setPeriod(p)}
-                    style={{
-                      padding: '6px 12px',
-                      background: period === p ? 'var(--primary)' : 'var(--surface)',
-                      color: period === p ? 'var(--text-on-primary)' : 'inherit',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                    }}
-                  >
-                    {p === '7d'
-                      ? '7 дней'
-                      : p === '30d'
-                        ? '30 дней'
-                        : p === '90d'
-                          ? '90 дней'
-                          : 'Свой'}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom Date Range */}
-            {period === 'custom' && (
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: '12px',
-                      color: 'var(--text-muted)',
-                      marginBottom: '6px',
-                    }}
-                  >
-                    От
-                  </label>
-                  <input
-                    type="date"
-                    value={customDateFrom}
-                    onChange={e => setCustomDateFrom(e.target.value)}
-                    style={{
-                      padding: '6px 10px',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                      background: 'var(--surface)',
-                      fontSize: '12px',
-                    }}
-                  />
-                </div>
-                <div>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: '12px',
-                      color: 'var(--text-muted)',
-                      marginBottom: '6px',
-                    }}
-                  >
-                    До
-                  </label>
-                  <input
-                    type="date"
-                    value={customDateTo}
-                    onChange={e => setCustomDateTo(e.target.value)}
-                    style={{
-                      padding: '6px 10px',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                      background: 'var(--surface)',
-                      fontSize: '12px',
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Bot Selection */}
-            <div>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '12px',
-                  color: 'var(--text-muted)',
-                  marginBottom: '6px',
-                }}
-              >
-                Бот
-              </label>
-              <select
-                value={selectedBotId || ''}
-                onChange={e =>
-                  setSelectedBotId(e.target.value ? Number(e.target.value) : undefined)
-                }
-                style={{
-                  padding: '6px 10px',
-                  border: '1px solid var(--border)',
-                  borderRadius: '4px',
-                  background: 'var(--surface)',
-                  fontSize: '12px',
-                  minWidth: '150px',
-                }}
-              >
-                <option value="">Все боты</option>
-                {bots.map(bot => (
-                  <option key={bot.id} value={bot.id}>
-                    {bot.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Widgets Toggle */}
-            <div style={{ marginLeft: 'auto' }}>
-              <label
-                style={{
-                  display: 'block',
-                  fontSize: '12px',
-                  color: 'var(--text-muted)',
-                  marginBottom: '6px',
-                }}
-              >
-                Виджеты
-              </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                {widgets.map(w => (
-                  <button
-                    key={w.id}
-                    onClick={() => toggleWidget(w.id)}
-                    style={{
-                      padding: '4px 8px',
-                      background: w.visible ? 'var(--primary)' : 'var(--surface)',
-                      color: w.visible ? 'var(--text-on-primary)' : 'var(--text-muted)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '10px',
-                    }}
-                  >
-                    {w.title.length > 15 ? w.title.slice(0, 15) + '...' : w.title}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* KPI Cards */}
+      {/* Main Tabs */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '16px',
+          display: 'flex',
+          gap: '0',
           marginBottom: '24px',
+          borderBottom: '2px solid var(--border)',
         }}
       >
-        <Card style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #22c55e20, #22c55e40)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Activity size={22} style={{ color: '#22c55e' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                Онлайн сейчас
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: 700 }}>{marketing?.online_now || 0}</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #3b82f620, #3b82f640)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Users size={22} style={{ color: '#3b82f6' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                Всего пользователей
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: 700 }}>
-                {marketing?.retention.total_users || 0}
-              </div>
-              <GrowthIndicator
-                value={marketing?.growth.users_growth || 0}
-                label="vs пред. период"
-              />
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #10b98120, #10b98140)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <UserPlus size={22} style={{ color: '#10b981' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                Новых за период
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: 700 }}>
-                {marketing?.growth.current_new_users || 0}
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                было: {marketing?.growth.previous_new_users || 0}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #f59e0b20, #f59e0b40)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <MessageCircle size={22} style={{ color: '#f59e0b' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                Сообщений
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: 700 }}>
-                {marketing?.messages.total || 0}
-              </div>
-              <GrowthIndicator
-                value={marketing?.growth.messages_growth || 0}
-                label="vs пред. период"
-              />
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #8b5cf620, #8b5cf640)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Target size={22} style={{ color: '#8b5cf6' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                Retention 7д
-              </div>
-              <div style={{ fontSize: '24px', fontWeight: 700 }}>
-                {marketing?.retention.retention_7d || 0}%
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                30д: {marketing?.retention.retention_30d || 0}%
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div
-              style={{
-                width: '44px',
-                height: '44px',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #ec489920, #ec489940)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Zap size={22} style={{ color: '#ec4899' }} />
-            </div>
-            <div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}>
-                Пик активности
-              </div>
-              <div style={{ fontSize: '18px', fontWeight: 700 }}>
-                {marketing?.peaks.peak_hour || 'N/A'}
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                {marketing?.peaks.peak_hour_users || 0} польз.
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Charts Grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-          gap: '20px',
-        }}
-      >
-        {widgets
-          .filter(w => w.visible)
-          .map(widget => (
-            <Card key={widget.id} style={{ padding: '16px' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '12px',
-                }}
-              >
-                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{widget.title}</h3>
-                <div style={{ display: 'flex', gap: '4px' }}>
-                  {(['bar', 'line', 'pie'] as ChartType[]).map(type => (
-                    <button
-                      key={type}
-                      onClick={() => changeWidgetType(widget.id, type)}
-                      style={{
-                        padding: '4px 8px',
-                        background: widget.type === type ? 'var(--primary)' : 'transparent',
-                        color:
-                          widget.type === type ? 'var(--text-on-primary)' : 'var(--text-muted)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                      }}
-                      title={type === 'bar' ? 'Столбцы' : type === 'line' ? 'Линия' : 'Круговая'}
-                    >
-                      {type === 'bar' && <BarChart3 size={14} />}
-                      {type === 'line' && <LineChart size={14} />}
-                      {type === 'pie' && <PieChart size={14} />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {renderWidget(widget)}
-            </Card>
-          ))}
-      </div>
-
-      {/* Summary Stats */}
-      <Card style={{ marginTop: '24px', padding: '20px' }}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 600 }}>
-          Сводная статистика
-        </h3>
-        <div
+        <button
+          onClick={() => setMainTab('overview')}
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: '16px',
-          }}
-        >
-          <div style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              Сообщ. на пользователя
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: 600 }}>
-              {marketing?.messages.avg_per_user || 0}
-            </div>
-          </div>
-          <div style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              Возвращающиеся
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: 600 }}>
-              {marketing?.retention.returning_users || 0}{' '}
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                ({marketing?.retention.return_rate || 0}%)
-              </span>
-            </div>
-          </div>
-          <div style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              Пиковый день
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: 600 }}>
-              {marketing?.peaks.peak_day || 'N/A'}{' '}
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                ({marketing?.peaks.peak_day_users || 0} польз.)
-              </span>
-            </div>
-          </div>
-          <div style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              Входящих сообщений
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: 600 }}>
-              {marketing?.messages.incoming || 0}
-            </div>
-          </div>
-          <div style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              Исходящих сообщений
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: 600 }}>
-              {marketing?.messages.outgoing || 0}
-            </div>
-          </div>
-          <div style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              Активных за 7 дней
-            </div>
-            <div style={{ fontSize: '20px', fontWeight: 600 }}>
-              {marketing?.retention.active_7d || 0}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Help Text */}
-      <div
-        style={{
-          marginTop: '20px',
-          padding: '16px',
-          background: 'var(--surface)',
-          borderRadius: '8px',
-          border: '1px solid var(--border)',
-        }}
-      >
-        <h4
-          style={{
-            margin: '0 0 8px 0',
-            fontSize: '13px',
+            padding: '14px 32px',
+            background: 'transparent',
+            border: 'none',
+            borderBottom:
+              mainTab === 'overview' ? '2px solid var(--primary)' : '2px solid transparent',
+            marginBottom: '-2px',
+            color: mainTab === 'overview' ? 'var(--primary)' : 'var(--text-muted)',
+            fontSize: '15px',
             fontWeight: 600,
+            cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '8px',
+            transition: 'all 0.2s',
           }}
         >
-          <TrendingUp size={16} style={{ color: 'var(--primary)' }} /> Как использовать для
-          маркетинга
-        </h4>
-        <ul
+          <BarChart3 size={18} />
+          Обзор
+        </button>
+        <button
+          onClick={() => setMainTab('users')}
           style={{
-            margin: 0,
-            paddingLeft: '20px',
-            fontSize: '12px',
-            color: 'var(--text-muted)',
-            lineHeight: 1.6,
+            padding: '14px 32px',
+            background: 'transparent',
+            border: 'none',
+            borderBottom:
+              mainTab === 'users' ? '2px solid var(--primary)' : '2px solid transparent',
+            marginBottom: '-2px',
+            color: mainTab === 'users' ? 'var(--primary)' : 'var(--text-muted)',
+            fontSize: '15px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.2s',
           }}
         >
-          <li>
-            <strong>Пики активности:</strong> Запускайте рекламные кампании за 1-2 часа до пика для
-            максимального охвата.
-          </li>
-          <li>
-            <strong>Новые пользователи:</strong> Отслеживайте эффективность рекламы — рост новых
-            пользователей = успешная кампания.
-          </li>
-          <li>
-            <strong>Retention:</strong> Если retention падает — пересмотрите контент бота и цепочки
-            сообщений.
-          </li>
-          <li>
-            <strong>Сообщения на пользователя:</strong> Чем выше — тем более вовлечённая аудитория.
-          </li>
-          <li>
-            <strong>Фильтр по ботам:</strong> Сравнивайте эффективность разных ботов и кампаний.
-          </li>
-        </ul>
+          <Users size={18} />
+          Пользователи
+        </button>
       </div>
+      {/* Overview Tab Content */}
+      {mainTab === 'overview' && (
+        <>
+          {/* Filters Panel */}
+          {showFilters && (
+            <Card style={{ marginBottom: '20px', padding: '16px' }}>
+              <div
+                style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}
+              >
+                {/* Period Selection */}
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      color: 'var(--text-muted)',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Период
+                  </label>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    {(['7d', '30d', '90d', 'custom'] as PeriodType[]).map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setPeriod(p)}
+                        style={{
+                          padding: '6px 12px',
+                          background: period === p ? 'var(--primary)' : 'var(--surface)',
+                          color: period === p ? 'var(--text-on-primary)' : 'inherit',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                        }}
+                      >
+                        {p === '7d'
+                          ? '7 дней'
+                          : p === '30d'
+                            ? '30 дней'
+                            : p === '90d'
+                              ? '90 дней'
+                              : 'Свой'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Custom Date Range */}
+                {period === 'custom' && (
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: '12px',
+                          color: 'var(--text-muted)',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        От
+                      </label>
+                      <input
+                        type="date"
+                        value={customDateFrom}
+                        onChange={e => setCustomDateFrom(e.target.value)}
+                        style={{
+                          padding: '6px 10px',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          background: 'var(--surface)',
+                          fontSize: '12px',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: '12px',
+                          color: 'var(--text-muted)',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        До
+                      </label>
+                      <input
+                        type="date"
+                        value={customDateTo}
+                        onChange={e => setCustomDateTo(e.target.value)}
+                        style={{
+                          padding: '6px 10px',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          background: 'var(--surface)',
+                          fontSize: '12px',
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Bot Selection */}
+                <div>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      color: 'var(--text-muted)',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Бот
+                  </label>
+                  <select
+                    value={selectedBotId || ''}
+                    onChange={e =>
+                      setSelectedBotId(e.target.value ? Number(e.target.value) : undefined)
+                    }
+                    style={{
+                      padding: '6px 10px',
+                      border: '1px solid var(--border)',
+                      borderRadius: '4px',
+                      background: 'var(--surface)',
+                      fontSize: '12px',
+                      minWidth: '150px',
+                    }}
+                  >
+                    <option value="">Все боты</option>
+                    {bots.map(bot => (
+                      <option key={bot.id} value={bot.id}>
+                        {bot.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Widgets Toggle */}
+                <div style={{ marginLeft: 'auto' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      color: 'var(--text-muted)',
+                      marginBottom: '6px',
+                    }}
+                  >
+                    Виджеты
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    {widgets.map(w => (
+                      <button
+                        key={w.id}
+                        onClick={() => toggleWidget(w.id)}
+                        style={{
+                          padding: '4px 8px',
+                          background: w.visible ? 'var(--primary)' : 'var(--surface)',
+                          color: w.visible ? 'var(--text-on-primary)' : 'var(--text-muted)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '10px',
+                        }}
+                      >
+                        {w.title.length > 15 ? w.title.slice(0, 15) + '...' : w.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* KPI Cards */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '16px',
+              marginBottom: '24px',
+            }}
+          >
+            <Card style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #22c55e20, #22c55e40)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Activity size={22} style={{ color: '#22c55e' }} />
+                </div>
+                <div>
+                  <div
+                    style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}
+                  >
+                    Онлайн сейчас
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 700 }}>
+                    {marketing?.online_now || 0}
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #3b82f620, #3b82f640)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Users size={22} style={{ color: '#3b82f6' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}
+                  >
+                    Всего пользователей
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 700 }}>
+                    {marketing?.retention.total_users || 0}
+                  </div>
+                  <GrowthIndicator
+                    value={marketing?.growth.users_growth || 0}
+                    label="vs пред. период"
+                  />
+                </div>
+              </div>
+            </Card>
+
+            <Card style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #10b98120, #10b98140)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <UserPlus size={22} style={{ color: '#10b981' }} />
+                </div>
+                <div>
+                  <div
+                    style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}
+                  >
+                    Новых за период
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 700 }}>
+                    {marketing?.growth.current_new_users || 0}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    было: {marketing?.growth.previous_new_users || 0}
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #f59e0b20, #f59e0b40)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <MessageCircle size={22} style={{ color: '#f59e0b' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div
+                    style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}
+                  >
+                    Сообщений
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 700 }}>
+                    {marketing?.messages.total || 0}
+                  </div>
+                  <GrowthIndicator
+                    value={marketing?.growth.messages_growth || 0}
+                    label="vs пред. период"
+                  />
+                </div>
+              </div>
+            </Card>
+
+            <Card style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #8b5cf620, #8b5cf640)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Target size={22} style={{ color: '#8b5cf6' }} />
+                </div>
+                <div>
+                  <div
+                    style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}
+                  >
+                    Retention 7д
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 700 }}>
+                    {marketing?.retention.retention_7d || 0}%
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    30д: {marketing?.retention.retention_30d || 0}%
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #ec489920, #ec489940)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Zap size={22} style={{ color: '#ec4899' }} />
+                </div>
+                <div>
+                  <div
+                    style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '2px' }}
+                  >
+                    Пик активности
+                  </div>
+                  <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                    {marketing?.peaks.peak_hour || 'N/A'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {marketing?.peaks.peak_hour_users || 0} польз.
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Charts Grid */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+              gap: '20px',
+            }}
+          >
+            {widgets
+              .filter(w => w.visible)
+              .map(widget => (
+                <Card key={widget.id} style={{ padding: '16px' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>{widget.title}</h3>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {(['bar', 'line', 'pie'] as ChartType[]).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => changeWidgetType(widget.id, type)}
+                          style={{
+                            padding: '4px 8px',
+                            background: widget.type === type ? 'var(--primary)' : 'transparent',
+                            color:
+                              widget.type === type ? 'var(--text-on-primary)' : 'var(--text-muted)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                          title={
+                            type === 'bar' ? 'Столбцы' : type === 'line' ? 'Линия' : 'Круговая'
+                          }
+                        >
+                          {type === 'bar' && <BarChart3 size={14} />}
+                          {type === 'line' && <LineChart size={14} />}
+                          {type === 'pie' && <PieChart size={14} />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {renderWidget(widget)}
+                </Card>
+              ))}
+          </div>
+
+          {/* Summary Stats */}
+          <Card style={{ marginTop: '24px', padding: '20px' }}>
+            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: 600 }}>
+              Сводная статистика
+            </h3>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '16px',
+              }}
+            >
+              <div
+                style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}
+              >
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Сообщ. на пользователя
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 600 }}>
+                  {marketing?.messages.avg_per_user || 0}
+                </div>
+              </div>
+              <div
+                style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}
+              >
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Возвращающиеся
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 600 }}>
+                  {marketing?.retention.returning_users || 0}{' '}
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    ({marketing?.retention.return_rate || 0}%)
+                  </span>
+                </div>
+              </div>
+              <div
+                style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}
+              >
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Пиковый день
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 600 }}>
+                  {marketing?.peaks.peak_day || 'N/A'}{' '}
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    ({marketing?.peaks.peak_day_users || 0} польз.)
+                  </span>
+                </div>
+              </div>
+              <div
+                style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}
+              >
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Входящих сообщений
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 600 }}>
+                  {marketing?.messages.incoming || 0}
+                </div>
+              </div>
+              <div
+                style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}
+              >
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Исходящих сообщений
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 600 }}>
+                  {marketing?.messages.outgoing || 0}
+                </div>
+              </div>
+              <div
+                style={{ padding: '12px', background: 'var(--surface-hover)', borderRadius: '8px' }}
+              >
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                  Активных за 7 дней
+                </div>
+                <div style={{ fontSize: '20px', fontWeight: 600 }}>
+                  {marketing?.retention.active_7d || 0}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Help Text */}
+          <div
+            style={{
+              marginTop: '20px',
+              padding: '16px',
+              background: 'var(--surface)',
+              borderRadius: '8px',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <h4
+              style={{
+                margin: '0 0 8px 0',
+                fontSize: '13px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <TrendingUp size={16} style={{ color: 'var(--primary)' }} /> Как использовать для
+              маркетинга
+            </h4>
+            <ul
+              style={{
+                margin: 0,
+                paddingLeft: '20px',
+                fontSize: '12px',
+                color: 'var(--text-muted)',
+                lineHeight: 1.6,
+              }}
+            >
+              <li>
+                <strong>Пики активности:</strong> Запускайте рекламные кампании за 1-2 часа до пика
+                для максимального охвата.
+              </li>
+              <li>
+                <strong>Новые пользователи:</strong> Отслеживайте эффективность рекламы — рост новых
+                пользователей = успешная кампания.
+              </li>
+              <li>
+                <strong>Retention:</strong> Если retention падает — пересмотрите контент бота и
+                цепочки сообщений.
+              </li>
+              <li>
+                <strong>Сообщения на пользователя:</strong> Чем выше — тем более вовлечённая
+                аудитория.
+              </li>
+              <li>
+                <strong>Фильтр по ботам:</strong> Сравнивайте эффективность разных ботов и кампаний.
+              </li>
+            </ul>
+          </div>
+        </>
+      )}{' '}
+      {/* End of Overview Tab */}
+      {/* Users Tab Content */}
+      {mainTab === 'users' && (
+        <>
+          {/* Filters Card */}
+          <Card style={{ marginBottom: '24px' }}>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}
+            >
+              <Users size={20} style={{ color: 'var(--primary)' }} />
+              <h3 style={{ fontSize: '18px', fontWeight: 600, margin: 0, color: 'var(--text)' }}>
+                Пользователи ботов
+              </h3>
+              <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
+                Всего: {usersTotal}
+              </span>
+            </div>
+
+            {/* Search and Filters */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+              {/* Search */}
+              <div style={{ position: 'relative', flex: '1', minWidth: '200px' }}>
+                <Search
+                  size={18}
+                  style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder="Поиск по имени, email, телефону..."
+                  value={usersSearch}
+                  onChange={e => setUsersSearch(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleUsersSearch()}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 40px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+              <button
+                onClick={handleUsersSearch}
+                style={{
+                  padding: '10px 20px',
+                  background: 'var(--primary)',
+                  color: 'var(--text-on-primary)',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Найти
+              </button>
+            </div>
+
+            {/* Filter Dropdowns */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+              {/* Bot Filter */}
+              {botUsersFilters && botUsersFilters.bots.length > 0 && (
+                <select
+                  value={usersBotFilter || ''}
+                  onChange={e => {
+                    setUsersBotFilter(e.target.value ? Number(e.target.value) : undefined);
+                    setUsersPage(1);
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    minWidth: '150px',
+                  }}
+                >
+                  <option value="">Все боты</option>
+                  {botUsersFilters.bots.map(bot => (
+                    <option key={bot.id} value={bot.id}>
+                      {bot.title}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Status Filter */}
+              {botUsersFilters && botUsersFilters.statuses.length > 0 && (
+                <select
+                  value={usersStatusFilter}
+                  onChange={e => {
+                    setUsersStatusFilter(e.target.value);
+                    setUsersPage(1);
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    minWidth: '120px',
+                  }}
+                >
+                  <option value="">Все статусы</option>
+                  {botUsersFilters.statuses.map(s => (
+                    <option key={s} value={s}>
+                      {s === 'active'
+                        ? 'Активен'
+                        : s === 'unsubscribed'
+                          ? 'Отписан'
+                          : s === 'banned'
+                            ? 'Заблокирован'
+                            : s}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Channel Filter */}
+              {botUsersFilters && botUsersFilters.channels.length > 0 && (
+                <select
+                  value={usersChannelFilter}
+                  onChange={e => {
+                    setUsersChannelFilter(e.target.value);
+                    setUsersPage(1);
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    minWidth: '120px',
+                  }}
+                >
+                  <option value="">Все каналы</option>
+                  {botUsersFilters.channels.map(c => (
+                    <option key={c} value={c}>
+                      {c === 'telegram' ? 'Telegram' : c}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* UTM Source Filter */}
+              {botUsersFilters && botUsersFilters.utm_sources.length > 0 && (
+                <select
+                  value={usersUtmFilter}
+                  onChange={e => {
+                    setUsersUtmFilter(e.target.value);
+                    setUsersPage(1);
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    color: 'var(--text)',
+                    fontSize: '13px',
+                    minWidth: '120px',
+                  }}
+                >
+                  <option value="">Все UTM</option>
+                  {botUsersFilters.utm_sources.map(u => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Sort */}
+              <select
+                value={`${usersSortBy}-${usersSortOrder}`}
+                onChange={e => {
+                  const [field, order] = e.target.value.split('-') as [
+                    'created_at' | 'last_interaction_at' | 'name',
+                    'asc' | 'desc',
+                  ];
+                  setUsersSortBy(field);
+                  setUsersSortOrder(order);
+                  setUsersPage(1);
+                }}
+                style={{
+                  padding: '8px 12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  color: 'var(--text)',
+                  fontSize: '13px',
+                  minWidth: '180px',
+                }}
+              >
+                <option value="last_interaction_at-desc">Последняя активность ↓</option>
+                <option value="last_interaction_at-asc">Последняя активность ↑</option>
+                <option value="created_at-desc">Дата регистрации ↓</option>
+                <option value="created_at-asc">Дата регистрации ↑</option>
+                <option value="name-asc">Имя А-Я</option>
+                <option value="name-desc">Имя Я-А</option>
+              </select>
+            </div>
+          </Card>
+
+          {/* Users List */}
+          {usersLoading ? (
+            <Card>
+              <div style={{ textAlign: 'center', padding: '60px' }}>
+                <RefreshCw
+                  size={40}
+                  style={{ color: 'var(--primary)', animation: 'spin 1s linear infinite' }}
+                />
+                <p style={{ marginTop: '16px', color: 'var(--text-muted)' }}>
+                  Загрузка пользователей...
+                </p>
+              </div>
+            </Card>
+          ) : botUsers.length === 0 ? (
+            <Card>
+              <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
+                <Users size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                <p style={{ fontSize: '16px', marginBottom: '8px' }}>Пользователей не найдено</p>
+                <p style={{ fontSize: '13px' }}>Попробуйте изменить фильтры или поисковый запрос</p>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* Users Table */}
+              <Card style={{ overflow: 'hidden', marginBottom: '16px' }}>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                    <thead>
+                      <tr
+                        style={{
+                          background: 'var(--surface)',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <th
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontWeight: 600,
+                            color: 'var(--text)',
+                          }}
+                        >
+                          Пользователь
+                        </th>
+                        <th
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontWeight: 600,
+                            color: 'var(--text)',
+                          }}
+                        >
+                          Бот
+                        </th>
+                        <th
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontWeight: 600,
+                            color: 'var(--text)',
+                          }}
+                        >
+                          Статус
+                        </th>
+                        <th
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontWeight: 600,
+                            color: 'var(--text)',
+                          }}
+                        >
+                          Контакты
+                        </th>
+                        <th
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: 'center',
+                            fontWeight: 600,
+                            color: 'var(--text)',
+                          }}
+                        >
+                          Сообщений
+                        </th>
+                        <th
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontWeight: 600,
+                            color: 'var(--text)',
+                          }}
+                        >
+                          UTM/Источник
+                        </th>
+                        <th
+                          style={{
+                            padding: '12px 16px',
+                            textAlign: 'left',
+                            fontWeight: 600,
+                            color: 'var(--text)',
+                          }}
+                        >
+                          Последняя активность
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {botUsers.map(user => (
+                        <tr key={user.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div
+                                style={{
+                                  width: '36px',
+                                  height: '36px',
+                                  borderRadius: '50%',
+                                  background: 'var(--primary-bg)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                }}
+                              >
+                                <Users size={18} style={{ color: 'var(--primary)' }} />
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 500, color: 'var(--text)' }}>
+                                  {user.name || 'Без имени'}
+                                </div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                  ID: {user.telegram_user_id}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{ fontSize: '13px', color: 'var(--text)' }}>
+                              {user.bot_title}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span
+                              style={{
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                background:
+                                  user.status === 'active'
+                                    ? 'rgba(34, 197, 94, 0.1)'
+                                    : user.status === 'banned'
+                                      ? 'rgba(239, 68, 68, 0.1)'
+                                      : 'rgba(148, 163, 184, 0.1)',
+                                color:
+                                  user.status === 'active'
+                                    ? '#22c55e'
+                                    : user.status === 'banned'
+                                      ? '#ef4444'
+                                      : '#94a3b8',
+                              }}
+                            >
+                              {user.status === 'active'
+                                ? 'Активен'
+                                : user.status === 'unsubscribed'
+                                  ? 'Отписан'
+                                  : user.status === 'banned'
+                                    ? 'Заблокирован'
+                                    : user.status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                                fontSize: '12px',
+                              }}
+                            >
+                              {user.email && (
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    color: 'var(--text-muted)',
+                                  }}
+                                >
+                                  <Mail size={12} /> {user.email}
+                                </div>
+                              )}
+                              {user.phone && (
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    color: 'var(--text-muted)',
+                                  }}
+                                >
+                                  <Phone size={12} /> {user.phone}
+                                </div>
+                              )}
+                              {!user.email && !user.phone && (
+                                <span style={{ color: 'var(--text-muted)' }}>—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text)' }}>
+                              {user.messages_count}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '4px',
+                                fontSize: '12px',
+                              }}
+                            >
+                              {user.utm_source && (
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '4px',
+                                    color: 'var(--text-muted)',
+                                  }}
+                                >
+                                  <Link2 size={12} /> {user.utm_source}
+                                </div>
+                              )}
+                              {user.entry_point && (
+                                <div style={{ color: 'var(--text-muted)' }}>
+                                  Точка: {user.entry_point}
+                                </div>
+                              )}
+                              {!user.utm_source && !user.entry_point && (
+                                <span style={{ color: 'var(--text-muted)' }}>—</span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                              {user.last_interaction_at
+                                ? new Date(user.last_interaction_at).toLocaleString('ru-RU', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : '—'}
+                            </div>
+                            <div
+                              style={{ fontSize: '11px', color: 'var(--text-muted)', opacity: 0.7 }}
+                            >
+                              Создан:{' '}
+                              {user.created_at
+                                ? new Date(user.created_at).toLocaleDateString('ru-RU')
+                                : '—'}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Pagination */}
+              {usersTotalPages > 1 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <button
+                    onClick={() => setUsersPage(p => Math.max(1, p - 1))}
+                    disabled={usersPage === 1}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      cursor: usersPage === 1 ? 'not-allowed' : 'pointer',
+                      opacity: usersPage === 1 ? 0.5 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <span style={{ fontSize: '14px', color: 'var(--text)' }}>
+                    Страница {usersPage} из {usersTotalPages}
+                  </span>
+                  <button
+                    onClick={() => setUsersPage(p => Math.min(usersTotalPages, p + 1))}
+                    disabled={usersPage === usersTotalPages}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      cursor: usersPage === usersTotalPages ? 'not-allowed' : 'pointer',
+                      opacity: usersPage === usersTotalPages ? 0.5 : 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}{' '}
+      {/* End of Users Tab */}
     </DashboardPage>
   );
 }

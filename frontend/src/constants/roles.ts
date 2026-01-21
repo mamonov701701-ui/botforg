@@ -47,6 +47,7 @@ export const SECTION_ACCESS = {
   balance: ['owner', 'admin'],
   analytics: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer'],
   team: ['owner', 'admin'],
+  messages: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer'], // Сообщения доступны всем
   bf_team: ['owner'], // BF команда - только для владельца платформы
   settings: ['owner', 'admin', 'developer'],
 } as const;

@@ -479,3 +479,208 @@ def _empty_marketing_response(days: int):
         "growth": {"users_growth": 0, "messages_growth": 0, "current_new_users": 0, "previous_new_users": 0},
         "online_now": 0,
     }
+
+
+@router.get("/bot-users")
+async def get_bot_users(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    bot_id: Optional[int] = Query(default=None, description="Фильтр по конкретному боту"),
+    status: Optional[str] = Query(default=None, description="Фильтр по статусу: active, unsubscribed, banned, inactive"),
+    channel: Optional[str] = Query(default=None, description="Фильтр по каналу: telegram, vk, whatsapp, webchat"),
+    search: Optional[str] = Query(default=None, description="Поиск по имени, email, телефону, telegram_user_id"),
+    utm_source: Optional[str] = Query(default=None, description="Фильтр по UTM source"),
+    utm_campaign: Optional[str] = Query(default=None, description="Фильтр по UTM campaign"),
+    entry_point: Optional[str] = Query(default=None, description="Фильтр по точке входа"),
+    sort_by: Optional[str] = Query(default="last_interaction_at", description="Сортировка: created_at, last_interaction_at, name"),
+    sort_order: Optional[str] = Query(default="desc", description="Порядок: asc, desc"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Получить список пользователей ботов текущего владельца с фильтрацией и пагинацией.
+    """
+    from backend.models.bot import Bot, BotInstance
+    from backend.models.bot_user_state import BotUserState
+    from backend.models.message import Message
+    from sqlalchemy import or_, case
+    
+    # Получаем ботов текущего пользователя
+    user_bots = db.query(Bot).filter(Bot.owner_id == current_user.id).all()
+    if not user_bots:
+        return {
+            "items": [],
+            "total": 0,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": 0,
+            "filters": {
+                "statuses": [],
+                "channels": [],
+                "utm_sources": [],
+                "entry_points": [],
+                "bots": [],
+            }
+        }
+    
+    # Получаем bot_instance_ids для фильтрации
+    bot_instance_ids = []
+    bot_id_to_title = {}
+    for bot in user_bots:
+        bot_instance = db.query(BotInstance).filter(
+            (BotInstance.token == bot.token) | (BotInstance.username == bot.username)
+        ).first()
+        if bot_instance:
+            bot_instance_ids.append(bot_instance.id)
+            bot_id_to_title[bot_instance.id] = bot.title
+    
+    if not bot_instance_ids:
+        return {
+            "items": [],
+            "total": 0,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": 0,
+            "filters": {
+                "statuses": [],
+                "channels": [],
+                "utm_sources": [],
+                "entry_points": [],
+                "bots": [{"id": b.id, "title": b.title} for b in user_bots],
+            }
+        }
+    
+    # Базовый запрос
+    query = db.query(BotUserState).filter(BotUserState.bot_id.in_(bot_instance_ids))
+    
+    # Фильтр по конкретному боту
+    if bot_id:
+        target_bot = db.query(Bot).filter(Bot.id == bot_id, Bot.owner_id == current_user.id).first()
+        if target_bot:
+            target_instance = db.query(BotInstance).filter(
+                (BotInstance.token == target_bot.token) | (BotInstance.username == target_bot.username)
+            ).first()
+            if target_instance:
+                query = query.filter(BotUserState.bot_id == target_instance.id)
+    
+    # Фильтры
+    if status:
+        query = query.filter(BotUserState.status == status)
+    if channel:
+        query = query.filter(BotUserState.channel == channel)
+    if utm_source:
+        query = query.filter(BotUserState.utm_source == utm_source)
+    if utm_campaign:
+        query = query.filter(BotUserState.utm_campaign == utm_campaign)
+    if entry_point:
+        query = query.filter(BotUserState.entry_point == entry_point)
+    
+    # Поиск
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(or_(
+            BotUserState.name.ilike(search_pattern),
+            BotUserState.email.ilike(search_pattern),
+            BotUserState.phone.ilike(search_pattern),
+            BotUserState.telegram_user_id.ilike(search_pattern),
+        ))
+    
+    # Получаем общее количество
+    total = query.count()
+    
+    # Сортировка
+    if sort_by == "created_at":
+        order_col = BotUserState.created_at
+    elif sort_by == "name":
+        order_col = BotUserState.name
+    else:
+        order_col = BotUserState.last_interaction_at
+    
+    if sort_order == "asc":
+        query = query.order_by(order_col.asc().nullslast())
+    else:
+        query = query.order_by(order_col.desc().nullsfirst())
+    
+    # Пагинация
+    offset = (page - 1) * page_size
+    users = query.offset(offset).limit(page_size).all()
+    
+    # Получаем количество сообщений для каждого пользователя
+    user_messages = {}
+    if users:
+        user_ids = [u.telegram_user_id for u in users]
+        # Получаем bot.id (не bot_instance.id) для Message
+        bot_ids = [b.id for b in user_bots]
+        
+        messages_counts = db.query(
+            Message.from_user_id,
+            func.count(Message.id).label('count')
+        ).filter(
+            Message.bot_id.in_(bot_ids),
+            Message.from_user_id.in_(user_ids),
+        ).group_by(Message.from_user_id).all()
+        
+        for mc in messages_counts:
+            user_messages[mc.from_user_id] = mc.count
+    
+    # Формируем результат
+    items = []
+    for u in users:
+        items.append({
+            "id": u.id,
+            "public_id": u.public_id,
+            "telegram_user_id": u.telegram_user_id,
+            "bot_id": u.bot_id,
+            "bot_title": bot_id_to_title.get(u.bot_id, "Неизвестный бот"),
+            "channel": u.channel,
+            "status": u.status,
+            "name": u.name,
+            "email": u.email,
+            "phone": u.phone,
+            "entry_point": u.entry_point,
+            "utm_source": u.utm_source,
+            "utm_campaign": u.utm_campaign,
+            "messages_count": user_messages.get(u.telegram_user_id, 0),
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "last_interaction_at": u.last_interaction_at.isoformat() if u.last_interaction_at else None,
+        })
+    
+    # Получаем уникальные значения для фильтров
+    all_users_query = db.query(BotUserState).filter(BotUserState.bot_id.in_(bot_instance_ids))
+    
+    statuses = db.query(BotUserState.status).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.status.isnot(None)
+    ).distinct().all()
+    
+    channels = db.query(BotUserState.channel).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.channel.isnot(None)
+    ).distinct().all()
+    
+    utm_sources_list = db.query(BotUserState.utm_source).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.utm_source.isnot(None)
+    ).distinct().all()
+    
+    entry_points_list = db.query(BotUserState.entry_point).filter(
+        BotUserState.bot_id.in_(bot_instance_ids),
+        BotUserState.entry_point.isnot(None)
+    ).distinct().all()
+    
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+        "filters": {
+            "statuses": [s[0] for s in statuses if s[0]],
+            "channels": [c[0] for c in channels if c[0]],
+            "utm_sources": [u[0] for u in utm_sources_list if u[0]],
+            "entry_points": [e[0] for e in entry_points_list if e[0]],
+            "bots": [{"id": b.id, "title": b.title} for b in user_bots],
+        }
+    }
