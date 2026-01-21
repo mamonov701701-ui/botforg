@@ -50,6 +50,13 @@ interface Widget {
 
 const defaultWidgets: Widget[] = [
   {
+    id: 'bots-stats',
+    title: 'Статистика ботов',
+    type: 'pie',
+    dataKey: 'bots_stats',
+    visible: true,
+  },
+  {
     id: 'hourly-users',
     title: 'Активность пользователей (24ч)',
     type: 'line',
@@ -100,7 +107,7 @@ const defaultWidgets: Widget[] = [
   },
   {
     id: 'messages-direction',
-    title: 'Входящие / Исходящие',
+    title: 'Входящие / Исходящие (за всё время)',
     type: 'pie',
     dataKey: 'messages_direction',
     visible: true,
@@ -605,6 +612,30 @@ export default function PlatformAnalyticsPage() {
     let content: React.ReactNode = null;
 
     switch (widget.dataKey) {
+      case 'bots_stats': {
+        const activeBots = data.summary.active_bots;
+        const inactiveBots = data.summary.total_bots - activeBots;
+        const segments = [
+          { label: 'Активные боты', value: activeBots, color: '#22c55e' },
+          { label: 'Неактивные боты', value: inactiveBots, color: '#64748b' },
+        ];
+        if (widget.type === 'pie') {
+          content = renderPieChart(segments);
+        } else {
+          const barData = convertToTimeSeriesData(segments);
+          const max = Math.max(...barData.map(p => p.value), 1);
+          if (widget.type === 'bar') {
+            content = renderBarChart(barData, max, '#22c55e');
+          } else {
+            content = renderLineChart(
+              barData.map((p, i) => ({ x: i, y: p.value, ...p })),
+              max,
+              '#22c55e'
+            );
+          }
+        }
+        break;
+      }
       case 'hourly_users': {
         const points = data.hourly.map((h, i) => ({
           x: i,
@@ -1047,6 +1078,45 @@ export default function PlatformAnalyticsPage() {
         )}
       </Card>
 
+      {/* Data explanation notice */}
+      {!loading && data && (
+        <Card
+          style={{
+            marginBottom: '16px',
+            padding: '12px 16px',
+            background: 'rgba(59, 130, 246, 0.1)',
+            border: '1px solid rgba(59, 130, 246, 0.2)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+            <Activity size={20} style={{ color: '#3b82f6', marginTop: '2px', flexShrink: 0 }} />
+            <div style={{ fontSize: '13px', color: 'var(--text)' }}>
+              <strong>Важно:</strong> KPI карточки показывают <strong>данные за всё время</strong>.
+              Графики и виджеты отображают активность только{' '}
+              <strong>
+                за выбранный период (
+                {period === '7d'
+                  ? '7'
+                  : period === '30d'
+                    ? '30'
+                    : period === '90d'
+                      ? '90'
+                      : 'указанный'}{' '}
+                дней)
+              </strong>
+              . Если боты не использовались в этот период — графики будут пустыми, но общие цифры
+              актуальны.
+              <br />
+              <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                Пользователей платформы: {data.summary.total_users} | Пользователей ботов за всё
+                время: {data.summary.total_bot_users} | Сообщений за всё время:{' '}
+                {data.summary.total_messages}
+              </span>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {loading ? (
         <Card>
           <div style={{ textAlign: 'center', padding: '60px' }}>
@@ -1081,7 +1151,7 @@ export default function PlatformAnalyticsPage() {
                 </div>
                 <div>
                   <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-                    Пользователей
+                    Пользователей платформы
                   </p>
                   <p
                     style={{
@@ -1092,6 +1162,9 @@ export default function PlatformAnalyticsPage() {
                     }}
                   >
                     {data.summary.total_users}
+                  </p>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
+                    (зарегистрированы на BotForg)
                   </p>
                 </div>
               </div>
@@ -1181,6 +1254,9 @@ export default function PlatformAnalyticsPage() {
                   >
                     {data.summary.total_bot_users}
                   </p>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
+                    (Telegram юзеры, писавшие ботам)
+                  </p>
                 </div>
               </div>
             </Card>
@@ -1198,7 +1274,7 @@ export default function PlatformAnalyticsPage() {
                 </div>
                 <div>
                   <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
-                    Сообщений
+                    Сообщений (всего)
                   </p>
                   <p
                     style={{
@@ -1209,6 +1285,9 @@ export default function PlatformAnalyticsPage() {
                     }}
                   >
                     {data.summary.total_messages}
+                  </p>
+                  <p style={{ fontSize: '10px', color: 'var(--text-muted)', margin: 0 }}>
+                    За период: {data.messages.total}
                   </p>
                 </div>
               </div>
