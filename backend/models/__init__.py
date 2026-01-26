@@ -31,6 +31,10 @@ from backend.models.chat import (
     ChatMessage, MessageReaction, BlockedUser,
     FriendshipStatus, UserOnlineStatus, MessageType, ChatRoomType
 )
+from backend.models.market import (
+    MarketItem, MarketOrder, OrderProposal, FreelancerProfile, MarketReview,
+    MarketItemType, MarketOrderStatus
+)
 
 __all__ = [
     "User",
@@ -76,4 +80,11 @@ __all__ = [
     "UserOnlineStatus",
     "MessageType",
     "ChatRoomType",
+    "MarketItem",
+    "MarketOrder",
+    "OrderProposal",
+    "FreelancerProfile",
+    "MarketReview",
+    "MarketItemType",
+    "MarketOrderStatus",
 ]

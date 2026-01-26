@@ -1,0 +1,875 @@
+"""
+Marketplace Router for BotForg
+Provides endpoints for marketplace: items, orders, freelancers, reviews
+"""
+import logging
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Optional, List, Tuple
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_, func, desc, asc
+
+from backend.dependencies.auth import get_current_user
+from backend.dependencies.auth_optional import get_current_user_optional
+from backend.database import get_db
+from backend.models.user import User
+from backend.models.market import (
+    MarketItem, MarketOrder, OrderProposal, FreelancerProfile, MarketReview,
+    MarketItemType, MarketOrderStatus
+)
+from backend.models.bot import Bot
+from backend.models.scenario import Scenario
+from backend.schemas.market import (
+    MarketItemCreate, MarketItemUpdate, MarketItemOut, MarketItemDetailOut,
+    MarketOrderCreate, MarketOrderUpdate, MarketOrderOut, MarketOrderDetailOut,
+    OrderProposalCreate, OrderProposalOut,
+    FreelancerProfileCreate, FreelancerProfileUpdate, FreelancerProfileOut,
+    MarketReviewCreate, MarketReviewOut,
+    MarketItemListResponse, MarketOrderListResponse, FreelancerListResponse,
+    SellerInfo
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/market", tags=["Marketplace"])
+
+
+# ================== Helper Functions ==================
+
+def get_seller_info(user: User) -> SellerInfo:
+    """Преобразует User в SellerInfo"""
+    return SellerInfo(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        avatar=getattr(user, 'avatar', None)
+    )
+
+
+def calculate_item_rating(db: Session, item_id: int) -> Tuple[Optional[float], int]:
+    """Вычисляет средний рейтинг и количество отзывов для товара"""
+    reviews = db.query(MarketReview).filter(
+        MarketReview.item_type == "market_item",
+        MarketReview.item_id == item_id
+    ).all()
+    
+    if not reviews:
+        return None, 0
+    
+    avg_rating = sum(r.rating for r in reviews) / len(reviews)
+    return round(avg_rating, 2), len(reviews)
+
+
+def calculate_freelancer_rating(db: Session, freelancer_id: int) -> Tuple[Optional[float], int]:
+    """Вычисляет средний рейтинг и количество отзывов для исполнителя"""
+    reviews = db.query(MarketReview).filter(
+        MarketReview.item_type == "freelancer",
+        MarketReview.item_id == freelancer_id
+    ).all()
+    
+    if not reviews:
+        return None, 0
+    
+    avg_rating = sum(r.rating for r in reviews) / len(reviews)
+    return round(avg_rating, 2), len(reviews)
+
+
+# ================== MarketItem Endpoints ==================
+
+@router.get("/items", response_model=MarketItemListResponse)
+async def list_market_items(
+    item_type: Optional[str] = Query(None, description="Фильтр по типу: template, scenario"),
+    category: Optional[str] = Query(None, description="Фильтр по категории"),
+    search: Optional[str] = Query(None, description="Поиск по названию и описанию"),
+    min_price: Optional[Decimal] = Query(None, ge=0, description="Минимальная цена"),
+    max_price: Optional[Decimal] = Query(None, ge=0, description="Максимальная цена"),
+    is_premium: Optional[bool] = Query(None, description="Фильтр по premium"),
+    is_published: Optional[bool] = Query(True, description="Только опубликованные"),
+    sort_by: str = Query("created_at", description="Сортировка: created_at, price, sales_count"),
+    order: str = Query("desc", description="Порядок: asc, desc"),
+    page: int = Query(1, ge=1, description="Номер страницы"),
+    page_size: int = Query(20, ge=1, le=100, description="Размер страницы"),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Получить список товаров на маркетплейсе"""
+    query = db.query(MarketItem)
+    
+    # Фильтры
+    if item_type:
+        try:
+            item_type_enum = MarketItemType(item_type)
+            query = query.filter(MarketItem.item_type == item_type_enum)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid item_type: {item_type}")
+    
+    if category:
+        query = query.filter(MarketItem.category == category)
+    
+    if is_published is not None:
+        query = query.filter(MarketItem.is_published == is_published)
+    
+    if is_premium is not None:
+        query = query.filter(MarketItem.is_premium == is_premium)
+    
+    if min_price is not None:
+        query = query.filter(MarketItem.price >= min_price)
+    
+    if max_price is not None:
+        query = query.filter(MarketItem.price <= max_price)
+    
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                MarketItem.title.ilike(search_pattern),
+                MarketItem.description.ilike(search_pattern),
+                MarketItem.additional_description.ilike(search_pattern)
+            )
+        )
+    
+    # Сортировка
+    if sort_by == "price":
+        sort_col = MarketItem.price
+    elif sort_by == "sales_count":
+        sort_col = MarketItem.sales_count
+    else:
+        sort_col = MarketItem.created_at
+    
+    if order == "asc":
+        query = query.order_by(asc(sort_col))
+    else:
+        query = query.order_by(desc(sort_col))
+    
+    # Подсчет и пагинация
+    total = query.count()
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
+    
+    # Преобразование в схемы
+    result_items = []
+    for item in items:
+        avg_rating, rating_count = calculate_item_rating(db, item.id)
+        item_dict = {
+            **item.__dict__,
+            "seller": get_seller_info(item.seller),
+            "average_rating": avg_rating,
+            "rating_count": rating_count
+        }
+        result_items.append(MarketItemOut(**item_dict))
+    
+    return MarketItemListResponse(
+        total=total,
+        items=result_items,
+        page=page,
+        page_size=page_size
+    )
+
+
+@router.get("/items/{item_id}", response_model=MarketItemDetailOut)
+async def get_market_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Получить детальную информацию о товаре"""
+    item = db.query(MarketItem).filter(MarketItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+    
+    # Проверка публикации
+    if not item.is_published and (not current_user or current_user.id != item.seller_id):
+        raise HTTPException(status_code=403, detail="Товар не опубликован")
+    
+    avg_rating, rating_count = calculate_item_rating(db, item_id)
+    
+    # Получаем отзывы
+    reviews = db.query(MarketReview).filter(
+        MarketReview.item_type == "market_item",
+        MarketReview.item_id == item_id
+    ).order_by(desc(MarketReview.created_at)).all()
+    
+    reviews_out = []
+    for review in reviews:
+        review_dict = {
+            **review.__dict__,
+            "author": get_seller_info(review.author)
+        }
+        reviews_out.append(MarketReviewOut(**review_dict))
+    
+    item_dict = {
+        **item.__dict__,
+        "seller": get_seller_info(item.seller),
+        "average_rating": avg_rating,
+        "rating_count": rating_count,
+        "reviews": reviews_out
+    }
+    
+    return MarketItemDetailOut(**item_dict)
+
+
+@router.post("/items", response_model=MarketItemOut, status_code=status.HTTP_201_CREATED)
+async def create_market_item(
+    item_data: MarketItemCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Создать товар на маркетплейсе"""
+    # Валидация типа
+    try:
+        item_type_enum = MarketItemType(item_data.item_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid item_type: {item_data.item_type}")
+    
+    # Проверка источника
+    if item_type_enum == MarketItemType.TEMPLATE:
+        if not item_data.source_bot_id:
+            raise HTTPException(status_code=400, detail="source_bot_id required for template")
+        bot = db.query(Bot).filter(Bot.id == item_data.source_bot_id).first()
+        if not bot:
+            raise HTTPException(status_code=404, detail="Bot not found")
+        if bot.owner_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You don't own this bot")
+    
+    elif item_type_enum == MarketItemType.SCENARIO:
+        if not item_data.source_scenario_id:
+            raise HTTPException(status_code=400, detail="source_scenario_id required for scenario")
+        scenario = db.query(Scenario).filter(Scenario.id == item_data.source_scenario_id).first()
+        if not scenario:
+            raise HTTPException(status_code=404, detail="Scenario not found")
+        if scenario.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="You don't own this scenario")
+    
+    # Создание товара
+    item = MarketItem(
+        item_type=item_type_enum,
+        source_bot_id=item_data.source_bot_id,
+        source_scenario_id=item_data.source_scenario_id,
+        title=item_data.title,
+        description=item_data.description,
+        additional_description=item_data.additional_description,
+        image_url=item_data.image_url,
+        price=item_data.price,
+        category=item_data.category,
+        tags=item_data.tags,
+        is_premium=item_data.is_premium,
+        is_published=item_data.is_published,
+        seller_id=current_user.id,
+        published_at=datetime.now(timezone.utc) if item_data.is_published else None
+    )
+    
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    
+    item_dict = {
+        **item.__dict__,
+        "seller": get_seller_info(current_user),
+        "average_rating": None,
+        "rating_count": 0
+    }
+    
+    return MarketItemOut(**item_dict)
+
+
+@router.put("/items/{item_id}", response_model=MarketItemOut)
+async def update_market_item(
+    item_id: int,
+    item_data: MarketItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Обновить товар на маркетплейсе"""
+    item = db.query(MarketItem).filter(MarketItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+    
+    if item.seller_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Вы не являетесь владельцем этого товара")
+    
+    # Обновление полей
+    update_data = item_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(item, field, value)
+    
+    # Если публикуется впервые
+    if item_data.is_published and not item.published_at:
+        item.published_at = datetime.now(timezone.utc)
+    
+    item.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(item)
+    
+    avg_rating, rating_count = calculate_item_rating(db, item_id)
+    item_dict = {
+        **item.__dict__,
+        "seller": get_seller_info(item.seller),
+        "average_rating": avg_rating,
+        "rating_count": rating_count
+    }
+    
+    return MarketItemOut(**item_dict)
+
+
+@router.delete("/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_market_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Удалить товар с маркетплейса"""
+    item = db.query(MarketItem).filter(MarketItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+    
+    if item.seller_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Вы не являетесь владельцем этого товара")
+    
+    db.delete(item)
+    db.commit()
+    
+    return None
+
+
+# ================== MarketOrder Endpoints ==================
+
+@router.get("/orders", response_model=MarketOrderListResponse)
+async def list_market_orders(
+    status_filter: Optional[str] = Query(None, alias="status", description="Фильтр по статусу"),
+    category: Optional[str] = Query(None, description="Фильтр по категории"),
+    search: Optional[str] = Query(None, description="Поиск по названию и описанию"),
+    sort_by: str = Query("created_at", description="Сортировка: created_at, budget_min, budget_max"),
+    order: str = Query("desc", description="Порядок: asc, desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Получить список заказов"""
+    query = db.query(MarketOrder)
+    
+    if status_filter:
+        try:
+            status_enum = MarketOrderStatus(status_filter)
+            query = query.filter(MarketOrder.status == status_enum)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status_filter}")
+    
+    if category:
+        query = query.filter(MarketOrder.category == category)
+    
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                MarketOrder.title.ilike(search_pattern),
+                MarketOrder.description.ilike(search_pattern)
+            )
+        )
+    
+    # Сортировка
+    if sort_by == "budget_min":
+        sort_col = MarketOrder.budget_min
+    elif sort_by == "budget_max":
+        sort_col = MarketOrder.budget_max
+    else:
+        sort_col = MarketOrder.created_at
+    
+    if order == "asc":
+        query = query.order_by(asc(sort_col))
+    else:
+        query = query.order_by(desc(sort_col))
+    
+    total = query.count()
+    orders = query.offset((page - 1) * page_size).limit(page_size).all()
+    
+    result_orders = []
+    for order in orders:
+        proposals_count = db.query(OrderProposal).filter(OrderProposal.order_id == order.id).count()
+        order_dict = {
+            **order.__dict__,
+            "author": get_seller_info(order.author),
+            "selected_freelancer": get_seller_info(order.selected_freelancer) if order.selected_freelancer else None,
+            "proposals_count": proposals_count
+        }
+        result_orders.append(MarketOrderOut(**order_dict))
+    
+    return MarketOrderListResponse(
+        total=total,
+        items=result_orders,
+        page=page,
+        page_size=page_size
+    )
+
+
+@router.get("/orders/{order_id}", response_model=MarketOrderDetailOut)
+async def get_market_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Получить детальную информацию о заказе"""
+    order = db.query(MarketOrder).filter(MarketOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    
+    # Получаем предложения
+    proposals = db.query(OrderProposal).filter(OrderProposal.order_id == order_id).all()
+    proposals_out = []
+    for proposal in proposals:
+        proposal_dict = {
+            **proposal.__dict__,
+            "freelancer": get_seller_info(proposal.freelancer)
+        }
+        proposals_out.append(OrderProposalOut(**proposal_dict))
+    
+    order_dict = {
+        **order.__dict__,
+        "author": get_seller_info(order.author),
+        "selected_freelancer": get_seller_info(order.selected_freelancer) if order.selected_freelancer else None,
+        "proposals_count": len(proposals_out),
+        "proposals": proposals_out
+    }
+    
+    return MarketOrderDetailOut(**order_dict)
+
+
+@router.post("/orders", response_model=MarketOrderOut, status_code=status.HTTP_201_CREATED)
+async def create_market_order(
+    order_data: MarketOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Создать заказ на маркетплейсе"""
+    order = MarketOrder(
+        title=order_data.title,
+        description=order_data.description,
+        budget_min=order_data.budget_min,
+        budget_max=order_data.budget_max,
+        deadline=order_data.deadline,
+        category=order_data.category,
+        skills=order_data.skills,
+        status=MarketOrderStatus.OPEN,
+        author_id=current_user.id
+    )
+    
+    db.add(order)
+    db.commit()
+    db.refresh(order)
+    
+    order_dict = {
+        **order.__dict__,
+        "author": get_seller_info(current_user),
+        "selected_freelancer": None,
+        "proposals_count": 0
+    }
+    
+    return MarketOrderOut(**order_dict)
+
+
+@router.put("/orders/{order_id}", response_model=MarketOrderOut)
+async def update_market_order(
+    order_id: int,
+    order_data: MarketOrderUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Обновить заказ"""
+    order = db.query(MarketOrder).filter(MarketOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    
+    if order.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Вы не являетесь автором этого заказа")
+    
+    update_data = order_data.model_dump(exclude_unset=True)
+    if "status" in update_data:
+        try:
+            update_data["status"] = MarketOrderStatus(update_data["status"])
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {update_data['status']}")
+    
+    for field, value in update_data.items():
+        setattr(order, field, value)
+    
+    order.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(order)
+    
+    proposals_count = db.query(OrderProposal).filter(OrderProposal.order_id == order_id).count()
+    order_dict = {
+        **order.__dict__,
+        "author": get_seller_info(order.author),
+        "selected_freelancer": get_seller_info(order.selected_freelancer) if order.selected_freelancer else None,
+        "proposals_count": proposals_count
+    }
+    
+    return MarketOrderOut(**order_dict)
+
+
+@router.delete("/orders/{order_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_market_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Удалить заказ"""
+    order = db.query(MarketOrder).filter(MarketOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    
+    if order.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Вы не являетесь автором этого заказа")
+    
+    db.delete(order)
+    db.commit()
+    
+    return None
+
+
+# ================== OrderProposal Endpoints ==================
+
+@router.post("/orders/{order_id}/proposals", response_model=OrderProposalOut, status_code=status.HTTP_201_CREATED)
+async def create_order_proposal(
+    order_id: int,
+    proposal_data: OrderProposalCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Создать предложение на заказ"""
+    order = db.query(MarketOrder).filter(MarketOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    
+    if order.status != MarketOrderStatus.OPEN:
+        raise HTTPException(status_code=400, detail="Заказ не принимает предложения")
+    
+    if order.author_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Вы не можете предложить услуги на свой заказ")
+    
+    # Проверка, не было ли уже предложения
+    existing = db.query(OrderProposal).filter(
+        OrderProposal.order_id == order_id,
+        OrderProposal.freelancer_id == current_user.id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Вы уже отправили предложение на этот заказ")
+    
+    proposal = OrderProposal(
+        order_id=order_id,
+        freelancer_id=current_user.id,
+        message=proposal_data.message,
+        proposed_price=proposal_data.proposed_price,
+        estimated_days=proposal_data.estimated_days
+    )
+    
+    db.add(proposal)
+    db.commit()
+    db.refresh(proposal)
+    
+    proposal_dict = {
+        **proposal.__dict__,
+        "freelancer": get_seller_info(current_user)
+    }
+    
+    return OrderProposalOut(**proposal_dict)
+
+
+@router.post("/orders/{order_id}/proposals/{proposal_id}/accept", response_model=MarketOrderOut)
+async def accept_proposal(
+    order_id: int,
+    proposal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Принять предложение на заказ"""
+    order = db.query(MarketOrder).filter(MarketOrder.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Заказ не найден")
+    
+    if order.author_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Вы не являетесь автором этого заказа")
+    
+    proposal = db.query(OrderProposal).filter(
+        OrderProposal.id == proposal_id,
+        OrderProposal.order_id == order_id
+    ).first()
+    
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Предложение не найдено")
+    
+    # Принимаем предложение
+    proposal.is_accepted = True
+    order.selected_freelancer_id = proposal.freelancer_id
+    order.status = MarketOrderStatus.IN_PROGRESS
+    
+    # Отклоняем остальные предложения
+    db.query(OrderProposal).filter(
+        OrderProposal.order_id == order_id,
+        OrderProposal.id != proposal_id
+    ).update({"is_declined": True})
+    
+    db.commit()
+    db.refresh(order)
+    
+    proposals_count = db.query(OrderProposal).filter(OrderProposal.order_id == order_id).count()
+    order_dict = {
+        **order.__dict__,
+        "author": get_seller_info(order.author),
+        "selected_freelancer": get_seller_info(order.selected_freelancer) if order.selected_freelancer else None,
+        "proposals_count": proposals_count
+    }
+    
+    return MarketOrderOut(**order_dict)
+
+
+# ================== FreelancerProfile Endpoints ==================
+
+@router.get("/freelancers", response_model=FreelancerListResponse)
+async def list_freelancers(
+    search: Optional[str] = Query(None, description="Поиск по названию и описанию"),
+    skills: Optional[str] = Query(None, description="Фильтр по навыкам (через запятую)"),
+    is_verified: Optional[bool] = Query(None, description="Фильтр по верификации"),
+    sort_by: str = Query("created_at", description="Сортировка: created_at, hourly_rate, completed_orders_count"),
+    order: str = Query("desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Получить список исполнителей"""
+    query = db.query(FreelancerProfile).filter(FreelancerProfile.is_active == True)
+    
+    if is_verified is not None:
+        query = query.filter(FreelancerProfile.is_verified == is_verified)
+    
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.join(User).filter(
+            or_(
+                FreelancerProfile.title.ilike(search_pattern),
+                FreelancerProfile.description.ilike(search_pattern),
+                User.name.ilike(search_pattern)
+            )
+        )
+    
+    if skills:
+        skill_list = [s.strip() for s in skills.split(",")]
+        # Фильтрация по навыкам (JSON содержит список)
+        for skill in skill_list:
+            query = query.filter(FreelancerProfile.skills.contains([skill]))
+    
+    # Сортировка
+    if sort_by == "hourly_rate":
+        sort_col = FreelancerProfile.hourly_rate
+    elif sort_by == "completed_orders_count":
+        sort_col = FreelancerProfile.completed_orders_count
+    else:
+        sort_col = FreelancerProfile.created_at
+    
+    if order == "asc":
+        query = query.order_by(asc(sort_col))
+    else:
+        query = query.order_by(desc(sort_col))
+    
+    total = query.count()
+    freelancers = query.offset((page - 1) * page_size).limit(page_size).all()
+    
+    result_freelancers = []
+    for freelancer in freelancers:
+        avg_rating, rating_count = calculate_freelancer_rating(db, freelancer.user_id)
+        freelancer_dict = {
+            **freelancer.__dict__,
+            "user": get_seller_info(freelancer.user),
+            "average_rating": avg_rating,
+            "rating_count": rating_count
+        }
+        result_freelancers.append(FreelancerProfileOut(**freelancer_dict))
+    
+    return FreelancerListResponse(
+        total=total,
+        items=result_freelancers,
+        page=page,
+        page_size=page_size
+    )
+
+
+@router.get("/freelancers/{user_id}", response_model=FreelancerProfileOut)
+async def get_freelancer_profile(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Получить профиль исполнителя"""
+    freelancer = db.query(FreelancerProfile).filter(FreelancerProfile.user_id == user_id).first()
+    if not freelancer:
+        raise HTTPException(status_code=404, detail="Профиль исполнителя не найден")
+    
+    avg_rating, rating_count = calculate_freelancer_rating(db, user_id)
+    freelancer_dict = {
+        **freelancer.__dict__,
+        "user": get_seller_info(freelancer.user),
+        "average_rating": avg_rating,
+        "rating_count": rating_count
+    }
+    
+    return FreelancerProfileOut(**freelancer_dict)
+
+
+@router.post("/freelancers", response_model=FreelancerProfileOut, status_code=status.HTTP_201_CREATED)
+async def create_freelancer_profile(
+    profile_data: FreelancerProfileCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Создать профиль исполнителя"""
+    # Проверка, нет ли уже профиля
+    existing = db.query(FreelancerProfile).filter(FreelancerProfile.user_id == current_user.id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Профиль исполнителя уже существует")
+    
+    profile = FreelancerProfile(
+        user_id=current_user.id,
+        title=profile_data.title,
+        description=profile_data.description,
+        hourly_rate=profile_data.hourly_rate,
+        skills=profile_data.skills,
+        portfolio_items=profile_data.portfolio_items,
+        is_active=True,
+        is_verified=False
+    )
+    
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    
+    profile_dict = {
+        **profile.__dict__,
+        "user": get_seller_info(current_user),
+        "average_rating": None,
+        "rating_count": 0
+    }
+    
+    return FreelancerProfileOut(**profile_dict)
+
+
+@router.put("/freelancers/me", response_model=FreelancerProfileOut)
+async def update_my_freelancer_profile(
+    profile_data: FreelancerProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Обновить свой профиль исполнителя"""
+    profile = db.query(FreelancerProfile).filter(FreelancerProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Профиль исполнителя не найден")
+    
+    update_data = profile_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(profile, field, value)
+    
+    profile.updated_at = datetime.now(timezone.utc)
+    
+    db.commit()
+    db.refresh(profile)
+    
+    avg_rating, rating_count = calculate_freelancer_rating(db, current_user.id)
+    profile_dict = {
+        **profile.__dict__,
+        "user": get_seller_info(current_user),
+        "average_rating": avg_rating,
+        "rating_count": rating_count
+    }
+    
+    return FreelancerProfileOut(**profile_dict)
+
+
+# ================== MarketReview Endpoints ==================
+
+@router.post("/reviews", response_model=MarketReviewOut, status_code=status.HTTP_201_CREATED)
+async def create_review(
+    review_data: MarketReviewCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Создать отзыв"""
+    # Проверка, что объект существует
+    if review_data.item_type == "market_item":
+        item = db.query(MarketItem).filter(MarketItem.id == review_data.item_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Товар не найден")
+        # Проверка, что пользователь купил товар (можно добавить проверку покупки)
+    elif review_data.item_type == "market_order":
+        order = db.query(MarketOrder).filter(MarketOrder.id == review_data.item_id).first()
+        if not order:
+            raise HTTPException(status_code=404, detail="Заказ не найден")
+        # Проверка, что пользователь участвовал в заказе
+        if order.author_id != current_user.id and order.selected_freelancer_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Вы не участвовали в этом заказе")
+    elif review_data.item_type == "freelancer":
+        freelancer = db.query(FreelancerProfile).filter(FreelancerProfile.user_id == review_data.item_id).first()
+        if not freelancer:
+            raise HTTPException(status_code=404, detail="Исполнитель не найден")
+    else:
+        raise HTTPException(status_code=400, detail=f"Invalid item_type: {review_data.item_type}")
+    
+    # Проверка, не оставлял ли уже отзыв
+    existing = db.query(MarketReview).filter(
+        MarketReview.item_type == review_data.item_type,
+        MarketReview.item_id == review_data.item_id,
+        MarketReview.author_id == current_user.id
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="Вы уже оставили отзыв")
+    
+    review = MarketReview(
+        item_type=review_data.item_type,
+        item_id=review_data.item_id,
+        author_id=current_user.id,
+        rating=review_data.rating,
+        comment=review_data.comment
+    )
+    
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+    
+    review_dict = {
+        **review.__dict__,
+        "author": get_seller_info(current_user)
+    }
+    
+    return MarketReviewOut(**review_dict)
+
+
+@router.get("/reviews", response_model=List[MarketReviewOut])
+async def list_reviews(
+    item_type: str = Query(..., description="Тип объекта: market_item, market_order, freelancer"),
+    item_id: int = Query(..., description="ID объекта"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+):
+    """Получить список отзывов для объекта"""
+    query = db.query(MarketReview).filter(
+        MarketReview.item_type == item_type,
+        MarketReview.item_id == item_id
+    ).order_by(desc(MarketReview.created_at))
+    
+    total = query.count()
+    reviews = query.offset((page - 1) * page_size).limit(page_size).all()
+    
+    result_reviews = []
+    for review in reviews:
+        review_dict = {
+            **review.__dict__,
+            "author": get_seller_info(review.author)
+        }
+        result_reviews.append(MarketReviewOut(**review_dict))
+    
+    return result_reviews

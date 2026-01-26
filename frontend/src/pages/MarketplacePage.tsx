@@ -15,6 +15,13 @@ import {
 } from 'lucide-react';
 import { getBots } from '../api/bot';
 import { getMyScenarios } from '../api/scenarios';
+import {
+  createMarketItem,
+  createMarketOrder,
+  createFreelancerProfile,
+  getMarketItems,
+} from '../api/market';
+import { toast } from '../utils/toast';
 
 type MarketTab = 'templates' | 'scenarios' | 'customers' | 'freelancers';
 
@@ -83,6 +90,11 @@ export default function MarketplacePage() {
   const [myScenarios, setMyScenarios] = useState<any[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [marketItems, setMarketItems] = useState<any[]>([]);
+  const [marketOrders, setMarketOrders] = useState<any[]>([]);
+  const [freelancers, setFreelancers] = useState<any[]>([]);
+  const [isLoadingItems, setIsLoadingItems] = useState(false);
 
   // Стили для select и option элементов
   const selectStyles = `
@@ -95,6 +107,38 @@ export default function MarketplacePage() {
       color-scheme: dark;
     }
   `;
+
+  // Загрузка товаров с маркетплейса
+  useEffect(() => {
+    const loadMarketItems = async () => {
+      setIsLoadingItems(true);
+      try {
+        if (activeTab === 'templates' || activeTab === 'scenarios') {
+          const response = await getMarketItems({
+            item_type: activeTab === 'templates' ? 'template' : 'scenario',
+            is_published: true,
+            page: 1,
+            page_size: 50,
+          });
+          console.log('[MarketplacePage] Loaded items:', response);
+          setMarketItems(response.items || []);
+        } else if (activeTab === 'customers') {
+          // TODO: Загрузить заказы
+          setMarketOrders([]);
+        } else if (activeTab === 'freelancers') {
+          // TODO: Загрузить исполнителей
+          setFreelancers([]);
+        }
+      } catch (error) {
+        console.error('Failed to load market items:', error);
+        setMarketItems([]);
+      } finally {
+        setIsLoadingItems(false);
+      }
+    };
+
+    loadMarketItems();
+  }, [activeTab]);
 
   // Загрузка шаблонов (ботов) и сценариев пользователя при открытии модалки
   useEffect(() => {
@@ -529,36 +573,146 @@ export default function MarketplacePage() {
                   gap: '24px',
                 }}
               >
-                {mockTemplates.map(renderProductCard)}
-                {/* Empty state for demonstration */}
-                <div
-                  style={{
-                    gridColumn: '1 / -1',
-                    textAlign: 'center',
-                    padding: '48px 24px',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  <ShoppingCart size={64} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-                  <p>Скоро здесь появятся шаблоны от пользователей платформы</p>
-                </div>
+                {isLoadingItems ? (
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                      textAlign: 'center',
+                      padding: '40px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Загрузка товаров...
+                  </div>
+                ) : marketItems.length === 0 ? (
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                      textAlign: 'center',
+                      padding: '48px 24px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    <ShoppingCart size={64} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                    <p>Товары не найдены. Станьте первым, кто разместит товар на маркетплейсе!</p>
+                  </div>
+                ) : (
+                  marketItems
+                    .filter(item => {
+                      if (searchQuery) {
+                        const query = searchQuery.toLowerCase();
+                        return (
+                          item.title?.toLowerCase().includes(query) ||
+                          item.description?.toLowerCase().includes(query) ||
+                          item.additional_description?.toLowerCase().includes(query)
+                        );
+                      }
+                      return true;
+                    })
+                    .map(item => {
+                      // Преобразуем данные из API в формат для компонента
+                      const formattedItem: MarketItem = {
+                        id: item.id,
+                        title: item.title,
+                        description: item.description || item.additional_description || '',
+                        price:
+                          typeof item.price === 'string' ? parseFloat(item.price) : item.price || 0,
+                        image: item.image_url || '/placeholder-template.png',
+                        seller: {
+                          id: item.seller?.id || 0,
+                          name: item.seller?.name || item.seller?.email || 'Неизвестно',
+                          avatar: item.seller?.avatar,
+                          rating: item.seller?.rating || 0,
+                          reviewsCount: item.seller?.reviewsCount || 0,
+                        },
+                        rating: item.average_rating || 0,
+                        reviewsCount: item.rating_count || 0,
+                        salesCount: item.sales_count || 0,
+                        category: item.category || 'Другое',
+                        tags: item.tags || [],
+                        isPremium: item.is_premium || false,
+                      };
+                      return renderProductCard(formattedItem);
+                    })
+                )}
               </div>
             </div>
           )}
 
           {activeTab === 'scenarios' && (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '64px 24px',
-                color: 'var(--text-muted)',
-              }}
-            >
-              <Briefcase size={64} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-              <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>
-                Сценарии скоро появятся
-              </h3>
-              <p>Пользователи смогут продавать и покупать готовые сценарии для ботов</p>
+            <div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                  gap: '24px',
+                }}
+              >
+                {isLoadingItems ? (
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                      textAlign: 'center',
+                      padding: '40px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Загрузка сценариев...
+                  </div>
+                ) : marketItems.length === 0 ? (
+                  <div
+                    style={{
+                      gridColumn: '1 / -1',
+                      textAlign: 'center',
+                      padding: '48px 24px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    <Briefcase size={64} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                    <p>
+                      Сценарии не найдены. Станьте первым, кто разместит сценарий на маркетплейсе!
+                    </p>
+                  </div>
+                ) : (
+                  marketItems
+                    .filter(item => {
+                      if (searchQuery) {
+                        const query = searchQuery.toLowerCase();
+                        return (
+                          item.title?.toLowerCase().includes(query) ||
+                          item.description?.toLowerCase().includes(query) ||
+                          item.additional_description?.toLowerCase().includes(query)
+                        );
+                      }
+                      return true;
+                    })
+                    .map(item => {
+                      // Преобразуем данные из API в формат для компонента
+                      const formattedItem: MarketItem = {
+                        id: item.id,
+                        title: item.title,
+                        description: item.description || item.additional_description || '',
+                        price:
+                          typeof item.price === 'string' ? parseFloat(item.price) : item.price || 0,
+                        image: item.image_url || '/placeholder-template.png',
+                        seller: {
+                          id: item.seller?.id || 0,
+                          name: item.seller?.name || item.seller?.email || 'Неизвестно',
+                          avatar: item.seller?.avatar,
+                          rating: item.seller?.rating || 0,
+                          reviewsCount: item.seller?.reviewsCount || 0,
+                        },
+                        rating: item.average_rating || 0,
+                        reviewsCount: item.rating_count || 0,
+                        salesCount: item.sales_count || 0,
+                        category: item.category || 'Другое',
+                        tags: item.tags || [],
+                        isPremium: item.is_premium || false,
+                      };
+                      return renderProductCard(formattedItem);
+                    })
+                )}
+              </div>
             </div>
           )}
 
@@ -660,11 +814,191 @@ export default function MarketplacePage() {
             </h2>
 
             <form
-              onSubmit={e => {
+              onSubmit={async e => {
                 e.preventDefault();
-                // TODO: Отправка формы
-                alert('Функционал размещения будет реализован после создания backend API');
-                setShowCreateModal(false);
+                setIsSubmitting(true);
+
+                try {
+                  const formData = new FormData(e.currentTarget);
+                  const formElement = e.currentTarget as HTMLFormElement;
+
+                  if (activeTab === 'templates' || activeTab === 'scenarios') {
+                    // Размещение шаблона/сценария
+                    if (sourceType === 'existing' && !selectedItemId) {
+                      toast.error('Выберите шаблон или сценарий');
+                      setIsSubmitting(false);
+                      return;
+                    }
+
+                    const titleInput =
+                      formElement.querySelector<HTMLInputElement>('input[name="title"]');
+                    const title = titleInput?.value || '';
+
+                    if (!title) {
+                      toast.error('Заполните название');
+                      setIsSubmitting(false);
+                      return;
+                    }
+
+                    const descriptionTextarea = formElement.querySelector<HTMLTextAreaElement>(
+                      'textarea[name="description"]'
+                    );
+                    const description = descriptionTextarea?.value || '';
+
+                    if (!description) {
+                      toast.error('Заполните описание');
+                      setIsSubmitting(false);
+                      return;
+                    }
+
+                    const additionalDescription =
+                      formElement.querySelector<HTMLTextAreaElement>(
+                        'textarea[name="additional_description"]'
+                      )?.value || '';
+
+                    const priceInput =
+                      formElement.querySelector<HTMLInputElement>('input[name="price"]');
+                    const price = priceInput ? parseFloat(priceInput.value) || 0 : 0;
+
+                    const categoryInput =
+                      formElement.querySelector<HTMLSelectElement>('select[name="category"]') ||
+                      formElement.querySelector<HTMLInputElement>('input[name="category"]');
+                    const category = categoryInput?.value || '';
+
+                    const tagsInput =
+                      formElement.querySelector<HTMLInputElement>('input[name="tags"]');
+                    const tagsStr = tagsInput?.value || '';
+                    const tags = tagsStr
+                      ? tagsStr
+                          .split(',')
+                          .map(t => t.trim())
+                          .filter(t => t.length > 0)
+                      : [];
+
+                    const marketItemData = {
+                      item_type: activeTab === 'templates' ? 'template' : 'scenario',
+                      title,
+                      description,
+                      additional_description: additionalDescription || undefined,
+                      price,
+                      category: category || undefined,
+                      tags: tags.length > 0 ? tags : undefined,
+                      is_published: true,
+                      is_premium: false,
+                    };
+
+                    if (sourceType === 'existing') {
+                      if (activeTab === 'templates') {
+                        marketItemData.source_bot_id = selectedItemId!;
+                      } else {
+                        marketItemData.source_scenario_id = selectedItemId!;
+                      }
+                    }
+
+                    const createdItem = await createMarketItem(marketItemData);
+                    toast.success(
+                      `${activeTab === 'templates' ? 'Шаблон' : 'Сценарий'} успешно размещен на маркетплейсе!`
+                    );
+                    setShowCreateModal(false);
+
+                    // Обновляем список товаров
+                    try {
+                      const response = await getMarketItems({
+                        item_type: activeTab === 'templates' ? 'template' : 'scenario',
+                        is_published: true,
+                        page: 1,
+                        page_size: 50,
+                      });
+                      setMarketItems(response.items || []);
+                    } catch (error) {
+                      console.error('Failed to refresh items:', error);
+                    }
+                  } else if (activeTab === 'customers') {
+                    // Создание заказа
+                    const title =
+                      formElement.querySelector<HTMLInputElement>('input[name="title"]')?.value ||
+                      '';
+                    const description =
+                      formElement.querySelector<HTMLTextAreaElement>('textarea[name="description"]')
+                        ?.value || '';
+                    const budgetMinInput = formElement.querySelector<HTMLInputElement>(
+                      'input[name="budget_min"]'
+                    );
+                    const budgetMin = budgetMinInput
+                      ? parseFloat(budgetMinInput.value) || undefined
+                      : undefined;
+                    const budgetMaxInput = formElement.querySelector<HTMLInputElement>(
+                      'input[name="budget_max"]'
+                    );
+                    const budgetMax = budgetMaxInput
+                      ? parseFloat(budgetMaxInput.value) || undefined
+                      : undefined;
+                    const categoryInput =
+                      formElement.querySelector<HTMLInputElement>('input[name="category"]');
+                    const category = categoryInput?.value || undefined;
+                    const skillsInput =
+                      formElement.querySelector<HTMLInputElement>('input[name="skills"]');
+                    const skillsStr = skillsInput?.value || '';
+                    const skills = skillsStr
+                      ? skillsStr
+                          .split(',')
+                          .map(s => s.trim())
+                          .filter(s => s.length > 0)
+                      : undefined;
+
+                    await createMarketOrder({
+                      title,
+                      description,
+                      budget_min: budgetMin,
+                      budget_max: budgetMax,
+                      category,
+                      skills,
+                    });
+                    toast.success('Заказ успешно создан!');
+                    setShowCreateModal(false);
+                  } else if (activeTab === 'freelancers') {
+                    // Создание профиля исполнителя
+                    const title =
+                      formElement.querySelector<HTMLInputElement>('input[name="title"]')?.value ||
+                      '';
+                    const description =
+                      formElement.querySelector<HTMLTextAreaElement>('textarea[name="description"]')
+                        ?.value || undefined;
+                    const hourlyRateInput = formElement.querySelector<HTMLInputElement>(
+                      'input[name="hourly_rate"]'
+                    );
+                    const hourlyRate = hourlyRateInput
+                      ? parseFloat(hourlyRateInput.value) || undefined
+                      : undefined;
+                    const skillsInput =
+                      formElement.querySelector<HTMLInputElement>('input[name="skills"]');
+                    const skillsStr = skillsInput?.value || '';
+                    const skills = skillsStr
+                      ? skillsStr
+                          .split(',')
+                          .map(s => s.trim())
+                          .filter(s => s.length > 0)
+                      : undefined;
+
+                    await createFreelancerProfile({
+                      title,
+                      description,
+                      hourly_rate: hourlyRate,
+                      skills,
+                    });
+                    toast.success('Профиль исполнителя успешно создан!');
+                    setShowCreateModal(false);
+                  }
+                } catch (error: any) {
+                  console.error('Error creating marketplace item:', error);
+                  const errorMessage =
+                    error?.response?.data?.detail ||
+                    error?.message ||
+                    'Произошла ошибка при размещении';
+                  toast.error(errorMessage);
+                } finally {
+                  setIsSubmitting(false);
+                }
               }}
               style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
             >
@@ -788,56 +1122,206 @@ export default function MarketplacePage() {
                   </div>
                 )}
 
-              {/* Price for existing items */}
+              {/* Fields for existing items */}
               {(activeTab === 'templates' || activeTab === 'scenarios') &&
                 sourceType === 'existing' &&
                 selectedItemId && (
-                  <div>
-                    <label
-                      style={{
-                        display: 'block',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        color: 'var(--text)',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      Цена (₽)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="0 = бесплатно"
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        fontSize: '14px',
-                        color: 'var(--text)',
-                      }}
-                    />
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
-                      💡 При необходимости вы можете добавить дополнительное описание для
-                      маркетплейса
-                    </p>
-                    <textarea
-                      rows={3}
-                      placeholder="Дополнительное описание для покупателей (необязательно)"
-                      style={{
-                        width: '100%',
-                        padding: '12px',
-                        background: 'var(--surface)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        fontSize: '14px',
-                        color: 'var(--text)',
-                        resize: 'vertical',
-                        marginTop: '8px',
-                      }}
-                    />
-                  </div>
+                  <>
+                    {/* Title for existing items */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          color: 'var(--text)',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        Название для маркетплейса
+                      </label>
+                      <input
+                        type="text"
+                        name="title"
+                        required
+                        defaultValue={
+                          activeTab === 'templates'
+                            ? myTemplates.find(t => t.id === selectedItemId)?.title || ''
+                            : myScenarios.find(s => s.id === selectedItemId)?.title || ''
+                        }
+                        placeholder="Название товара"
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          color: 'var(--text)',
+                        }}
+                      />
+                    </div>
+
+                    {/* Description for existing items */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          color: 'var(--text)',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        Описание для маркетплейса
+                      </label>
+                      <textarea
+                        name="description"
+                        required
+                        rows={5}
+                        defaultValue={
+                          activeTab === 'templates'
+                            ? myTemplates.find(t => t.id === selectedItemId)?.description || ''
+                            : myScenarios.find(s => s.id === selectedItemId)?.description || ''
+                        }
+                        placeholder="Описание товара"
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          color: 'var(--text)',
+                          resize: 'vertical',
+                        }}
+                      />
+                    </div>
+
+                    {/* Price for existing items */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          color: 'var(--text)',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        Цена (₽)
+                      </label>
+                      <input
+                        type="number"
+                        name="price"
+                        min="0"
+                        placeholder="0 = бесплатно"
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          color: 'var(--text)',
+                        }}
+                      />
+                    </div>
+
+                    {/* Category for existing items */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          color: 'var(--text)',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        Категория
+                      </label>
+                      <select
+                        name="category"
+                        className="marketplace-select"
+                        required
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          color: 'var(--text)',
+                        }}
+                      >
+                        <option value="">Выберите категорию</option>
+                        <option value="ecommerce">E-commerce</option>
+                        <option value="support">Поддержка</option>
+                        <option value="automation">Автоматизация</option>
+                        <option value="marketing">Маркетинг</option>
+                        <option value="other">Другое</option>
+                      </select>
+                    </div>
+
+                    {/* Tags for existing items */}
+                    <div>
+                      <label
+                        style={{
+                          display: 'block',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          color: 'var(--text)',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        Теги (через запятую)
+                      </label>
+                      <input
+                        type="text"
+                        name="tags"
+                        placeholder="магазин, оплата, корзина"
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          color: 'var(--text)',
+                        }}
+                      />
+                    </div>
+
+                    {/* Additional description for existing items */}
+                    <div>
+                      <p
+                        style={{
+                          fontSize: '12px',
+                          color: 'var(--text-muted)',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        💡 При необходимости вы можете добавить дополнительное описание для
+                        маркетплейса
+                      </p>
+                      <textarea
+                        name="additional_description"
+                        rows={3}
+                        placeholder="Дополнительное описание для покупателей (необязательно)"
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          background: 'var(--surface)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          color: 'var(--text)',
+                          resize: 'vertical',
+                        }}
+                      />
+                    </div>
+                  </>
                 )}
 
               {/* Title - only for new items or customers/freelancers */}
@@ -859,6 +1343,7 @@ export default function MarketplacePage() {
                   </label>
                   <input
                     type="text"
+                    name="title"
                     required
                     placeholder={
                       activeTab === 'templates'
@@ -900,6 +1385,7 @@ export default function MarketplacePage() {
                     Описание
                   </label>
                   <textarea
+                    name="description"
                     required
                     rows={5}
                     placeholder="Детальное описание..."
@@ -940,6 +1426,7 @@ export default function MarketplacePage() {
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                       <input
                         type="number"
+                        name={activeTab === 'customers' ? 'budget_min' : 'price'}
                         min="0"
                         placeholder={activeTab === 'customers' ? 'От' : '0 = бесплатно'}
                         style={{
@@ -957,6 +1444,7 @@ export default function MarketplacePage() {
                           <span style={{ color: 'var(--text-muted)' }}>—</span>
                           <input
                             type="number"
+                            name="budget_max"
                             min="0"
                             placeholder="До"
                             style={{
@@ -991,6 +1479,7 @@ export default function MarketplacePage() {
                   </label>
                   <input
                     type="number"
+                    name="hourly_rate"
                     min="0"
                     placeholder="Например: 2000"
                     style={{
@@ -1025,6 +1514,7 @@ export default function MarketplacePage() {
                       Категория
                     </label>
                     <select
+                      name="category"
                       className="marketplace-select"
                       required
                       style={{
@@ -1061,7 +1551,14 @@ export default function MarketplacePage() {
                     </label>
                     <input
                       type="text"
-                      placeholder="магазин, оплата, корзина"
+                      name={
+                        activeTab === 'customers' || activeTab === 'freelancers' ? 'skills' : 'tags'
+                      }
+                      placeholder={
+                        activeTab === 'customers' || activeTab === 'freelancers'
+                          ? 'python, telegram, fastapi'
+                          : 'магазин, оплата, корзина'
+                      }
                       style={{
                         width: '100%',
                         padding: '12px',
@@ -1112,19 +1609,21 @@ export default function MarketplacePage() {
                 </button>
                 <button
                   type="submit"
+                  disabled={isSubmitting}
                   style={{
                     flex: 1,
                     padding: '14px',
-                    background: 'var(--primary)',
-                    color: 'var(--text-on-primary)',
+                    background: isSubmitting ? 'var(--surface)' : 'var(--primary)',
+                    color: isSubmitting ? 'var(--text-muted)' : 'var(--text-on-primary)',
                     border: 'none',
                     borderRadius: '8px',
                     fontSize: '15px',
                     fontWeight: 600,
-                    cursor: 'pointer',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    opacity: isSubmitting ? 0.6 : 1,
                   }}
                 >
-                  Опубликовать
+                  {isSubmitting ? 'Публикация...' : 'Опубликовать'}
                 </button>
               </div>
             </form>
