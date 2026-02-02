@@ -1,7 +1,7 @@
 # Models package
 # Импортируем все модели для корректной работы SQLAlchemy relationships
 
-from backend.models.user import User
+from backend.models.user import User, UserSettings
 from backend.models.auth import Account, EmailVerification, PasswordReset
 from backend.models.template import Template
 from backend.models.rating import Rating
@@ -38,6 +38,7 @@ from backend.models.market import (
 
 __all__ = [
     "User",
+    "UserSettings",
     "Account",
     "EmailVerification",
     "PasswordReset",

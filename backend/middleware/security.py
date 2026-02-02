@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+import traceback
 from collections import defaultdict
 from typing import Dict
 
@@ -36,14 +37,28 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         client_ip = self._get_client_ip(request)
 
-        if not self._check_rate_limit(client_ip):
-            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
-            return JSONResponse(
-                status_code=429, content={"detail": "Too many requests"}
-            )
+        if getattr(settings, "ENVIRONMENT", "") != "development":
+            if not self._check_rate_limit(client_ip):
+                logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+                return JSONResponse(
+                    status_code=429, content={"detail": "Too many requests"}
+                )
 
         self._log_request(request, client_ip)
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as exc:
+            from fastapi import HTTPException
+            if isinstance(exc, HTTPException):
+                raise
+            logger.exception("Unhandled in middleware: %s", exc)
+            if getattr(settings, "ENVIRONMENT", "") == "development":
+                tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+                return JSONResponse(
+                    status_code=500,
+                    content={"detail": f"{exc!s}\n\n{tb}"},
+                )
+            return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
         # Добавляем заголовки безопасности
         response.headers["X-Frame-Options"] = "DENY"

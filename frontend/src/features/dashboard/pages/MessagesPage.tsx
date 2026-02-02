@@ -6,6 +6,7 @@ import { toast } from '../../../utils/toast';
 import {
   MessageCircle,
   Users,
+  User,
   Search,
   Send,
   UserPlus,
@@ -60,6 +61,7 @@ import {
   type ChatRoom,
   type ChatMessage,
   type BlockedUser,
+  type UserBrief,
 } from '../../../api/chat';
 
 type TabType = 'chats' | 'friends' | 'requests' | 'blocked';
@@ -104,6 +106,7 @@ export default function MessagesPage() {
   const [showEmojiPicker, setShowEmojiPicker] = useState<number | null>(null);
   const [showMessageMenu, setShowMessageMenu] = useState<number | null>(null);
   const [showChatMenu, setShowChatMenu] = useState<number | null>(null);
+  const [contactViewUser, setContactViewUser] = useState<UserBrief | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -162,13 +165,21 @@ export default function MessagesPage() {
         setShowChatMenu(null);
         setShowMessageMenu(null);
       }
+      // Закрыть панель эмодзи при клике вне неё и вне кнопки «Реакция»
+      if (
+        showEmojiPicker !== null &&
+        !target.closest('[data-emoji-picker]') &&
+        !target.closest('[data-emoji-trigger]')
+      ) {
+        setShowEmojiPicker(null);
+      }
     };
 
-    if (showChatMenu || showMessageMenu) {
+    if (showChatMenu || showMessageMenu || showEmojiPicker !== null) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showChatMenu, showMessageMenu]);
+  }, [showChatMenu, showMessageMenu, showEmojiPicker]);
 
   const loadChatRooms = async () => {
     try {
@@ -1456,16 +1467,113 @@ export default function MessagesPage() {
                     <Users size={24} style={{ color: 'var(--text-muted)' }} />
                   )}
                 </div>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, color: 'var(--text)' }}>
                     {selectedRoom?.name || 'Чат'}
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                     {selectedRoom?.room_type === 'private'
                       ? 'Личный чат'
-                      : `${selectedRoom?.participants.length} участников`}
+                      : `${selectedRoom?.participants?.length ?? 0} участников`}
                   </div>
                 </div>
+                {selectedRoom?.room_type === 'private' &&
+                  (() => {
+                    const otherParticipant = selectedRoom?.participants?.find(
+                      p => p.id !== user?.id
+                    ) as UserBrief | undefined;
+                    const isAlreadyFriend =
+                      otherParticipant &&
+                      friends.some(f => f.public_id === otherParticipant.public_id);
+                    const hasOutgoingRequest =
+                      otherParticipant &&
+                      friendRequests.outgoing.some(
+                        r => r.user.public_id === otherParticipant.public_id
+                      );
+                    const canAddFriend =
+                      otherParticipant &&
+                      otherParticipant.id !== user?.id &&
+                      !isAlreadyFriend &&
+                      !hasOutgoingRequest;
+                    return otherParticipant ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setContactViewUser(otherParticipant)}
+                          title="Просмотр контакта"
+                          style={{
+                            padding: '8px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: 'var(--surface)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '8px',
+                            color: 'var(--text)',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <User size={16} />
+                          Контакт
+                        </button>
+                        {canAddFriend ? (
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const res = await sendFriendRequest(otherParticipant.public_id);
+                                toast.success(res.message);
+                                loadFriendRequests();
+                                loadFriends();
+                              } catch (err: unknown) {
+                                const ax = err as { response?: { data?: { detail?: string } } };
+                                toast.error(
+                                  ax.response?.data?.detail || 'Не удалось отправить запрос'
+                                );
+                              }
+                            }}
+                            title="Добавить в друзья"
+                            style={{
+                              padding: '8px 12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              background: 'var(--primary)',
+                              border: 'none',
+                              borderRadius: '8px',
+                              color: 'var(--text-on-primary)',
+                              fontSize: '13px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <UserPlus size={16} />В друзья
+                          </button>
+                        ) : isAlreadyFriend ? (
+                          <span
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '12px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            <UserCheck size={16} />В друзьях
+                          </span>
+                        ) : hasOutgoingRequest ? (
+                          <span
+                            style={{
+                              fontSize: '12px',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            Запрос отправлен
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null;
+                  })()}
               </div>
 
               {/* Messages */}
@@ -1669,6 +1777,8 @@ export default function MessagesPage() {
                               <Reply size={14} />
                             </button>
                             <button
+                              type="button"
+                              data-emoji-trigger
                               onClick={() =>
                                 setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)
                               }
@@ -1722,25 +1832,30 @@ export default function MessagesPage() {
                           </div>
                         )}
 
-                        {/* Emoji Picker */}
+                        {/* Emoji Picker — открывается под сообщением, чтобы не обрезаться и не уходить вверх */}
                         {showEmojiPicker === msg.id && (
                           <div
+                            data-emoji-picker
                             style={{
                               position: 'absolute',
-                              bottom: '100%',
+                              top: '100%',
+                              marginTop: '6px',
                               [msg.is_mine ? 'right' : 'left']: 0,
                               padding: '8px',
                               background: 'var(--card)',
                               border: '1px solid var(--border)',
                               borderRadius: '12px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                               display: 'flex',
                               gap: '4px',
-                              zIndex: 100,
+                              flexWrap: 'wrap',
+                              zIndex: 1000,
                             }}
                           >
                             {EMOJI_LIST.map(emoji => (
                               <button
                                 key={emoji}
+                                type="button"
                                 onClick={() => handleAddReaction(msg.id, emoji)}
                                 style={{
                                   padding: '6px',
@@ -2139,6 +2254,165 @@ export default function MessagesPage() {
               >
                 <UserX size={16} />
                 Заблокировать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Модальное окно просмотра контакта (собеседника в чате) */}
+      {contactViewUser && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+          }}
+          onClick={() => setContactViewUser(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'var(--card)',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '420px',
+              width: '90%',
+              boxShadow: '0 24px 48px rgba(0,0,0,0.5)',
+              position: 'relative',
+            }}
+          >
+            <button
+              onClick={() => setContactViewUser(null)}
+              style={{
+                position: 'absolute',
+                top: '16px',
+                right: '16px',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                fontSize: '24px',
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <div
+                style={{
+                  width: '96px',
+                  height: '96px',
+                  borderRadius: '50%',
+                  background: 'var(--primary-bg)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 16px',
+                  overflow: 'hidden',
+                }}
+              >
+                {contactViewUser.avatar ? (
+                  <img
+                    src={contactViewUser.avatar}
+                    alt=""
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                ) : (
+                  <Users size={48} style={{ color: 'var(--primary)' }} />
+                )}
+              </div>
+              <h2
+                style={{
+                  fontSize: '20px',
+                  fontWeight: 600,
+                  color: 'var(--text)',
+                  marginBottom: '8px',
+                }}
+              >
+                {contactViewUser.name || 'Без имени'}
+              </h2>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--text-muted)',
+                  marginBottom: '4px',
+                  wordBreak: 'break-all',
+                }}
+              >
+                {contactViewUser.email}
+              </div>
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                ID: {contactViewUser.public_id}
+              </div>
+            </div>
+
+            <div
+              style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}
+            >
+              {contactViewUser.id !== user?.id &&
+                !friends.some(f => f.public_id === contactViewUser.public_id) &&
+                !friendRequests.outgoing.some(
+                  r => r.user.public_id === contactViewUser.public_id
+                ) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await sendFriendRequest(contactViewUser.public_id);
+                        toast.success(res.message);
+                        loadFriendRequests();
+                        loadFriends();
+                        setContactViewUser(null);
+                      } catch (err: unknown) {
+                        const ax = err as { response?: { data?: { detail?: string } } };
+                        toast.error(ax.response?.data?.detail || 'Не удалось отправить запрос');
+                      }
+                    }}
+                    style={{
+                      padding: '10px 20px',
+                      background: 'var(--primary)',
+                      color: 'var(--text-on-primary)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                    }}
+                  >
+                    <UserPlus size={18} />
+                    Добавить в друзья
+                  </button>
+                )}
+              <button
+                type="button"
+                onClick={() => setContactViewUser(null)}
+                style={{
+                  padding: '10px 20px',
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                }}
+              >
+                Закрыть
               </button>
             </div>
           </div>

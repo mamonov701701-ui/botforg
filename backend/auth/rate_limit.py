@@ -15,7 +15,7 @@ def check_rate_limit(request: Request, action: str):
     Check rate limit for IP + action
     Raises HTTPException 429 if limit exceeded
     """
-    ip = request.client.host
+    ip = request.client.host if request.client else "127.0.0.1"
     key = f"{ip}:{action}"
 
     now = datetime.utcnow()

@@ -1,11 +1,12 @@
 # Chat module enabled - 2026-01-21
+import logging
 import os
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from pathlib import Path
@@ -129,4 +130,6 @@ def root():
 def healthz():
     return {"status": "ok"}
 
-# Force reload trigger - chat enabled 2026-01-21 14:25
+
+
+

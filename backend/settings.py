@@ -1,8 +1,12 @@
 import os
+from pathlib import Path
 from typing import Optional
 
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
+
+_KEYS_DIR = Path(__file__).resolve().parent
+_ENV_FILE = _KEYS_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -57,7 +61,10 @@ class Settings(BaseSettings):
     # Testing mode
     TESTING: bool = os.getenv("TESTING", "false").lower() == "true"
 
-    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = ConfigDict(
+        env_file=str(_ENV_FILE) if _ENV_FILE.exists() else ".env",
+        env_file_encoding="utf-8",
+    )
 
 
 settings = Settings()

@@ -38,15 +38,19 @@ BotForg - это платформа для создания и управлен�
 - Backend: http://127.0.0.1:8001 (Swagger: /docs)
 - Frontend: http://localhost:5173
 
-### 3. Альтернативный запуск скриптом:
+### 3. Полный запуск одним скриптом (рекомендуется):
 
-- **PowerShell**: Открыть PowerShell в корне проекта и выполнить:
+Скрипт освобождает порты 8001 и 5173, применяет миграции БД и запускает backend и frontend:
+
+- **PowerShell** (из корня проекта):
   ```powershell
   .\scripts\start-dev.ps1
   ```
-- **CMD**: Или использовать batch-файл:
-  ```cmd
-  .\scripts\start-dev.bat
+  Откроются два окна: backend (8001) и frontend (5173). Закройте их для остановки.
+
+- Только применить миграции (например, после клонирования репозитория):
+  ```powershell
+  .\scripts\prepare-dev.ps1
   ```
 
 ## API URL
@@ -102,10 +106,10 @@ botforg/
 
 ### Backend
 
-- Авто-перезагрузка при изменениях (uvicorn --reload)
 - Swagger документация: http://127.0.0.1:8001/docs
 - База данных: SQLite (botforg.db) с Alembic миграциями
 - Конфигурация через переменные окружения (файл `.env`)
+- **Личный кабинет — Настройки**: API `GET/PUT /me/settings`, `PATCH /me`; данные хранятся в таблице `user_settings` (профиль, интерфейс, уведомления, BF Agent)
 
 ### Frontend
 

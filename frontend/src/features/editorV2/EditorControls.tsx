@@ -81,20 +81,38 @@ const EditorControls: React.FC<EditorControlsProps> = ({
 
   // Загрузка сценариев при монтировании (только для авторизованных пользователей)
   useEffect(() => {
-    if (botId && user) {
-      const botIdNum = parseInt(botId);
-      console.log('🔄 Loading scenarios for bot:', botIdNum);
+    if (!botId || !user) return;
 
-      loadBotScenarios(botIdNum);
-      loadLibraryScenarios();
-      enableAutoSave(); // Включаем автосохранение
-    }
+    const botIdNum = parseInt(botId);
+    let cancelled = false;
+
+    (async () => {
+      try {
+        console.log('🔄 Loading scenarios for bot:', botIdNum);
+        await loadBotScenarios(botIdNum);
+        if (cancelled) return;
+        loadLibraryScenarios();
+        enableAutoSave();
+      } catch (e: any) {
+        if (cancelled) return;
+        const is403 =
+          e?.status === 403 ||
+          (typeof e?.message === 'string' && e.message.includes('Access denied'));
+        if (is403) {
+          showToast('Нет доступа к этому боту. Выберите свой бот.', 'error');
+          navigate('/dashboard/bots');
+          return;
+        }
+        console.error('Failed to load scenarios:', e);
+      }
+    })();
 
     return () => {
-      disableAutoSave(); // Выключаем при размонтировании
+      cancelled = true;
+      disableAutoSave();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [botId, user]); // botId и user в зависимостях
+  }, [botId, user]);
 
   const handleSelectScenario = (scenarioId: string) => {
     selectScenario(parseInt(scenarioId));

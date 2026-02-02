@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Smartphone, MessageSquare, FileSpreadsheet, CreditCard } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction } from '../../../constants/roles';
+import { getSettings, updateSettings, updateMe } from '../../../api/auth';
+import { toast } from '../../../utils/toast';
 
 type TabType = 'profile' | 'integrations' | 'interface' | 'agent';
 
@@ -17,9 +19,11 @@ interface Integration {
 }
 
 export default function SettingsPage() {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState<TabType>('profile');
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   // Стейт для профиля
   const [profileData, setProfileData] = useState({
@@ -57,6 +61,54 @@ export default function SettingsPage() {
     mode: 'advisor',
     dataPolicy: 'minimal',
   });
+
+  // Загрузка настроек с бэкенда
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoadingSettings(true);
+        const data = await getSettings();
+        if (cancelled) return;
+        setProfileData({
+          name: data.profile.name ?? '',
+          email: data.profile.email ?? '',
+          language: data.profile.language ?? 'ru',
+          timezone: data.profile.timezone ?? 'Europe/Moscow',
+          twoFactorEnabled: data.profile.two_factor_enabled ?? false,
+        });
+        setInterfaceSettings({
+          theme: data.interface?.theme ?? 'system',
+          density: data.interface?.density ?? 'comfortable',
+          fontSize: data.interface?.font_size ?? 'medium',
+        });
+        setNotificationSettings({
+          email: {
+            botErrors: data.notifications?.email?.bot_errors ?? true,
+            payments: data.notifications?.email?.payments ?? true,
+            teamChanges: data.notifications?.email?.team_changes ?? false,
+          },
+          telegram: {
+            botErrors: data.notifications?.telegram?.bot_errors ?? false,
+            payments: data.notifications?.telegram?.payments ?? true,
+            teamChanges: data.notifications?.telegram?.team_changes ?? false,
+          },
+        });
+        setAgentSettings({
+          enabled: data.agent?.enabled ?? false,
+          mode: data.agent?.mode ?? 'advisor',
+          dataPolicy: data.agent?.data_policy ?? 'minimal',
+        });
+      } catch (e) {
+        if (!cancelled) toast.error('Не удалось загрузить настройки');
+      } finally {
+        if (!cancelled) setLoadingSettings(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const integrations: Integration[] = [
     {
@@ -97,24 +149,85 @@ export default function SettingsPage() {
 
   const canEditIntegrations = hasAccessToAction(user?.role, 'settings_integrations');
 
-  const handleSaveProfile = () => {
-    console.log('Save profile:', profileData);
-    // TODO: API call
+  const handleSaveProfile = async () => {
+    try {
+      setSaving(true);
+      await updateMe({ name: profileData.name || null });
+      await updateSettings({
+        profile: {
+          language: profileData.language,
+          timezone: profileData.timezone,
+          two_factor_enabled: profileData.twoFactorEnabled,
+        },
+      });
+      setUser(user ? { ...user, name: profileData.name || null } : null);
+      toast.success('Профиль сохранён');
+    } catch {
+      toast.error('Не удалось сохранить профиль');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSaveInterface = () => {
-    console.log('Save interface:', interfaceSettings);
-    // TODO: Apply settings
+  const handleSaveInterface = async () => {
+    try {
+      setSaving(true);
+      await updateSettings({
+        interface: {
+          theme: interfaceSettings.theme,
+          density: interfaceSettings.density,
+          font_size: interfaceSettings.fontSize,
+        },
+      });
+      toast.success('Настройки интерфейса применены');
+    } catch {
+      toast.error('Не удалось сохранить настройки');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSaveNotifications = () => {
-    console.log('Save notifications:', notificationSettings);
-    // TODO: API call
+  const handleSaveNotifications = async () => {
+    try {
+      setSaving(true);
+      await updateSettings({
+        notifications: {
+          email: {
+            bot_errors: notificationSettings.email.botErrors,
+            payments: notificationSettings.email.payments,
+            team_changes: notificationSettings.email.teamChanges,
+          },
+          telegram: {
+            bot_errors: notificationSettings.telegram.botErrors,
+            payments: notificationSettings.telegram.payments,
+            team_changes: notificationSettings.telegram.teamChanges,
+          },
+        },
+      });
+      toast.success('Настройки уведомлений сохранены');
+    } catch {
+      toast.error('Не удалось сохранить уведомления');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleSaveAgent = () => {
-    console.log('Save agent:', agentSettings);
-    // TODO: API call
+  const handleSaveAgent = async () => {
+    try {
+      setSaving(true);
+      await updateSettings({
+        agent: {
+          enabled: agentSettings.enabled,
+          mode: agentSettings.mode,
+          data_policy: agentSettings.dataPolicy,
+        },
+      });
+      toast.success('Настройки BF Agent сохранены');
+    } catch {
+      toast.error('Не удалось сохранить настройки');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabs = [
@@ -123,6 +236,16 @@ export default function SettingsPage() {
     { id: 'interface' as TabType, label: 'Интерфейс и уведомления' },
     { id: 'agent' as TabType, label: 'BF Agent' },
   ];
+
+  if (loadingSettings) {
+    return (
+      <DashboardPage title="Настройки" subtitle="Управление аккаунтом и настройками">
+        <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          Загрузка настроек...
+        </div>
+      </DashboardPage>
+    );
+  }
 
   return (
     <DashboardPage title="Настройки" subtitle="Управление аккаунтом и настройками">
@@ -331,6 +454,7 @@ export default function SettingsPage() {
             <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 onClick={handleSaveProfile}
+                disabled={saving}
                 style={{
                   padding: '12px 24px',
                   background: 'var(--primary)',
@@ -342,10 +466,12 @@ export default function SettingsPage() {
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--primary-hover)')}
+                onMouseEnter={e =>
+                  !saving && (e.currentTarget.style.background = 'var(--primary-hover)')
+                }
                 onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}
               >
-                Сохранить
+                {saving ? 'Сохранение...' : 'Сохранить'}
               </button>
               <button
                 onClick={() => setShowPasswordModal(true)}
@@ -560,6 +686,7 @@ export default function SettingsPage() {
 
               <button
                 onClick={handleSaveInterface}
+                disabled={saving}
                 style={{
                   padding: '12px 24px',
                   background: 'var(--primary)',
@@ -568,13 +695,16 @@ export default function SettingsPage() {
                   borderRadius: '8px',
                   fontSize: '15px',
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  opacity: saving ? 0.7 : 1,
                   transition: 'all 0.2s',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--primary-hover)')}
+                onMouseEnter={e =>
+                  !saving && (e.currentTarget.style.background = 'var(--primary-hover)')
+                }
                 onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}
               >
-                Применить
+                {saving ? 'Сохранение...' : 'Применить'}
               </button>
             </div>
           </Card>
@@ -658,6 +788,7 @@ export default function SettingsPage() {
 
               <button
                 onClick={handleSaveNotifications}
+                disabled={saving}
                 style={{
                   padding: '12px 24px',
                   marginTop: '16px',
@@ -667,13 +798,16 @@ export default function SettingsPage() {
                   borderRadius: '8px',
                   fontSize: '15px',
                   fontWeight: 600,
-                  cursor: 'pointer',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  opacity: saving ? 0.7 : 1,
                   transition: 'all 0.2s',
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'var(--primary-hover)')}
+                onMouseEnter={e =>
+                  !saving && (e.currentTarget.style.background = 'var(--primary-hover)')
+                }
                 onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}
               >
-                Сохранить
+                {saving ? 'Сохранение...' : 'Сохранить'}
               </button>
             </div>
           </Card>
@@ -781,6 +915,7 @@ export default function SettingsPage() {
 
             <button
               onClick={handleSaveAgent}
+              disabled={saving}
               style={{
                 padding: '12px 24px',
                 background: 'var(--primary)',
@@ -789,13 +924,16 @@ export default function SettingsPage() {
                 borderRadius: '8px',
                 fontSize: '15px',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.7 : 1,
                 transition: 'all 0.2s',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--primary-hover)')}
+              onMouseEnter={e =>
+                !saving && (e.currentTarget.style.background = 'var(--primary-hover)')
+              }
               onMouseLeave={e => (e.currentTarget.style.background = 'var(--primary)')}
             >
-              Сохранить
+              {saving ? 'Сохранение...' : 'Сохранить'}
             </button>
           </div>
         </Card>

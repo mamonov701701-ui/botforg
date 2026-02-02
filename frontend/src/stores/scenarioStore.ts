@@ -116,9 +116,13 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
         } else if (scenarios.length > 0) {
           get().selectScenario(scenarios[0].id);
         }
-      } catch (error) {
-        console.error('Failed to load scenarios:', error);
+      } catch (error: any) {
         set({ isLoading: false });
+        const is403 =
+          error?.status === 403 ||
+          (typeof error?.message === 'string' && error.message.includes('Access denied'));
+        if (is403) throw error;
+        console.error('Failed to load scenarios:', error);
       }
     },
 

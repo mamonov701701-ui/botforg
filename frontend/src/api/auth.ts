@@ -3,7 +3,46 @@
  * All endpoints use the unified HTTP client with proper error handling
  */
 
-import { get, post, ApiError } from './client';
+import { get, post, put, patch, ApiError } from './client';
+
+// --- Типы для настроек личного кабинета (ответ API: snake_case) ---
+export interface ProfileSettingsOut {
+  name: string | null;
+  email: string;
+  language: string;
+  timezone: string;
+  two_factor_enabled: boolean;
+}
+
+export interface InterfaceSettingsOut {
+  theme: string;
+  density: string;
+  font_size: string;
+}
+
+export interface NotificationChannelOut {
+  bot_errors: boolean;
+  payments: boolean;
+  team_changes: boolean;
+}
+
+export interface NotificationSettingsOut {
+  email: NotificationChannelOut;
+  telegram: NotificationChannelOut;
+}
+
+export interface AgentSettingsOut {
+  enabled: boolean;
+  mode: string;
+  data_policy: string;
+}
+
+export interface SettingsOut {
+  profile: ProfileSettingsOut;
+  interface: InterfaceSettingsOut;
+  notifications: NotificationSettingsOut;
+  agent: AgentSettingsOut;
+}
 
 // Token management
 const TOKEN_KEY = 'auth_token';
@@ -60,7 +99,11 @@ export async function registerEmail(email: string, password: string, name?: stri
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || errorData.message || 'Ошибка регистрации');
+      let msg = errorData.message || 'Ошибка регистрации';
+      const d = errorData.detail;
+      if (typeof d === 'string') msg = d;
+      else if (Array.isArray(d) && d[0]?.msg) msg = d[0].msg;
+      throw new Error(msg);
     }
 
     const data = await response.json();
@@ -111,4 +154,31 @@ export async function resetPassword(token: string, newPassword: string) {
 
 export async function verifyEmail(token: string) {
   return get(`/auth/email/verify?token=${token}`);
+}
+
+// --- Настройки личного кабинета ---
+
+export async function getSettings(): Promise<SettingsOut> {
+  return get('/me/settings');
+}
+
+export async function updateMe(data: { name?: string | null }): Promise<void> {
+  await patch('/me', data);
+}
+
+export async function updateSettings(data: {
+  profile?: {
+    name?: string | null;
+    language?: string;
+    timezone?: string;
+    two_factor_enabled?: boolean;
+  };
+  interface?: { theme?: string; density?: string; font_size?: string };
+  notifications?: {
+    email?: { bot_errors?: boolean; payments?: boolean; team_changes?: boolean };
+    telegram?: { bot_errors?: boolean; payments?: boolean; team_changes?: boolean };
+  };
+  agent?: { enabled?: boolean; mode?: string; data_policy?: string };
+}): Promise<SettingsOut> {
+  return put('/me/settings', data);
 }

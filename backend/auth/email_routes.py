@@ -1,17 +1,15 @@
+import logging
 from datetime import datetime
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from backend.auth.email import send_password_reset_email, send_verification_email
-from backend.auth.password import (
-    hash_password,
-    normalize_email,
-    validate_password,
-    verify_password,
-)
+from backend.auth.password import normalize_email, validate_password
 from backend.auth.rate_limit import check_rate_limit
+from backend.security import verify_password
 from backend.auth.tokens import (
     generate_reset_token,
     generate_verification_token,
@@ -23,6 +21,7 @@ from backend.database import get_db
 from backend.models.user import User
 from backend.settings import settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/email", tags=["email-auth"])
 
 
@@ -46,46 +45,61 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+def _hash_password(password: str) -> str:
+    """Hash password with bcrypt. Truncate to 72 bytes to avoid ValueError."""
+    pw_bytes = password.encode("utf-8")[:72]
+    return bcrypt.hashpw(pw_bytes, bcrypt.gensalt()).decode("utf-8")
+
+
 @router.post("/register")
 async def register(
     data: RegisterRequest, request: Request, db: Session = Depends(get_db)
 ):
     """Register new user with email/password"""
-    check_rate_limit(request, "register")
+    try:
+        if settings.ENVIRONMENT != "development":
+            check_rate_limit(request, "register")
+        # Validate password
+        is_valid, error = validate_password(data.password)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error)
 
-    # Validate password
-    is_valid, error = validate_password(data.password)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error)
+        # Normalize email
+        email = normalize_email(data.email)
 
-    # Normalize email
-    email = normalize_email(data.email)
+        # Check if user exists
+        existing = db.query(User).filter(User.email == email).first()
+        if existing:
+            raise HTTPException(
+                status_code=400, detail="Пользователь с таким email уже существует"
+            )
 
-    # Check if user exists
-    existing = db.query(User).filter(User.email == email).first()
-    if existing:
-        raise HTTPException(
-            status_code=400, detail="Пользователь с таким email уже существует"
+        # Create user
+        user = User(
+            email=email,
+            name=data.name or email.split("@")[0],
+            hashed_password=_hash_password(data.password),
         )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    # Create user
-    user = User(
-        email=email,
-        name=data.name or email.split("@")[0],
-        hashed_password=hash_password(data.password),
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+        # Generate verification token
+        token = generate_verification_token(db, user.id)
+        send_verification_email(email, token)
 
-    # Generate verification token
-    token = generate_verification_token(db, user.id)
-    send_verification_email(email, token)
-
-    return {
-        "message": "Регистрация успешна. Проверьте email для подтверждения.",
-        "user_id": user.id,
-    }
+        return {
+            "message": "Регистрация успешна. Проверьте email для подтверждения.",
+            "user_id": user.id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.exception("register 500: %s", e)
+        if settings.ENVIRONMENT == "development":
+            raise HTTPException(status_code=500, detail=str(e) + "\n" + traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Ошибка регистрации")
 
 
 @router.post("/login")
@@ -107,7 +121,6 @@ async def login(
             raise HTTPException(status_code=401, detail="Неверный email или пароль")
         
         # Verify password
-        from backend.security import verify_password
         if not verify_password(data.password, user.hashed_password):
             raise HTTPException(status_code=401, detail="Неверный email или пароль")
         
@@ -169,7 +182,7 @@ async def request_reset(
     user = db.query(User).filter(User.email == email).first()
 
     # Always return success (security: don't reveal if email exists)
-    if user and user.password_hash:
+    if user and user.hashed_password:
         token = generate_reset_token(db, user.id)
         send_password_reset_email(email, token)
 
@@ -193,7 +206,7 @@ async def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_d
     # Update password
     user = db.query(User).filter(User.id == user_id).first()
     if user:
-        user.password_hash = hash_password(data.new_password)
+        user.hashed_password = _hash_password(data.new_password)
         db.commit()
 
     return {"message": "Пароль успешно изменен"}

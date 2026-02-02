@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import random
 
-from sqlalchemy import Column, DateTime, Integer, String, BigInteger, Boolean, Text
+from sqlalchemy import Column, DateTime, Integer, String, BigInteger, Boolean, Text, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 
 from backend.database import Base
@@ -56,3 +56,24 @@ class User(Base):
     accounts = relationship(
         "Account", back_populates="user", cascade="all, delete-orphan"
     )
+    settings = relationship(
+        "UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class UserSettings(Base):
+    """Настройки личного кабинета: профиль, интерфейс, уведомления, BF Agent."""
+    __tablename__ = "user_settings"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    language = Column(String(10), nullable=True, default="ru")
+    timezone = Column(String(64), nullable=True, default="Europe/Moscow")
+    two_factor_enabled = Column(Boolean, default=False, nullable=False)
+    interface_settings = Column(JSON, nullable=True)  # { theme, density, fontSize }
+    notification_settings = Column(JSON, nullable=True)  # { email: {...}, telegram: {...} }
+    agent_settings = Column(JSON, nullable=True)  # { enabled, mode, dataPolicy }
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="settings")
