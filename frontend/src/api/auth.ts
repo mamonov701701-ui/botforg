@@ -156,6 +156,33 @@ export async function verifyEmail(token: string) {
   return get(`/auth/email/verify?token=${token}`);
 }
 
+// --- 152-ФЗ: юридические документы и согласия ---
+
+export interface LegalDocOut {
+  version: string;
+  text: string;
+}
+
+export interface LegalDocsResponse {
+  privacy_policy: LegalDocOut;
+  terms: LegalDocOut;
+  consent_text: LegalDocOut;
+}
+
+export async function getLegalDocs(): Promise<LegalDocsResponse> {
+  return get('/legal/docs');
+}
+
+export async function getConsentStatus(): Promise<{
+  accepted: { doc_type: string; doc_version: string; accepted_at: string }[];
+}> {
+  return get('/legal/consent/status');
+}
+
+export async function acceptConsent(docType: string, docVersion: string): Promise<{ ok: boolean }> {
+  return post('/legal/consent', { doc_type: docType, doc_version: docVersion });
+}
+
 // --- Настройки личного кабинета ---
 
 export async function getSettings(): Promise<SettingsOut> {

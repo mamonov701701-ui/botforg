@@ -9,6 +9,9 @@ import {
   registerEmail,
   requestPasswordReset,
   getMe,
+  getLegalDocs,
+  getConsentStatus,
+  acceptConsent,
 } from '../../api/auth';
 import { toast } from '../../utils/toast';
 import { Eye, EyeOff } from 'lucide-react';
@@ -33,6 +36,12 @@ export default function AuthModal() {
   const [rememberMe, setRememberMe] = useState(false);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+  const [consentDocs, setConsentDocs] = useState<{
+    privacy_policy?: { version: string; text: string };
+    terms?: { version: string; text: string };
+  } | null>(null);
 
   // Локальные ошибки валидации для каждого поля
   const [emailError, setEmailError] = useState('');
@@ -189,6 +198,11 @@ export default function AuthModal() {
           hasErrors = true;
         }
 
+        if (!consentAccepted) {
+          setConfirmPasswordError('Необходимо принять Политику ПДн и Пользовательское соглашение');
+          hasErrors = true;
+        }
+
         if (hasErrors) {
           setLoading(false);
           return;
@@ -197,8 +211,12 @@ export default function AuthModal() {
         // Регистрация
         const response = await registerEmail(email, password, username);
 
-        // Если получили токен - автоматически входим
+        // Если получили токен - автоматически входим и фиксируем согласие
         if (response?.access_token) {
+          try {
+            await acceptConsent('privacy_policy', '1.0');
+            await acceptConsent('terms', '1.0');
+          } catch (_) {}
           toast.success('Регистрация успешна! Выполняется вход...');
 
           // Получаем данные пользователя
@@ -278,21 +296,28 @@ export default function AuthModal() {
 
         console.log('Токен проверен в localStorage:', savedToken.substring(0, 20) + '...');
 
-        // Получаем данные пользователя
+        // Получаем данные пользователя и проверяем согласие (152-ФЗ)
         try {
           const user = await getMe();
           if (user) {
-            console.log('Пользователь получен:', user);
             setUser(user);
             setLoading(false);
+            try {
+              const status = await getConsentStatus();
+              const acceptedTypes = new Set(
+                (status.accepted || []).map((a: { doc_type: string }) => a.doc_type)
+              );
+              if (!acceptedTypes.has('privacy_policy') || !acceptedTypes.has('terms')) {
+                const docs = await getLegalDocs();
+                setConsentDocs(docs);
+                setShowConsentModal(true);
+                return;
+              }
+            } catch (_) {}
             toast.success('Вход выполнен успешно!');
             closeAuth();
-            // Навигация после закрытия модалки
-            if (nextPath) {
-              navigate(nextPath);
-            } else {
-              navigate('/dashboard');
-            }
+            if (nextPath) navigate(nextPath);
+            else navigate('/dashboard');
           } else {
             console.error('getMe вернул null, токен:', savedToken.substring(0, 20) + '...');
             setLoading(false);
@@ -887,6 +912,45 @@ export default function AuthModal() {
               )}
             </div>
 
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                marginBottom: '16px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                color: 'var(--text)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={consentAccepted}
+                onChange={e => setConsentAccepted(e.target.checked)}
+                style={{ marginTop: '3px', accentColor: 'var(--accent)' }}
+              />
+              <span>
+                Я согласен с{' '}
+                <a
+                  href="/legal/doc/privacy_policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Политикой обработки персональных данных
+                </a>{' '}
+                и{' '}
+                <a
+                  href="/legal/doc/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Пользовательским соглашением
+                </a>
+              </span>
+            </label>
+
             <button
               type="submit"
               disabled={loading}
@@ -984,6 +1048,87 @@ export default function AuthModal() {
               })}
             </div>
           </form>
+        )}
+
+        {/* Модальное окно согласия при первом входе (152-ФЗ) */}
+        {showConsentModal && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 20,
+              padding: '16px',
+            }}
+          >
+            <div
+              style={{
+                background: 'var(--card)',
+                borderRadius: '16px',
+                padding: '24px',
+                maxWidth: '420px',
+                width: '100%',
+              }}
+            >
+              <h3 style={{ marginBottom: '12px', fontSize: '18px' }}>
+                Согласие на обработку персональных данных
+              </h3>
+              <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                Для продолжения необходимо принять{' '}
+                <a
+                  href="/legal/doc/privacy_policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Политику ПДн
+                </a>{' '}
+                и{' '}
+                <a
+                  href="/legal/doc/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Пользовательское соглашение
+                </a>
+                .
+              </p>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await acceptConsent('privacy_policy', '1.0');
+                    await acceptConsent('terms', '1.0');
+                    setShowConsentModal(false);
+                    setConsentDocs(null);
+                    toast.success('Согласие принято');
+                    closeAuth();
+                    if (nextPath) navigate(nextPath);
+                    else navigate('/dashboard');
+                  } catch (e) {
+                    toast.error('Не удалось сохранить согласие');
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: 'var(--accent)',
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Принять и продолжить
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

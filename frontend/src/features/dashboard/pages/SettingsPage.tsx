@@ -60,6 +60,7 @@ export default function SettingsPage() {
     enabled: false,
     mode: 'advisor',
     dataPolicy: 'minimal',
+    allowSendTextToAi: false,
   });
 
   // Загрузка настроек с бэкенда
@@ -98,6 +99,7 @@ export default function SettingsPage() {
           enabled: data.agent?.enabled ?? false,
           mode: data.agent?.mode ?? 'advisor',
           dataPolicy: data.agent?.data_policy ?? 'minimal',
+          allowSendTextToAi: data.agent?.allow_send_text_to_ai ?? false,
         });
       } catch (e) {
         if (!cancelled) toast.error('Не удалось загрузить настройки');
@@ -220,6 +222,7 @@ export default function SettingsPage() {
           enabled: agentSettings.enabled,
           mode: agentSettings.mode,
           data_policy: agentSettings.dataPolicy,
+          allow_send_text_to_ai: agentSettings.allowSendTextToAi,
         },
       });
       toast.success('Настройки BF Agent сохранены');
@@ -838,6 +841,32 @@ export default function SettingsPage() {
                   <div style={{ fontSize: '14px', fontWeight: 500 }}>Включить BF Agent</div>
                   <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                     AI-помощник для анализа и оптимизации ботов
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <input
+                  type="checkbox"
+                  checked={agentSettings.allowSendTextToAi}
+                  onChange={e =>
+                    setAgentSettings({ ...agentSettings, allowSendTextToAi: e.target.checked })
+                  }
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    cursor: 'pointer',
+                    accentColor: 'var(--primary)',
+                  }}
+                />
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: 500 }}>
+                    Разрешить отправку текста в AI
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                    Чат, генерация изображений и TTS будут доступны только при включении (152-ФЗ)
                   </div>
                 </div>
               </label>

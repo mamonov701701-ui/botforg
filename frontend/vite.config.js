@@ -19,7 +19,9 @@ export default defineConfig({
             !req.url.startsWith('/analytics') &&
             !req.url.startsWith('/blocks') &&
             !req.url.startsWith('/scenarios') &&
-            !req.url.startsWith('/chat')
+            !req.url.startsWith('/chat') &&
+            !req.url.startsWith('/legal') &&
+            !req.url.startsWith('/privacy')
           ) {
             req.headers['host'] = 'localhost:5173';
           }
@@ -70,6 +72,16 @@ export default defineConfig({
         secure: false,
       },
       '/chat': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/legal': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/privacy': {
         target: 'http://localhost:8001',
         changeOrigin: true,
         secure: false,
