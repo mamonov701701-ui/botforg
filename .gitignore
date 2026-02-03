@@ -7,12 +7,30 @@ __pycache__/
 *.log
 *.sqlite3
 *.db
+*.db.*
+botforg.db
+botforg.db.*
+
 .env
 .env.*
 .venv/
 venv/
 backend/venv/
-botforg.db
+
+# Логи и временные файлы backend
+backend_stderr.txt
+backend_stderr*.txt
+uvicorn_err.txt
+uvicorn_out.txt
+**/uvicorn_*.txt
+**/backend_stderr*.txt
+
+# Локальные lock/результаты
+**/monitoring/prompt_agent.lock
+TEST_RESULTS.md
+test-results/
+*.bak
+*.bak_*
 
 # Node / Frontend
 node_modules/
