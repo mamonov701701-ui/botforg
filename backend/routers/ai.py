@@ -1,18 +1,29 @@
 """
 AI Router for BotForg
 Provides AI-related endpoints for chat, image generation, etc.
+152-ФЗ: отправка текста в AI разрешена только при явном флаге allow_send_text_to_ai в настройках.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Optional
+from sqlalchemy.orm import Session
 
 from backend.auth.deps import get_current_user
-from backend.models.user import User
+from backend.database import get_db
+from backend.models.user import User, UserSettings
 from backend.services.ai_service import ai_service, AIMessage, AIRequest, AIResponse
 
 
 router = APIRouter(prefix="/ai", tags=["AI"])
+
+
+def _allow_send_text_to_ai(db: Session, user_id: int) -> bool:
+    """Проверка флага «Разрешить отправку текста в AI» (по умолчанию OFF)."""
+    row = db.query(UserSettings).filter(UserSettings.user_id == user_id).first()
+    if not row or not row.agent_settings:
+        return False
+    return row.agent_settings.get("allow_send_text_to_ai") is True
 
 
 class ChatRequest(BaseModel):
@@ -51,11 +62,17 @@ class TTSRequest(BaseModel):
 async def chat(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Send a message to AI chat model.
-    Requires authentication.
+    Requires authentication and разрешение «Разрешить отправку текста в AI» в настройках.
     """
+    if not _allow_send_text_to_ai(db, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Отправка текста в AI отключена. Включите в настройках: «Разрешить отправку текста в AI».",
+        )
     try:
         # Build messages list
         messages = []
@@ -104,11 +121,17 @@ async def chat(
 async def generate_image(
     request: ImageRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Generate an image using AI.
-    Requires authentication.
+    Requires authentication and разрешение «Разрешить отправку текста в AI».
     """
+    if not _allow_send_text_to_ai(db, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Отправка текста в AI отключена. Включите в настройках: «Разрешить отправку текста в AI».",
+        )
     try:
         url = await ai_service.generate_image(
             prompt=request.prompt,
@@ -135,14 +158,20 @@ async def generate_image(
 async def text_to_speech(
     request: TTSRequest,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     Convert text to speech using AI.
     Returns audio file bytes.
-    Requires authentication.
+    Requires authentication and разрешение «Разрешить отправку текста в AI».
     """
     from fastapi.responses import Response
-    
+
+    if not _allow_send_text_to_ai(db, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Отправка текста в AI отключена. Включите в настройках: «Разрешить отправку текста в AI».",
+        )
     try:
         audio_bytes = await ai_service.text_to_speech(
             text=request.text,

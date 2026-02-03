@@ -2,6 +2,7 @@
 import logging
 import os
 import sys
+import threading
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI, Request
@@ -38,9 +39,25 @@ from backend.routers import bot_tags as bot_tags_router
 from backend.routers import chat as chat_router
 from backend.routers import bot_contacts as bot_contacts_router
 from backend.routers import market as market_router
+from backend.routers import legal as legal_router
+from backend.routers import privacy as privacy_router
+from backend.routers import channels as channels_router
+from backend.routers import channel_webhooks as channel_webhooks_router
+from backend.routers import max as max_router
+from backend.routers import whatsapp as whatsapp_router
+from backend.middleware.pd_access_log import PDAccessLogMiddleware
+import backend.channels  # noqa: F401 — регистрация адаптеров каналов
 from backend.settings import settings
 
-app = FastAPI()
+logger = logging.getLogger(__name__)
+
+# В prod (ENVIRONMENT=production) по умолчанию /docs, /redoc, /openapi.json отключены (404)
+_docs_enabled = getattr(settings, "ALLOW_DOCS", True)
+app = FastAPI(
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
 
 # Add session middleware for OAuth state
 app.add_middleware(
@@ -51,6 +68,8 @@ app.add_middleware(
     same_site="lax",
 )
 
+# Логирование доступа к ПДн (152-ФЗ)
+app.add_middleware(PDAccessLogMiddleware)
 # Добавляем security middleware
 app.add_middleware(SecurityMiddleware)
 
@@ -107,11 +126,58 @@ app.include_router(bot_tags_router.router)
 app.include_router(bot_contacts_router.router)
 app.include_router(market_router.router)
 app.include_router(chat_router.router)
+app.include_router(legal_router.router)
+app.include_router(privacy_router.router)
+app.include_router(channels_router.router)
+app.include_router(max_router.router)
+app.include_router(whatsapp_router.router)
+app.include_router(channel_webhooks_router.router)
 
 # Настройка раздачи статических файлов для загруженных медиа
 UPLOAD_DIR = Path("uploads/media")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
+
+def _check_production_env():
+    """152-ФЗ: в production запретить запуск без обязательных env (РФ)."""
+    if settings.ENVIRONMENT != "production":
+        return
+    dev_jwt = "dev-jwt-secret-key-change-in-production-32"
+    if not settings.JWT_SECRET or settings.JWT_SECRET == dev_jwt:
+        logger.error("Production: JWT_SECRET must be set and differ from dev default")
+        sys.exit(1)
+    if getattr(settings, "DEBUG", False):
+        logger.error("Production: DEBUG must be false")
+        sys.exit(1)
+    if settings.DATA_REGION != "RU":
+        logger.error("Production: DATA_REGION=RU is required for РФ")
+        sys.exit(1)
+    if settings.STORAGE_REGION != "RU":
+        logger.error("Production: STORAGE_REGION=RU is required for РФ")
+        sys.exit(1)
+    if not settings.CHAT_HASH_SALT or settings.CHAT_HASH_SALT.strip() == "":
+        logger.error("Production: CHAT_HASH_SALT must be set for РФ")
+        sys.exit(1)
+
+
+@app.on_event("startup")
+def startup_retention_job():
+    """Проверка prod-переменных (152-ФЗ), затем запуск ежедневной очистки по retention."""
+    _check_production_env()
+    if getattr(settings, "TESTING", False):
+        return
+    from backend.services.retention_cleanup import run_retention_cleanup_once
+    def _loop():
+        import time
+        time.sleep(60)
+        while True:
+            try:
+                run_retention_cleanup_once()
+            except Exception as e:
+                logger.exception("retention_cleanup: %s", e)
+            time.sleep(86400)
+    threading.Thread(target=_loop, daemon=True).start()
 
 
 @app.get("/health")

@@ -81,6 +81,16 @@ class BotUpdate(BaseModel):
     description: Optional[str] = None
     webhook_url: Optional[str] = None
     is_active: Optional[bool] = None
+    # Режим минимального хранения ПДн (152-ФЗ)
+    store_messages: Optional[bool] = None
+    message_retention_days: Optional[int] = None
+
+    @field_validator("message_retention_days")
+    @classmethod
+    def validate_retention_days(cls, v):
+        if v is not None and (v < 1 or v > 3650):
+            raise ValueError("message_retention_days must be between 1 and 3650")
+        return v
 
     @field_validator("title")
     @classmethod
@@ -132,6 +142,9 @@ class BotOut(BaseModel):
     status: Optional[str] = None  # Статус бота (active/paused/error)
     usersCount: Optional[int] = 0  # Количество пользователей бота
     messagesCount: Optional[int] = 0  # Количество сообщений
+    # 152-ФЗ: минимальное хранение ПДн
+    store_messages: Optional[bool] = False
+    message_retention_days: Optional[int] = 30
 
     model_config = ConfigDict(from_attributes=True)
     

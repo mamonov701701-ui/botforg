@@ -39,12 +39,12 @@ async def get_current_user_optional(
         
         if auth_token:
             try:
-                user_id = verify_jwt_token(auth_token)
+                user_id, token_tv = verify_jwt_token(auth_token)
                 if user_id:
                     user = db.query(User).filter(User.id == user_id).first()
-                    if user:
+                    if user and getattr(user, "token_version", 0) == token_tv:
                         return user
-            except:
+            except Exception:
                 pass
     
     if not auth_token:
@@ -66,6 +66,8 @@ async def get_current_user_optional(
             return None
         
         user = db.query(User).filter(User.id == int(token_data)).first()
+        if user and getattr(user, "token_version", 0) != payload.get("tv", 0):
+            return None
         return user
     except (JWTError, ValueError, TypeError):
         return None

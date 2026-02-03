@@ -53,6 +53,7 @@ class AgentSettingsOut(BaseModel):
     enabled: bool
     mode: str
     data_policy: str
+    allow_send_text_to_ai: bool = False  # 152-ФЗ: по умолчанию OFF
 
 
 class SettingsOut(BaseModel):
@@ -92,6 +93,7 @@ class AgentSettingsUpdate(BaseModel):
     enabled: bool | None = None
     mode: str | None = None
     data_policy: str | None = None
+    allow_send_text_to_ai: bool | None = None
 
 
 class SettingsUpdate(BaseModel):
@@ -108,7 +110,7 @@ DEFAULT_NOTIFICATIONS = {
     "email": {"bot_errors": True, "payments": True, "team_changes": False},
     "telegram": {"bot_errors": False, "payments": True, "team_changes": False},
 }
-DEFAULT_AGENT = {"enabled": False, "mode": "advisor", "data_policy": "minimal"}
+DEFAULT_AGENT = {"enabled": False, "mode": "advisor", "data_policy": "minimal", "allow_send_text_to_ai": False}
 
 
 def _get_or_create_settings(db: Session, user_id: int) -> UserSettings:
@@ -207,6 +209,7 @@ async def get_settings(
             enabled=agent.get("enabled", False),
             mode=agent.get("mode", "advisor"),
             data_policy=agent.get("data_policy", "minimal"),
+            allow_send_text_to_ai=agent.get("allow_send_text_to_ai", False),
         ),
     )
 

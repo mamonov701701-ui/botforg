@@ -26,6 +26,13 @@ class Bot(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
     
+    # 152-ФЗ: срок хранения сообщений (дней), по умолчанию 30 (применяется при store_messages=True)
+    message_retention_days = Column(Integer, default=30, nullable=False)
+    # 152-ФЗ / AI safety: разрешить отправку текста пользователей в AI (по умолчанию OFF)
+    allow_ai_text = Column(Boolean, default=False, nullable=False)
+    # Режим минимального хранения ПДн: хранить тексты сообщений (OFF = только агрегаты)
+    store_messages = Column(Boolean, default=False, nullable=False)
+
     # Поля блокировки бота
     is_suspended = Column(Boolean, default=False)  # Приостановлен ли бот
     suspension_type = Column(String, nullable=True)  # warning, temporary, permanent
@@ -35,6 +42,11 @@ class Bot(Base):
     suspended_by_id = Column(Integer, nullable=True)  # Кто заблокировал
 
     user = relationship("User", back_populates="bots")
+    channel_connections = relationship(
+        "BotChannelConnection",
+        back_populates="bot",
+        cascade="all, delete-orphan",
+    )
 
 
 # Оставляем старую модель для совместимости

@@ -84,18 +84,44 @@ async def track_event(
     event_type: str,
     event_name: str,
     payload: Optional[dict] = None,
+    bot_id: Optional[int] = None,
+    channel: Optional[str] = None,
+    chat_hash: Optional[str] = None,
+    chat_id: Optional[str] = None,
+    node_id: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Track a custom event.
+    Если передан chat_id — сервер вычисляет chat_hash (HMAC), chat_id в БД/логах не сохраняется.
+    Если передан bot_id и у бота store_messages=False, сохраняются только агрегаты без ПДн.
     """
+    from backend.models.bot import Bot
+    from backend.utils.bot_access import check_bot_access
+    from backend.utils.chat_hash import make_chat_hash
+
+    resolved_chat_hash = make_chat_hash(channel or "", chat_id) if chat_id else chat_hash
+
+    minimal_storage = False
+    resolved_bot_id = bot_id
+    if bot_id is not None:
+        check_bot_access(bot_id, current_user.id, db)
+        bot = db.query(Bot).filter(Bot.id == bot_id).first()
+        if bot and not getattr(bot, "store_messages", True):
+            minimal_storage = True
+
     analytics = get_analytics_service(db)
     event = analytics.track_event(
         event_type=event_type,
         event_name=event_name,
-        user_id=current_user.id,
+        user_id=None if minimal_storage else current_user.id,
+        bot_id=resolved_bot_id,
         payload=payload,
+        channel=channel,
+        chat_hash=resolved_chat_hash,
+        node_id=node_id,
+        minimal_storage=minimal_storage,
     )
     return {"id": event.id, "created_at": event.created_at}
 

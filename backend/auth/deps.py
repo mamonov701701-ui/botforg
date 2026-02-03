@@ -15,7 +15,7 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> U
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
         )
 
-    user_id = verify_jwt_token(token)
+    user_id, token_tv = verify_jwt_token(token)
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -26,6 +26,11 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> U
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
+        )
+    if getattr(user, "token_version", 0) != token_tv:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="token revoked",
         )
 
     return user

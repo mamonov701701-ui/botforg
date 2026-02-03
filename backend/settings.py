@@ -60,6 +60,26 @@ class Settings(BaseSettings):
 
     # Testing mode
     TESTING: bool = os.getenv("TESTING", "false").lower() == "true"
+    # Production: must be False (no debug stack traces, no autodocs in unsafe mode)
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
+    # В prod по умолчанию отключаем /docs, /redoc, /openapi.json (ALLOW_DOCS=false)
+    ALLOW_DOCS: bool = (
+        os.getenv("ALLOW_DOCS", "false" if os.getenv("ENVIRONMENT") == "production" else "true").lower() == "true"
+    )
+
+    # 152-ФЗ: регион данных и хранения (для prod в РФ обязательны DATA_REGION=RU, STORAGE_REGION=RU)
+    DATA_REGION: str = ""
+    STORAGE_REGION: str = ""
+    # 152-ФЗ: секрет для HMAC chat_hash (в prod обязателен, chat_id в БД не хранится)
+    CHAT_HASH_SALT: str = ""
+
+    # MAX (platform-api.max.ru): базовый URL API и публичный URL для webhook
+    MAX_API_BASE: str = "https://platform-api.max.ru"
+    MAX_WEBHOOK_BASE_URL: str = ""  # https://YOUR_DOMAIN — обязателен в prod для включения канала MAX
+    MAX_WEBHOOK_SECRET_LEN: int = 48  # длина генерируемого webhook_secret (A-Za-z0-9_-)
+
+    # WhatsApp Meta Cloud API (Graph API)
+    WHATSAPP_GRAPH_API_BASE: str = "https://graph.facebook.com/v19.0"
 
     model_config = ConfigDict(
         env_file=str(_ENV_FILE) if _ENV_FILE.exists() else ".env",

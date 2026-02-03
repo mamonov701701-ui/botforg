@@ -10,6 +10,8 @@ from backend.models.purchase import Purchase
 from backend.models.payment import Payment
 from backend.models.team import TeamMember
 from backend.models.bot import Bot, BotInstance
+from backend.models.bot_channel import BotChannelConnection
+from backend.models.processed_update import ProcessedUpdate
 from backend.models.bot_template import BotTemplate
 from backend.models.user_template import UserTemplate
 from backend.models.token_blacklist import TokenBlacklist
@@ -35,6 +37,7 @@ from backend.models.market import (
     MarketItem, MarketOrder, OrderProposal, FreelancerProfile, MarketReview,
     MarketItemType, MarketOrderStatus
 )
+from backend.models.legal import Consent
 
 __all__ = [
     "User",
@@ -50,6 +53,8 @@ __all__ = [
     "TeamMember",
     "Bot",
     "BotInstance",
+    "BotChannelConnection",
+    "ProcessedUpdate",
     "BotTemplate",
     "UserTemplate",
     "TokenBlacklist",
@@ -88,4 +93,5 @@ __all__ = [
     "MarketReview",
     "MarketItemType",
     "MarketOrderStatus",
+    "Consent",
 ]

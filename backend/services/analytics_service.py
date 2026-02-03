@@ -30,19 +30,47 @@ class AnalyticsService:
         session_id: Optional[str] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
+        *,
+        channel: Optional[str] = None,
+        chat_hash: Optional[str] = None,
+        node_id: Optional[str] = None,
+        minimal_storage: bool = False,
     ) -> Event:
-        """Track a new event"""
-        event = Event(
-            event_type=event_type,
-            event_name=event_name,
-            user_id=user_id,
-            bot_id=bot_id,
-            scenario_id=scenario_id,
-            payload=payload or {},
-            session_id=session_id,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
+        """
+        Track a new event.
+        При minimal_storage=True сохраняются только агрегаты: event_type, channel, chat_hash, node_id, bot_id, created_at
+        (без payload, user_id, session_id, ip_address, user_agent).
+        """
+        if minimal_storage:
+            event = Event(
+                event_type=event_type,
+                event_name=event_name,
+                bot_id=bot_id,
+                channel=channel,
+                chat_hash=chat_hash,
+                node_id=node_id,
+                payload={},
+                user_id=None,
+                scenario_id=None,
+                session_id=None,
+                ip_address=None,
+                user_agent=None,
+            )
+        else:
+            event = Event(
+                event_type=event_type,
+                event_name=event_name,
+                user_id=user_id,
+                bot_id=bot_id,
+                scenario_id=scenario_id,
+                payload=payload or {},
+                session_id=session_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                channel=channel,
+                chat_hash=chat_hash,
+                node_id=node_id,
+            )
         self.db.add(event)
         self.db.commit()
         self.db.refresh(event)

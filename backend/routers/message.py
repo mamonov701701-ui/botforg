@@ -65,15 +65,22 @@ async def create_message(
         is_paid_message = True
         message_price = Decimal("1.00")
 
-    # Создаем сообщение
+    # Режим минимального хранения ПДн: не сохраняем текст и user_id (152-ФЗ)
+    store_messages = getattr(bot, "store_messages", True)
+    if store_messages:
+        content = message.content
+        user_id = message.user_id or current_user.id
+    else:
+        content = ""
+        user_id = None
+
     db_message = Message(
         bot_id=message.bot_id,
-        user_id=message.user_id
-        or current_user.id,  # Если user_id не указан, используем текущего пользователя
+        user_id=user_id,
         direction=message.direction,
-        content=message.content,
+        content=content,
         status=message.status,
-        language=message.language,
+        language=message.language if store_messages else None,
         is_paid=is_paid_message,
     )
 

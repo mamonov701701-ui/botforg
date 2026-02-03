@@ -1,0 +1,23 @@
+# BotForg Backend — systemd unit (пример для Ubuntu)
+# Установка: sudo cp deploy/systemd/botforg-backend.service /etc/systemd/system/
+#            sudo systemctl daemon-reload
+#            sudo systemctl enable botforg-backend
+#            sudo systemctl start botforg-backend
+# Логи:      journalctl -u botforg-backend -f
+
+[Unit]
+Description=BotForg FastAPI Backend
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/botforg
+EnvironmentFile=/opt/botforg/.env
+ExecStart=/opt/botforg/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

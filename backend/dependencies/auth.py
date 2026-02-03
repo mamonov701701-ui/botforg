@@ -42,14 +42,14 @@ async def get_current_user(
         # Пытаемся получить токен из cookie
         auth_token = get_token_from_cookie(request)
         if auth_token:
-            logger.info(f"Token from cookie: {auth_token[:20]}...")
-            # Проверяем токен из cookie
-            user_id = verify_jwt_token(auth_token)
-            if user_id:
+            logger.info("Token from cookie")
+            user_id, token_tv = verify_jwt_token(auth_token)
+            if user_id is not None:
                 user = db.query(User).filter(User.id == user_id).first()
-                if user:
-                    logger.info(f"User authenticated from cookie: {user.email}")
+                if user and getattr(user, "token_version", 0) == token_tv:
                     return user
+                if user and getattr(user, "token_version", 0) != token_tv:
+                    raise credentials_exception
         else:
             logger.warning("No token found in header or cookie")
             logger.warning(f"Request headers keys: {list(request.headers.keys())}")
@@ -73,13 +73,16 @@ async def get_current_user(
         if token_data is None:
             raise credentials_exception
     except JWTError:
-        logger.warning(f"Invalid JWT token")
+        logger.warning("Invalid JWT token")
         raise credentials_exception
 
     user = db.query(User).filter(User.id == int(token_data)).first()
     if user is None:
-        logger.warning(f"User not found for token: {token_data}")
         raise credentials_exception
-
-    logger.info(f"User authenticated: {user.email}")
+    if getattr(user, "token_version", 0) != payload.get("tv", 0):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="token revoked",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user

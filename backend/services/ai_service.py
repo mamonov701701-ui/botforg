@@ -1,12 +1,15 @@
 """
 AI Service for BotForg
 Provides integration with various AI models (OpenAI, Anthropic, etc.)
+Перед вызовом LLM применяется маскирование PII (152-ФЗ).
 """
 
 import httpx
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 import os
+
+from backend.utils.pii_scrubber import scrub_text
 
 
 class AIMessage(BaseModel):
@@ -48,15 +51,26 @@ class AIService:
         }
     
     async def chat(self, request: AIRequest) -> AIResponse:
-        """Send a chat request to AI model"""
-        provider = self.model_providers.get(request.model, "openai")
-        
+        """Send a chat request to AI model. PII in messages is scrubbed before sending."""
+        # Маскируем PII во всех сообщениях перед отправкой в LLM
+        scrubbed_messages = [
+            AIMessage(role=m.role, content=scrub_text(m.content))
+            for m in request.messages
+        ]
+        scrubbed_request = AIRequest(
+            model=request.model,
+            messages=scrubbed_messages,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            stream=request.stream,
+        )
+        provider = self.model_providers.get(scrubbed_request.model, "openai")
         if provider == "openai":
-            return await self._openai_chat(request)
+            return await self._openai_chat(scrubbed_request)
         elif provider == "anthropic":
-            return await self._anthropic_chat(request)
+            return await self._anthropic_chat(scrubbed_request)
         else:
-            raise ValueError(f"Unsupported model: {request.model}")
+            raise ValueError(f"Unsupported model: {scrubbed_request.model}")
     
     async def _openai_chat(self, request: AIRequest) -> AIResponse:
         """Send request to OpenAI API"""
@@ -152,7 +166,8 @@ class AIService:
         size: str = "1024x1024",
         quality: str = "standard",
     ) -> str:
-        """Generate image using AI"""
+        """Generate image using AI. Prompt is PII-scrubbed before sending."""
+        prompt = scrub_text(prompt)
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY not configured")
         
@@ -187,7 +202,8 @@ class AIService:
         model: str = "tts-1",
         speed: float = 1.0,
     ) -> bytes:
-        """Convert text to speech"""
+        """Convert text to speech. Text is PII-scrubbed before sending."""
+        text = scrub_text(text)
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY not configured")
         

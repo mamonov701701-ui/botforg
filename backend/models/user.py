@@ -34,6 +34,7 @@ class User(Base):
     suspended_at = Column(DateTime, nullable=True)  # Когда заблокирован
     suspended_until = Column(DateTime, nullable=True)  # До какого времени (для временной)
     suspended_by_id = Column(Integer, nullable=True)  # Кто заблокировал (admin id)
+    token_version = Column(Integer, default=0, nullable=False)  # 152-ФЗ: отзыв токенов при /privacy/delete
 
     templates = relationship("Template", back_populates="user", cascade="all, delete")
     ratings = relationship("Rating", back_populates="user", cascade="all, delete")

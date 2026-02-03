@@ -25,8 +25,13 @@ class Event(Base):
     scenario_id = Column(Integer, ForeignKey("scenarios.id"), nullable=True, index=True)
     
     # Event data
-    payload = Column(JSON, default={})  # Additional event data
-    
+    payload = Column(JSON, default={})  # Additional event data (пустой в режиме минимального хранения)
+
+    # Агрегированные поля (режим минимального хранения ПДн: только эти + event_type, created_at)
+    channel = Column(String(50), nullable=True, index=True)   # telegram, web, etc.
+    chat_hash = Column(String(64), nullable=True, index=True)  # хеш чата, без ПДн
+    node_id = Column(String(100), nullable=True, index=True)  # узел сценария
+
     # Context
     session_id = Column(String(100), nullable=True, index=True)  # User session
     ip_address = Column(String(45), nullable=True)

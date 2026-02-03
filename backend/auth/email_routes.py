@@ -124,8 +124,8 @@ async def login(
         if not verify_password(data.password, user.hashed_password):
             raise HTTPException(status_code=401, detail="Неверный email или пароль")
         
-        # Create token
-        jwt_token = create_jwt_token(user.id)
+        # Create token (tv = token_version для отзыва при delete)
+        jwt_token = create_jwt_token(user.id, getattr(user, "token_version", 0))
         
         return {
             "message": "Вход выполнен успешно",
@@ -158,7 +158,7 @@ async def verify_email(token: str, response: Response, db: Session = Depends(get
         db.commit()
 
         # Auto-login
-        jwt_token = create_jwt_token(user.id)
+        jwt_token = create_jwt_token(user.id, getattr(user, "token_version", 0))
         set_auth_cookie(response, jwt_token)
         
         return {
