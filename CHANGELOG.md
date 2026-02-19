@@ -2,6 +2,30 @@
 
 Все значимые изменения в проекте BotForg будут документироваться в этом файле.
 
+## [2026-02-02] - Модерация шаблонов маркетплейса
+
+### Добавлено
+- **Модерация шаблонов (Moderation Flow)**:
+  - Жизненный цикл: draft → pending → approved/rejected
+  - Enum `ModerationStatus` в модели MarketItem
+  - Поля `moderation_status`, `moderation_rejection_reason`
+- **Backend API**:
+  - `POST /api/market/templates/{id}/submit` — отправить на модерацию (draft→pending), только Developer
+  - `POST /api/admin/market/templates/{id}/approve` — одобрить (owner)
+  - `POST /api/admin/market/templates/{id}/reject` — отклонить с причиной (owner)
+- **Публичный маркетплейс** — в списке только шаблоны со статусом approved
+- **Кабинет разработчика** (`/developer/templates`):
+  - Отображение статуса модерации (Черновик, На модерации, Одобрен, Отклонён)
+  - Кнопка «На модерацию» для draft
+  - Показ причины отказа для rejected
+- **Миграция** `market_moderation_014.py` — колонки moderation_status, moderation_rejection_reason
+- **Тесты** `backend/tests/test_moderation.py` — 5 тестов модерации
+- **Документация** — раздел «Модерация шаблонов» в docs/MARKETPLACE.md
+
+### Изменено
+- Схема MyTemplateOut — добавлены moderation_status, moderation_rejection_reason
+- Существующие опубликованные шаблоны помечены как approved при миграции
+
 ## [2026-01-21] - Маркетплейс: выбор из личного кабинета и улучшение UI
 
 ### Добавлено

@@ -28,6 +28,14 @@ class MarketOrderStatus(str, Enum):
     CANCELLED = "cancelled"  # Отменен
 
 
+class ModerationStatus(str, Enum):
+    """Статус модерации шаблона"""
+    DRAFT = "draft"  # Черновик
+    PENDING = "pending"  # На модерации
+    APPROVED = "approved"  # Одобрен
+    REJECTED = "rejected"  # Отклонён
+
+
 class MarketItem(Base):
     """
     Товар на маркетплейсе (шаблон или сценарий)
@@ -66,6 +74,15 @@ class MarketItem(Base):
     # Продавец
     seller_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
+    # Модерация (для шаблонов)
+    moderation_status = Column(
+        SQLEnum(ModerationStatus),
+        default=ModerationStatus.DRAFT,
+        nullable=False,
+        index=True,
+    )
+    moderation_rejection_reason = Column(Text, nullable=True)  # Причина отказа
+
     # Временные метки
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), 

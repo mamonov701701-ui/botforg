@@ -5,6 +5,8 @@
 ### 1. Database Models ✅
 Созданы модели БД в `backend/models/market.py`:
 - **MarketItem**: Товары на маркетплейсе (шаблоны и сценарии)
+  - `moderation_status`: draft | pending | approved | rejected
+  - `moderation_rejection_reason`: причина отклонения (для rejected)
 - **MarketOrder**: Заказы от заказчиков
 - **OrderProposal**: Предложения от исполнителей на заказы
 - **FreelancerProfile**: Профили исполнителей
@@ -19,11 +21,16 @@
 Создан роутер `backend/routers/market.py` с полным набором endpoints:
 
 #### Market Items (5 endpoints):
-- `GET /api/market/items` - Список товаров с фильтрацией и поиском
+- `GET /api/market/items` - Список товаров (шаблоны: только approved)
 - `GET /api/market/items/{item_id}` - Детальная информация о товаре
 - `POST /api/market/items` - Создание товара
 - `PUT /api/market/items/{item_id}` - Обновление товара
 - `DELETE /api/market/items/{item_id}` - Удаление товара
+
+#### Moderation (3 endpoints):
+- `POST /api/market/templates/{id}/submit` - Отправить на модерацию (Developer)
+- `POST /api/admin/market/templates/{id}/approve` - Одобрить (owner)
+- `POST /api/admin/market/templates/{id}/reject` - Отклонить с причиной (owner)
 
 #### Market Orders (5 endpoints):
 - `GET /api/market/orders` - Список заказов
@@ -46,7 +53,7 @@
 - `POST /api/market/reviews` - Создание отзыва
 - `GET /api/market/reviews` - Список отзывов для объекта
 
-**Всего: 18 endpoints**
+**Всего: 21 endpoint** (18 + 3 moderation)
 
 ### 4. Pydantic Schemas ✅
 Созданы схемы в `backend/schemas/market.py`:

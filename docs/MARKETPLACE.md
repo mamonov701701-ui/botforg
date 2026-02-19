@@ -308,15 +308,68 @@ class Review(Base):
 
 ---
 
+## Кабинет разработчика (Creator Dashboard)
+
+**Доступ:** Только тариф Developer.
+
+Страница `/developer/templates` — «Мои шаблоны» — позволяет разработчикам управлять опубликованными шаблонами.
+
+**Функционал:**
+- Таблица: Название | Статус | Установки | Просмотры | Дата | Действия
+- Пустое состояние: «У вас пока нет опубликованных шаблонов» + CTA «Создать и опубликовать шаблон»
+- Кнопка «Мои шаблоны» на странице маркетплейса (видна только при тарифе Developer)
+
+**API:**
+```
+GET    /api/market/my-templates    - Список шаблонов текущего пользователя (403 без Developer)
+```
+
+**Ответ:** массив объектов `{ id, name, status, moderation_status, moderation_rejection_reason, installs_count, views_count, created_at }`.
+
+---
+
+## Модерация шаблонов (Moderation Flow)
+
+### Жизненный цикл шаблона
+
+1. **draft** — черновик. Разработчик создаёт шаблон через маркетплейс. Шаблон не виден в публичном каталоге.
+2. **pending** — на модерации. Разработчик нажимает «Отправить на модерацию» в кабинете `/developer/templates`. Шаблон ожидает проверки администратором.
+3. **approved** — одобрен. Администратор (owner) одобряет шаблон. Шаблон появляется в публичном маркетплейсе.
+4. **rejected** — отклонён. Администратор отклоняет с указанием причины. Разработчик видит причину отказа и может исправить и отправить заново (после правок — создать новый или изменить и снова отправить).
+
+### API модерации
+
+```
+POST   /api/market/templates/{id}/submit              - Отправить на модерацию (draft→pending), Developer
+POST   /api/admin/market/templates/{id}/approve       - Одобрить (pending→approved), owner
+POST   /api/admin/market/templates/{id}/reject         - Отклонить (pending→rejected), owner, body: { reason }
+```
+
+### Публичный маркетплейс
+
+В `GET /api/market/items` возвращаются **только шаблоны со статусом approved**. Шаблоны в статусе draft, pending, rejected скрыты от покупателей.
+
+### Кабинет разработчика
+
+- Отображается статус модерации (Черновик, На модерации, Одобрен, Отклонён)
+- Кнопка «На модерацию» для шаблонов в статусе draft
+- При отклонении отображается причина отказа (`moderation_rejection_reason`)
+
+---
+
 ## API Endpoints (Планируемые)
 
 ### Шаблоны и сценарии
 ```
-GET    /api/market/items?type=template&category=...     - Список товаров
+GET    /api/market/items?type=template&category=...     - Список товаров (только approved для шаблонов)
 GET    /api/market/items/{id}                           - Детали товара
 POST   /api/market/items                                - Создать товар
 PUT    /api/market/items/{id}                           - Обновить товар
 DELETE /api/market/items/{id}                           - Удалить товар
+GET    /api/market/my-templates                         - Мои шаблоны (Creator Dashboard, Developer)
+POST   /api/market/templates/{id}/submit                - Отправить на модерацию (Developer)
+POST   /api/admin/market/templates/{id}/approve        - Одобрить (owner)
+POST   /api/admin/market/templates/{id}/reject         - Отклонить (owner)
 ```
 
 ### Заказы

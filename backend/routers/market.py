@@ -16,10 +16,11 @@ from backend.database import get_db
 from backend.models.user import User
 from backend.models.market import (
     MarketItem, MarketOrder, OrderProposal, FreelancerProfile, MarketReview,
-    MarketItemType, MarketOrderStatus
+    MarketItemType, MarketOrderStatus, ModerationStatus
 )
 from backend.models.bot import Bot
 from backend.models.scenario import Scenario
+from backend.utils.plan_limits import check_can_publish_templates, require_developer_plan
 from backend.schemas.market import (
     MarketItemCreate, MarketItemUpdate, MarketItemOut, MarketItemDetailOut,
     MarketOrderCreate, MarketOrderUpdate, MarketOrderOut, MarketOrderDetailOut,
@@ -27,7 +28,7 @@ from backend.schemas.market import (
     FreelancerProfileCreate, FreelancerProfileUpdate, FreelancerProfileOut,
     MarketReviewCreate, MarketReviewOut,
     MarketItemListResponse, MarketOrderListResponse, FreelancerListResponse,
-    SellerInfo
+    SellerInfo, MyTemplateOut
 )
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,81 @@ def calculate_freelancer_rating(db: Session, freelancer_id: int) -> Tuple[Option
     return round(avg_rating, 2), len(reviews)
 
 
+# ================== Creator Dashboard (Developer plan) ==================
+
+@router.get("/my-templates", response_model=List[MyTemplateOut])
+async def get_my_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Список шаблонов текущего пользователя для кабинета разработчика.
+    Доступ только при plan_code === 'developer'.
+    """
+    require_developer_plan(db, current_user)
+    items = (
+        db.query(MarketItem)
+        .filter(
+            MarketItem.seller_id == current_user.id,
+            MarketItem.item_type == MarketItemType.TEMPLATE,
+        )
+        .order_by(MarketItem.created_at.desc())
+        .all()
+    )
+    def _mod_status(it):
+        ms = getattr(it, "moderation_status", None)
+        return ms.value if hasattr(ms, "value") else (ms or "draft")
+
+    return [
+        MyTemplateOut(
+            id=item.id,
+            name=item.title,
+            status="published" if item.is_published else "draft",
+            moderation_status=_mod_status(item),
+            moderation_rejection_reason=getattr(item, "moderation_rejection_reason", None),
+            installs_count=item.sales_count or 0,
+            views_count=0,  # TODO: добавить при реализации аналитики
+            created_at=item.created_at,
+        )
+        for item in items
+    ]
+
+
+@router.post("/templates/{template_id}/submit")
+async def submit_template_for_moderation(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Отправить шаблон на модерацию (draft → pending).
+    Доступно только автору и при тарифе Developer.
+    """
+    require_developer_plan(db, current_user)
+    item = (
+        db.query(MarketItem)
+        .filter(
+            MarketItem.id == template_id,
+            MarketItem.item_type == MarketItemType.TEMPLATE,
+            MarketItem.seller_id == current_user.id,
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Шаблон не найден")
+    current = getattr(item, "moderation_status", None)
+    current_val = current.value if hasattr(current, "value") else (current or "draft")
+    if current_val != "draft":
+        raise HTTPException(
+            status_code=400,
+            detail=f"На модерацию можно отправить только черновик. Текущий статус: {current_val}",
+        )
+    item.moderation_status = ModerationStatus.PENDING
+    item.moderation_rejection_reason = None
+    db.commit()
+    return {"ok": True, "moderation_status": "pending"}
+
+
 # ================== MarketItem Endpoints ==================
 
 @router.get("/items", response_model=MarketItemListResponse)
@@ -109,6 +185,15 @@ async def list_market_items(
     
     if is_published is not None:
         query = query.filter(MarketItem.is_published == is_published)
+    # Шаблоны: в публичном маркете только approved; сценарии — без модерации
+    if hasattr(MarketItem, "moderation_status"):
+        query = query.filter(
+            or_(
+                MarketItem.item_type == MarketItemType.SCENARIO,
+                (MarketItem.item_type == MarketItemType.TEMPLATE)
+                & (MarketItem.moderation_status == ModerationStatus.APPROVED),
+            )
+        )
     
     if is_premium is not None:
         query = query.filter(MarketItem.is_premium == is_premium)
@@ -220,6 +305,10 @@ async def create_market_item(
         item_type_enum = MarketItemType(item_data.item_type)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid item_type: {item_data.item_type}")
+
+    # Публикация шаблонов — только тариф Developer
+    if item_type_enum == MarketItemType.TEMPLATE:
+        check_can_publish_templates(db, current_user)
     
     # Проверка источника
     if item_type_enum == MarketItemType.TEMPLATE:
@@ -255,7 +344,8 @@ async def create_market_item(
         is_premium=item_data.is_premium,
         is_published=item_data.is_published,
         seller_id=current_user.id,
-        published_at=datetime.now(timezone.utc) if item_data.is_published else None
+        published_at=datetime.now(timezone.utc) if item_data.is_published else None,
+        moderation_status=ModerationStatus.DRAFT if item_type_enum == MarketItemType.TEMPLATE else ModerationStatus.APPROVED,
     )
     
     db.add(item)

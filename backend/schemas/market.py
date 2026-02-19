@@ -84,6 +84,18 @@ class MarketItemDetailOut(MarketItemOut):
     reviews: List['MarketReviewOut'] = []
 
 
+class MyTemplateOut(BaseModel):
+    """Шаблон разработчика для кабинета (GET /my-templates)"""
+    id: int
+    name: str
+    status: str  # published | draft (legacy, для совместимости)
+    moderation_status: str  # draft | pending | approved | rejected
+    moderation_rejection_reason: Optional[str] = None
+    installs_count: int
+    views_count: int
+    created_at: datetime
+
+
 # ================== MarketOrder Schemas ==================
 
 class MarketOrderCreate(BaseModel):

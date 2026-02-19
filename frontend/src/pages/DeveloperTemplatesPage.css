@@ -1,0 +1,219 @@
+.developer-templates {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+.developer-templates__header {
+  margin-bottom: 32px;
+}
+
+.developer-templates__title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text, #e6eaf2);
+  margin: 0 0 8px;
+}
+
+.developer-templates__subtitle {
+  font-size: 1rem;
+  color: var(--text-muted, #9aa4b2);
+  margin: 0 0 16px;
+}
+
+.developer-templates__back {
+  font-size: 0.95rem;
+  color: var(--primary, #ffd24c);
+  text-decoration: none;
+}
+
+.developer-templates__back:hover {
+  text-decoration: underline;
+}
+
+.developer-templates__loading,
+.developer-templates__error {
+  text-align: center;
+  padding: 48px;
+  color: var(--text-muted);
+}
+
+.developer-templates__error {
+  color: var(--error, #ef4444);
+}
+
+.developer-templates__empty {
+  background: var(--card, #161c24);
+  border: 1px solid var(--border, #232b36);
+  border-radius: 16px;
+  padding: 64px 48px;
+  text-align: center;
+}
+
+.developer-templates__empty-icon {
+  color: var(--text-muted);
+  opacity: 0.5;
+  margin-bottom: 24px;
+}
+
+.developer-templates__empty h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 12px;
+}
+
+.developer-templates__empty p {
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin: 0 0 32px;
+}
+
+.developer-templates__cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 24px;
+  background: var(--primary, #ffd24c);
+  color: #000;
+  font-weight: 600;
+  font-size: 1rem;
+  border-radius: 10px;
+  text-decoration: none;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+
+.developer-templates__cta:hover {
+  background: var(--primary-hover, #ffc107);
+  transform: translateY(-1px);
+}
+
+.developer-templates__table-wrap {
+  background: var(--card, #161c24);
+  border: 1px solid var(--border, #232b36);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.developer-templates__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.developer-templates__table th,
+.developer-templates__table td {
+  padding: 14px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border, #232b36);
+}
+
+.developer-templates__table th {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.developer-templates__table td {
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.developer-templates__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.developer-templates__table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.developer-templates__name {
+  font-weight: 500;
+}
+
+.developer-templates__status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.developer-templates__status--published {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--success, #10b981);
+}
+
+.developer-templates__status--draft {
+  background: rgba(156, 163, 175, 0.2);
+  color: var(--text-muted);
+}
+
+.developer-templates__status--pending {
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--warning, #f59e0b);
+}
+
+.developer-templates__status--approved {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--success, #10b981);
+}
+
+.developer-templates__status--rejected {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--error, #ef4444);
+}
+
+.developer-templates__rejection {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.developer-templates__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.developer-templates__submit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--primary, #ffd24c);
+  color: #000;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.developer-templates__submit-btn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.developer-templates__submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.developer-templates__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--primary);
+  transition: background 0.2s;
+}
+
+.developer-templates__action:hover {
+  background: rgba(255, 210, 76, 0.15);
+}

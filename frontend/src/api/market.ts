@@ -56,6 +56,17 @@ export interface MarketItemListResponse {
   page_size: number;
 }
 
+export interface MyTemplate {
+  id: number;
+  name: string;
+  status: 'published' | 'draft';
+  moderation_status: 'draft' | 'pending' | 'approved' | 'rejected';
+  moderation_rejection_reason?: string | null;
+  installs_count: number;
+  views_count: number;
+  created_at: string;
+}
+
 export interface MarketOrder {
   id: number;
   title: string;
@@ -151,6 +162,26 @@ export interface MarketReviewCreate {
   item_id: number;
   rating: number;
   comment?: string;
+}
+
+// ================== Creator Dashboard (Developer plan) ==================
+
+/**
+ * Получить список своих шаблонов (кабинет разработчика).
+ * Требует тариф Developer.
+ */
+export async function getMyTemplates(): Promise<MyTemplate[]> {
+  return api.get('/api/market/my-templates');
+}
+
+/**
+ * Отправить шаблон на модерацию (draft → pending).
+ * Требует тариф Developer.
+ */
+export async function submitTemplateToModeration(
+  templateId: number
+): Promise<{ ok: boolean; moderation_status: string }> {
+  return api.post(`/api/market/templates/${templateId}/submit`);
 }
 
 // ================== Market Items ==================

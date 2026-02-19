@@ -68,6 +68,38 @@ Base URL: `/api/market`
 
 **Response:** 204 No Content
 
+### Moderation (Модерация шаблонов)
+
+#### POST `/api/market/templates/{template_id}/submit`
+Отправить шаблон на модерацию (draft → pending).
+
+**Требования:** тариф Developer, автор шаблона.
+
+**Response:** `MarketItemOut` (moderation_status = pending)
+
+#### POST `/api/admin/market/templates/{template_id}/approve`
+Одобрить шаблон (pending → approved).
+
+**Требования:** роль owner.
+
+**Response:** `MarketItemOut` (moderation_status = approved)
+
+#### POST `/api/admin/market/templates/{template_id}/reject`
+Отклонить шаблон (pending → rejected).
+
+**Требования:** роль owner.
+
+**Request Body:**
+```json
+{
+  "reason": "Причина отклонения"
+}
+```
+
+**Response:** `MarketItemOut` (moderation_status = rejected, moderation_rejection_reason)
+
+**Примечание:** В публичном `GET /api/market/items` возвращаются только шаблоны со статусом `approved`.
+
 ### Market Orders (Заказы)
 
 #### GET `/api/market/orders`
@@ -197,6 +229,12 @@ Base URL: `/api/market`
 ### MarketItemType
 - `template`: Шаблон (готовый бот)
 - `scenario`: Сценарий
+
+### ModerationStatus (для шаблонов)
+- `draft`: Черновик, не виден в маркетплейсе
+- `pending`: На модерации
+- `approved`: Одобрен, виден в публичном маркетплейсе
+- `rejected`: Отклонён (с причиной в moderation_rejection_reason)
 
 ### MarketOrderStatus
 - `open`: Открыт, принимаются предложения
