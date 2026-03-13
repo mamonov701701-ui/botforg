@@ -25,7 +25,6 @@ import { nanoid } from 'nanoid';
 import 'reactflow/dist/style.css';
 import './flow.css';
 import EditorControls from './EditorControls';
-import Toolbar from './Toolbar';
 import BlockSettingsPanel from './BlockSettingsPanel';
 import CustomEdge from './CustomEdge';
 import ToastContainer from './ToastContainer';
@@ -36,6 +35,8 @@ import { useUiStore } from '../../stores/uiStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { validateAllNodes, debugNodeStructure } from '../../utils/validateNode';
 import { canAccessBlock, getAccessDeniedMessage, logAccessDenied } from '../../utils/accessControl';
+import { isEditorDemoMode } from '../../constants/roles';
+import DemoModeBanner from '../../components/DemoModeBanner';
 import { useValidationStore } from '../../stores/validationStore';
 import { validateAllNodesWithSchema, hasValidationErrors } from '../../utils/schemaValidation';
 import ValidationModal from './ValidationModal';
@@ -549,147 +550,22 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
 CustomNode.displayName = 'CustomNode';
 
 function InnerEditor() {
-  const {
-    nodes: zustandNodes,
-    edges: zustandEdges,
-    setNodes: setZustandNodes,
-    setEdges: setZustandEdges,
-    catalog,
-    plan,
-    role,
-    showToast,
-    loadCatalog,
-  } = useEditorStore();
+  const { catalog, plan, role, showToast, loadCatalog } = useEditorStore();
 
-  // Scenario store для работы со сценариями
-  const syncFromEditor = useScenarioStore(state => state.syncFromEditor);
-  const scenarios = useScenarioStore(state => state.scenarios);
+  // Scenario store: единый источник правды для сценария
+  const { currentState, scenarios, updateCurrentScenario, setValidationStatus } = useScenarioStore(
+    state => ({
+      currentState: state.currentState,
+      scenarios: state.scenarios,
+      updateCurrentScenario: state.updateCurrentScenario,
+      setValidationStatus: state.setValidationStatus,
+    })
+  );
 
   // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
   // React Flow управляет своим внутренним state, Zustand используется ТОЛЬКО для добавления новых блоков
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
-
-  // Ref для отслеживания последних ID из Zustand (для добавления новых узлов)
-  const lastZustandNodeIdsRef = useRef<Set<string>>(new Set());
-  const lastZustandEdgeIdsRef = useRef<Set<string>>(new Set());
-
-  // Синхронизация nodes: Zustand -> React Flow
-  // При загрузке сценария полностью заменяем nodes, при изменениях добавляем только новые
-  useEffect(() => {
-    // Пропускаем синхронизацию при начальной загрузке (она обрабатывается отдельным useEffect)
-    if (isInitialLoadRef.current) {
-      return;
-    }
-
-    const currentZustandIds = new Set(zustandNodes.map(n => n.id));
-    const lastIds = lastZustandNodeIdsRef.current;
-
-    setNodes(currentNodes => {
-      const currentNodeIds = new Set(currentNodes.map(n => n.id));
-      const zustandNodeIds = new Set(zustandNodes.map(n => n.id));
-
-      // Если React Flow пустой, а Zustand не пустой - полная загрузка
-      if (currentNodes.length === 0 && zustandNodes.length > 0) {
-        // Принудительно исправляем видимость после загрузки
-        const fixVisibility = () => {
-          zustandNodes.forEach(node => {
-            const nodeElement = document.querySelector(`[data-id="${node.id}"]`) as HTMLElement;
-            if (nodeElement) {
-              nodeElement.style.setProperty('visibility', 'visible', 'important');
-              nodeElement.style.setProperty('opacity', '1', 'important');
-              nodeElement.style.setProperty('display', 'block', 'important');
-              const innerDiv = nodeElement.querySelector('div:first-child') as HTMLElement;
-              if (innerDiv) {
-                innerDiv.style.setProperty('visibility', 'visible', 'important');
-                innerDiv.style.setProperty('opacity', '1', 'important');
-                innerDiv.style.setProperty('display', 'flex', 'important');
-              }
-            }
-          });
-        };
-        setTimeout(fixVisibility, 50);
-        setTimeout(fixVisibility, 100);
-        setTimeout(fixVisibility, 200);
-        setTimeout(fixVisibility, 500);
-        return zustandNodes;
-      }
-
-      // Если есть значительные различия - полная синхронизация (например, при загрузке сценария)
-      const hasSignificantDiff =
-        currentNodes.length !== zustandNodes.length ||
-        currentNodeIds.size !== zustandNodeIds.size ||
-        Array.from(zustandNodeIds).some(id => !currentNodeIds.has(id)) ||
-        // Проверяем, изменились ли позиции или настройки существующих узлов
-        zustandNodes.some(zNode => {
-          const current = currentNodes.find(n => n.id === zNode.id);
-          if (!current) return false;
-          return (
-            Math.abs(current.position.x - zNode.position.x) > 1 ||
-            Math.abs(current.position.y - zNode.position.y) > 1 ||
-            JSON.stringify(current.data?.settings || {}) !==
-              JSON.stringify(zNode.data?.settings || {})
-          );
-        });
-
-      if (hasSignificantDiff) {
-        // Полная синхронизация: заменяем все nodes
-        // Принудительно исправляем видимость после синхронизации
-        const fixVisibility = () => {
-          zustandNodes.forEach(node => {
-            const nodeElement = document.querySelector(`[data-id="${node.id}"]`) as HTMLElement;
-            if (nodeElement) {
-              nodeElement.style.setProperty('visibility', 'visible', 'important');
-              nodeElement.style.setProperty('opacity', '1', 'important');
-              nodeElement.style.setProperty('display', 'block', 'important');
-              const innerDiv = nodeElement.querySelector('div:first-child') as HTMLElement;
-              if (innerDiv) {
-                innerDiv.style.setProperty('visibility', 'visible', 'important');
-                innerDiv.style.setProperty('opacity', '1', 'important');
-                innerDiv.style.setProperty('display', 'flex', 'important');
-              }
-            }
-          });
-        };
-        setTimeout(fixVisibility, 50);
-        setTimeout(fixVisibility, 100);
-        setTimeout(fixVisibility, 200);
-        setTimeout(fixVisibility, 500);
-        return zustandNodes;
-      }
-
-      // Иначе добавляем только новые nodes
-      const newNodes = zustandNodes.filter(n => !lastIds.has(n.id) && !currentNodeIds.has(n.id));
-      if (newNodes.length > 0) {
-        // Принудительно исправляем видимость новых nodes
-        const fixVisibility = () => {
-          newNodes.forEach(node => {
-            const nodeElement = document.querySelector(`[data-id="${node.id}"]`) as HTMLElement;
-            if (nodeElement) {
-              nodeElement.style.setProperty('visibility', 'visible', 'important');
-              nodeElement.style.setProperty('opacity', '1', 'important');
-              nodeElement.style.setProperty('display', 'block', 'important');
-              const innerDiv = nodeElement.querySelector('div:first-child') as HTMLElement;
-              if (innerDiv) {
-                innerDiv.style.setProperty('visibility', 'visible', 'important');
-                innerDiv.style.setProperty('opacity', '1', 'important');
-                innerDiv.style.setProperty('display', 'flex', 'important');
-              }
-            }
-          });
-        };
-        setTimeout(fixVisibility, 50);
-        setTimeout(fixVisibility, 100);
-        setTimeout(fixVisibility, 200);
-        return [...currentNodes, ...newNodes];
-      }
-
-      return currentNodes;
-    });
-
-    // Обновляем ref для следующего сравнения
-    lastZustandNodeIdsRef.current = currentZustandIds;
-  }, [zustandNodes, setNodes]);
 
   // Функция для валидации edge - проверяет, существуют ли source и target handles
   const validateEdge = useCallback((edge: Edge, allNodes: Node[]): boolean => {
@@ -729,66 +605,37 @@ function InnerEditor() {
     return true;
   }, []);
 
-  // Синхронизация edges: Zustand -> React Flow
-  // При загрузке сценария полностью заменяем edges, при изменениях добавляем только новые
+  // Инициализация React Flow из текущего сценария при смене сценария
+  const lastScenarioIdRef = useRef<number | null>(null);
   useEffect(() => {
-    const currentZustandIds = new Set(zustandEdges.map(e => e.id));
-    const lastIds = lastZustandEdgeIdsRef.current;
+    if (!currentState) {
+      setNodes([]);
+      setEdges([]);
+      lastScenarioIdRef.current = null;
+      return;
+    }
 
-    // Если это начальная загрузка (edges пустые) или Zustand edges сильно отличаются - полная синхронизация
-    setEdges(currentEdges => {
-      const currentEdgeIds = new Set(currentEdges.map(e => e.id));
-      const zustandEdgeIds = new Set(zustandEdges.map(e => e.id));
+    if (lastScenarioIdRef.current === currentState.id) {
+      return;
+    }
 
-      // Валидируем и фильтруем edges перед загрузкой
-      const validatedEdges = zustandEdges.filter(e => validateEdge(e, nodes));
+    lastScenarioIdRef.current = currentState.id;
 
-      // Если React Flow пустой, а Zustand не пустой - полная загрузка
-      if (currentEdges.length === 0 && validatedEdges.length > 0) {
-        // Добавляем data.onDelete для всех валидных edges из Zustand
-        return validatedEdges.map(e => ({
-          ...e,
-          data: {
-            ...e.data,
-            onDelete: handleDeleteEdgeRef.current,
-          },
-        }));
-      }
+    const scenarioNodes = currentState.nodes || [];
+    const scenarioEdges = currentState.edges || [];
 
-      // Если есть значительные различия - полная синхронизация
-      const hasSignificantDiff =
-        currentEdgeIds.size !== zustandEdgeIds.size ||
-        Array.from(zustandEdgeIds).some(id => !currentEdgeIds.has(id));
+    setNodes(scenarioNodes);
 
-      if (hasSignificantDiff) {
-        // Полная синхронизация: заменяем все edges только валидными
-        return validatedEdges.map(e => ({
-          ...e,
-          data: {
-            ...e.data,
-            onDelete: handleDeleteEdgeRef.current,
-          },
-        }));
-      }
-
-      // Иначе добавляем только новые валидные edges
-      const newEdges = validatedEdges.filter(e => !lastIds.has(e.id) && !currentEdgeIds.has(e.id));
-      if (newEdges.length > 0) {
-        const edgesWithDelete = newEdges.map(e => ({
-          ...e,
-          data: {
-            ...e.data,
-            onDelete: handleDeleteEdgeRef.current,
-          },
-        }));
-        return [...currentEdges, ...edgesWithDelete];
-      }
-
-      return currentEdges;
-    });
-
-    lastZustandEdgeIdsRef.current = currentZustandIds;
-  }, [zustandEdges, setEdges, nodes, validateEdge]);
+    const validatedEdges = scenarioEdges.filter(e => validateEdge(e, scenarioNodes));
+    const edgesWithDelete = validatedEdges.map(e => ({
+      ...e,
+      data: {
+        ...e.data,
+        onDelete: handleDeleteEdgeRef.current,
+      },
+    }));
+    setEdges(edgesWithDelete);
+  }, [currentState, setNodes, setEdges, validateEdge]);
 
   // Обработчики изменений для ReactFlow с синхронизацией обратно в Zustand
   const onNodesChange = useCallback(
@@ -809,24 +656,13 @@ function InnerEditor() {
     [onNodesChangeInternal]
   );
 
-  // Синхронизация nodes из React Flow в Zustand при изменении
-  // Используем useRef для отслеживания предыдущего состояния, чтобы избежать бесконечных циклов
-  const prevNodesRef = useRef<string>('');
-  const isInitializingRef = useRef<boolean>(true);
+  // Синхронизация React Flow → scenarioStore (единый источник правды)
+  const prevNodesKeyRef = useRef<string>('');
+  const prevEdgesKeyRef = useRef<string>('');
 
   useEffect(() => {
-    // Пропускаем синхронизацию при начальной инициализации
-    if (isInitializingRef.current) {
-      isInitializingRef.current = false;
-      return;
-    }
+    if (!currentState) return;
 
-    // Пропускаем синхронизацию если nodes пустые и это начальная загрузка
-    if (nodes.length === 0 && zustandNodes.length === 0) {
-      return;
-    }
-
-    // Создаем строку для сравнения (только важные поля: id, position, data.settings)
     const nodesKey = nodes
       .map(n => {
         const settings = n.data?.settings || {};
@@ -835,14 +671,22 @@ function InnerEditor() {
       .sort()
       .join('|');
 
-    // Синхронизируем только если nodes действительно изменились
-    if (nodesKey !== prevNodesRef.current) {
-      prevNodesRef.current = nodesKey;
-      // Синхронизируем nodes из React Flow в Zustand (без внутренних полей React Flow)
-      const nodesToSync = nodes.map(({ selected, dragging, ...rest }) => rest);
-      setZustandNodes(nodesToSync);
+    const edgesKey = edges
+      .map(e => `${e.id}:${e.source}:${e.target}:${e.sourceHandle || ''}:${e.targetHandle || ''}`)
+      .sort()
+      .join('|');
+
+    if (nodesKey === prevNodesKeyRef.current && edgesKey === prevEdgesKeyRef.current) {
+      return;
     }
-  }, [nodes, setZustandNodes]);
+
+    prevNodesKeyRef.current = nodesKey;
+    prevEdgesKeyRef.current = edgesKey;
+
+    const nodesToStore = nodes.map(({ selected, dragging, ...rest }) => rest);
+    const edgesToStore = edges.map(({ data, ...rest }) => rest);
+    updateCurrentScenario(nodesToStore, edgesToStore);
+  }, [nodes, edges, updateCurrentScenario, currentState]);
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
@@ -851,30 +695,7 @@ function InnerEditor() {
     [onEdgesChangeInternal]
   );
 
-  // Синхронизация edges из React Flow в Zustand при изменении
-  // Используем useRef для отслеживания предыдущего состояния, чтобы избежать бесконечных циклов
-  const prevEdgesRef = useRef<string>('');
-
-  useEffect(() => {
-    // Пропускаем синхронизацию если edges пустые и это начальная загрузка
-    if (edges.length === 0 && zustandEdges.length === 0) {
-      return;
-    }
-
-    // Создаем строку для сравнения (только важные поля)
-    const edgesKey = edges
-      .map(e => `${e.id}:${e.source}:${e.target}:${e.sourceHandle || ''}:${e.targetHandle || ''}`)
-      .sort()
-      .join('|');
-
-    // Синхронизируем только если edges действительно изменились
-    if (edgesKey !== prevEdgesRef.current) {
-      prevEdgesRef.current = edgesKey;
-      // Синхронизируем edges из React Flow в Zustand (без data.onDelete, чтобы избежать циклических ссылок)
-      const edgesToSync = edges.map(({ data, ...rest }) => rest);
-      setZustandEdges(edgesToSync);
-    }
-  }, [edges, setZustandEdges]);
+  // Далее обработчики изменений edges остаются, но хранение в scenarioStore уже настроено выше
 
   const { setAllValidationResults } = useValidationStore();
   const invalidNodesCount = useValidationStore(state => {
@@ -953,7 +774,7 @@ function InnerEditor() {
     });
 
     const pane = document.querySelector('.react-flow__pane');
-    if (pane) {
+    if (pane instanceof HTMLElement) {
       observer.observe(pane, {
         childList: true,
         subtree: true,
@@ -1155,7 +976,7 @@ function InnerEditor() {
 
     const pane = document.querySelector('.react-flow__pane');
     if (pane) {
-      observer.observe(pane, {
+      observer.observe(pane!, {
         childList: true,
         subtree: true,
         attributes: true,
@@ -1216,7 +1037,9 @@ function InnerEditor() {
 
     // Debounce валидацию на 100ms чтобы избежать каскадных обновлений
     validationTimeoutRef.current = setTimeout(() => {
-      runValidation(nodes);
+      const results = runValidation(nodes);
+      const hasErrors = hasValidationErrors(results);
+      setValidationStatus(hasErrors);
     }, 100);
 
     return () => {
@@ -1228,13 +1051,8 @@ function InnerEditor() {
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return undefined;
-    // Сначала ищем в текущих nodes
-    const node = nodes.find(n => n.id === selectedNodeId);
-    if (node) return node;
-    // Если не нашли, ищем в zustandNodes (на случай если nodes еще не синхронизированы)
-    const zustandNode = zustandNodes.find(n => n.id === selectedNodeId);
-    return zustandNode;
-  }, [nodes, selectedNodeId, zustandNodes]);
+    return nodes.find(n => n.id === selectedNodeId);
+  }, [nodes, selectedNodeId]);
 
   // Node changes are now handled directly by BlockSettingsPanel
 
@@ -1245,21 +1063,12 @@ function InnerEditor() {
 
     // Удаляем узел и связанные edges из React Flow
     setNodes(ns => ns.filter(n => n.id !== selectedNodeId));
-    setEdges(es => {
-      const filtered = es.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId);
-      // Синхронизируем с Zustand сразу при удалении узла
-      setZustandEdges(filtered);
-      return filtered;
-    });
-
-    // Также удаляем из Zustand для синхронизации ref
-    setZustandNodes(ns => ns.filter(n => n.id !== selectedNodeId));
-    lastZustandNodeIdsRef.current.delete(selectedNodeId);
+    setEdges(es => es.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId));
 
     setSelectedNodeId(undefined);
     setIsPanelVisible(false);
     showToast(`Блок "${nodeTitle}" удалён`, 'success');
-  }, [selectedNodeId, nodes, setNodes, setEdges, setZustandNodes, showToast]);
+  }, [selectedNodeId, nodes, setNodes, setEdges, showToast]);
 
   const handleDuplicateNode = useCallback(() => {
     if (!selectedNode) return;
@@ -1276,9 +1085,9 @@ function InnerEditor() {
       },
       selected: false, // Новая копия не выделена
     };
-    setZustandNodes(ns => [...ns, newNode]);
+    setNodes(ns => [...ns, newNode]);
     showToast(`Блок "${selectedNode.data.title || 'Блок'}" продублирован`, 'success');
-  }, [selectedNode, setZustandNodes, showToast]);
+  }, [selectedNode, setNodes, showToast]);
 
   // Export function - определяется сначала
   const performExport = useCallback(
@@ -1394,6 +1203,7 @@ function InnerEditor() {
 
   // Проверка авторизации и загрузка каталога блоков
   const { user } = useAuthStore();
+  const isReadOnly = isEditorDemoMode(user?.role as import('../../constants/roles').RoleValue);
 
   useEffect(() => {
     // Загружаем каталог только если пользователь авторизован
@@ -1403,19 +1213,23 @@ function InnerEditor() {
     // Если не авторизован - каталог не загружается, редактор показывается пустым
   }, [loadCatalog, user]);
 
-  // Инициализация nodes и edges из Zustand при монтировании компонента
+  // Инициализация nodes и edges из scenarioStore при монтировании компонента
   useEffect(() => {
     // Инициализация nodes - загружаем все сразу при первой загрузке
-    if (isInitialLoadRef.current && zustandNodes.length > 0 && nodes.length === 0) {
-      setNodes(zustandNodes);
-      lastZustandNodeIdsRef.current = new Set(zustandNodes.map(n => n.id));
+    if (
+      isInitialLoadRef.current &&
+      currentState &&
+      currentState.nodes.length > 0 &&
+      nodes.length === 0
+    ) {
+      setNodes(currentState.nodes);
 
       // Принудительно исправляем видимость всех nodes после загрузки
       // Используем несколько попыток с задержками, так как React Flow может устанавливать стили асинхронно
       const fixVisibility = (attempt = 0) => {
         if (attempt > 10) return; // Максимум 10 попыток
 
-        zustandNodes.forEach(node => {
+        currentState.nodes.forEach(node => {
           const nodeElement = document.querySelector(`[data-id="${node.id}"]`) as HTMLElement;
           if (nodeElement) {
             // Всегда устанавливаем видимость, независимо от текущего состояния
@@ -1449,9 +1263,13 @@ function InnerEditor() {
     }
 
     // Инициализация edges
-    if (zustandEdges.length > 0 && edges.length === 0 && handleDeleteEdgeRef.current) {
-      // При первой загрузке загружаем edges из Zustand
-      const edgesWithDelete = zustandEdges.map(e => ({
+    if (
+      currentState &&
+      currentState.edges.length > 0 &&
+      edges.length === 0 &&
+      handleDeleteEdgeRef.current
+    ) {
+      const edgesWithDelete = currentState.edges.map(e => ({
         ...e,
         data: {
           ...e.data,
@@ -1459,9 +1277,8 @@ function InnerEditor() {
         },
       }));
       setEdges(edgesWithDelete);
-      lastZustandEdgeIdsRef.current = new Set(zustandEdges.map(e => e.id));
     }
-  }, [zustandNodes, zustandEdges, nodes.length, edges.length, setNodes, setEdges]);
+  }, [currentState, nodes.length, edges.length, setNodes, setEdges]);
 
   // Установка начального viewport ОДИН раз при монтировании
   useEffect(() => {
@@ -1506,59 +1323,6 @@ function InnerEditor() {
       clearTimeout(timeout4);
     };
   }, [nodes]); // Зависим от самих nodes, чтобы исправлять при каждом изменении
-
-  // Ref для debounce синхронизации со scenarioStore
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Синхронизация изменений с scenarioStore (с debounce)
-  // Используем useRef для отслеживания предыдущего состояния nodes и edges
-  const prevZustandNodesRef = useRef<string>('');
-  const prevZustandEdgesRef = useRef<string>('');
-
-  useEffect(() => {
-    // Пропускаем если нет данных
-    if (zustandNodes.length === 0 && zustandEdges.length === 0) {
-      return;
-    }
-
-    // Создаем ключи для сравнения (позиции, настройки, edges)
-    const nodesKey = zustandNodes
-      .map(
-        n =>
-          `${n.id}:${Math.round(n.position.x)}:${Math.round(n.position.y)}:${JSON.stringify(n.data?.settings || {})}`
-      )
-      .sort()
-      .join('|');
-    const edgesKey = zustandEdges
-      .map(e => `${e.id}:${e.source}:${e.target}:${e.sourceHandle || ''}:${e.targetHandle || ''}`)
-      .sort()
-      .join('|');
-
-    // Проверяем, изменились ли nodes или edges
-    const nodesChanged = nodesKey !== prevZustandNodesRef.current;
-    const edgesChanged = edgesKey !== prevZustandEdgesRef.current;
-
-    if (nodesChanged || edgesChanged) {
-      prevZustandNodesRef.current = nodesKey;
-      prevZustandEdgesRef.current = edgesKey;
-
-      // Очищаем предыдущий timeout
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-
-      // Debounce синхронизацию на 200ms
-      syncTimeoutRef.current = setTimeout(() => {
-        syncFromEditor();
-      }, 200);
-    }
-
-    return () => {
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-    };
-  }, [zustandNodes, zustandEdges, syncFromEditor]); // Зависим от самих nodes и edges
 
   // Типы узлов и рёбер
   const nodeTypes = useMemo(
@@ -1687,7 +1451,7 @@ function InnerEditor() {
       // Check access - validate before creating node
       if (!canAccessBlock(block, plan, role)) {
         // Log denied attempt for analytics
-        logAccessDenied(block, plan, role, 'add');
+        logAccessDenied(block, plan, role, 'view');
 
         // Show warning toast
         const message = getAccessDeniedMessage(block, plan, role);
@@ -1717,8 +1481,8 @@ function InnerEditor() {
       // Debug: log the created node structure
       debugNodeStructure(newNode);
 
-      // Добавляем новый узел в массив Zustand
-      setZustandNodes(nds => [...nds, newNode]);
+      // Добавляем новый узел в React Flow (scenarioStore синхронизируется через useEffect)
+      setNodes(nds => [...nds, newNode]);
       showToast(`Блок "${block.title}" добавлен`, 'success');
 
       // КРИТИЧНО: Принудительно делаем узел видимым (через несколько попыток, т.к. React Flow может перезаписывать стили)
@@ -1761,13 +1525,14 @@ function InnerEditor() {
       setTimeout(() => ensureNodeVisible(), 1200);
       setTimeout(() => ensureNodeVisible(), 2000);
     },
-    [setZustandNodes, showToast]
+    [setNodes, showToast]
   );
 
   // Handle drop block from library (legacy drag-n-drop support)
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      if (isReadOnly) return;
 
       const blockData = e.dataTransfer.getData('application/block');
       if (!blockData) return;
@@ -1793,7 +1558,7 @@ function InnerEditor() {
         useEditorStore.getState().showToast('Ошибка при добавлении блока', 'error');
       }
     },
-    [screenToFlowPosition, addBlockAtPosition]
+    [screenToFlowPosition, addBlockAtPosition, isReadOnly]
   );
 
   // Handle add block from modal
@@ -1843,10 +1608,8 @@ function InnerEditor() {
 
       // НЕ используем fitView - это вызывает автомасштабирование
       setTimeout(() => {
-        const newNodes = useEditorStore.getState().nodes;
-        const addedNode = newNodes[newNodes.length - 1];
+        const addedNode = nodes[nodes.length - 1];
         if (addedNode) {
-          // Просто убеждаемся что узел видим
           const nodeElement = document.querySelector(`[data-id="${addedNode.id}"]`) as HTMLElement;
           if (nodeElement) {
             nodeElement.style.setProperty('visibility', 'visible', 'important');
@@ -1863,16 +1626,7 @@ function InnerEditor() {
         }
       }, 100);
     },
-    [
-      selectedNode,
-      nodes,
-      screenToFlowPosition,
-      getViewport,
-      addBlockAtPosition,
-      reactFlowWrapper,
-      user,
-      showToast,
-    ]
+    [selectedNode, nodes, screenToFlowPosition, getViewport, addBlockAtPosition, reactFlowWrapper]
   );
 
   // Обработчики кликов
@@ -1955,9 +1709,9 @@ function InnerEditor() {
             return;
           }
 
-          // Import data
-          setZustandNodes(data.nodes);
-          setZustandEdges(data.edges);
+          // Import data: загружаем в React Flow, scenarioStore синхронизируется через useEffect
+          setNodes(data.nodes);
+          setEdges(data.edges);
           setSelectedNodeId(undefined);
 
           // Run validation
@@ -1972,7 +1726,7 @@ function InnerEditor() {
       reader.readAsText(file);
     };
     input.click();
-  }, [setZustandNodes, setZustandEdges, showToast, runValidation]);
+  }, [setNodes, setEdges, showToast, runValidation]);
 
   // Show validation modal
   const handleValidate = useCallback(() => {
@@ -2010,8 +1764,20 @@ function InnerEditor() {
         onCancel={() => setIsExportConfirmOpen(false)}
       />
 
+      {/* Demo mode banner */}
+      {isReadOnly && (
+        <div style={{ padding: '12px 20px', flexShrink: 0 }}>
+          <DemoModeBanner
+            message="Просмотр без возможности редактирования"
+            compact
+            upgradeUrl="/pricing"
+          />
+        </div>
+      )}
+
       {/* Top controls bar */}
       <EditorControls
+        isReadOnly={isReadOnly}
         onExport={handleExport}
         onSave={handleSave}
         onOpenBlockLibrary={() => {
@@ -2119,10 +1885,10 @@ function InnerEditor() {
             onDragOver={onDragOver}
             onDrop={onDrop}
             onDragLeave={onDragLeave}
-            // Интерактивность
-            nodesDraggable={true}
-            nodesConnectable={true}
-            elementsSelectable={true}
+            // Интерактивность (read-only в демо-режиме)
+            nodesDraggable={!isReadOnly}
+            nodesConnectable={!isReadOnly}
+            elementsSelectable={!isReadOnly}
             // Панорамирование: ЛКМ на пустом месте ИЛИ с зажатым пробелом
             panOnDrag={true}
             panOnScroll={true}
@@ -2140,6 +1906,7 @@ function InnerEditor() {
             minZoom={0.3}
             maxZoom={1.5}
             defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
+            onlyRenderVisibleElements
             // Режим соединения
             connectionMode={ConnectionMode.Loose}
             connectOnClick={true}
@@ -2274,21 +2041,22 @@ function InnerEditor() {
           >
             <BlockSettingsPanel
               selectedNode={selectedNode}
+              isReadOnly={isReadOnly}
               onClose={() => {
                 setIsPanelVisible(false);
                 setSelectedNodeId(undefined);
               }}
-              onDelete={handleDeleteNode}
-              onDuplicate={handleDuplicateNode}
-              onUpdateNode={(nodeId, updates) => {
-                // Обновляем в React Flow
-                setNodes(nodes => {
-                  const updated = nodes.map(n => (n.id === nodeId ? { ...n, ...updates } : n));
-                  // Синхронизируем с Zustand
-                  setZustandNodes(updated);
-                  return updated;
-                });
-              }}
+              onDelete={isReadOnly ? undefined : handleDeleteNode}
+              onDuplicate={isReadOnly ? undefined : handleDuplicateNode}
+              onUpdateNode={
+                isReadOnly
+                  ? undefined
+                  : (nodeId, updates) => {
+                      setNodes(nodes =>
+                        nodes.map(n => (n.id === nodeId ? { ...n, ...updates } : n))
+                      );
+                    }
+              }
             />
           </aside>
         )}

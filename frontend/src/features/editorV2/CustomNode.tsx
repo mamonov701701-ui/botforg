@@ -3,7 +3,7 @@ import { Handle, Position, NodeProps } from 'reactflow';
 import { NODE_SPECS } from './constants';
 import type { V2NodeData } from '@/types/editor';
 
-const CustomNode: React.FC<NodeProps<V2NodeData>> = ({ data, type }) => {
+const CustomNodeBase: React.FC<NodeProps<V2NodeData>> = ({ data, type }) => {
   const label = data?.label ?? 'Блок';
   const spec = NODE_SPECS.find(s => s.type === (type as string));
   const color = data?.borderColor || spec?.borderColor || '#2f6dff';
@@ -21,5 +21,7 @@ const CustomNode: React.FC<NodeProps<V2NodeData>> = ({ data, type }) => {
     </div>
   );
 };
+
+const CustomNode = React.memo(CustomNodeBase);
 
 export default CustomNode;

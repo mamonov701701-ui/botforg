@@ -34,6 +34,7 @@ interface BlockCardProps {
   isFavorite: boolean;
   onToggleFavorite: (blockId: string) => void;
   showFavoriteButton?: boolean;
+  highlightQuery?: string;
 }
 
 const BlockCard: React.FC<BlockCardProps> = ({
@@ -42,7 +43,31 @@ const BlockCard: React.FC<BlockCardProps> = ({
   isFavorite,
   onToggleFavorite,
   showFavoriteButton = true,
+  highlightQuery = '',
 }) => {
+  const query = highlightQuery.trim();
+
+  const highlight = (text: string) => {
+    if (!query) return text;
+    const lower = text.toLowerCase();
+    const idx = lower.indexOf(query.toLowerCase());
+    if (idx === -1) return text;
+    return (
+      <>
+        {text.slice(0, idx)}
+        <span
+          style={{
+            background: 'rgba(59, 130, 246, 0.25)',
+            borderRadius: 3,
+            padding: '0 1px',
+          }}
+        >
+          {text.slice(idx, idx + query.length)}
+        </span>
+        {text.slice(idx + query.length)}
+      </>
+    );
+  };
   return (
     <div
       draggable
@@ -100,7 +125,7 @@ const BlockCard: React.FC<BlockCardProps> = ({
             flex: 1,
           }}
         >
-          {block.title}
+          {highlight(block.title)}
         </span>
         {showFavoriteButton && (
           <button
@@ -152,7 +177,7 @@ const BlockCard: React.FC<BlockCardProps> = ({
           WebkitBoxOrient: 'vertical',
         }}
       >
-        {block.description}
+        {highlight(block.description)}
       </div>
       {(block.planAccess || block.permissions) && (
         <div
@@ -471,6 +496,7 @@ const BlockLibrary: React.FC = () => {
                     isFavorite={isFavorite(block.id)}
                     onToggleFavorite={toggleFavorite}
                     showFavoriteButton={categoryKey !== 'favorites'}
+                    highlightQuery={searchQuery}
                   />
                 ))}
               </div>

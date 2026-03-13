@@ -8,12 +8,14 @@ import * as scenarioAPI from '../api/scenarios';
 import { useEditorStore } from './editorStore';
 
 interface ScenarioState {
-  id: number;
+  id: number | null;
   name: string;
   icon: string;
   nodes: Node[];
   edges: Edge[];
   isDirty: boolean; // Есть несохраненные изменения
+  // Краткое состояние валидации сценария
+  hasValidationErrors: boolean;
 }
 
 interface ScenarioStore {
@@ -35,6 +37,10 @@ interface ScenarioStore {
   // Загрузка
   isLoading: boolean;
   isSaving: boolean;
+
+  // Статус автосохранения: idle | saving | error
+  saveStatus: 'idle' | 'saving' | 'error';
+  lastSaveError: string | null;
 
   // Последнее сохранение
   lastSaved: Date | null;
@@ -63,13 +69,53 @@ interface ScenarioStore {
   enableAutoSave: () => void;
   disableAutoSave: () => void;
 
+  // Валидация
+  setValidationStatus: (hasErrors: boolean) => void;
+
   // Utility
   hasUnsavedChanges: () => boolean;
   getCurrentScenario: () => scenarioAPI.Scenario | null;
+  getDraftFromStorage: (
+    botId: number,
+    scenarioId: number
+  ) => { nodes: Node[]; edges: Edge[] } | null;
+  clearDraftFromStorage: () => void;
 }
+
+const DRAFT_STORAGE_KEY = 'scenario_draft';
+const DRAFT_STORAGE_DEBOUNCE_MS = 2000;
 
 export const useScenarioStore = create<ScenarioStore>((set, get) => {
   let autoSaveInterval: NodeJS.Timeout | null = null;
+  let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+  let autoSaveEnabled = false;
+  let draftStorageTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  const saveDraftToStorage = () => {
+    const { currentBotId, currentScenarioId, currentState } = get();
+    if (!currentBotId || !currentScenarioId || !currentState?.isDirty) return;
+    try {
+      const key = `${DRAFT_STORAGE_KEY}_${currentBotId}_${currentScenarioId}`;
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          nodes: currentState.nodes,
+          edges: currentState.edges,
+          savedAt: Date.now(),
+        })
+      );
+    } catch {
+      // localStorage full or disabled
+    }
+  };
+
+  const clearDraftFromStorage = () => {
+    const { currentBotId, currentScenarioId } = get();
+    if (!currentBotId || !currentScenarioId) return;
+    try {
+      localStorage.removeItem(`${DRAFT_STORAGE_KEY}_${currentBotId}_${currentScenarioId}`);
+    } catch {}
+  };
 
   return {
     // Initial state
@@ -80,6 +126,8 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
     libraryScenarios: [],
     isLoading: false,
     isSaving: false,
+    saveStatus: 'idle',
+    lastSaveError: null,
     lastSaved: null,
 
     // Load scenarios
@@ -97,13 +145,9 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
           nodes: [],
           edges: [],
           isDirty: false,
+          hasValidationErrors: false,
         },
       });
-
-      // Очищаем редактор
-      const editorStore = useEditorStore.getState();
-      editorStore.setNodes([]);
-      editorStore.setEdges([]);
 
       try {
         const scenarios = await scenarioAPI.getBotScenarios(botId);
@@ -147,17 +191,13 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
         nodes: scenario.content?.nodes || [],
         edges: scenario.content?.edges || [],
         isDirty: false,
+        hasValidationErrors: false,
       };
 
       set({
         currentScenarioId: scenarioId,
         currentState: newState,
       });
-
-      // Синхронизируем с editorStore
-      const editorStore = useEditorStore.getState();
-      editorStore.setNodes(newState.nodes);
-      editorStore.setEdges(newState.edges);
     },
 
     // Create scenario
@@ -188,6 +228,22 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
           ? { ...state.currentState, nodes, edges, isDirty: true }
           : null,
       }));
+      if (draftStorageTimeout) clearTimeout(draftStorageTimeout);
+      draftStorageTimeout = setTimeout(saveDraftToStorage, DRAFT_STORAGE_DEBOUNCE_MS);
+
+      if (autoSaveEnabled) {
+        if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = setTimeout(async () => {
+          const { currentState, isSaving } = get();
+          if (currentState?.isDirty && !isSaving) {
+            try {
+              await get().saveCurrentScenario();
+            } catch {
+              // Ошибка уже отражена в saveStatus
+            }
+          }
+        }, 5000);
+      }
     },
 
     // Синхронизация с editorStore (вызывается при изменениях в React Flow)
@@ -205,7 +261,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
       const { currentScenarioId, currentState } = get();
       if (!currentScenarioId || !currentState) return;
 
-      set({ isSaving: true });
+      set({ isSaving: true, saveStatus: 'saving', lastSaveError: null });
       try {
         const updated = await scenarioAPI.updateScenario(currentScenarioId, {
           content: {
@@ -214,17 +270,23 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
           },
         });
 
-        // Обновляем в списке
+        clearDraftFromStorage();
         set(state => ({
           scenarios: state.scenarios.map(s => (s.id === currentScenarioId ? updated : s)),
           currentState: state.currentState ? { ...state.currentState, isDirty: false } : null,
           isSaving: false,
+          saveStatus: 'idle',
+          lastSaveError: null,
           lastSaved: new Date(),
         }));
       } catch (error: any) {
         console.error('Failed to save scenario:', error);
-        set({ isSaving: false });
-        // Пробрасываем ошибку дальше для обработки в UI
+        const errMsg = error?.message || 'Ошибка сохранения';
+        set({
+          isSaving: false,
+          saveStatus: 'error',
+          lastSaveError: errMsg,
+        });
         if (error.status === 401) {
           throw new Error('Для сохранения сценариев необходимо войти в систему');
         }
@@ -275,31 +337,32 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
       get().selectScenario(scenario.id);
     },
 
-    // Автосохранение
+    // Автосохранение с debounce: сохраняем через 5с после последнего изменения
     enableAutoSave: () => {
-      if (autoSaveInterval) return; // Уже включено
-
-      autoSaveInterval = setInterval(async () => {
-        const { currentState, isSaving } = get();
-        if (currentState?.isDirty && !isSaving) {
-          try {
-            await get().saveCurrentScenario();
-            console.log('✅ Автосохранение выполнено');
-          } catch (error) {
-            console.error('❌ Ошибка автосохранения:', error);
-          }
-        }
-      }, 30000); // Каждые 30 секунд
-
-      console.log('🔄 Автосохранение включено (каждые 30 сек)');
+      autoSaveEnabled = true;
+      console.log('🔄 Автосохранение включено (debounce 5s)');
     },
 
     disableAutoSave: () => {
+      autoSaveEnabled = false;
       if (autoSaveInterval) {
         clearInterval(autoSaveInterval);
         autoSaveInterval = null;
-        console.log('⏸️ Автосохранение выключено');
       }
+      if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+        autoSaveTimeout = null;
+      }
+      console.log('⏸️ Автосохранение выключено');
+    },
+
+    // Валидация
+    setValidationStatus: hasErrors => {
+      set(state => ({
+        currentState: state.currentState
+          ? { ...state.currentState, hasValidationErrors: hasErrors }
+          : null,
+      }));
     },
 
     // Utility
@@ -311,5 +374,18 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
       const { currentScenarioId, scenarios } = get();
       return scenarios.find(s => s.id === currentScenarioId) || null;
     },
+
+    getDraftFromStorage: (botId: number, scenarioId: number) => {
+      try {
+        const raw = localStorage.getItem(`${DRAFT_STORAGE_KEY}_${botId}_${scenarioId}`);
+        if (!raw) return null;
+        const data = JSON.parse(raw);
+        return data?.nodes && data?.edges ? { nodes: data.nodes, edges: data.edges } : null;
+      } catch {
+        return null;
+      }
+    },
+
+    clearDraftFromStorage,
   };
 });

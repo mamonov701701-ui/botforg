@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Node, Edge } from 'reactflow';
 import { nanoid } from 'nanoid';
 import { BlockCatalogItem, PlanType, RoleType } from '../types/blocks';
 import { fetchBlocksCatalog } from '../api/blocks';
@@ -23,10 +22,6 @@ interface EditorStore {
   plan: PlanType;
   role: RoleType;
   isLoading: boolean;
-
-  // Flow data
-  nodes: Node[];
-  edges: Edge[];
 
   // Search filter
   searchQuery: string;
@@ -70,8 +65,6 @@ export const useEditorStore = create<EditorStore>()(
       plan: 'free',
       role: 'developer',
       isLoading: false,
-      nodes: [],
-      edges: [],
       searchQuery: '',
       toasts: [],
       favoriteBlockIds: [],
@@ -90,22 +83,6 @@ export const useEditorStore = create<EditorStore>()(
       },
 
       setCatalog: catalog => set({ catalog }),
-
-      setNodes: nodes => {
-        if (typeof nodes === 'function') {
-          set(state => ({ nodes: nodes(state.nodes) }));
-        } else {
-          set({ nodes });
-        }
-      },
-
-      setEdges: edges => {
-        if (typeof edges === 'function') {
-          set(state => ({ edges: edges(state.edges) }));
-        } else {
-          set({ edges });
-        }
-      },
 
       setSearchQuery: query => set({ searchQuery: query }),
 

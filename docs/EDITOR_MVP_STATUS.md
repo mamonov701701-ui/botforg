@@ -77,6 +77,10 @@ The BotForg Editor has successfully completed all 7 sprints of MVP development. 
 - Border colors match block.color
 - Responsive layout
 - Loading states
+- Favorites section (⭐ Избранные)
+- Recent blocks section (🕐 Недавние)
+- Drag preview ghost block on drag start
+- Search with inline highlighting of matches
 
 ### Sprint 3: Drag-and-Drop ✅
 
