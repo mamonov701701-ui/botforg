@@ -13,17 +13,9 @@ import { NodeSelectField } from './fields/NodeSelectField';
 import { ButtonListField } from './fields/ButtonListField';
 import { MediaUploadField } from './fields/MediaUploadField';
 import { MediaListField } from './fields/MediaListField';
+import { FieldProps } from './fields/types';
 
-interface Props {
-  field: BlockConfigField;
-  value: any;
-  onChange: (value: any) => void;
-  error?: string;
-  // Дополнительные данные для специальных полей
-  allSettings?: Record<string, any>;
-}
-
-export const FieldRenderer: React.FC<Props> = props => {
+export const FieldRenderer: React.FC<FieldProps> = props => {
   const { field, allSettings } = props;
 
   // Проверка dependsOn - если поле зависит от другого и условие не выполнено, не показываем

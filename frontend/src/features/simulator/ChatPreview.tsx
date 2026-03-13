@@ -3,7 +3,11 @@ import type { SimulatorMessage } from './scenarioRunner';
 
 interface ChatPreviewProps {
   messages: SimulatorMessage[];
-  onButtonClick: (button: { label: string; sourceHandle?: string | null }) => void;
+  onButtonClick: (button: {
+    label: string;
+    sourceHandle?: string | null;
+    buttonId?: string;
+  }) => void;
 }
 
 const ChatPreview: React.FC<ChatPreviewProps> = ({ messages, onButtonClick }) => {
@@ -58,6 +62,7 @@ const ChatPreview: React.FC<ChatPreviewProps> = ({ messages, onButtonClick }) =>
                         onButtonClick({
                           label: btn.label,
                           sourceHandle: btn.sourceHandle,
+                          buttonId: btn.id,
                         })
                       }
                       style={{

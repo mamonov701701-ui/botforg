@@ -20,9 +20,11 @@ import { BlockConfigField } from '../../../types/blocks';
 interface Props {
   selectedNode: Node;
   onClose: () => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
+  onDelete?: () => void;
+  onDuplicate?: () => void;
   onUpdateNode?: (nodeId: string, updates: Partial<Node>) => void;
+  /** Демо-режим: только просмотр, без редактирования */
+  isReadOnly?: boolean;
 }
 
 // Tooltip component
@@ -99,6 +101,7 @@ export default function BlockSettingsPanel({
   onDelete,
   onDuplicate,
   onUpdateNode,
+  isReadOnly = false,
 }: Props) {
   const catalog = useEditorStore(state => state.catalog);
   const setNodesZustand = useEditorStore(state => state.setNodes);
@@ -115,7 +118,7 @@ export default function BlockSettingsPanel({
     [catalog, selectedNode.data.blockId]
   );
 
-  // Reset changes when node changes
+  // Reset local state when node changes
   useEffect(() => {
     setHasChanges(false);
     setShowHelp(false);
@@ -130,9 +133,19 @@ export default function BlockSettingsPanel({
     }
   }, [selectedNode, block, setValidationResult]);
 
+  const initialSettings = selectedNode.data.settings || {};
+
+  const isFieldDirty = (fieldName: string, value: any) => {
+    const initial = initialSettings?.[fieldName];
+    return JSON.stringify(initial ?? null) !== JSON.stringify(value ?? null);
+  };
+
   // Handle field change - updates node.data.settings
   const handleFieldChange = (fieldName: string, value: any) => {
-    setHasChanges(true);
+    if (isReadOnly) return;
+    if (!hasChanges && isFieldDirty(fieldName, value)) {
+      setHasChanges(true);
+    }
 
     // Используем переданный onUpdateNode если доступен (из React Flow),
     // иначе используем Zustand (для обратной совместимости)
@@ -168,6 +181,7 @@ export default function BlockSettingsPanel({
 
   // Handle title change - updates node.data.title (but keeps icon unchanged)
   const handleTitleChange = (newTitle: string) => {
+    if (isReadOnly) return;
     setHasChanges(true);
 
     // Используем переданный onUpdateNode если доступен (из React Flow),
@@ -394,18 +408,20 @@ export default function BlockSettingsPanel({
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ opacity: 0.5, fontSize: 11 }}>ID: {selectedNode.id}</span>
-              {hasChanges && (
+              {hasChanges && !isReadOnly && (
                 <span
                   style={{
                     fontSize: 10,
                     padding: '2px 6px',
-                    background: 'rgba(251, 191, 36, 0.2)',
+                    background: 'rgba(251, 191, 36, 0.15)',
                     color: '#fbbf24',
-                    borderRadius: 4,
+                    borderRadius: 999,
                     fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.3,
                   }}
                 >
-                  Не сохранено
+                  Локальные изменения
                 </span>
               )}
             </div>
@@ -520,16 +536,19 @@ export default function BlockSettingsPanel({
             value={selectedNode.data.title || block.title || ''}
             onChange={e => handleTitleChange(e.target.value)}
             placeholder={block.title || 'Введите название'}
+            readOnly={isReadOnly}
             style={{
               width: '100%',
               padding: '8px 12px',
-              background: '#1f2937',
+              background: isReadOnly ? '#0f1729' : '#1f2937',
               border: '1px solid #374151',
               borderRadius: 6,
               color: '#e5e7eb',
               fontSize: 14,
               outline: 'none',
               transition: 'all 0.2s ease',
+              cursor: isReadOnly ? 'default' : 'text',
+              opacity: isReadOnly ? 0.9 : 1,
             }}
             onFocus={e => {
               e.currentTarget.style.borderColor = '#3b82f6';
@@ -554,7 +573,18 @@ export default function BlockSettingsPanel({
 
         {block.configSchema && block.configSchema.length > 0 ? (
           <>
-            {/* Основные поля */}
+            {/* Основные настройки */}
+            <div
+              style={{
+                marginBottom: 12,
+                fontSize: 11,
+                textTransform: 'uppercase',
+                letterSpacing: 0.6,
+                color: '#6b7280',
+              }}
+            >
+              Основные настройки
+            </div>
             {block.configSchema
               .filter(f => !f.isAdvanced)
               .map(field => {
@@ -629,6 +659,12 @@ export default function BlockSettingsPanel({
                       onChange={v => handleFieldChange(field.name, v)}
                       error={error}
                       allSettings={selectedNode.data.settings}
+                      isReadOnly={isReadOnly}
+                      onResetToDefault={
+                        typeof field.default !== 'undefined'
+                          ? () => handleFieldChange(field.name, field.default)
+                          : undefined
+                      }
                     />
                   </div>
                 );
@@ -757,6 +793,12 @@ export default function BlockSettingsPanel({
                               onChange={v => handleFieldChange(field.name, v)}
                               error={error}
                               allSettings={selectedNode.data.settings}
+                              isReadOnly={isReadOnly}
+                              onResetToDefault={
+                                typeof field.default !== 'undefined'
+                                  ? () => handleFieldChange(field.name, field.default)
+                                  : undefined
+                              }
                             />
                           </div>
                         );
@@ -793,35 +835,37 @@ export default function BlockSettingsPanel({
           gap: 8,
         }}
       >
-        {/* Save button */}
-        <button
-          onClick={handleSave}
-          style={{
-            flex: 1,
-            padding: '10px 12px',
-            borderRadius: 8,
-            background: hasChanges ? '#22c55e' : '#374151',
-            color: '#fff',
-            border: 'none',
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={e => {
-            if (hasChanges) e.currentTarget.style.background = '#16a34a';
-          }}
-          onMouseLeave={e => {
-            if (hasChanges) e.currentTarget.style.background = '#22c55e';
-          }}
-        >
-          <Save size={16} />
-          {hasChanges ? 'Сохранить' : 'Сохранено'}
-        </button>
+        {/* Save button — скрыт в read-only */}
+        {!isReadOnly && (
+          <button
+            onClick={handleSave}
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: 8,
+              background: hasChanges ? '#22c55e' : '#374151',
+              color: '#fff',
+              border: 'none',
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={e => {
+              if (hasChanges) e.currentTarget.style.background = '#16a34a';
+            }}
+            onMouseLeave={e => {
+              if (hasChanges) e.currentTarget.style.background = '#22c55e';
+            }}
+          >
+            <Save size={16} />
+            {hasChanges ? 'Сохранить' : 'Сохранено'}
+          </button>
+        )}
 
         {/* Action buttons */}
         <Tooltip text="Инспектор (консоль)">
@@ -872,28 +916,30 @@ export default function BlockSettingsPanel({
           </Tooltip>
         )}
 
-        <Tooltip text="Удалить">
-          <button
-            onClick={onDelete}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 8,
-              background: '#ef4444',
-              border: 'none',
-              color: '#fff',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background 0.2s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#dc2626')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#ef4444')}
-          >
-            <Trash2 size={18} />
-          </button>
-        </Tooltip>
+        {onDelete && (
+          <Tooltip text="Удалить">
+            <button
+              onClick={onDelete}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 8,
+                background: '#ef4444',
+                border: 'none',
+                color: '#fff',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#dc2626')}
+              onMouseLeave={e => (e.currentTarget.style.background = '#ef4444')}
+            >
+              <Trash2 size={18} />
+            </button>
+          </Tooltip>
+        )}
       </div>
 
       {/* CSS for animations */}

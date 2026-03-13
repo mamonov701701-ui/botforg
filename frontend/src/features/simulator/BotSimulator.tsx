@@ -39,16 +39,35 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
 
   const handleContinue = () => {
     if (!simState) return;
-    const { state, waitingForUser: w } = stepFromCurrentNode(graph, simState);
-    setSimState(state);
+    const { context, waitingForUser: w } = stepFromCurrentNode(graph, simState);
+    setSimState({
+      currentNodeId: context.currentNodeId,
+      history: context.history,
+      variables: context.variables,
+      lastUserInput: context.lastUserInput,
+    });
     setWaitingForUser(w);
   };
 
-  const handleUserChoice = (payload: { label: string; sourceHandle?: string | null }) => {
+  const handleUserChoice = (payload: {
+    label: string;
+    sourceHandle?: string | null;
+    buttonId?: string;
+  }) => {
     if (!simState) return;
-    const { state } = applyUserChoice(graph, simState, payload);
-    const after = stepFromCurrentNode(graph, state);
-    setSimState(after.state);
+    const { context } = applyUserChoice(graph, simState, payload);
+    const after = stepFromCurrentNode(graph, {
+      currentNodeId: context.currentNodeId,
+      history: context.history,
+      variables: context.variables,
+      lastUserInput: context.lastUserInput,
+    });
+    setSimState({
+      currentNodeId: after.context.currentNodeId,
+      history: after.context.history,
+      variables: after.context.variables,
+      lastUserInput: after.context.lastUserInput,
+    });
     setWaitingForUser(after.waitingForUser);
   };
 

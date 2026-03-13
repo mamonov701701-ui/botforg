@@ -4,6 +4,40 @@
 
 import * as api from './client';
 
+/**
+ * Нормализованный snapshot опубликованного сценария для runtime.
+ *
+ * Backend может хранить его в отдельном поле (например, published_content_runtime)
+ * и использовать как вход для движка выполнения сценариев.
+ *
+ * ВАЖНО: структура намеренно не зависит от React Flow и UI.
+ * Она синхронизирована с frontend‑типами из `src/utils/runtimeNormalization.ts`.
+ */
+export interface PublishedRuntimeSnapshot {
+  nodes: {
+    id: string;
+    blockId: string;
+    title?: string;
+    settings: Record<string, unknown>;
+  }[];
+  edges: {
+    id: string;
+    source: string;
+    target: string;
+    sourceHandle?: string | null;
+    targetHandle?: string | null;
+    routing?: {
+      buttonId?: string;
+      conditionValue?: string | number | boolean | null;
+      [key: string]: unknown;
+    };
+  }[];
+  startNodeId: string | null;
+  meta: {
+    schemaVersion: number;
+  };
+}
+
 export interface Scenario {
   id: number;
   user_id: number;
@@ -20,6 +54,20 @@ export interface Scenario {
     nodes: any[];
     edges: any[];
   } | null;
+  /**
+   * Оригинальный опубликованный контент (редакторский граф).
+   * Может содержать UI‑поля и React Flow‑специфику.
+   */
+  published_content?: { nodes: any[]; edges: any[] } | null;
+  /**
+   * TODO (backend): добавить хранение нормализованного runtime‑snapshot,
+   * совместимого с PublishedRuntimeSnapshot, чтобы избежать повторной
+   * нормализации при каждом запуске сценария.
+   *
+   * Пример серверного поля:
+   *   published_content_runtime: PublishedRuntimeSnapshot | null;
+   */
+  status: 'draft' | 'published' | 'archived';
   order: number;
   created_at: string;
   updated_at: string;
@@ -49,6 +97,22 @@ export interface ScenarioUpdate {
     edges: any[];
   };
   order?: number;
+}
+
+/**
+ * DTO для передачи runtime‑snapshot на backend для исполнения.
+ * Пока используется только на frontend как контракт для будущего API.
+ */
+export interface ScenarioRuntimeExecuteRequest {
+  /** ID сценария, который будет выполняться (published). */
+  scenarioId: number;
+  /** Нормализованный runtime‑snapshot, см. PublishedRuntimeSnapshot. */
+  runtime: PublishedRuntimeSnapshot;
+  /**
+   * Начальный контекст выполнения (переменные, пользователь, и т.п.).
+   * Backend может расширить/уточнить этот контракт.
+   */
+  context?: Record<string, unknown>;
 }
 
 /**
@@ -147,4 +211,52 @@ export interface ScenarioNode {
  */
 export async function getScenarioNodes(scenarioId: number): Promise<ScenarioNode[]> {
   return api.get(`/scenarios/${scenarioId}/nodes`);
+}
+
+/**
+ * Версия сценария
+ */
+export interface ScenarioVersion {
+  id: number;
+  version: number;
+  created_at: string;
+  is_active: boolean;
+}
+
+/**
+ * Получить список версий сценария
+ */
+export async function getScenarioVersions(scenarioId: number): Promise<ScenarioVersion[]> {
+  return api.get(`/scenarios/${scenarioId}/versions`);
+}
+
+/**
+ * Восстановить сценарий из версии
+ */
+export async function restoreScenarioVersion(
+  scenarioId: number,
+  versionId: number
+): Promise<Scenario> {
+  return api.post(`/scenarios/${scenarioId}/restore/${versionId}`);
+}
+
+/**
+ * Опубликовать сценарий (draft -> published)
+ */
+export async function publishScenario(scenarioId: number): Promise<Scenario> {
+  return api.post(`/scenarios/${scenarioId}/publish`);
+}
+
+/**
+ * TODO: Backend runtime execution endpoint.
+ *
+ * ПРЕДПОЛАГАЕМЫЙ контракт:
+ * - backend принимает нормализованный runtime‑snapshot + контекст
+ * - возвращает первый "шаг" выполнения (сообщение, next node, и т.п.)
+ *
+ * Пока это заглушка, чтобы зафиксировать точку интеграции и типы.
+ */
+export async function executeScenarioRuntime(payload: ScenarioRuntimeExecuteRequest): Promise<any> {
+  // TODO: заменить URL и тип ответа после реализации backend‑эндпоинта
+  return api.post('/scenarios/runtime/execute', payload);
 }

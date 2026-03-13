@@ -1,28 +1,55 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { FieldProps } from './types';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
 
 interface Button {
+  id?: string;
   label: string;
   branch?: string;
   action?: string;
 }
 
-export const ButtonListField: React.FC<FieldProps> = ({ field, value, onChange, error }) => {
+export const ButtonListField: React.FC<FieldProps> = ({
+  field,
+  value,
+  onChange,
+  error,
+  isReadOnly,
+}) => {
   const buttons: Button[] = Array.isArray(value) ? value : [];
 
   const addButton = () => {
-    onChange([...buttons, { label: '', action: 'next' }]);
+    if (isReadOnly) return;
+    const nextIndex = buttons.length + 1;
+    const newId = `btn_${nextIndex}`;
+    onChange([
+      ...buttons,
+      {
+        id: newId,
+        label: `Кнопка ${nextIndex}`,
+        action: 'next',
+      },
+    ]);
   };
 
   const removeButton = (index: number) => {
+    if (isReadOnly) return;
     onChange(buttons.filter((_, i) => i !== index));
   };
 
   const updateButton = (index: number, updates: Partial<Button>) => {
+    if (isReadOnly) return;
     const newButtons = [...buttons];
     newButtons[index] = { ...newButtons[index], ...updates };
     onChange(newButtons);
+  };
+
+  const moveButton = (from: number, to: number) => {
+    if (isReadOnly || from === to || to < 0 || to >= buttons.length) return;
+    const next = [...buttons];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(next);
   };
 
   return (
@@ -43,19 +70,65 @@ export const ButtonListField: React.FC<FieldProps> = ({ field, value, onChange, 
                 alignItems: 'flex-start',
               }}
             >
-              {/* Drag handle (визуальный элемент) */}
+              {/* Drag handle / reorder */}
               <div
                 style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 4,
                   color: '#6b7280',
-                  cursor: 'grab',
                   padding: '4px 0',
                 }}
               >
+                <button
+                  type="button"
+                  disabled={isReadOnly || index === 0}
+                  onClick={() => moveButton(index, index - 1)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: isReadOnly || index === 0 ? '#1f2937' : '#6b7280',
+                    cursor: isReadOnly || index === 0 ? 'default' : 'pointer',
+                    fontSize: 12,
+                    padding: 0,
+                  }}
+                >
+                  ▲
+                </button>
                 <GripVertical size={16} />
+                <button
+                  type="button"
+                  disabled={isReadOnly || index === buttons.length - 1}
+                  onClick={() => moveButton(index, index + 1)}
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    color: isReadOnly || index === buttons.length - 1 ? '#1f2937' : '#6b7280',
+                    cursor: isReadOnly || index === buttons.length - 1 ? 'default' : 'pointer',
+                    fontSize: 12,
+                    padding: 0,
+                  }}
+                >
+                  ▼
+                </button>
               </div>
 
               {/* Поля кнопки */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Идентификатор кнопки */}
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: '#9ca3af',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span>ID: {button.id || `btn_${index + 1}`}</span>
+                  <span style={{ opacity: 0.8 }}>#{index + 1}</span>
+                </div>
+
                 {/* Текст кнопки */}
                 <input
                   type="text"
@@ -65,11 +138,13 @@ export const ButtonListField: React.FC<FieldProps> = ({ field, value, onChange, 
                   style={{
                     width: '100%',
                     padding: '8px 12px',
-                    background: '#0f1729',
+                    background: isReadOnly ? '#020617' : '#0f1729',
                     border: '1px solid #374151',
                     borderRadius: 6,
                     color: '#fff',
                     fontSize: 13,
+                    cursor: isReadOnly ? 'default' : 'text',
+                    opacity: isReadOnly ? 0.85 : 1,
                   }}
                 />
 
@@ -80,13 +155,15 @@ export const ButtonListField: React.FC<FieldProps> = ({ field, value, onChange, 
                   style={{
                     width: '100%',
                     padding: '8px 12px',
-                    background: '#0f1729',
+                    background: isReadOnly ? '#020617' : '#0f1729',
                     border: '1px solid #374151',
                     borderRadius: 6,
                     color: '#9ca3af',
                     fontSize: 12,
-                    cursor: 'pointer',
+                    cursor: isReadOnly ? 'default' : 'pointer',
+                    opacity: isReadOnly ? 0.85 : 1,
                   }}
+                  disabled={isReadOnly}
                 >
                   <option value="next">Продолжить сценарий</option>
                   <option value="branch">Перейти по ветке (скоро)</option>
@@ -96,20 +173,25 @@ export const ButtonListField: React.FC<FieldProps> = ({ field, value, onChange, 
 
               {/* Удалить кнопку */}
               <button
+                type="button"
                 onClick={() => removeButton(index)}
+                disabled={isReadOnly}
                 style={{
                   background: 'transparent',
                   border: 'none',
                   color: '#ef4444',
-                  cursor: 'pointer',
+                  cursor: isReadOnly ? 'default' : 'pointer',
                   padding: 4,
                   borderRadius: 4,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  opacity: isReadOnly ? 0.4 : 1,
                 }}
                 onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                  if (!isReadOnly) {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                  }
                 }}
                 onMouseLeave={e => {
                   e.currentTarget.style.background = 'transparent';
@@ -124,7 +206,9 @@ export const ButtonListField: React.FC<FieldProps> = ({ field, value, onChange, 
 
       {/* Кнопка добавления */}
       <button
+        type="button"
         onClick={addButton}
+        disabled={isReadOnly}
         style={{
           width: '100%',
           padding: '10px 12px',
@@ -134,12 +218,13 @@ export const ButtonListField: React.FC<FieldProps> = ({ field, value, onChange, 
           color: '#9ca3af',
           fontSize: 13,
           fontWeight: 500,
-          cursor: 'pointer',
+          cursor: isReadOnly ? 'default' : 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: 6,
           transition: 'all 0.2s ease',
+          opacity: isReadOnly ? 0.5 : 1,
         }}
         onMouseEnter={e => {
           e.currentTarget.style.borderColor = '#3b82f6';
@@ -166,7 +251,8 @@ export const ButtonListField: React.FC<FieldProps> = ({ field, value, onChange, 
             textAlign: 'center',
           }}
         >
-          Кнопки помогают пользователю быстро ответить
+          Кнопки помогают пользователю быстро ответить. ID кнопок используется в условиях и
+          переходах.
         </div>
       )}
 

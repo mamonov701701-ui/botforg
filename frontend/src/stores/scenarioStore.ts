@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { Node, Edge } from 'reactflow';
 import * as scenarioAPI from '../api/scenarios';
 import { useEditorStore } from './editorStore';
+import { buildRuntimeGraph, RuntimeGraph } from '../utils/runtimeNormalization';
 
 interface ScenarioState {
   id: number | null;
@@ -69,12 +70,25 @@ interface ScenarioStore {
   enableAutoSave: () => void;
   disableAutoSave: () => void;
 
+  // Импорт сценария из JSON в текущий сценарий
+  importFromJson: (nodes: Node[], edges: Edge[]) => void;
+
   // Валидация
   setValidationStatus: (hasErrors: boolean) => void;
 
   // Utility
   hasUnsavedChanges: () => boolean;
   getCurrentScenario: () => scenarioAPI.Scenario | null;
+  getCurrentStatus: () => scenarioAPI.Scenario['status'] | null;
+  /**
+   * Возвращает нормализованный runtime‑snapshot для текущего сценария
+   * на основе editor‑графа (currentState.nodes/edges).
+   *
+   * Этот snapshot:
+   * - не содержит UI‑полей и React Flow‑специфики
+   * - может быть передан на backend для выполнения
+   */
+  getCurrentRuntimeGraph: () => RuntimeGraph | null;
   getDraftFromStorage: (
     botId: number,
     scenarioId: number
@@ -221,7 +235,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
       return scenario;
     },
 
-    // Update current scenario (вызывается из editorStore при изменении nodes/edges)
+    // Update current scenario (вызывается из редактора при изменении nodes/edges)
     updateCurrentScenario: (nodes: Node[], edges: Edge[]) => {
       set(state => ({
         currentState: state.currentState
@@ -244,6 +258,15 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
           }
         }, 5000);
       }
+    },
+
+    // Импорт JSON в текущий сценарий.
+    // CONTRACT: вызывает updateCurrentScenario, поэтому:
+    // - обновляет currentState.nodes/edges;
+    // - помечает сценарий как isDirty;
+    // - запускает debounce автосохранения и сохранение draft в localStorage.
+    importFromJson: (nodes: Node[], edges: Edge[]) => {
+      get().updateCurrentScenario(nodes, edges);
     },
 
     // Синхронизация с editorStore (вызывается при изменениях в React Flow)
@@ -373,6 +396,18 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
     getCurrentScenario: () => {
       const { currentScenarioId, scenarios } = get();
       return scenarios.find(s => s.id === currentScenarioId) || null;
+    },
+
+    getCurrentStatus: () => {
+      const { currentScenarioId, scenarios } = get();
+      const s = scenarios.find(sc => sc.id === currentScenarioId);
+      return s ? s.status : null;
+    },
+
+    getCurrentRuntimeGraph: () => {
+      const { currentState } = get();
+      if (!currentState) return null;
+      return buildRuntimeGraph(currentState.nodes, currentState.edges);
     },
 
     getDraftFromStorage: (botId: number, scenarioId: number) => {

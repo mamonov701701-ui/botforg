@@ -4,9 +4,11 @@
 
 Successfully implemented a dynamic Block Settings Panel that renders forms based on each block's configSchema from the catalog.
 
+This document also tracks UX improvements that make block editing clearer, safer, and faster.
+
 ## Overview
 
-The BlockSettingsPanel replaces the generic SettingsPanel with schema-driven form generation. It reads the block's `configSchema` from the catalog and renders appropriate input fields for each configuration option.
+The BlockSettingsPanel replaces the generic SettingsPanel with schema-driven form generation. It reads the block's `configSchema` from the catalog and renders appropriate input fields for each configuration option. The panel also provides inline validation, reset-to-default controls for supported fields, and a local "unsaved changes" indicator.
 
 ## Architecture
 
@@ -52,25 +54,28 @@ BlockSettingsPanel/
 | `image`       | Placeholder      | Coming soon                 |
 | `file`        | Placeholder      | Coming soon                 |
 
-### 3. **Live Updates**
+### 3. **Live Updates & Local Change Indicator**
 
 - Changes update `node.data.settings` immediately
-- No save button required
 - Uses Zustand store for persistence
 - React Flow re-renders automatically
+- Panel header shows a pill badge **"Локальные изменения"** when the user modified settings compared to the node's initial settings
+- The badge is hidden in read-only mode
 
 ### 4. **Validation**
 
 - Required fields show red asterisk (\*)
-- Empty required fields show error message
+- Empty required fields show inline error message below the field
 - JSON fields validate parse errors
-- Errors display below fields in red
+- Errors display below fields with compact red text
+- Header shows an aggregated status icon (green check / red alert) based on required-field validation
 
 ### 5. **Panel Header**
 
 - Shows block title from catalog
 - Shows block description
 - Displays node ID for reference
+- Shows a small tooltip with aggregated validation result (valid / number of errors)
 
 ### 6. **Inspect Feature**
 
@@ -105,8 +110,15 @@ BlockSettingsPanel/
 ### StringField
 
 ```typescript
-// Simple text input
-<input type="text" value={value || ''} onChange={...} />
+// Simple text input with optional "Reset to default" button
+<StringField
+  field={field}
+  value={value}
+  onChange={...}
+  error={error}
+  onResetToDefault={() => handleFieldChange(field.name, field.default)}
+  isReadOnly={isReadOnly}
+/>
 ```
 
 ### TextField
@@ -119,8 +131,15 @@ BlockSettingsPanel/
 ### NumberField
 
 ```typescript
-// Numeric input
-<input type="number" value={value ?? ''} onChange={...} />
+// Numeric input with optional "Reset to default" button
+<NumberField
+  field={field}
+  value={value}
+  onChange={...}
+  error={error}
+  onResetToDefault={() => handleFieldChange(field.name, field.default)}
+  isReadOnly={isReadOnly}
+/>
 ```
 
 ### BooleanField
