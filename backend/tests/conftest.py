@@ -17,24 +17,50 @@ from sqlalchemy.pool import StaticPool
 CURRENT_DIR = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
 BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
-from main import app  # noqa: E402
-from database import Base, get_db  # noqa: E402
-from auth.rate_limit import rate_limit_store  # noqa: E402
+# Use file-based test DB so Alembic can run migrations (includes token_version)
+_test_db_path = os.path.abspath(os.path.join(PROJECT_ROOT, "test_botforg.db"))
+TEST_DATABASE_URL = "sqlite:///" + _test_db_path.replace("\\", "/")
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+
+# Import after setting DATABASE_URL
+from backend.database import Base, get_db  # noqa: E402
+import backend.models  # noqa: F401 - ensure all models registered with Base
+from backend.main import app  # noqa: E402
+from backend.auth.rate_limit import rate_limit_store  # noqa: E402
 
 # Clear rate limit store at import time
 rate_limit_store.clear()
 
-# Create test database engine (in-memory SQLite for isolation)
-TEST_DATABASE_URL = "sqlite:///:memory:"
+# Run Alembic migrations for correct schema (token_version, etc.)
+from alembic import command
+from alembic.config import Config
+_alembic_cfg = Config(os.path.join(PROJECT_ROOT, "alembic.ini"))
+_alembic_cfg.set_main_option("sqlalchemy.url", TEST_DATABASE_URL)
+_alembic_cfg.set_main_option("script_location", os.path.join(PROJECT_ROOT, "backend", "migrations").replace("\\", "/"))
+# Reuse existing DB if present (alembic upgrade is idempotent); skip remove on Windows PermissionError
+try:
+    if os.path.exists(_test_db_path):
+        os.remove(_test_db_path)
+except OSError:
+    pass
+command.upgrade(_alembic_cfg, "head")
+
 test_engine = create_engine(
     TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Close DB connections to avoid PermissionError on Windows."""
+    test_engine.dispose()
 
 
 def override_get_db():
@@ -46,8 +72,6 @@ def override_get_db():
         db.close()
 
 
-# Setup test database once at module import
-Base.metadata.create_all(bind=test_engine)
 app.dependency_overrides[get_db] = override_get_db
 
 
@@ -57,11 +81,17 @@ def client():
     # Clear rate limit store
     rate_limit_store.clear()
     
-    # Clear all data before each test
+    # Clear all data before each test (only tables that exist in migrated DB)
+    # Исключаем plans — справочные данные, не очищаем
+    from sqlalchemy import inspect, text
+    inspector = inspect(test_engine)
+    existing_tables = set(inspector.get_table_names())
+    skip_tables = {"plans"}
     for table in reversed(Base.metadata.sorted_tables):
-        with test_engine.connect() as conn:
-            conn.execute(table.delete())
-            conn.commit()
+        if table.name in existing_tables and table.name not in skip_tables:
+            with test_engine.connect() as conn:
+                conn.execute(text(f"DELETE FROM {table.name}"))
+                conn.commit()
     
     # Patch rate limiter to do nothing
     with patch("backend.auth.email_routes.check_rate_limit", lambda req, action: None):
@@ -98,7 +128,7 @@ def register_and_get_token(client: TestClient) -> str:
 
 
 def create_test_bot(client: TestClient, auth_header: str) -> int:
-    """Create a test bot and return its ID."""
+    """Create a test Bot (Telegram) and return its ID."""
     with patch("requests.get") as mock_get:
         unique_id = uuid.uuid4().hex[:8]
         mock_response = Mock()
@@ -127,4 +157,49 @@ def create_test_bot(client: TestClient, auth_header: str) -> int:
         )
         assert res.status_code == 201, f"Bot creation failed: {res.text}"
         return res.json()["id"]
+
+
+def get_user_id(client: TestClient, auth_header: str) -> int:
+    """Get current user ID from /me endpoint."""
+    res = client.get("/me", headers={"Authorization": auth_header})
+    assert res.status_code == 200, f"GET /me failed: {res.text}"
+    return res.json()["id"]
+
+
+def create_test_bot_instance(client: TestClient, auth_header: str) -> int:
+    """
+    Create a BotInstance (template-based) for bot_tags, bot_user_state API.
+    Returns BotInstance.id.
+    """
+    from backend.models.bot import BotInstance
+    from backend.models.template import Template
+
+    user_id = get_user_id(client, auth_header)
+    db = TestingSessionLocal()
+    try:
+        template = Template(
+            name="Test Template",
+            description="For tests",
+            category="test",
+            is_public=False,
+            user_id=user_id,
+        )
+        db.add(template)
+        db.commit()
+        db.refresh(template)
+
+        unique_id = uuid.uuid4().hex[:8]
+        bot_instance = BotInstance(
+            user_id=user_id,
+            token=f"test_token_{unique_id}",
+            username=f"test_instance_{unique_id}",
+            template_id=template.id,
+            is_active=True,
+        )
+        db.add(bot_instance)
+        db.commit()
+        db.refresh(bot_instance)
+        return bot_instance.id
+    finally:
+        db.close()
 

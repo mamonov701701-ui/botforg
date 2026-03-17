@@ -56,6 +56,12 @@ def update_user_role(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Безопасность: запрещаем понижать владельца платформы через этот эндпоинт
+    if user.role == "owner" and update.role != "owner":
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя понижать владельца платформы через этот эндпоинт. Используйте отдельный безопасный процесс передачи владения.",
+        )
     user.role = update.role
     db.commit()
     db.refresh(user)

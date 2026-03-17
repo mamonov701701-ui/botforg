@@ -553,14 +553,12 @@ function InnerEditor() {
   const { catalog, plan, role, showToast, loadCatalog } = useEditorStore();
 
   // Scenario store: единый источник правды для сценария
-  const { currentState, scenarios, updateCurrentScenario, setValidationStatus } = useScenarioStore(
-    state => ({
-      currentState: state.currentState,
-      scenarios: state.scenarios,
-      updateCurrentScenario: state.updateCurrentScenario,
-      setValidationStatus: state.setValidationStatus,
-    })
-  );
+  // Важно: используем отдельные селекторы, а не один объект,
+  // чтобы избежать предупреждения useSyncExternalStore про getSnapshot
+  const currentState = useScenarioStore(state => state.currentState);
+  const scenarios = useScenarioStore(state => state.scenarios);
+  const updateCurrentScenario = useScenarioStore(state => state.updateCurrentScenario);
+  const setValidationStatus = useScenarioStore(state => state.setValidationStatus);
 
   // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
   // React Flow управляет своим внутренним state, Zustand используется ТОЛЬКО для добавления новых блоков
@@ -605,25 +603,74 @@ function InnerEditor() {
     return true;
   }, []);
 
-  // Инициализация React Flow из текущего сценария при смене сценария
-  const lastScenarioIdRef = useRef<number | null>(null);
+  // Флаг внешней синхронизации (scenarioStore -> ReactFlow), чтобы избежать циклов.
+  const isExternalSyncRef = useRef(false);
+
+  // helper для сериализации списков нод/рёбер в "ключ" без внутренних полей ReactFlow
+  const makeNodesKey = useCallback((list: Node[]) => {
+    return list
+      .map(n => {
+        const settings = n.data?.settings || {};
+        return `${n.id}:${Math.round(n.position.x)}:${Math.round(n.position.y)}:${JSON.stringify(
+          settings
+        )}`;
+      })
+      .sort()
+      .join('|');
+  }, []);
+
+  const makeEdgesKey = useCallback((list: Edge[]) => {
+    return list
+      .map(e => `${e.id}:${e.source}:${e.target}:${e.sourceHandle || ''}:${e.targetHandle || ''}`)
+      .sort()
+      .join('|');
+  }, []);
+
+  // Синхронизация scenarioStore -> ReactFlow.
+  // CONTRACT:
+  // - Любое внешнее изменение currentState.nodes/edges (загрузка сценария, импорт JSON)
+  //   должно обновить канвас без перезагрузки страницы.
+  // - При этом не должно запускаться обратное обновление scenarioStore (см. ниже).
   useEffect(() => {
     if (!currentState) {
-      setNodes([]);
-      setEdges([]);
-      lastScenarioIdRef.current = null;
+      if (nodes.length || edges.length) {
+        isExternalSyncRef.current = true;
+        setNodes([]);
+        setEdges([]);
+      }
       return;
     }
-
-    if (lastScenarioIdRef.current === currentState.id) {
-      return;
-    }
-
-    lastScenarioIdRef.current = currentState.id;
 
     const scenarioNodes = currentState.nodes || [];
     const scenarioEdges = currentState.edges || [];
 
+    // ВАЖНО:
+    // Если в состоянии сценария ещё нет узлов/рёбер (пустой сценарий),
+    // но на канвасе уже есть локальные nodes/edges, значит изменения пришли
+    // ИЗ РЕДАКТОРА (React Flow → scenarioStore), а не снаружи.
+    // В таком случае нельзя затирать канвас пустым состоянием store,
+    // иначе только что добавленный блок "исчезает".
+    if (
+      scenarioNodes.length === 0 &&
+      scenarioEdges.length === 0 &&
+      (nodes.length > 0 || edges.length > 0)
+    ) {
+      return;
+    }
+
+    const stateNodesKey = makeNodesKey(scenarioNodes);
+    const stateEdgesKey = makeEdgesKey(scenarioEdges);
+    const currentNodesKey = makeNodesKey(nodes);
+    const currentEdgesKey = makeEdgesKey(edges);
+
+    const nodesChanged = stateNodesKey !== currentNodesKey;
+    const edgesChanged = stateEdgesKey !== currentEdgesKey;
+
+    if (!nodesChanged && !edgesChanged) {
+      return;
+    }
+
+    isExternalSyncRef.current = true;
     setNodes(scenarioNodes);
 
     const validatedEdges = scenarioEdges.filter(e => validateEdge(e, scenarioNodes));
@@ -635,7 +682,7 @@ function InnerEditor() {
       },
     }));
     setEdges(edgesWithDelete);
-  }, [currentState, setNodes, setEdges, validateEdge]);
+  }, [currentState, nodes, edges, setNodes, setEdges, validateEdge, makeNodesKey, makeEdgesKey]);
 
   // Обработчики изменений для ReactFlow с синхронизацией обратно в Zustand
   const onNodesChange = useCallback(
@@ -656,25 +703,29 @@ function InnerEditor() {
     [onNodesChangeInternal]
   );
 
-  // Синхронизация React Flow → scenarioStore (единый источник правды)
+  // Синхронизация React Flow → scenarioStore (единый источник правды).
+  // CONTRACT:
+  // - Локальное редактирование на канвасе (drag, изменение настроек) должно вызывать
+  //   updateCurrentScenario c debounce автосохранения.
+  // - Внешние обновления из scenarioStore (load/import), помеченные isExternalSyncRef,
+  //   НЕ должны вызывать повторный updateCurrentScenario.
   const prevNodesKeyRef = useRef<string>('');
   const prevEdgesKeyRef = useRef<string>('');
 
   useEffect(() => {
     if (!currentState) return;
 
-    const nodesKey = nodes
-      .map(n => {
-        const settings = n.data?.settings || {};
-        return `${n.id}:${Math.round(n.position.x)}:${Math.round(n.position.y)}:${JSON.stringify(settings)}`;
-      })
-      .sort()
-      .join('|');
+    const nodesKey = makeNodesKey(nodes);
+    const edgesKey = makeEdgesKey(edges);
 
-    const edgesKey = edges
-      .map(e => `${e.id}:${e.source}:${e.target}:${e.sourceHandle || ''}:${e.targetHandle || ''}`)
-      .sort()
-      .join('|');
+    if (isExternalSyncRef.current) {
+      // Внешнее обновление уже записало новые nodes/edges в ReactFlow.
+      // Синхронизируем только кеш ключей и сбрасываем флаг, без updateCurrentScenario.
+      prevNodesKeyRef.current = nodesKey;
+      prevEdgesKeyRef.current = edgesKey;
+      isExternalSyncRef.current = false;
+      return;
+    }
 
     if (nodesKey === prevNodesKeyRef.current && edgesKey === prevEdgesKeyRef.current) {
       return;

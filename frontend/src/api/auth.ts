@@ -42,6 +42,7 @@ export interface SettingsOut {
   interface: InterfaceSettingsOut;
   notifications: NotificationSettingsOut;
   agent: AgentSettingsOut;
+  demo_content_created?: boolean;
 }
 
 // Token management

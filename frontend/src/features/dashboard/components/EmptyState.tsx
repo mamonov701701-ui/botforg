@@ -1,5 +1,6 @@
 import React from 'react';
 import { Inbox } from 'lucide-react';
+import { toast } from '../../../utils/toast';
 
 interface EmptyStateProps {
   icon?: string | React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
@@ -7,7 +8,9 @@ interface EmptyStateProps {
   description?: string;
   action?: {
     label: string;
-    onClick: () => void;
+    onClick?: () => void;
+    disabled?: boolean;
+    disabledMessage?: string;
   };
 }
 
@@ -63,25 +66,36 @@ export default function EmptyState({ icon = Inbox, title, description, action }:
       )}
       {action && (
         <button
-          onClick={action.onClick}
+          onClick={() => {
+            if (action.disabled && action.disabledMessage) {
+              toast.warning(action.disabledMessage);
+            } else if (action.onClick) {
+              action.onClick();
+            }
+          }}
           style={{
             padding: '12px 24px',
-            background: 'var(--primary)',
-            color: '#000',
-            border: 'none',
+            background: action.disabled ? 'var(--card)' : 'var(--primary)',
+            color: action.disabled ? 'var(--text-muted)' : '#000',
+            border: action.disabled ? '1px solid var(--border)' : 'none',
             borderRadius: '8px',
             fontSize: '15px',
             fontWeight: 600,
-            cursor: 'pointer',
+            cursor: action.disabled ? 'not-allowed' : 'pointer',
+            opacity: action.disabled ? 0.7 : 1,
             transition: 'all 0.2s',
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.background = 'var(--primary-hover)';
-            e.currentTarget.style.transform = 'translateY(-2px)';
+            if (!action.disabled) {
+              e.currentTarget.style.background = 'var(--primary-hover)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.background = 'var(--primary)';
-            e.currentTarget.style.transform = 'translateY(0)';
+            if (!action.disabled) {
+              e.currentTarget.style.background = 'var(--primary)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }
           }}
         >
           {action.label}

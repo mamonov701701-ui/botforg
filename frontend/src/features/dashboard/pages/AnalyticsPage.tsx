@@ -33,6 +33,7 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction } from '../../../constants/roles';
+import { AccessLocked } from '../../../components/AccessLocked';
 import {
   getDashboardData,
   getMarketingAnalytics,
@@ -1069,9 +1070,12 @@ export default function AnalyticsPage() {
           >
             <Filter size={16} /> Фильтры
           </button>
-          {canExport && (
+          <AccessLocked
+            hasAccess={canExport}
+            actionKey="transactions_export"
+            onClick={handleExport}
+          >
             <button
-              onClick={handleExport}
               style={{
                 padding: '8px 12px',
                 background: 'var(--surface)',
@@ -1085,7 +1089,7 @@ export default function AnalyticsPage() {
             >
               <Download size={16} /> Экспорт
             </button>
-          )}
+          </AccessLocked>
         </div>
       }
     >

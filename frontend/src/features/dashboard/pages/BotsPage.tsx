@@ -21,7 +21,13 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
 import { useAuthStore } from '../../../stores/authStore';
-import { hasAccessToAction } from '../../../constants/roles';
+import {
+  hasAccessToAction,
+  getAccessDeniedMessage,
+  type RoleValue,
+} from '../../../constants/roles';
+import { AccessLocked } from '../../../components/AccessLocked';
+import DemoModeBanner from '../../../components/DemoModeBanner';
 import { getBots, toggleBotStatus, deleteBot, updateBot, type Bot } from '../../../api/bot';
 import { toast } from '../../../utils/toast';
 import NewBotModal from '../../editorV2/NewBotModal';
@@ -270,8 +276,10 @@ export default function BotsPage() {
     loadBots();
   }, []);
 
-  const canCreate = hasAccessToAction(user?.role, 'bot_create');
-  const canEdit = hasAccessToAction(user?.role, 'bot_edit');
+  const canCreate = hasAccessToAction(user?.role as RoleValue, 'bot_create');
+  const canEdit = hasAccessToAction(user?.role as RoleValue, 'bot_edit');
+  const canStartStop = hasAccessToAction(user?.role as RoleValue, 'bot_start_stop');
+  const canDelete = hasAccessToAction(user?.role as RoleValue, 'bot_delete');
 
   // Фильтрация ботов
   const filteredBots = bots.filter(bot => {
@@ -350,9 +358,12 @@ export default function BotsPage() {
       title="Мои боты"
       subtitle={`Всего ботов: ${bots.length}`}
       actions={
-        canCreate ? (
+        <AccessLocked
+          hasAccess={canCreate}
+          actionKey="bot_create"
+          onClick={() => setShowNewBotModal(true)}
+        >
           <button
-            onClick={() => setShowNewBotModal(true)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -379,9 +390,17 @@ export default function BotsPage() {
             <Plus size={18} />
             Создать бота
           </button>
-        ) : undefined
+        </AccessLocked>
       }
     >
+      {!canCreate && !canEdit && (
+        <div style={{ marginBottom: '20px' }}>
+          <DemoModeBanner
+            message="Просмотр без возможности создания и редактирования ботов"
+            upgradeUrl="/pricing"
+          />
+        </div>
+      )}
       {/* Фильтры и поиск */}
       <div
         style={{
@@ -486,8 +505,13 @@ export default function BotsPage() {
               : 'Создайте своего первого бота, чтобы начать работу'
           }
           action={
-            !searchQuery && canCreate
-              ? { label: 'Создать бота', onClick: () => setShowNewBotModal(true) }
+            !searchQuery
+              ? {
+                  label: 'Создать бота',
+                  onClick: canCreate ? () => setShowNewBotModal(true) : undefined,
+                  disabled: !canCreate,
+                  disabledMessage: getAccessDeniedMessage('bot_create'),
+                }
               : undefined
           }
         />
@@ -633,167 +657,180 @@ export default function BotsPage() {
               </div>
 
               {/* Кнопка меню действий */}
-              {canEdit && (
-                <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      setMenuOpenId(menuOpenId === bot.id ? null : bot.id);
-                    }}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      background: 'transparent',
-                      border: '1px solid var(--border)',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <MoreVertical size={16} style={{ color: 'var(--text-muted)' }} />
-                  </button>
+              <div style={{ position: 'absolute', top: '12px', right: '12px' }}>
+                <button
+                  onClick={e => {
+                    e.stopPropagation();
+                    setMenuOpenId(menuOpenId === bot.id ? null : bot.id);
+                  }}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    background: 'transparent',
+                    border: '1px solid var(--border)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <MoreVertical size={16} style={{ color: 'var(--text-muted)' }} />
+                </button>
 
-                  {menuOpenId === bot.id && (
-                    <>
-                      <div
-                        style={{ position: 'fixed', inset: 0, zIndex: 10 }}
-                        onClick={() => setMenuOpenId(null)}
-                      />
-                      <div
-                        style={{
-                          position: 'absolute',
-                          right: 0,
-                          top: '36px',
-                          background: 'var(--surface)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '8px',
-                          padding: '8px',
-                          minWidth: '180px',
-                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                          zIndex: 20,
+                {menuOpenId === bot.id && (
+                  <>
+                    <div
+                      style={{ position: 'fixed', inset: 0, zIndex: 10 }}
+                      onClick={() => setMenuOpenId(null)}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        right: 0,
+                        top: '36px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                        padding: '8px',
+                        minWidth: '180px',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                        zIndex: 20,
+                      }}
+                    >
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (!canEdit) {
+                            toast.warning(getAccessDeniedMessage('bot_edit'));
+                            return;
+                          }
+                          setEditingBot(bot);
+                          setMenuOpenId(null);
                         }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'transparent',
+                          border: 'none',
+                          borderRadius: '4px',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: canEdit ? 'var(--text)' : 'var(--text-muted)',
+                          opacity: canEdit ? 1 : 0.7,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            setEditingBot(bot);
-                            setMenuOpenId(null);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '8px 12px',
-                            background: 'transparent',
-                            border: 'none',
-                            borderRadius: '4px',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            color: 'var(--text)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <Edit size={16} /> Редактировать
-                        </button>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            navigate(`/editor/${bot.id}`);
-                            setMenuOpenId(null);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '8px 12px',
-                            background: 'transparent',
-                            border: 'none',
-                            borderRadius: '4px',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            color: 'var(--text)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <ExternalLink size={16} /> Открыть редактор
-                        </button>
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleToggleStatus(bot);
-                            setMenuOpenId(null);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '8px 12px',
-                            background: 'transparent',
-                            border: 'none',
-                            borderRadius: '4px',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            color: 'var(--text)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          {bot.is_active ? (
-                            <>
-                              <Pause size={16} /> Остановить
-                            </>
-                          ) : (
-                            <>
-                              <Play size={16} /> Запустить
-                            </>
-                          )}
-                        </button>
-                        <div
-                          style={{ height: '1px', background: 'var(--border)', margin: '8px 0' }}
-                        />
-                        <button
-                          onClick={e => {
-                            e.stopPropagation();
-                            handleDeleteBot(bot);
-                            setMenuOpenId(null);
-                          }}
-                          style={{
-                            width: '100%',
-                            padding: '8px 12px',
-                            background: 'transparent',
-                            border: 'none',
-                            borderRadius: '4px',
-                            textAlign: 'left',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            color: '#ef4444',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.background = '#ef444410')}
-                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                        >
-                          <Trash2 size={16} /> Удалить
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                        <Edit size={16} /> Редактировать
+                      </button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          navigate(`/editor/${bot.id}`);
+                          setMenuOpenId(null);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'transparent',
+                          border: 'none',
+                          borderRadius: '4px',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: 'var(--text)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <ExternalLink size={16} /> Открыть редактор
+                      </button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (!canStartStop) {
+                            toast.warning(getAccessDeniedMessage('bot_start_stop'));
+                            return;
+                          }
+                          handleToggleStatus(bot);
+                          setMenuOpenId(null);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'transparent',
+                          border: 'none',
+                          borderRadius: '4px',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: canStartStop ? 'var(--text)' : 'var(--text-muted)',
+                          opacity: canStartStop ? 1 : 0.7,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        {bot.is_active ? (
+                          <>
+                            <Pause size={16} /> Остановить
+                          </>
+                        ) : (
+                          <>
+                            <Play size={16} /> Запустить
+                          </>
+                        )}
+                      </button>
+                      <div
+                        style={{ height: '1px', background: 'var(--border)', margin: '8px 0' }}
+                      />
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (!canDelete) {
+                            toast.warning(getAccessDeniedMessage('bot_delete'));
+                            return;
+                          }
+                          handleDeleteBot(bot);
+                          setMenuOpenId(null);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'transparent',
+                          border: 'none',
+                          borderRadius: '4px',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: canDelete ? '#ef4444' : 'var(--text-muted)',
+                          opacity: canDelete ? 1 : 0.7,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#ef444410')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <Trash2 size={16} /> Удалить
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </Card>
           ))}
         </div>

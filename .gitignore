@@ -54,4 +54,7 @@ coverage/
 
 # Alembic
 backend/migrations/versions/__pycache__/
+
+# QA Tester Agent (generated)
+qa_artifacts/
 ########################################

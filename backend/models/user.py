@@ -24,7 +24,7 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     hashed_password = Column(String, nullable=True)  # NULL for OAuth-only users
     password_hash = Column(String, nullable=True)  # Alias for OAuth compatibility
-    role = Column(String, default="viewer", nullable=False)
+    role = Column(String, default="user", nullable=False)
     email_verified_at = Column(DateTime, nullable=True)
     
     # Поля блокировки пользователя
@@ -35,6 +35,7 @@ class User(Base):
     suspended_until = Column(DateTime, nullable=True)  # До какого времени (для временной)
     suspended_by_id = Column(Integer, nullable=True)  # Кто заблокировал (admin id)
     token_version = Column(Integer, default=0, nullable=False)  # 152-ФЗ: отзыв токенов при /privacy/delete
+    plan_code = Column(String(32), default="free", nullable=False)  # free, pro, team
 
     templates = relationship("Template", back_populates="user", cascade="all, delete")
     ratings = relationship("Rating", back_populates="user", cascade="all, delete")
@@ -72,7 +73,7 @@ class UserSettings(Base):
     language = Column(String(10), nullable=True, default="ru")
     timezone = Column(String(64), nullable=True, default="Europe/Moscow")
     two_factor_enabled = Column(Boolean, default=False, nullable=False)
-    interface_settings = Column(JSON, nullable=True)  # { theme, density, fontSize }
+    interface_settings = Column(JSON, nullable=True)  # { theme, density, fontSize, demo_content_created }
     notification_settings = Column(JSON, nullable=True)  # { email: {...}, telegram: {...} }
     agent_settings = Column(JSON, nullable=True)  # { enabled, mode, dataPolicy }
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

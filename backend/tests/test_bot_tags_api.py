@@ -7,15 +7,14 @@ from datetime import datetime, timezone
 from backend.models.bot import BotInstance
 from backend.models.bot_user_state import BotUserState
 from backend.models.bot_tag import BotTag
-from backend.database import get_db
 
 
 def test_create_tag(client):
     """Тест создания тега через API"""
-    from backend.tests.conftest import register_and_get_token, create_test_bot
-    
+    from backend.tests.conftest import register_and_get_token, create_test_bot_instance
+
     auth_header = register_and_get_token(client)
-    bot_id = create_test_bot(client, auth_header)
+    bot_id = create_test_bot_instance(client, auth_header)
     
     # Создаем тег
     tag_data = {
@@ -29,7 +28,6 @@ def test_create_tag(client):
         json=tag_data,
         headers={"Authorization": auth_header}
     )
-    
     assert response.status_code == 201
     data = response.json()
     assert data["name"] == "VIP"
@@ -42,10 +40,10 @@ def test_create_tag(client):
 
 def test_get_tags(client):
     """Тест получения всех тегов бота"""
-    from backend.tests.conftest import register_and_get_token, create_test_bot
-    
+    from backend.tests.conftest import register_and_get_token, create_test_bot_instance
+
     auth_header = register_and_get_token(client)
-    bot_id = create_test_bot(client, auth_header)
+    bot_id = create_test_bot_instance(client, auth_header)
     
     # Создаем несколько тегов
     tag1_data = {"name": "VIP", "color": "#FFD700"}
@@ -70,10 +68,10 @@ def test_get_tags(client):
 
 def test_delete_tag(client):
     """Тест удаления тега"""
-    from backend.tests.conftest import register_and_get_token, create_test_bot
-    
+    from backend.tests.conftest import register_and_get_token, create_test_bot_instance
+
     auth_header = register_and_get_token(client)
-    bot_id = create_test_bot(client, auth_header)
+    bot_id = create_test_bot_instance(client, auth_header)
     
     # Создаем тег
     tag_data = {"name": "Test Tag", "color": "#FF0000"}
@@ -103,10 +101,10 @@ def test_delete_tag(client):
 
 def test_assign_tag_to_contact(client):
     """Тест присвоения тега контакту"""
-    from backend.tests.conftest import register_and_get_token, create_test_bot
-    
+    from backend.tests.conftest import register_and_get_token, create_test_bot_instance
+
     auth_header = register_and_get_token(client)
-    bot_id = create_test_bot(client, auth_header)
+    bot_id = create_test_bot_instance(client, auth_header)
     
     # Создаем тег
     tag_data = {"name": "VIP", "color": "#FFD700"}
@@ -117,8 +115,9 @@ def test_assign_tag_to_contact(client):
     )
     tag_id = tag_response.json()["id"]
     
-    # Создаем контакт через БД
-    db = next(get_db())
+    # Создаем контакт через тестовую сессию
+    from backend.tests.conftest import TestingSessionLocal
+    db = TestingSessionLocal()
     bot_instance = db.query(BotInstance).filter(BotInstance.id == bot_id).first()
     contact = BotUserState(
         telegram_user_id="123456789",
@@ -145,9 +144,9 @@ def test_assign_tag_to_contact(client):
     )
     
     assert assign_response.status_code == 204
-    
+
     # Проверяем через БД, что тег присвоен
-    db = next(get_db())
+    db = TestingSessionLocal()
     contact = db.query(BotUserState).filter(BotUserState.id == contact_id).first()
     assert len(contact.tags) == 1
     assert contact.tags[0].id == tag_id
@@ -156,10 +155,10 @@ def test_assign_tag_to_contact(client):
 
 def test_unassign_tag_from_contact(client):
     """Тест удаления тега у контакта"""
-    from backend.tests.conftest import register_and_get_token, create_test_bot
-    
+    from backend.tests.conftest import register_and_get_token, create_test_bot_instance
+
     auth_header = register_and_get_token(client)
-    bot_id = create_test_bot(client, auth_header)
+    bot_id = create_test_bot_instance(client, auth_header)
     
     # Создаем тег и контакт
     tag_data = {"name": "VIP", "color": "#FFD700"}
@@ -170,7 +169,8 @@ def test_unassign_tag_from_contact(client):
     )
     tag_id = tag_response.json()["id"]
     
-    db = next(get_db())
+    from backend.tests.conftest import TestingSessionLocal
+    db = TestingSessionLocal()
     bot_instance = db.query(BotInstance).filter(BotInstance.id == bot_id).first()
     contact = BotUserState(
         telegram_user_id="123456789",
@@ -183,18 +183,19 @@ def test_unassign_tag_from_contact(client):
     db.commit()
     db.refresh(contact)
     contact_id = contact.id
-    
+
     # Присваиваем тег
     contact.tags.append(db.query(BotTag).filter(BotTag.id == tag_id).first())
     db.commit()
     db.close()
     
-    # Удаляем тег
+    # Удаляем тег (DELETE с телом через request)
     unassign_data = {
         "contact_id": contact_id,
         "tag_id": tag_id
     }
-    unassign_response = client.delete(
+    unassign_response = client.request(
+        "DELETE",
         "/bot-tags/unassign",
         json=unassign_data,
         headers={"Authorization": auth_header}
@@ -203,7 +204,7 @@ def test_unassign_tag_from_contact(client):
     assert unassign_response.status_code == 204
     
     # Проверяем, что тег удален
-    db = next(get_db())
+    db = TestingSessionLocal()
     contact = db.query(BotUserState).filter(BotUserState.id == contact_id).first()
     assert len(contact.tags) == 0
     db.close()

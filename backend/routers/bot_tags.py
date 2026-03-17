@@ -1,10 +1,12 @@
 """
 API для управления тегами пользователей ботов
 """
+from datetime import datetime
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, field_serializer
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
@@ -30,15 +32,94 @@ class BotTagOut(BaseModel):
     name: str
     description: Optional[str] = None
     color: Optional[str] = None
-    created_at: str
+    created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
+
+    @field_serializer("created_at")
+    def serialize_created_at(self, v: datetime) -> str:
+        return v.isoformat() if v else ""
 
 
 class TagContactRequest(BaseModel):
     contact_id: int  # bot_user_state.id
     tag_id: int
+
+
+# Важно: /assign и /unassign должны быть ДО /{bot_id}, иначе "assign" матчится как bot_id
+@router.post("/assign", status_code=status.HTTP_204_NO_CONTENT)
+async def assign_tag_to_contact(
+    request: TagContactRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Присвоить тег контакту"""
+    contact = db.query(BotUserState).filter(BotUserState.id == request.contact_id).first()
+    if not contact:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Контакт не найден"
+        )
+    tag = db.query(BotTag).filter(BotTag.id == request.tag_id).first()
+    if not tag:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Тег не найден"
+        )
+    if tag.bot_id != contact.bot_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Тег и контакт принадлежат разным ботам"
+        )
+    bot = check_bot_access(contact.bot_id, current_user.id, db)
+    if not bot:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нет доступа к этому боту"
+        )
+    from sqlalchemy import select
+    stmt = select(bot_contact_tags).where(
+        bot_contact_tags.c.bot_contact_id == request.contact_id,
+        bot_contact_tags.c.tag_id == request.tag_id
+    )
+    existing = db.execute(stmt).first()
+    if existing:
+        return None
+    stmt = bot_contact_tags.insert().values(
+        bot_contact_id=request.contact_id,
+        tag_id=request.tag_id
+    )
+    db.execute(stmt)
+    db.commit()
+    return None
+
+
+@router.delete("/unassign", status_code=status.HTTP_204_NO_CONTENT)
+async def unassign_tag_from_contact(
+    request: TagContactRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Удалить тег у контакта"""
+    contact = db.query(BotUserState).filter(BotUserState.id == request.contact_id).first()
+    if not contact:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Контакт не найден"
+        )
+    bot = check_bot_access(contact.bot_id, current_user.id, db)
+    if not bot:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нет доступа к этому боту"
+        )
+    stmt = bot_contact_tags.delete().where(
+        bot_contact_tags.c.bot_contact_id == request.contact_id,
+        bot_contact_tags.c.tag_id == request.tag_id
+    )
+    db.execute(stmt)
+    db.commit()
+    return None
 
 
 @router.post("/{bot_id}", response_model=BotTagOut, status_code=status.HTTP_201_CREATED)
@@ -131,96 +212,6 @@ async def delete_tag(
         )
     
     db.delete(tag)
-    db.commit()
-    return None
-
-
-@router.post("/assign", status_code=status.HTTP_204_NO_CONTENT)
-async def assign_tag_to_contact(
-    request: TagContactRequest,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user),
-):
-    """Присвоить тег контакту"""
-    # Проверяем существование контакта и тега
-    contact = db.query(BotUserState).filter(BotUserState.id == request.contact_id).first()
-    if not contact:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Контакт не найден"
-        )
-    
-    tag = db.query(BotTag).filter(BotTag.id == request.tag_id).first()
-    if not tag:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Тег не найден"
-        )
-    
-    # Проверяем, что тег принадлежит тому же боту, что и контакт
-    if tag.bot_id != contact.bot_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Тег и контакт принадлежат разным ботам"
-        )
-    
-    # Проверяем доступ к боту
-    bot = check_bot_access(contact.bot_id, current_user.id, db)
-    if not bot:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Нет доступа к этому боту"
-        )
-    
-    # Проверяем, не присвоен ли тег уже
-    from sqlalchemy import select
-    stmt = select(bot_contact_tags).where(
-        bot_contact_tags.c.bot_contact_id == request.contact_id,
-        bot_contact_tags.c.tag_id == request.tag_id
-    )
-    existing = db.execute(stmt).first()
-    if existing:
-        return None  # Тег уже присвоен
-    
-    # Присваиваем тег
-    stmt = bot_contact_tags.insert().values(
-        bot_contact_id=request.contact_id,
-        tag_id=request.tag_id
-    )
-    db.execute(stmt)
-    db.commit()
-    return None
-
-
-@router.delete("/unassign", status_code=status.HTTP_204_NO_CONTENT)
-async def unassign_tag_from_contact(
-    request: TagContactRequest,
-    db: Session = Depends(get_db),
-    current_user: UserModel = Depends(get_current_user),
-):
-    """Удалить тег у контакта"""
-    # Проверяем существование контакта
-    contact = db.query(BotUserState).filter(BotUserState.id == request.contact_id).first()
-    if not contact:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Контакт не найден"
-        )
-    
-    # Проверяем доступ к боту
-    bot = check_bot_access(contact.bot_id, current_user.id, db)
-    if not bot:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Нет доступа к этому боту"
-        )
-    
-    # Удаляем связь
-    stmt = bot_contact_tags.delete().where(
-        bot_contact_tags.c.bot_contact_id == request.contact_id,
-        bot_contact_tags.c.tag_id == request.tag_id
-    )
-    db.execute(stmt)
     db.commit()
     return None
 

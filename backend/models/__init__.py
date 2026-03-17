@@ -38,6 +38,7 @@ from backend.models.market import (
     MarketItemType, MarketOrderStatus
 )
 from backend.models.legal import Consent
+from backend.models.plan import Plan
 
 __all__ = [
     "User",
@@ -94,4 +95,5 @@ __all__ = [
     "MarketItemType",
     "MarketOrderStatus",
     "Consent",
+    "Plan",
 ]

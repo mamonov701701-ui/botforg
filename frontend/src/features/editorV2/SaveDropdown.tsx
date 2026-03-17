@@ -2,10 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Save, Library, FileDown } from 'lucide-react';
 
 interface SaveDropdownProps {
-  onQuickSave: () => void;
-  onSaveBot: () => void;
-  onSaveToLibrary: () => void;
-  onExportToFile: () => void;
+  onQuickSave?: () => void;
+  onSaveBot?: () => void;
+  onSaveToLibrary?: () => void;
+  onExportToFile?: () => void;
   hasUnsavedChanges?: boolean;
 }
 
@@ -16,6 +16,7 @@ export default function SaveDropdown({
   onExportToFile,
   hasUnsavedChanges = false,
 }: SaveDropdownProps) {
+  const hasSaveActions = onQuickSave || onSaveBot || onSaveToLibrary;
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -38,6 +39,7 @@ export default function SaveDropdown({
 
   // Hotkey Ctrl+S для быстрого сохранения
   useEffect(() => {
+    if (!onQuickSave) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === 's') {
         e.preventDefault();
@@ -51,11 +53,46 @@ export default function SaveDropdown({
     };
   }, [onQuickSave]);
 
+  // Read-only: только кнопка экспорта
+  if (!hasSaveActions && onExportToFile) {
+    return (
+      <button
+        onClick={onExportToFile}
+        style={{
+          background: 'var(--primary)',
+          color: '#000',
+          border: 'none',
+          borderRadius: 6,
+          padding: '10px 16px',
+          fontSize: 14,
+          fontWeight: 600,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = 'var(--primary-hover)';
+          e.currentTarget.style.transform = 'translateY(-1px)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = 'var(--primary)';
+          e.currentTarget.style.transform = 'translateY(0)';
+        }}
+        title="Экспортировать сценарий"
+      >
+        <FileDown size={18} />
+        <span>Экспорт</span>
+      </button>
+    );
+  }
+
   return (
     <div style={{ position: 'relative', display: 'flex', gap: 0 }} ref={dropdownRef}>
       {/* Основная кнопка Сохранить */}
       <button
-        onClick={onQuickSave}
+        onClick={onQuickSave!}
         style={{
           background: 'var(--primary)',
           color: '#000',
@@ -149,152 +186,166 @@ export default function SaveDropdown({
           }}
         >
           {/* Быстрое сохранение */}
-          <button
-            onClick={() => {
-              onQuickSave();
-              setIsOpen(false);
-            }}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              textAlign: 'left',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              transition: 'background 0.2s',
-              marginBottom: 2,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#252540';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            <Save size={18} color="var(--primary)" />
-            <div style={{ flex: 1 }}>
-              <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
-                Быстрое сохранение
+          {onQuickSave && (
+            <button
+              onClick={() => {
+                onQuickSave();
+                setIsOpen(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                transition: 'background 0.2s',
+                marginBottom: 2,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#252540';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <Save size={18} color="var(--primary)" />
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
+                  Быстрое сохранение
+                </div>
+                <div style={{ color: '#9ca3af', fontSize: 12 }}>Сохранить весь бот (Ctrl+S)</div>
               </div>
-              <div style={{ color: '#9ca3af', fontSize: 12 }}>Сохранить весь бот (Ctrl+S)</div>
-            </div>
-          </button>
+            </button>
+          )}
 
           {/* Разделитель */}
-          <div style={{ height: 1, background: '#374151', margin: '4px 0' }} />
+          {onQuickSave && (onSaveBot || onSaveToLibrary) && (
+            <div style={{ height: 1, background: '#374151', margin: '4px 0' }} />
+          )}
 
           {/* Сохранить бот как... */}
-          <button
-            onClick={() => {
-              onSaveBot();
-              setIsOpen(false);
-            }}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              textAlign: 'left',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              transition: 'background 0.2s',
-              marginBottom: 2,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#252540';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            <Save size={18} color="#9ca3af" />
-            <div style={{ flex: 1 }}>
-              <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
-                Сохранить бот как...
+          {onSaveBot && (
+            <button
+              onClick={() => {
+                onSaveBot();
+                setIsOpen(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                transition: 'background 0.2s',
+                marginBottom: 2,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#252540';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <Save size={18} color="#9ca3af" />
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
+                  Сохранить бот как...
+                </div>
+                <div style={{ color: '#9ca3af', fontSize: 12 }}>
+                  Создать копию или переименовать{' '}
+                </div>
               </div>
-              <div style={{ color: '#9ca3af', fontSize: 12 }}>Создать копию или переименовать</div>
-            </div>
-          </button>
+            </button>
+          )}
 
           {/* Сохранить сценарий в библиотеку */}
-          <button
-            onClick={() => {
-              onSaveToLibrary();
-              setIsOpen(false);
-            }}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              textAlign: 'left',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              transition: 'background 0.2s',
-              marginBottom: 2,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#252540';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            <Library size={18} color="#9ca3af" />
-            <div style={{ flex: 1 }}>
-              <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
-                Сохранить сценарий в библиотеку
+          {onSaveToLibrary && (
+            <button
+              onClick={() => {
+                onSaveToLibrary();
+                setIsOpen(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                transition: 'background 0.2s',
+                marginBottom: 2,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#252540';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <Library size={18} color="#9ca3af" />
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
+                  Сохранить сценарий в библиотеку
+                </div>
+                <div style={{ color: '#9ca3af', fontSize: 12 }}>
+                  Для переиспользования в других ботах
+                </div>
               </div>
-              <div style={{ color: '#9ca3af', fontSize: 12 }}>
-                Для переиспользования в других ботах
-              </div>
-            </div>
-          </button>
+            </button>
+          )}
 
           {/* Экспортировать в файл */}
-          <button
-            onClick={() => {
-              onExportToFile();
-              setIsOpen(false);
-            }}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              textAlign: 'left',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              transition: 'background 0.2s',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = '#252540';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'transparent';
-            }}
-          >
-            <FileDown size={18} color="#9ca3af" />
-            <div style={{ flex: 1 }}>
-              <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
-                Экспортировать в файл
+          {onExportToFile && (
+            <button
+              onClick={() => {
+                onExportToFile();
+                setIsOpen(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 4,
+                cursor: 'pointer',
+                textAlign: 'left',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#252540';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+              }}
+            >
+              <FileDown size={18} color="#9ca3af" />
+              <div style={{ flex: 1 }}>
+                <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
+                  Экспортировать в файл
+                </div>
+                <div style={{ color: '#9ca3af', fontSize: 12 }}>
+                  Скачать текущий сценарий (.json)
+                </div>
               </div>
-              <div style={{ color: '#9ca3af', fontSize: 12 }}>Скачать текущий сценарий (.json)</div>
-            </div>
-          </button>
+            </button>
+          )}
         </div>
       )}
     </div>

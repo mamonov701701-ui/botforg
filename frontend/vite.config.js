@@ -31,6 +31,9 @@ export default defineConfig({
     },
   ],
   server: {
+    // ВАЖНО: dev-порты синхронизированы с docs/DEV_PORTS.md
+    // Frontend: http://localhost:5173
+    // Backend API (см. proxy ниже): http://localhost:8001
     host: '0.0.0.0',
     port: 5173,
     strictPort: false,
@@ -82,6 +85,11 @@ export default defineConfig({
         secure: false,
       },
       '/privacy': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/plans': {
         target: 'http://localhost:8001',
         changeOrigin: true,
         secure: false,

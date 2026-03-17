@@ -8,6 +8,7 @@ interface User {
   avatar: string | null;
   providers: string[];
   role: string;
+  plan_code?: string; // free, pro, team, developer
 }
 
 interface AuthState {

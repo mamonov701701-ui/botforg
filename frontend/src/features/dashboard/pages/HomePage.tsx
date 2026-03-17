@@ -16,6 +16,7 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction, hasAccessToSection } from '../../../constants/roles';
+import { AccessLocked } from '../../../components/AccessLocked';
 import { getDashboardData, getRecentEvents } from '../../../api/analytics';
 import { getBots } from '../../../api/bot';
 
@@ -271,18 +272,21 @@ export default function HomePage() {
       label: 'Создать бота',
       action: () => navigate('/dashboard/bots/new'),
       permission: hasAccessToAction(user?.role, 'bot_create'),
+      actionKey: 'bot_create' as const,
     },
     {
       icon: FileText,
       label: 'Шаблоны',
       action: () => navigate('/dashboard/templates'),
-      permission: hasAccessToSection(user?.role, 'templates'),
+      permission: true,
+      actionKey: null,
     },
     {
       icon: CreditCard,
       label: 'Пополнить баланс',
       action: () => navigate('/dashboard/balance'),
       permission: hasAccessToAction(user?.role, 'balance_topup'),
+      actionKey: 'balance_topup' as const,
     },
   ];
 
@@ -345,42 +349,50 @@ export default function HomePage() {
           Быстрые действия
         </h2>
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-          {quickActions
-            .filter(action => action.permission)
-            .map((action, index) => {
-              const ActionIcon = action.icon;
-              return (
-                <button
-                  key={index}
-                  onClick={action.action}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '12px 20px',
-                    background: 'var(--primary)',
-                    color: '#000',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '15px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = 'var(--primary-hover)';
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.background = 'var(--primary)';
-                    e.currentTarget.style.transform = 'translateY(0)';
-                  }}
-                >
-                  <ActionIcon size={18} />
-                  {action.label}
-                </button>
-              );
-            })}
+          {quickActions.map((action, index) => {
+            const ActionIcon = action.icon;
+            const btn = (
+              <button
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '12px 20px',
+                  background: 'var(--primary)',
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'var(--primary-hover)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'var(--primary)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                <ActionIcon size={18} />
+                {action.label}
+              </button>
+            );
+            return action.actionKey ? (
+              <AccessLocked
+                key={index}
+                hasAccess={action.permission}
+                actionKey={action.actionKey}
+                onClick={action.action}
+              >
+                {btn}
+              </AccessLocked>
+            ) : (
+              React.cloneElement(btn, { key: index, onClick: action.action })
+            );
+          })}
         </div>
       </div>
 

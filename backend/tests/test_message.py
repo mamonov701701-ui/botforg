@@ -7,8 +7,13 @@ def test_create_incoming_message(client):
     """Test creating an incoming message"""
     auth_header = register_and_get_token(client)
 
-    # Create test bot
+    # Create test bot and enable store_messages (152-ФЗ: по умолчанию content не сохраняется)
     bot_id = create_test_bot(client, auth_header)
+    client.patch(
+        f"/bots/{bot_id}",
+        json={"store_messages": True},
+        headers={"Authorization": auth_header},
+    )
 
     # Create incoming message
     message_data = {
@@ -36,8 +41,13 @@ def test_create_outgoing_message(client):
     """Test creating an outgoing message"""
     auth_header = register_and_get_token(client)
 
-    # Create test bot
+    # Create test bot and enable store_messages (152-ФЗ: по умолчанию content не сохраняется)
     bot_id = create_test_bot(client, auth_header)
+    client.patch(
+        f"/bots/{bot_id}",
+        json={"store_messages": True},
+        headers={"Authorization": auth_header},
+    )
 
     # Create outgoing message
     message_data = {
@@ -127,8 +137,13 @@ def test_get_messages(client):
     """Test getting list of messages"""
     auth_header = register_and_get_token(client)
 
-    # Create test bot
+    # Create test bot and enable store_messages (152-ФЗ: по умолчанию content не сохраняется)
     bot_id = create_test_bot(client, auth_header)
+    client.patch(
+        f"/bots/{bot_id}",
+        json={"store_messages": True},
+        headers={"Authorization": auth_header},
+    )
 
     # Create messages
     message_data1 = {
@@ -170,8 +185,13 @@ def test_get_messages_with_filters(client):
     """Test getting messages with filters"""
     auth_header = register_and_get_token(client)
 
-    # Create test bot
+    # Create test bot and enable store_messages (152-ФЗ: по умолчанию content не сохраняется)
     bot_id = create_test_bot(client, auth_header)
+    client.patch(
+        f"/bots/{bot_id}",
+        json={"store_messages": True},
+        headers={"Authorization": auth_header},
+    )
 
     # Create messages
     message_data1 = {
@@ -225,8 +245,13 @@ def test_get_message(client):
     """Test getting a specific message"""
     auth_header = register_and_get_token(client)
 
-    # Create test bot and message
+    # Create test bot and enable store_messages (152-ФЗ: по умолчанию content не сохраняется)
     bot_id = create_test_bot(client, auth_header)
+    client.patch(
+        f"/bots/{bot_id}",
+        json={"store_messages": True},
+        headers={"Authorization": auth_header},
+    )
     message_data = {
         "bot_id": bot_id,
         "direction": "incoming",
@@ -359,8 +384,13 @@ def test_access_other_user_message_forbidden(client):
     auth_header1 = register_and_get_token(client)
     auth_header2 = register_and_get_token(client)
 
-    # User 1 creates bot and message
+    # User 1 creates bot and enable store_messages
     bot_id = create_test_bot(client, auth_header1)
+    client.patch(
+        f"/bots/{bot_id}",
+        json={"store_messages": True},
+        headers={"Authorization": auth_header1},
+    )
     message_data = {
         "bot_id": bot_id,
         "direction": "incoming",

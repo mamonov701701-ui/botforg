@@ -22,6 +22,10 @@ import {
   getMarketItems,
 } from '../api/market';
 import { toast } from '../utils/toast';
+import { useAuthStore } from '../stores/authStore';
+import { hasAccessToPlanRestrictedAction } from '../constants/roles';
+import { AccessLocked } from '../components/AccessLocked';
+import { Link } from 'react-router-dom';
 
 type MarketTab = 'templates' | 'scenarios' | 'customers' | 'freelancers';
 
@@ -82,6 +86,7 @@ interface Freelancer {
 }
 
 export default function MarketplacePage() {
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<MarketTab>('templates');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -538,29 +543,92 @@ export default function MarketplacePage() {
             </div>
 
             {/* Create button */}
-            <button
-              onClick={() => setShowCreateModal(true)}
-              style={{
-                padding: '14px 24px',
-                background: 'var(--primary)',
-                color: 'var(--text-on-primary)',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '15px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <Plus size={20} />
-              {activeTab === 'templates' && 'Разместить шаблон'}
-              {activeTab === 'scenarios' && 'Разместить сценарий'}
-              {activeTab === 'customers' && 'Создать заказ'}
-              {activeTab === 'freelancers' && 'Стать исполнителем'}
-            </button>
+            {activeTab === 'templates' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                {hasAccessToPlanRestrictedAction(user, 'marketplace_stats') && (
+                  <Link
+                    to="/developer/templates"
+                    style={{
+                      padding: '14px 24px',
+                      background: 'transparent',
+                      color: 'var(--primary)',
+                      border: '1px solid var(--primary)',
+                      borderRadius: '12px',
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Мои шаблоны
+                  </Link>
+                )}
+                <AccessLocked
+                  hasAccess={hasAccessToPlanRestrictedAction(user, 'template_publish')}
+                  actionKey="template_publish"
+                  onClick={() => setShowCreateModal(true)}
+                >
+                  <button
+                    style={{
+                      padding: '14px 24px',
+                      background: 'var(--primary)',
+                      color: 'var(--text-on-primary)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      fontSize: '15px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <Plus size={20} />
+                    Опубликовать шаблон
+                  </button>
+                </AccessLocked>
+                {!hasAccessToPlanRestrictedAction(user, 'template_publish') && (
+                  <Link
+                    to="/pricing"
+                    style={{
+                      fontSize: '14px',
+                      color: 'var(--primary)',
+                      textDecoration: 'none',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Тариф Developer →
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                style={{
+                  padding: '14px 24px',
+                  background: 'var(--primary)',
+                  color: 'var(--text-on-primary)',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <Plus size={20} />
+                {activeTab === 'scenarios' && 'Разместить сценарий'}
+                {activeTab === 'customers' && 'Создать заказ'}
+                {activeTab === 'freelancers' && 'Стать исполнителем'}
+              </button>
+            )}
           </div>
 
           {/* Content */}

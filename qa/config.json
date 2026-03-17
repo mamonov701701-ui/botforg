@@ -1,0 +1,24 @@
+{
+  "baseUrl": "http://127.0.0.1:5173",
+  "backendUrl": "http://127.0.0.1:8001",
+  "pages": [
+    { "route": "/", "name": "Home", "selector": "h1, h2, .site-main, main" },
+    { "route": "/market", "name": "Market", "selector": "h1, h2, .grid, main" },
+    { "route": "/features", "name": "Features", "selector": "h1, h2, main" },
+    { "route": "/pricing", "name": "Pricing", "selector": "h1, h2, main" },
+    { "route": "/dashboard", "name": "Dashboard", "selector": "h1, h2, [data-testid='dashboard'], main, .site-main" },
+    { "route": "/dashboard/bots", "name": "Bots", "selector": "h1, h2, main" },
+    { "route": "/dashboard/templates", "name": "Templates", "selector": "h1, h2, main, .grid" },
+    { "route": "/dashboard/settings", "name": "Settings", "selector": "h1, h2, main, [data-testid='allowSendTextToAi'], input, form" },
+    { "route": "/dashboard/analytics", "name": "Analytics", "selector": "h1, h2, main" },
+    { "route": "/editor/1", "name": "Editor", "selector": "h1, h2, main, .react-flow" }
+  ],
+  "menuLinks": [
+    { "text": "BF агент", "href": "/bf-agent" },
+    { "text": "Маркет", "href": "/market" },
+    { "text": "Возможности", "href": "/features" },
+    { "text": "Тарифы", "href": "/pricing" },
+    { "text": "Личный кабинет", "href": "/dashboard" },
+    { "text": "Редактор", "href": "/dashboard/bots" }
+  ]
+}

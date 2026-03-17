@@ -16,7 +16,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
-import { hasAccessToSection, ROLE_NAMES, type SectionKey } from '../../constants/roles';
+import { ROLE_NAMES, type SectionKey } from '../../constants/roles';
 import { getMe, logout } from '../../api/auth';
 
 type DashboardMode = 'projects' | 'platform';
@@ -180,18 +180,18 @@ export default function DashboardLayout() {
     [dashboardMode]
   );
 
-  // Фильтруем пункты меню по правам доступа
+  // Пункты меню: все разделы видимы для всех ролей (ограничения только на уровне действий)
   const availableNavItems = useMemo(() => {
     return currentNavItems.filter(item => {
-      // Для платформенных пунктов проверяем дополнительный доступ
-      if (item.mode === 'platform') {
+      // Платформенные пункты — только для owner
+      if (
+        item.mode === 'platform' ||
+        (typeof item.id === 'string' && item.id.startsWith('platform_'))
+      ) {
         return hasPlatformAccess(user);
       }
-      // Для обычных пунктов используем стандартную проверку
-      if ('id' in item && typeof item.id === 'string' && item.id.startsWith('platform_')) {
-        return hasPlatformAccess(user);
-      }
-      return hasAccessToSection(user?.role, item.id as SectionKey);
+      // Все остальные разделы (Главная, Боты, Сценарии, Шаблоны, Баланс, Аналитика, Команда, Сообщения, Настройки) — для всех
+      return true;
     });
   }, [currentNavItems, user]);
 
@@ -252,8 +252,8 @@ export default function DashboardLayout() {
     );
   }
 
-  // Проверка доступа к ЛК
-  if (!user || user.role === 'user') {
+  // Проверка доступа к ЛК (только для неавторизованных)
+  if (!user) {
     return (
       <div
         style={{
@@ -279,44 +279,24 @@ export default function DashboardLayout() {
             Доступ ограничен
           </h1>
           <p style={{ color: 'var(--text-muted)', marginBottom: '32px', lineHeight: 1.6 }}>
-            {user
-              ? 'У вас нет доступа к личному кабинету. Обратитесь к администратору для получения соответствующей роли.'
-              : 'Для доступа к личному кабинету необходимо зарегистрироваться или войти в систему.'}
+            Для доступа к личному кабинету необходимо зарегистрироваться или войти в систему.
           </p>
-          {!user ? (
-            <button
-              onClick={() => navigate('/dashboard')}
-              style={{
-                padding: '14px 32px',
-                background: 'var(--primary)',
-                color: '#000',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              Войти / Зарегистрироваться
-            </button>
-          ) : (
-            <button
-              onClick={() => navigate('/')}
-              style={{
-                padding: '14px 32px',
-                background: 'var(--card)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              На главную
-            </button>
-          )}
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{
+              padding: '14px 32px',
+              background: 'var(--primary)',
+              color: '#000',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            Войти / Зарегистрироваться
+          </button>
         </div>
       </div>
     );

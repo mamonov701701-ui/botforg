@@ -53,6 +53,9 @@ def add_team_member(
     Добавить участника в команду проекта
     Можно указать срок действия роли
     """
+    from backend.utils.plan_limits import check_max_team_members
+    check_max_team_members(db, current_user, current_user.id)
+
     # Проверка, что участник не добавлен дважды
     exists = (
         db.query(TeamMember)
@@ -68,6 +71,12 @@ def add_team_member(
     user = db.query(User).filter(User.id == member.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Безопасность: нельзя менять базовую роль владельца платформы через команду
+    if user.role == "owner":
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя добавлять владельца платформы в команду и изменять его базовую роль через этот эндпоинт",
+        )
     
     team_member = TeamMember(
         owner_id=current_user.id, user_id=member.user_id, role=member.role
@@ -134,6 +143,12 @@ def update_team_member_role(
     user = db.query(User).filter(User.id == member.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Безопасность: нельзя менять базовую роль владельца платформы через команду
+    if user.role == "owner":
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя изменять роль владельца платформы через команду. Используйте отдельный безопасный процесс передачи владения.",
+        )
     
     member.role = update.role
     
@@ -194,6 +209,12 @@ def delete_team_member(
     
     user = db.query(User).filter(User.id == member.user_id).first()
     if user:
+        # Безопасность: нельзя понижать владельца платформы через команду
+        if user.role == "owner":
+            raise HTTPException(
+                status_code=400,
+                detail="Нельзя удалять владельца платформы из команды и понижать его базовую роль через этот эндпоинт",
+            )
         # Деактивируем все активные базовые роли
         existing_roles = db.query(BaseRole).filter(
             BaseRole.user_id == user.id,

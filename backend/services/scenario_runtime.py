@@ -8,7 +8,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from backend.models.scenario import Scenario
+from backend.models.scenario import Scenario, SCENARIO_STATUS_PUBLISHED
 from backend.models.event import ScenarioExecution
 from backend.models.bot_user_state import BotUserState
 
@@ -80,27 +80,37 @@ class ScenarioRuntime:
     def get_scenario(self, scenario_id: int) -> Optional[Scenario]:
         """Получить сценарий по ID"""
         return self.db.query(Scenario).filter(Scenario.id == scenario_id).first()
-    
+
+    def _get_execution_content(self, scenario: Scenario) -> Optional[Dict[str, Any]]:
+        """Контент для выполнения: бот использует только published."""
+        if scenario.published_content:
+            return scenario.published_content
+        if scenario.status != SCENARIO_STATUS_PUBLISHED:
+            return None
+        return scenario.content
+
     def get_start_node(self, scenario: Scenario) -> Optional[Dict[str, Any]]:
         """Найти стартовый узел сценария (блок 'start')"""
-        if not scenario.content or "nodes" not in scenario.content:
+        content = self._get_execution_content(scenario)
+        if not content or "nodes" not in content:
             return None
         
-        for node in scenario.content["nodes"]:
+        for node in content["nodes"]:
             node_data = node.get("data", {})
             if node_data.get("blockId") == "start":
                 return node
         
         # Если нет блока start, возвращаем первый узел
-        nodes = scenario.content.get("nodes", [])
+        nodes = content.get("nodes", [])
         return nodes[0] if nodes else None
     
     def get_node_by_id(self, scenario: Scenario, node_id: str) -> Optional[Dict[str, Any]]:
         """Найти узел по ID"""
-        if not scenario.content or "nodes" not in scenario.content:
+        content = self._get_execution_content(scenario)
+        if not content or "nodes" not in content:
             return None
         
-        for node in scenario.content["nodes"]:
+        for node in content["nodes"]:
             if node.get("id") == node_id:
                 return node
         

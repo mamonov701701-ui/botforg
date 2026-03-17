@@ -4,7 +4,9 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
 import { useAuthStore } from '../../../stores/authStore';
-import { hasAccessToAction } from '../../../constants/roles';
+import { hasAccessToAction, getAccessDeniedMessage } from '../../../constants/roles';
+import { AccessLocked } from '../../../components/AccessLocked';
+import DemoModeBanner from '../../../components/DemoModeBanner';
 import { ROLE_NAMES, type RoleValue } from '../../../constants/roles';
 import {
   getMyTeam,
@@ -487,6 +489,14 @@ export default function TeamPage() {
 
   return (
     <DashboardPage title="Команда" subtitle={`Участников: ${teamMembers.length}`}>
+      {!canInvite && (
+        <div style={{ marginBottom: '20px' }}>
+          <DemoModeBanner
+            message="Просмотр без возможности приглашения и управления участниками"
+            upgradeUrl="/pricing"
+          />
+        </div>
+      )}
       {/* Toolbar с поиском и кнопкой пригласить */}
       <div
         style={{
@@ -529,9 +539,12 @@ export default function TeamPage() {
         </div>
 
         {/* Кнопка пригласить */}
-        {canInvite && (
+        <AccessLocked
+          hasAccess={canInvite}
+          actionKey="team_invite"
+          onClick={() => setShowAddByIdModal(true)}
+        >
           <button
-            onClick={() => setShowAddByIdModal(true)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -559,7 +572,7 @@ export default function TeamPage() {
             <Plus size={18} />
             Пригласить
           </button>
-        )}
+        </AccessLocked>
       </div>
 
       {/* Таблица участников */}
@@ -625,34 +638,37 @@ export default function TeamPage() {
                 </div>
                 <div style={{ fontWeight: 600 }}>{member.name || '—'}</div>
                 <div style={{ color: 'var(--text-muted)' }}>{member.email}</div>
-                <div>
-                  {canEditRole ? (
-                    <select
-                      value={getActiveBaseRole(member)}
-                      onChange={e => handleChangeRole(member.id, e.target.value as RoleValue)}
-                      style={{
-                        padding: '6px 10px',
-                        background: 'var(--card)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '6px',
-                        fontSize: '13px',
-                        color: 'var(--text)',
-                        cursor: 'pointer',
-                        outline: 'none',
-                      }}
-                    >
-                      <option value="admin">{ROLE_NAMES.admin}</option>
-                      <option value="developer">{ROLE_NAMES.developer}</option>
-                      <option value="templates_manager">{ROLE_NAMES.templates_manager}</option>
-                      <option value="support">{ROLE_NAMES.support}</option>
-                      <option value="viewer">{ROLE_NAMES.viewer}</option>
-                    </select>
-                  ) : (
-                    <span>
-                      {ROLE_NAMES[getActiveBaseRole(member) as RoleValue] ||
-                        getActiveBaseRole(member)}
-                    </span>
-                  )}
+                <div
+                  onClick={
+                    !canEditRole
+                      ? () => toast.warning(getAccessDeniedMessage('team_edit_role'))
+                      : undefined
+                  }
+                  style={!canEditRole ? { cursor: 'not-allowed', opacity: 0.7 } : {}}
+                >
+                  <select
+                    value={getActiveBaseRole(member)}
+                    onChange={e =>
+                      canEditRole ? handleChangeRole(member.id, e.target.value as RoleValue) : null
+                    }
+                    disabled={!canEditRole}
+                    style={{
+                      padding: '6px 10px',
+                      background: 'var(--card)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      color: 'var(--text)',
+                      cursor: canEditRole ? 'pointer' : 'not-allowed',
+                      outline: 'none',
+                    }}
+                  >
+                    <option value="admin">{ROLE_NAMES.admin}</option>
+                    <option value="developer">{ROLE_NAMES.developer}</option>
+                    <option value="templates_manager">{ROLE_NAMES.templates_manager}</option>
+                    <option value="support">{ROLE_NAMES.support}</option>
+                    <option value="viewer">{ROLE_NAMES.viewer}</option>
+                  </select>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -680,9 +696,12 @@ export default function TeamPage() {
                     <Settings size={14} />
                     Настройка
                   </button>
-                  {canRemove && (
+                  <AccessLocked
+                    hasAccess={canRemove}
+                    actionKey="team_remove"
+                    onClick={() => setConfirmDelete(member.id)}
+                  >
                     <button
-                      onClick={() => setConfirmDelete(member.id)}
                       style={{
                         padding: '6px 12px',
                         background: 'transparent',
@@ -701,7 +720,7 @@ export default function TeamPage() {
                     >
                       <Trash2 size={14} />
                     </button>
-                  )}
+                  </AccessLocked>
                 </div>
               </div>
             ))}

@@ -10,9 +10,16 @@ from pydantic import BaseModel, field_serializer
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.user import User
-from backend.models.scenario import Scenario
+from backend.models.scenario import (
+    Scenario,
+    ScenarioVersion,
+    SCENARIO_STATUS_DRAFT,
+    VERSION_TYPE_DRAFT,
+    VERSION_TYPE_PUBLISHED,
+)
 from backend.models.bot import Bot
 from backend.utils.bot_access import check_bot_access, check_bot_edit_permission
+from backend.utils.plan_limits import check_can_publish
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -51,6 +58,8 @@ class ScenarioOut(BaseModel):
     is_standard: bool
     is_public: bool
     content: Optional[dict]
+    published_content: Optional[dict] = None
+    status: str = SCENARIO_STATUS_DRAFT
     order: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -71,6 +80,23 @@ class ScenarioNodeOut(BaseModel):
     title: str
     block_type: str
     icon: Optional[str] = None
+
+
+class ScenarioVersionOut(BaseModel):
+    """Версия сценария для API"""
+    id: int
+    version: int
+    created_at: Optional[datetime] = None
+    is_active: bool
+
+    @field_serializer('created_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.isoformat()
+
+    class Config:
+        from_attributes = True
 
 
 # Получить все сценарии бота
@@ -176,16 +202,76 @@ def create_scenario(
         icon=scenario_data.icon,
         category=scenario_data.category,
         content=scenario_data.content or {"nodes": [], "edges": []},
+        status=SCENARIO_STATUS_DRAFT,
         is_library=scenario_data.is_library,
         is_main=scenario_data.is_main,
         order=0,
     )
     
     db.add(scenario)
+    db.flush()
+    if scenario.content:
+        _create_scenario_version(scenario, db)
     db.commit()
     db.refresh(scenario)
     
     return scenario
+
+
+def _check_scenario_access(scenario: Scenario, user_id: int, db: Session) -> None:
+    """Проверяет доступ к сценарию (чтение). Вызывает HTTPException при отказе."""
+    if scenario.user_id == user_id:
+        return
+    if scenario.is_standard:
+        return
+    if scenario.bot_id:
+        check_bot_access(scenario.bot_id, user_id, db)
+        return
+    raise HTTPException(status_code=403, detail="Access denied")
+
+
+def _check_scenario_edit_access(scenario: Scenario, user_id: int, db: Session) -> None:
+    """Проверяет право на редактирование сценария. Вызывает HTTPException при отказе."""
+    if scenario.user_id == user_id:
+        return
+    if scenario.bot_id:
+        bot = db.query(Bot).filter(Bot.id == scenario.bot_id).first()
+        if bot and check_bot_edit_permission(bot, user_id, db):
+            return
+    raise HTTPException(
+        status_code=403,
+        detail="Access denied: No permission to edit this scenario"
+    )
+
+
+def _create_scenario_version(scenario: Scenario, db: Session, version_type: str = VERSION_TYPE_DRAFT) -> None:
+    """Создаёт новую версию сценария. Вызывать внутри транзакции."""
+    content = scenario.content
+    if content is None:
+        content = {"nodes": [], "edges": []}
+    max_version = (
+        db.query(ScenarioVersion)
+        .filter(
+            ScenarioVersion.scenario_id == scenario.id,
+            ScenarioVersion.version_type == version_type,
+        )
+        .count()
+    )
+    new_version_num = max_version + 1
+    # Снимаем is_active с текущей активной версии того же типа
+    db.query(ScenarioVersion).filter(
+        ScenarioVersion.scenario_id == scenario.id,
+        ScenarioVersion.version_type == version_type,
+        ScenarioVersion.is_active == True,
+    ).update({"is_active": False})
+    version = ScenarioVersion(
+        scenario_id=scenario.id,
+        version=new_version_num,
+        version_type=version_type,
+        content=content,
+        is_active=True,
+    )
+    db.add(version)
 
 
 # Обновить сценарий
@@ -197,20 +283,23 @@ def update_scenario(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Обновить существующий сценарий
+    Обновить существующий сценарий.
+    При изменении content создаётся новая версия в scenario_versions.
     """
-    scenario = db.query(Scenario).filter(
-        Scenario.id == scenario_id,
-        Scenario.user_id == current_user.id
-    ).first()
-    
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
     if not scenario:
         raise HTTPException(status_code=404, detail="Сценарий не найден")
+    _check_scenario_edit_access(scenario, current_user.id, db)
     
     # Обновляем поля
-    update_data = scenario_data.dict(exclude_unset=True)
+    update_data = scenario_data.model_dump(exclude_unset=True)
+    content_updated = "content" in update_data
+    
     for field, value in update_data.items():
         setattr(scenario, field, value)
+    
+    if content_updated and scenario.content is not None:
+        _create_scenario_version(scenario, db)
     
     db.commit()
     db.refresh(scenario)
@@ -284,12 +373,13 @@ def save_to_library(
     # Создаем копию в библиотеке
     library_scenario = Scenario(
         user_id=current_user.id,
-        bot_id=None,  # В библиотеке нет привязки к боту
+        bot_id=None,
         name=name or source.name,
         description=description or source.description,
         icon=icon or source.icon,
         category=category or source.category,
         content=source.content,
+        status=SCENARIO_STATUS_DRAFT,
         is_library=True,
         is_main=False,
         order=0,
@@ -342,6 +432,115 @@ def get_scenario_nodes(
     return nodes
 
 
+# Получить список версий сценария
+@router.get("/{scenario_id}/versions", response_model=List[ScenarioVersionOut])
+def get_scenario_versions(
+    scenario_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Получить список версий сценария.
+    Возвращает id, version, created_at, is_active для каждой версии.
+    """
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    _check_scenario_access(scenario, current_user.id, db)
+    
+    versions = (
+        db.query(ScenarioVersion)
+        .filter(
+            ScenarioVersion.scenario_id == scenario_id,
+            ScenarioVersion.version_type == VERSION_TYPE_DRAFT,
+        )
+        .order_by(ScenarioVersion.version.desc())
+        .all()
+    )
+    return versions
+
+
+# Восстановить сценарий из версии
+@router.post("/{scenario_id}/restore/{version_id}", response_model=ScenarioOut)
+def restore_scenario_version(
+    scenario_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Восстановить сценарий из выбранной версии.
+    Восстанавливает content из версии, помечает её как активную,
+    снимает is_active с предыдущей, создаёт новую версию (фиксируя факт восстановления).
+    Доступно: владелец сценария или owner/admin/developer с правами на бота.
+    """
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    _check_scenario_edit_access(scenario, current_user.id, db)
+    
+    version = (
+        db.query(ScenarioVersion)
+        .filter(
+            ScenarioVersion.id == version_id,
+            ScenarioVersion.scenario_id == scenario_id,
+        )
+        .first()
+    )
+    if not version:
+        raise HTTPException(status_code=404, detail="Версия не найдена")
+    
+    if not version.content:
+        raise HTTPException(
+            status_code=400,
+            detail="Версия не содержит данных для восстановления"
+        )
+    
+    scenario.content = version.content
+    _create_scenario_version(scenario, db)
+    
+    db.commit()
+    db.refresh(scenario)
+    
+    return scenario
+
+
+# Опубликовать сценарий (draft -> published)
+@router.post("/{scenario_id}/publish", response_model=ScenarioOut)
+def publish_scenario(
+    scenario_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Опубликовать черновик сценария.
+    Копирует content (draft) в published_content, создаёт версию published,
+    помечает предыдущую published-версию неактивной.
+    Бот использует только published_content.
+    """
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    _check_scenario_edit_access(scenario, current_user.id, db)
+
+    check_can_publish(db, current_user)
+
+    if not scenario.content:
+        raise HTTPException(
+            status_code=400,
+            detail="Нет содержимого для публикации. Сохраните черновик сначала."
+        )
+
+    scenario.published_content = scenario.content
+    scenario.status = "published"
+    _create_scenario_version(scenario, db, version_type=VERSION_TYPE_PUBLISHED)
+
+    db.commit()
+    db.refresh(scenario)
+
+    return scenario
+
+
 # Добавить сценарий из библиотеки в бот
 @router.post("/library/{library_scenario_id}/add-to-bot", response_model=ScenarioOut)
 def add_from_library(
@@ -382,6 +581,7 @@ def add_from_library(
         icon=library_scenario.icon,
         category=library_scenario.category,
         content=library_scenario.content,
+        status=SCENARIO_STATUS_DRAFT,
         is_library=False,
         is_main=False,
         order=0,

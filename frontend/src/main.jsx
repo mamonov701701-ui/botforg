@@ -5,11 +5,14 @@ import './styles/theme.css';
 import './output.css';
 import SiteLayout from './layouts/SiteLayout';
 import EditorV2Shell from './features/editorV2/EditorV2Shell';
+import QuickEditorEntry from './features/editorV2/QuickEditorEntry';
 import Home from './pages/Home';
 import Pricing from './pages/Pricing';
 import MarketplacePage from './pages/MarketplacePage';
+import DeveloperTemplatesPage from './pages/DeveloperTemplatesPage';
 import Features from './pages/Features';
 import NotFound from './pages/NotFound';
+import Login from './pages/Login';
 import AuthGate from './features/auth/AuthGate';
 import VerifyEmail from './features/auth/VerifyEmail';
 import ResetPassword from './features/auth/ResetPassword';
@@ -45,11 +48,38 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/" element={<SiteLayout />}>
           <Route index element={<Home />} />
           <Route path="pricing" element={<Pricing />} />
+          <Route path="login" element={<Login />} />
           <Route path="market" element={<MarketplacePage />} />
+          <Route
+            path="developer/templates"
+            element={
+              <AuthGate>
+                <DeveloperTemplatesPage />
+              </AuthGate>
+            }
+          />
           <Route path="features" element={<Features />} />
           <Route path="auth/verify" element={<VerifyEmail />} />
           <Route path="auth/reset" element={<ResetPassword />} />
-          <Route path="editor/:id" element={<EditorV2Shell />} />
+          {/* Быстрый вход в редактор:
+              /editor  → подбирает/создаёт бота и сценарий и редиректит в /editor/:botId
+              /editor/:id → непосредственно оболочка редактора для конкретного бота */}
+          <Route
+            path="editor"
+            element={
+              <AuthGate>
+                <QuickEditorEntry />
+              </AuthGate>
+            }
+          />
+          <Route
+            path="editor/:id"
+            element={
+              <AuthGate>
+                <EditorV2Shell />
+              </AuthGate>
+            }
+          />
 
           {/* Dashboard routes */}
           <Route

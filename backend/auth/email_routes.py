@@ -19,6 +19,7 @@ from backend.auth.tokens import (
 from backend.core.security import create_jwt_token, set_auth_cookie
 from backend.database import get_db
 from backend.models.user import User
+from backend.services.demo_content import create_demo_content_for_user
 from backend.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -74,15 +75,26 @@ async def register(
                 status_code=400, detail="Пользователь с таким email уже существует"
             )
 
+        # Определяем роль: первый пользователь в системе → owner, остальные → user
+        is_first_user = db.query(User).count() == 0
+        default_role = "owner" if is_first_user else "user"
+
         # Create user
         user = User(
             email=email,
             name=data.name or email.split("@")[0],
             hashed_password=_hash_password(data.password),
+            role=default_role,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+
+        # Создаём демо-контент для нового пользователя (1 бот, 2 шаблона)
+        try:
+            create_demo_content_for_user(db, user.id)
+        except Exception as e:
+            logger.warning("Demo content creation failed for user %s: %s", user.id, e)
 
         # Generate verification token
         token = generate_verification_token(db, user.id)
@@ -109,20 +121,36 @@ async def login(
 ):
     """Login with email/password"""
     try:
-        # Normalize email
+        # Normalize email (поиск по email, не username)
         email = data.email.lower().strip()
-        
+
+        # DEBUG: вывод в консоль для диагностики
+        logger.info("login attempt: email=%s", email)
+        print(f"[AUTH DEBUG] login: email={email!r}")
+
         # Find user
         user = db.query(User).filter(User.email == email).first()
         if not user:
+            logger.warning("login: user not found for email=%s", email)
+            print(f"[AUTH DEBUG] user NOT FOUND for email={email!r}")
             raise HTTPException(status_code=401, detail="Неверный email или пароль")
-        
+
+        print(f"[AUTH DEBUG] user FOUND id={user.id}")
+
         if not user.hashed_password:
+            logger.warning("login: user id=%s has no hashed_password", user.id)
+            print(f"[AUTH DEBUG] user has no hashed_password")
             raise HTTPException(status_code=401, detail="Неверный email или пароль")
-        
-        # Verify password
-        if not verify_password(data.password, user.hashed_password):
+
+        # Verify password (bcrypt или pbkdf2_sha256 через backend.security)
+        pw_ok = verify_password(data.password, user.hashed_password)
+        if not pw_ok:
+            logger.warning("login: password mismatch for email=%s", email)
+            print(f"[AUTH DEBUG] password MISMATCH for email={email!r}")
             raise HTTPException(status_code=401, detail="Неверный email или пароль")
+
+        logger.info("login success: email=%s user_id=%s", email, user.id)
+        print(f"[AUTH DEBUG] password OK, login success")
         
         # Create token (tv = token_version для отзыва при delete)
         jwt_token = create_jwt_token(user.id, getattr(user, "token_version", 0))

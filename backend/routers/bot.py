@@ -15,6 +15,7 @@ from backend.utils.bot_access import (
     check_bot_delete_permission,
     get_accessible_bot_owner_ids,
 )
+from backend.utils.plan_limits import check_max_bots
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -98,6 +99,9 @@ async def connect_bot(
                 detail="Username mismatch",
             )
 
+        # Проверяем лимит ботов по тарифу
+        check_max_bots(db, current_user)
+
         # Создаем бота с данными из Telegram API
         db_bot = Bot(
             owner_id=current_user.id,
@@ -161,7 +165,10 @@ async def create_bot(
     Бот создается как шаблон, который можно позже подключить к каналу.
     """
     import uuid
-    
+
+    # Проверяем лимит ботов по тарифу
+    check_max_bots(db, current_user)
+
     # Генерируем уникальный placeholder для username и token
     unique_id = str(uuid.uuid4())[:8]
     placeholder_username = f"template_{current_user.id}_{unique_id}"

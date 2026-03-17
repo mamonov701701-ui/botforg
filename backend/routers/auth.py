@@ -11,6 +11,7 @@ from backend.security import (
     verify_password,
     verify_token,
 )
+from backend.settings import settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -22,6 +23,12 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 @router.post("/register", response_model=Token)
 def register(user_in: RegisterIn, db: Session = Depends(get_db)):
+    # В продакшене legacy-схема /auth.* отключена в пользу новой авторизации через cookie.
+    if settings.ENVIRONMENT == "production":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Legacy эндпоинт /auth/register отключён в production. Используйте новую схему входа через /auth/email или /auth/routes.",
+        )
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="user exists")
@@ -44,6 +51,12 @@ def register(user_in: RegisterIn, db: Session = Depends(get_db)):
 def login(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
 ):
+    # В продакшене legacy-схема /auth.* отключена в пользу новой авторизации через cookie.
+    if settings.ENVIRONMENT == "production":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Legacy эндпоинт /auth/login отключён в production. Используйте новую схему входа через /auth/email или /auth/routes.",
+        )
     user = db.query(User).filter(User.email == form_data.username).first()
 
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -59,6 +72,12 @@ def login(
 
 @router.post("/logout")
 def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    # В продакшене legacy-схема /auth.* отключена в пользу новой авторизации через cookie.
+    if settings.ENVIRONMENT == "production":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Legacy эндпоинт /auth/logout отключён в production. Выход выполняется через новую auth-схему (cookie).",
+        )
     """Отзыв токена - добавляем в blacklist"""
     payload = verify_token(token)
     if not payload:

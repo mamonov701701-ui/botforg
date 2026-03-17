@@ -1,4 +1,9 @@
 {
+  "scripts": {
+    "test:backend": "cd backend && python -m pytest tests/ -v --tb=short",
+    "test:e2e": "cd frontend && npm run test:e2e",
+    "test:ui": "cd frontend && npm run test:ui"
+  },
   "devDependencies": {
     "tailwindcss": "^4.1.11",
     "vite": "^7.0.5"

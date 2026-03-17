@@ -66,6 +66,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     getDraftFromStorage,
     clearDraftFromStorage,
     updateCurrentScenario,
+    importFromJson,
   } = useScenarioStore();
 
   // Editor store для toast
@@ -299,9 +300,98 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     }
   };
 
-  const handleImportFromFile = async (file: File, name: string) => {
-    // TODO: Реализовать импорт из файла
-    showToast('Функция в разработке', 'info');
+  // Импорт сценария из файла (используется в верхней панели и в NewScenarioModal)
+  interface ImportPreviewData {
+    nodes: any[];
+    edges: any[];
+    fileName: string;
+  }
+
+  const [importPreview, setImportPreview] = useState<ImportPreviewData | null>(null);
+
+  const startFileImport = () => {
+    if (!user) {
+      showToast('Для импорта сценариев необходимо войти в систему', 'error');
+      openAuth(window.location.pathname);
+      return;
+    }
+
+    if (!currentScenarioId) {
+      showToast('Сначала создайте или выберите сценарий для импорта', 'warning');
+      setIsNewScenarioOpen(true);
+      return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = e => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const raw = ev.target?.result as string;
+          const data = JSON.parse(raw);
+
+          if (!data || typeof data !== 'object') {
+            showToast('Некорректный формат файла: ожидается JSON‑объект', 'error');
+            return;
+          }
+          if (!Array.isArray(data.nodes)) {
+            showToast('Некорректный формат файла: отсутствует поле nodes[]', 'error');
+            return;
+          }
+          if (!Array.isArray(data.edges)) {
+            showToast('Некорректный формат файла: отсутствует поле edges[]', 'error');
+            return;
+          }
+
+          setImportPreview({
+            nodes: data.nodes,
+            edges: data.edges,
+            fileName: file.name,
+          });
+        } catch (err) {
+          console.error('Import parse error:', err);
+          showToast('Файл повреждён или имеет неверный формат JSON', 'error');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
+  // Совместимость с NewScenarioModal: он передаёт файл, мы сразу запускаем превью
+  const handleImportFromFile = async (file: File, _name: string) => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const raw = ev.target?.result as string;
+        const data = JSON.parse(raw);
+
+        if (
+          !data ||
+          typeof data !== 'object' ||
+          !Array.isArray(data.nodes) ||
+          !Array.isArray(data.edges)
+        ) {
+          showToast('Некорректный формат файла для импорта', 'error');
+          return;
+        }
+
+        setImportPreview({
+          nodes: data.nodes,
+          edges: data.edges,
+          fileName: file.name,
+        });
+      } catch (err) {
+        console.error('Import parse error:', err);
+        showToast('Файл повреждён или имеет неверный формат JSON', 'error');
+      }
+    };
+    reader.readAsText(file);
   };
 
   // Обработчики для SaveDropdown
@@ -550,45 +640,103 @@ const EditorControls: React.FC<EditorControlsProps> = ({
 
         {/* Опубликовать изменения */}
         <AccessLocked hasAccess={canPublish} actionKey="scenario_edit">
-          <button
-            onClick={() => setIsPublishConfirmOpen(true)}
-            disabled={!currentScenarioId || isReadOnly}
-            title={
-              isReadOnly
-                ? 'Доступно в полной версии'
-                : currentScenarioId
-                  ? 'Опубликовать изменения'
-                  : 'Сначала выберите сценарий'
-            }
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '10px 16px',
-              background: 'var(--primary)',
-              color: '#000',
-              border: 'none',
-              borderRadius: 6,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: !currentScenarioId || isReadOnly ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s ease',
-              opacity: !currentScenarioId || isReadOnly ? 0.6 : 1,
-            }}
-            onMouseEnter={e => {
-              if (currentScenarioId && !isReadOnly) {
-                e.currentTarget.style.background = 'var(--primary-hover)';
-                e.currentTarget.style.transform = 'translateY(-1px)';
+          {(() => {
+            const nodes = currentState?.nodes || [];
+            const hasValidationErrors = currentState?.hasValidationErrors;
+            const isDirty = currentState?.isDirty;
+            const hasStartNode = nodes.some(n => {
+              const data: any = n.data || {};
+              const t = (data.blockId || data.type || '').toString().toLowerCase();
+              return t === 'start';
+            });
+
+            let publishLabel = 'Опубликовать';
+            let publishDisabled = isReadOnly || !currentScenarioId;
+            let publishReason: string | null = null;
+
+            if (!currentScenarioId) {
+              publishReason = 'Сначала выберите сценарий';
+            } else if (!nodes.length) {
+              publishDisabled = true;
+              publishReason = 'Нельзя публиковать пустой сценарий';
+            } else if (!hasStartNode) {
+              publishDisabled = true;
+              publishReason = 'Добавьте стартовый блок, чтобы публикация стала доступна';
+            } else if (hasValidationErrors) {
+              publishDisabled = true;
+              publishReason = 'Исправьте ошибки валидации перед публикацией';
+            } else if (currentScenario?.status === 'published') {
+              if (isDirty) {
+                publishLabel = 'Обновить публикацию';
+                publishDisabled = false;
+              } else {
+                publishLabel = 'Уже опубликовано';
+                publishDisabled = true;
+                publishReason = 'Текущая версия уже опубликована и не содержит изменений';
               }
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'var(--primary)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
-          >
-            <Upload size={18} />
-            Опубликовать
-          </button>
+            } else if (currentScenario?.status === 'draft') {
+              publishLabel = 'Опубликовать';
+              publishDisabled = false;
+            } else if (currentScenario?.status === 'archived') {
+              publishLabel = 'Архивный сценарий';
+              publishDisabled = true;
+              publishReason = 'Нельзя публиковать сценарий из архива';
+            }
+
+            const tooltip = isReadOnly
+              ? 'Публикация доступна в полной версии'
+              : publishReason || 'Публикация делает текущую версию сценария активной для бота';
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <button
+                  onClick={() => setIsPublishConfirmOpen(true)}
+                  disabled={publishDisabled}
+                  title={tooltip}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 16px',
+                    background: 'var(--primary)',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: 6,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: publishDisabled ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.2s ease',
+                    opacity: publishDisabled ? 0.6 : 1,
+                  }}
+                  onMouseEnter={e => {
+                    if (!publishDisabled) {
+                      e.currentTarget.style.background = 'var(--primary-hover)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'var(--primary)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <Upload size={18} />
+                  {publishLabel}
+                </button>
+                {currentScenarioId && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: '#9ca3af',
+                      maxWidth: 220,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Публикация делает текущую версию сценария активной для бота.
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </AccessLocked>
 
         {/* История изменений — доступна для просмотра всем, восстановление через AccessLocked */}
@@ -628,6 +776,46 @@ const EditorControls: React.FC<EditorControlsProps> = ({
           История
         </button>
 
+        {/* Кнопка импорта сценария из JSON */}
+        <button
+          onClick={startFileImport}
+          disabled={isReadOnly}
+          title={
+            isReadOnly
+              ? 'Импорт доступен в полной версии'
+              : currentScenarioId
+                ? 'Импортировать узлы и связи из JSON‑файла'
+                : 'Сначала создайте или выберите сценарий'
+          }
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 14px',
+            background: 'transparent',
+            border: '1px dashed #4b5563',
+            borderRadius: 6,
+            color: isReadOnly ? '#6b7280' : '#e5e7eb',
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: isReadOnly ? 'not-allowed' : 'pointer',
+            opacity: isReadOnly ? 0.6 : 1,
+          }}
+          onMouseEnter={e => {
+            if (!isReadOnly) {
+              e.currentTarget.style.background = '#1a1a2e';
+              e.currentTarget.style.borderColor = '#60a5fa';
+            }
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.borderColor = '#4b5563';
+          }}
+        >
+          <Upload size={16} />
+          <span>Импорт</span>
+        </button>
+
         {/* Разделитель */}
         <div
           style={{
@@ -638,7 +826,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
           }}
         />
 
-        {/* Кнопка предпросмотра бота */}
+        {/* Кнопка предпросмотра сценария */}
         <button
           onClick={() => {
             if (!currentScenarioId) {
@@ -665,7 +853,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
           title={currentScenarioId ? 'Предпросмотр сценария как чат' : 'Сначала выберите сценарий'}
         >
           <Eye size={16} />
-          Preview Bot
+          <span>Предпросмотр</span>
         </button>
 
         {/* Индикатор состояния автосохранения */}
@@ -853,6 +1041,146 @@ const EditorControls: React.FC<EditorControlsProps> = ({
       />
 
       <BotSimulator isOpen={isSimulatorOpen} onClose={() => setIsSimulatorOpen(false)} />
+
+      {/* Модалка предпросмотра импорта */}
+      {importPreview && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 60,
+          }}
+        >
+          <div
+            style={{
+              background: '#020617',
+              borderRadius: 12,
+              padding: 24,
+              width: 480,
+              maxWidth: '90%',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+              border: '1px solid #1f2937',
+            }}
+          >
+            <h2
+              style={{
+                fontSize: 18,
+                fontWeight: 600,
+                marginBottom: 8,
+                color: '#f9fafb',
+              }}
+            >
+              Импорт сценария из JSON
+            </h2>
+            <p
+              style={{
+                fontSize: 13,
+                color: '#9ca3af',
+                marginBottom: 12,
+              }}
+            >
+              Файл: <span style={{ color: '#e5e7eb' }}>{importPreview.fileName}</span>
+            </p>
+            <ul
+              style={{
+                fontSize: 13,
+                color: '#e5e7eb',
+                marginBottom: 16,
+                paddingLeft: 18,
+              }}
+            >
+              <li>Узлов: {importPreview.nodes.length}</li>
+              <li>Связей: {importPreview.edges.length}</li>
+            </ul>
+            {importPreview.nodes.length > 0 && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#9ca3af',
+                  marginBottom: 16,
+                  maxHeight: 120,
+                  overflowY: 'auto',
+                }}
+              >
+                <div style={{ marginBottom: 4 }}>Первые несколько узлов:</div>
+                <ul style={{ paddingLeft: 18 }}>
+                  {importPreview.nodes.slice(0, 5).map((n: any, idx: number) => (
+                    <li key={idx}>{n.data?.title || n.id || `Узел ${idx + 1}`}</li>
+                  ))}
+                  {importPreview.nodes.length > 5 && (
+                    <li>… и ещё {importPreview.nodes.length - 5}</li>
+                  )}
+                </ul>
+              </div>
+            )}
+            <p
+              style={{
+                fontSize: 12,
+                color: '#9ca3af',
+                marginBottom: 16,
+              }}
+            >
+              Текущий граф сценария будет полностью заменён узлами и связями из файла. Это действие
+              нельзя отменить.
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+              }}
+            >
+              <button
+                onClick={() => setImportPreview(null)}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 6,
+                  border: '1px solid #374151',
+                  background: 'transparent',
+                  color: '#e5e7eb',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Отмена
+              </button>
+              <button
+                onClick={() => {
+                  if (!currentScenarioId) {
+                    showToast('Сначала выберите сценарий', 'warning');
+                    setImportPreview(null);
+                    return;
+                  }
+                  // Обновляем store (autosave + синхронизация с канвасом через EditorV2Shell)
+                  importFromJson(importPreview.nodes as any[], importPreview.edges as any[]);
+                  // Немедленно обновляем локальный канвас, чтобы пользователь сразу увидел результат
+                  setNodes(importPreview.nodes as any[]);
+                  setEdges(importPreview.edges as any[]);
+                  setImportPreview(null);
+                  showToast('Сценарий импортирован из файла', 'success');
+                }}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: '#22c55e',
+                  color: '#000',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Импортировать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

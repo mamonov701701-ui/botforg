@@ -16,6 +16,7 @@ from backend.auth import email_routes
 from backend.auth import routes as oauth_routes
 from backend.middleware.security import SecurityMiddleware
 from backend.routers import account as account_router
+from backend.routers import plans as plans_router
 from backend.routers import auth
 from backend.routers import billing as billing_router
 from backend.routers import blocks as blocks_router
@@ -39,6 +40,7 @@ from backend.routers import bot_tags as bot_tags_router
 from backend.routers import chat as chat_router
 from backend.routers import bot_contacts as bot_contacts_router
 from backend.routers import market as market_router
+from backend.routers import market_admin as market_admin_router
 from backend.routers import legal as legal_router
 from backend.routers import privacy as privacy_router
 from backend.routers import channels as channels_router
@@ -101,6 +103,7 @@ app.add_middleware(
 app.include_router(oauth_routes.router)
 app.include_router(email_routes.router)
 app.include_router(account_router.router)
+app.include_router(plans_router.router)
 
 # Existing routes
 # app.include_router(auth.router, prefix="/auth")  # ОТКЛЮЧЕН - используем email_routes вместо этого
@@ -125,6 +128,7 @@ app.include_router(media_router.router, prefix="/media")
 app.include_router(bot_tags_router.router)
 app.include_router(bot_contacts_router.router)
 app.include_router(market_router.router)
+app.include_router(market_admin_router.router)
 app.include_router(chat_router.router)
 app.include_router(legal_router.router)
 app.include_router(privacy_router.router)
@@ -143,7 +147,11 @@ def _check_production_env():
     """152-ФЗ: в production запретить запуск без обязательных env (РФ)."""
     if settings.ENVIRONMENT != "production":
         return
+    dev_secret = "dev-secret-key-change-in-production-32chars"
     dev_jwt = "dev-jwt-secret-key-change-in-production-32"
+    if not settings.SECRET_KEY or settings.SECRET_KEY == dev_secret:
+        logger.error("Production: SECRET_KEY must be set and differ from dev default")
+        sys.exit(1)
     if not settings.JWT_SECRET or settings.JWT_SECRET == dev_jwt:
         logger.error("Production: JWT_SECRET must be set and differ from dev default")
         sys.exit(1)
@@ -165,6 +173,9 @@ def _check_production_env():
 def startup_retention_job():
     """Проверка prod-переменных (152-ФЗ), затем запуск ежедневной очистки по retention."""
     _check_production_env()
+    if settings.ENVIRONMENT == "production":
+        logger.info("Production mode enabled")
+        logger.info("Security keys loaded from environment")
     if getattr(settings, "TESTING", False):
         return
     from backend.services.retention_cleanup import run_retention_cleanup_once

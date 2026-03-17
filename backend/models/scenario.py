@@ -5,6 +5,9 @@ from sqlalchemy.orm import relationship
 
 from backend.database import Base
 
+SCENARIO_STATUS_DRAFT = "draft"
+SCENARIO_STATUS_PUBLISHED = "published"
+
 
 class Scenario(Base):
     """
@@ -35,7 +38,9 @@ class Scenario(Base):
     is_public = Column(Boolean, default=False)  # Для маркетплейса (будущее)
     
     # Данные сценария (nodes и edges в JSON)
-    content = Column(JSON, nullable=True)
+    content = Column(JSON, nullable=True)  # Черновик (draft)
+    published_content = Column(JSON, nullable=True)  # Опубликованная версия (используется ботом)
+    status = Column(String(20), default=SCENARIO_STATUS_DRAFT, nullable=False)  # draft | published
     
     # Метаданные
     order = Column(Integer, default=0)  # Порядок в списке
@@ -50,16 +55,26 @@ class Scenario(Base):
     # user и bot доступны через foreign keys
 
 
+VERSION_TYPE_DRAFT = "draft"
+VERSION_TYPE_PUBLISHED = "published"
+
+
 class ScenarioVersion(Base):
     """
-    История версий сценария (для будущего - автосохранение)
+    История версий сценария.
+    - draft: версии черновика (при каждом сохранении)
+    - published: версии публикаций (при каждом publish)
+    Только одна версия каждого типа на сценарий имеет is_active=True.
     """
     __tablename__ = "scenario_versions"
     __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, index=True)
     scenario_id = Column(Integer, ForeignKey("scenarios.id", ondelete="CASCADE"), nullable=False, index=True)
+    version = Column(Integer, nullable=False, default=1)  # Порядковый номер версии (1, 2, 3...)
+    version_type = Column(String(20), default=VERSION_TYPE_DRAFT, nullable=False)  # draft | published
     content = Column(JSON, nullable=True)  # Снимок nodes/edges
+    is_active = Column(Boolean, default=False, nullable=False)  # Текущая активная версия
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     
     scenario = relationship("Scenario")

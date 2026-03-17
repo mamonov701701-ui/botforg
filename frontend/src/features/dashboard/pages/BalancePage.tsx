@@ -12,6 +12,8 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction } from '../../../constants/roles';
+import { AccessLocked } from '../../../components/AccessLocked';
+import DemoModeBanner from '../../../components/DemoModeBanner';
 
 interface Transaction {
   id: string;
@@ -287,6 +289,14 @@ export default function BalancePage() {
 
   return (
     <DashboardPage title="Баланс и платежи" subtitle="Управление финансами">
+      {!canTopup && (
+        <div style={{ marginBottom: '20px' }}>
+          <DemoModeBanner
+            message="Просмотр без возможности пополнения и экспорта"
+            upgradeUrl="/pricing"
+          />
+        </div>
+      )}
       {/* Финансовый обзор */}
       <div
         style={{
@@ -305,7 +315,7 @@ export default function BalancePage() {
             <p style={{ fontSize: '48px', fontWeight: 700, marginBottom: '16px' }}>
               {balance.toLocaleString()} {currency}
             </p>
-            {canTopup && (
+            <AccessLocked hasAccess={canTopup} actionKey="balance_topup">
               <button
                 style={{
                   padding: '12px 32px',
@@ -332,7 +342,7 @@ export default function BalancePage() {
               >
                 <CreditCard size={18} /> Пополнить
               </button>
-            )}
+            </AccessLocked>
           </div>
         </Card>
 
@@ -506,10 +516,13 @@ export default function BalancePage() {
             />
           </div>
 
-          {canExport && (
-            <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <AccessLocked
+              hasAccess={canExport}
+              actionKey="transactions_export"
+              onClick={() => handleExport('csv')}
+            >
               <button
-                onClick={() => handleExport('csv')}
                 style={{
                   padding: '10px 16px',
                   background: 'transparent',
@@ -526,8 +539,13 @@ export default function BalancePage() {
               >
                 CSV
               </button>
+            </AccessLocked>
+            <AccessLocked
+              hasAccess={canExport}
+              actionKey="transactions_export"
+              onClick={() => handleExport('pdf')}
+            >
               <button
-                onClick={() => handleExport('pdf')}
                 style={{
                   padding: '10px 16px',
                   background: 'transparent',
@@ -544,8 +562,8 @@ export default function BalancePage() {
               >
                 PDF
               </button>
-            </div>
-          )}
+            </AccessLocked>
+          </div>
         </div>
       </Card>
 

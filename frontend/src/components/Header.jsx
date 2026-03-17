@@ -188,7 +188,7 @@ export default function Header({ openAuthModal }) {
           )}
         </Link>
         <Link
-          to="/dashboard/bots"
+          to="/editor"
           className="bg-yellow-400 hover:bg-yellow-300 font-semibold py-2 px-5 rounded transition ml-4"
           style={{
             color: '#000',

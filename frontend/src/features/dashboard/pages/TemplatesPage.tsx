@@ -15,7 +15,9 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
 import { useAuthStore } from '../../../stores/authStore';
-import { hasAccessToAction } from '../../../constants/roles';
+import { hasAccessToAction, getAccessDeniedMessage } from '../../../constants/roles';
+import { AccessLocked } from '../../../components/AccessLocked';
+import DemoModeBanner from '../../../components/DemoModeBanner';
 
 type TabType = 'my' | 'purchased' | 'favorites';
 
@@ -432,32 +434,35 @@ export default function TemplatesPage() {
       title="Шаблоны"
       subtitle="Управление шаблонами ботов"
       actions={
-        canCreate ? (
-          <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={handleImport}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 20px',
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              fontSize: '15px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              color: 'var(--text)',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <Upload size={18} />
+            Импорт
+          </button>
+          <AccessLocked
+            hasAccess={canCreate}
+            actionKey="template_create"
+            onClick={() => navigate('/dashboard/templates/new')}
+          >
             <button
-              onClick={handleImport}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 20px',
-                background: 'transparent',
-                border: '1px solid var(--border)',
-                borderRadius: '8px',
-                fontSize: '15px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                color: 'var(--text)',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <Upload size={18} />
-              Импорт
-            </button>
-            <button
-              onClick={() => navigate('/dashboard/templates/new')}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -484,10 +489,18 @@ export default function TemplatesPage() {
               <Plus size={18} />
               Создать шаблон
             </button>
-          </div>
-        ) : undefined
+          </AccessLocked>
+        </div>
       }
     >
+      {!canCreate && (
+        <div style={{ marginBottom: '20px' }}>
+          <DemoModeBanner
+            message="Просмотр без возможности создания шаблонов"
+            upgradeUrl="/pricing"
+          />
+        </div>
+      )}
       {/* Вкладки */}
       <div
         style={{
@@ -588,10 +601,12 @@ export default function TemplatesPage() {
                 : 'Добавьте шаблоны в избранное'
           }
           action={
-            canCreate && activeTab === 'my'
+            activeTab === 'my'
               ? {
                   label: 'Создать шаблон',
-                  onClick: () => navigate('/dashboard/templates/new'),
+                  onClick: canCreate ? () => navigate('/dashboard/templates/new') : undefined,
+                  disabled: !canCreate,
+                  disabledMessage: getAccessDeniedMessage('template_create'),
                 }
               : undefined
           }

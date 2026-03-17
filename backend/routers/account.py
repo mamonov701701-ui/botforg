@@ -2,11 +2,16 @@ import copy
 from backend.dependencies.auth import get_current_user
 from backend.database import get_db
 from backend.models.user import User, UserSettings
-from fastapi import APIRouter, Depends
+from backend.models.plan import Plan
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 router = APIRouter(tags=["account"])
+
+
+class ChangePlanRequest(BaseModel):
+    plan_code: str
 
 
 class UserProfile(BaseModel):
@@ -17,9 +22,9 @@ class UserProfile(BaseModel):
     avatar: str | None
     providers: list[str]
     role: str
+    plan_code: str = "free"
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # --- Settings schemas (личный кабинет — настройки) ---
@@ -61,6 +66,7 @@ class SettingsOut(BaseModel):
     interface: InterfaceSettingsOut
     notifications: NotificationSettingsOut
     agent: AgentSettingsOut
+    demo_content_created: bool = False
 
 
 class ProfileUpdate(BaseModel):
@@ -151,6 +157,7 @@ async def get_me(
         avatar=current_user.avatar,
         providers=providers,
         role=current_user.role,
+        plan_code=current_user.plan_code or "free",
     )
 
 
@@ -174,6 +181,7 @@ async def update_me(
         avatar=current_user.avatar,
         providers=providers,
         role=current_user.role,
+        plan_code=current_user.plan_code or "free",
     )
 
 
@@ -187,6 +195,9 @@ async def get_settings(
     interface = settings.interface_settings or DEFAULT_INTERFACE
     notifications = settings.notification_settings or DEFAULT_NOTIFICATIONS
     agent = settings.agent_settings or DEFAULT_AGENT
+
+    interface_dict = settings.interface_settings or {}
+    demo_created = bool(interface_dict.get("demo_content_created", False))
 
     return SettingsOut(
         profile=ProfileSettingsOut(
@@ -211,6 +222,7 @@ async def get_settings(
             data_policy=agent.get("data_policy", "minimal"),
             allow_send_text_to_ai=agent.get("allow_send_text_to_ai", False),
         ),
+        demo_content_created=demo_created,
     )
 
 
@@ -266,3 +278,23 @@ async def update_settings(
     return await get_settings(current_user=current_user, db=db)
 
 
+@router.post("/me/plan")
+async def change_plan(
+    body: ChangePlanRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Смена тарифа текущего пользователя (mock, без оплаты).
+    Для тестов и ручного назначения.
+    """
+    plan = db.query(Plan).filter(Plan.code == body.plan_code).first()
+    if not plan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Тариф '{body.plan_code}' не найден. Доступные: free, pro, team.",
+        )
+    current_user.plan_code = body.plan_code
+    db.commit()
+    db.refresh(current_user)
+    return {"plan_code": plan.code, "name": plan.name, "limits": plan.limits}

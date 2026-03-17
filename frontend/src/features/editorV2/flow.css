@@ -675,6 +675,15 @@ g[data-connection-line='true'] path {
   }
 }
 
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
 /* Визуальная индикация при перетаскивании блока над холстом */
 .react-flow__pane.drag-over {
   background-color: rgba(59, 130, 246, 0.05) !important;

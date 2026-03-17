@@ -7,6 +7,7 @@ from backend.core.security import clear_auth_cookie, create_jwt_token, set_auth_
 from backend.database import get_db
 from backend.models.auth import Account
 from backend.models.user import User
+from backend.services.demo_content import create_demo_content_for_user
 from backend.settings import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -66,12 +67,18 @@ async def oauth_callback(
         account.name = normalized["name"]
         account.avatar = normalized["avatar"]
         user = account.user
+        is_new_user = False
     else:
         # Create new user and account
+        # Первый пользователь в системе → owner, остальные → user
+        is_first_user = db.query(User).count() == 0
+        default_role = "owner" if is_first_user else "user"
+
         user = User(
             email=normalized["email"],
             name=normalized["name"],
             avatar=normalized["avatar"],
+            role=default_role,
         )
         db.add(user)
         db.flush()
@@ -85,8 +92,16 @@ async def oauth_callback(
             avatar=normalized["avatar"],
         )
         db.add(account)
+        is_new_user = True
 
     db.commit()
+
+    # Демо-контент только для нового пользователя (при первом OAuth-входе)
+    if is_new_user:
+        try:
+            create_demo_content_for_user(db, user.id)
+        except Exception:
+            pass  # Не блокируем вход при ошибке
 
     # Create JWT and set cookie
     jwt_token = create_jwt_token(user.id)

@@ -17,11 +17,7 @@ export default function Footer() {
           </a>
         </nav>
         <div className="flex gap-2 items-center mt-2 md:mt-0">
-          <span className="opacity-70 font-heading text-sm">русский</span>
-          <span className="mx-1 text-sm">/</span>
-          <a href="#en" className="hover:text-yellow-400 font-heading transition text-sm">
-            English
-          </a>
+          <span className="opacity-70 font-heading text-sm">Русский интерфейс</span>
         </div>
       </div>
     </footer>

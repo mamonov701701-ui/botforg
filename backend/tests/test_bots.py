@@ -161,14 +161,19 @@ def test_get_bots_list(mock_get, client):
     )
     assert res_create.status_code == 201
 
-    # Get bots list
+    # Get bots list (может быть >1 из-за shared test DB или команд)
     res_list = client.get("/bots/", headers={"Authorization": auth_header})
     assert res_list.status_code == 200
     data = res_list.json()
-    assert data["total"] == 1
-    assert len(data["items"]) == 1
-    assert data["items"][0]["title"] == "Test Bot"
-    assert data["items"][0]["username"] == f"test_bot_{unique_id}"
+    assert data["total"] >= 1
+    assert len(data["items"]) >= 1
+    # Проверяем, что созданный бот есть в списке
+    created_bot = next(
+        (b for b in data["items"] if b["username"] == f"test_bot_{unique_id}"),
+        None,
+    )
+    assert created_bot is not None
+    assert created_bot["title"] == "Test Bot"
 
 
 def test_get_bots_requires_auth(client):

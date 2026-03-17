@@ -1,0 +1,48 @@
+Project stack:
+- FastAPI backend
+- React + Vite + TypeScript frontend
+
+Code rules:
+- read related files before editing
+- follow existing architecture and naming conventions
+- make minimal targeted changes
+- do not refactor unrelated code
+- do not introduce new dependencies unless necessary
+- preserve API contracts
+- preserve project structure
+- prefer small diffs over large rewrites
+
+Frontend rules:
+- do not change UI behavior or layout unless requested
+- avoid unnecessary re-renders
+- guard against update loops
+- add cleanup for effects, listeners, intervals, and subscriptions
+
+Backend rules:
+- keep routes, schemas, and contracts stable
+- avoid breaking existing integrations
+- keep logic explicit and maintainable
+
+Response rules:
+- answer briefly by default
+- do not repeat the user's request
+- do not write long reports unless explicitly requested
+- do not restate the same conclusion in different words
+- keep final explanations compact and practical
+
+For code tasks, final response must include only:
+1. root cause
+2. fix applied
+3. changed files
+4. remaining risk (only if any)
+
+Keep final responses under 150 words unless the user asks for detail.
+
+Final response format:
+
+Root cause:
+Fix:
+Changed files:
+Risk:
+
+Keep it under 120 words.
