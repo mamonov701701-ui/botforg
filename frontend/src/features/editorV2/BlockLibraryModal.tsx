@@ -11,7 +11,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   business: 'Бизнесовые',
   service: 'Сервисные',
   system: 'Системные',
-  ai: 'AI',
+  ai: 'ИИ',
   custom: 'Дополнительные',
 };
 
@@ -220,9 +220,9 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                   cursor: 'pointer',
                 }}
               >
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
+                <option value="free">Бесплатный</option>
+                <option value="pro">Про</option>
+                <option value="enterprise">Корпоративный</option>
               </select>
             </div>
 
@@ -484,7 +484,9 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                     <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
                       {selectedBlock.title}
                     </div>
-                    <div style={{ fontSize: 12, color: '#9ca3af' }}>ID: {selectedBlock.id}</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                      Идентификатор: {selectedBlock.id}
+                    </div>
                   </div>
                 </div>
 

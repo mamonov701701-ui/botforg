@@ -242,7 +242,7 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
                 handleAddUrl();
               }
             }}
-            placeholder="https://example.com/image.jpg"
+            placeholder="Ссылка на изображение, напр. https://site.ru/photo.jpg"
             style={{
               flex: 1,
               padding: '10px 12px',

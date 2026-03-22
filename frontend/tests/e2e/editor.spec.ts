@@ -48,6 +48,12 @@ test.describe('Editor', () => {
       body.includes('Бот');
     expect(hasEditorContent || body.length > 50).toBeTruthy();
 
+    // Кнопка «Импорт» видна только когда открыт сам редактор (после входа); без сессии AuthGate не рендерит панель
+    if (body.includes('Новый сценарий') || body.includes('Добавить блок')) {
+      const importBtn = page.getByRole('button', { name: 'Импорт', exact: true });
+      await expect(importBtn).toBeVisible({ timeout: 10000 });
+    }
+
     await page.screenshot({ path: path.join(screensDir(), 'editor_load.png'), fullPage: true });
     if (consoleErrors.length) {
       fs.appendFileSync(getConsoleLogPath(), `[Editor]\n${consoleErrors.join('\n')}\n\n`, 'utf8');

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useValidationStore } from '../../stores/validationStore';
-import { useEditorStore } from '../../stores/editorStore';
+import { useScenarioStore } from '../../stores/scenarioStore';
 
 interface Props {
   isOpen: boolean;
@@ -15,7 +15,7 @@ const ValidationModalContent: React.FC<{ onClose: () => void }> = ({ onClose }) 
     return results.filter(r => !r.isValid);
   });
 
-  const nodes = useEditorStore(state => state.nodes);
+  const nodes = useScenarioStore(state => state.currentState?.nodes ?? []);
 
   const handleNavigateToNode = (nodeId: string) => {
     // Find node and highlight it

@@ -13,6 +13,8 @@ Code rules:
 - prefer small diffs over large rewrites
 
 Frontend rules:
+- scenario graph: scenarioStore is source of truth; BotSimulator must map stepFromCurrentNode / applyUserChoice result via `context`, not `state` (RunStepResult)
+- normalize edges for RF handles using utils/flowHandleCompatibility when syncing store → React Flow
 - do not change UI behavior or layout unless requested
 - avoid unnecessary re-renders
 - guard against update loops
@@ -23,20 +25,21 @@ Backend rules:
 - avoid breaking existing integrations
 - keep logic explicit and maintainable
 
-Response rules:
-- answer briefly by default
+Execution mode:
+- do not explain unless explicitly asked
+- do not describe what you are doing
+- do not write analysis unless explicitly requested
+- perform the task and return only the result
 - do not repeat the user's request
-- do not write long reports unless explicitly requested
 - do not restate the same conclusion in different words
-- keep final explanations compact and practical
+- do not write long reports unless explicitly requested
+- prefer concise engineering-style answers
 
 For code tasks, final response must include only:
-1. root cause
-2. fix applied
-3. changed files
-4. remaining risk (only if any)
-
-Keep final responses under 150 words unless the user asks for detail.
+1. Root cause
+2. Fix
+3. Changed files
+4. Risk (only if any)
 
 Final response format:
 
@@ -45,4 +48,22 @@ Fix:
 Changed files:
 Risk:
 
-Keep it under 120 words.
+Response limits:
+- keep final responses under 120 words
+- default to 3-6 short bullets or 4 short sections
+- do not include narrative summaries
+- do not include “what I checked” unless explicitly asked
+- do not include “why this should now work” unless explicitly asked
+- do not duplicate findings across sections
+
+Coding workflow:
+- first inspect relevant files
+- then make the minimal safe fix
+- add guards and cleanup where needed
+- preserve existing behavior unless the task requires a change
+- add brief code comments only where they prevent future regressions
+
+Priority:
+- correctness over verbosity
+- minimal diffs over broad rewrites
+- stable behavior over clever refactoring

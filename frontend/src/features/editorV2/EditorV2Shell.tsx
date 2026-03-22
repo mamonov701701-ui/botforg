@@ -42,6 +42,7 @@ import { validateAllNodesWithSchema, hasValidationErrors } from '../../utils/sch
 import ValidationModal from './ValidationModal';
 import ExportConfirmModal from './ExportConfirmModal';
 import BlockLibraryModal from './BlockLibraryModal';
+import { normalizeScenarioEdges } from '../../utils/flowHandleCompatibility';
 
 // Connection line component - временная линия при создании соединения
 const ConnectionLine = ({
@@ -565,46 +566,15 @@ function InnerEditor() {
   const [nodes, setNodes, onNodesChangeInternal] = useNodesState([]);
   const [edges, setEdges, onEdgesChangeInternal] = useEdgesState([]);
 
-  // Функция для валидации edge - проверяет, существуют ли source и target handles
-  const validateEdge = useCallback((edge: Edge, allNodes: Node[]): boolean => {
-    const sourceNode = allNodes.find(n => n.id === edge.source);
-    const targetNode = allNodes.find(n => n.id === edge.target);
-
-    if (!sourceNode || !targetNode) {
-      return false; // Узлы не найдены
-    }
-
-    // Если есть sourceHandle, проверяем, что он существует в sourceNode
-    if (edge.sourceHandle) {
-      // Для message блоков с кнопками - проверяем, что кнопка существует
-      if (edge.sourceHandle.startsWith('button_')) {
-        const buttonIndex = parseInt(edge.sourceHandle.replace('button_', ''));
-        const buttons = sourceNode.data?.settings?.buttons || [];
-        if (isNaN(buttonIndex) || buttonIndex < 0 || buttonIndex >= buttons.length) {
-          return false; // Кнопка не существует
-        }
-      } else {
-        // Для обычных handles - проверяем стандартные id (top, right, bottom, left)
-        const validSourceHandles = ['top', 'right', 'bottom', 'left'];
-        if (!validSourceHandles.includes(edge.sourceHandle)) {
-          return false; // Неизвестный sourceHandle
-        }
-      }
-    }
-
-    // Если есть targetHandle, проверяем, что он существует в targetNode
-    if (edge.targetHandle) {
-      const validTargetHandles = ['top', 'right', 'bottom', 'left'];
-      if (!validTargetHandles.includes(edge.targetHandle)) {
-        return false; // Неизвестный targetHandle
-      }
-    }
-
-    return true;
-  }, []);
+  // Актуальные nodes для проверки dragging без подписки store→RF на каждый кадр drag
+  const nodesRef = useRef<Node[]>(nodes);
+  nodesRef.current = nodes;
 
   // Флаг внешней синхронизации (scenarioStore -> ReactFlow), чтобы избежать циклов.
   const isExternalSyncRef = useRef(false);
+
+  // Ref объявлен до эффекта sync store→RF (там edges получают onDelete), иначе ESLint/no-use-before-define
+  const handleDeleteEdgeRef = React.useRef<(edgeId: string) => void>();
 
   // helper для сериализации списков нод/рёбер в "ключ" без внутренних полей ReactFlow
   const makeNodesKey = useCallback((list: Node[]) => {
@@ -626,14 +596,58 @@ function InnerEditor() {
       .join('|');
   }, []);
 
+  // Сигнатура графа ТОЛЬКО из scenarioStore (без локальных nodes/edges React Flow).
+  // КРИТИЧНО: эффект синхронизации store → canvas НЕ должен зависеть от `nodes`/`edges` RF.
+  // Иначе при каждом drag позиции на канвасе новее, чем в store на один тик, и эффект
+  // перезаписывает канвас старыми данными из store — ломается перетаскивание, пропадают
+  // рёбра и «исчезают» только что добавленные блоки.
+  const storeGraphSignature = useMemo(() => {
+    if (!currentState) return '';
+    const sid = currentState.id ?? 'null';
+    return `${sid}::${makeNodesKey(currentState.nodes || [])}::${makeEdgesKey(
+      currentState.edges || []
+    )}`;
+  }, [currentState, makeNodesKey, makeEdgesKey]);
+
+  const lastAppliedStoreSignatureRef = useRef<string>('');
+
+  // Порядок КРИТИЧЕН: сначала React Flow → scenarioStore, потом store → канвас.
+  // Если store→RF выполняется раньше RF→store, в кадре после отпускания узла в store
+  // ещё старые координаты — setNodes перезаписывает канвас и drag «откатывается» / рёбра дёргаются.
+
+  const prevNodesKeyRef = useRef<string>('');
+  const prevEdgesKeyRef = useRef<string>('');
+
+  useEffect(() => {
+    if (!currentState) return;
+
+    const nodesKey = makeNodesKey(nodes);
+    const edgesKey = makeEdgesKey(edges);
+
+    if (isExternalSyncRef.current) {
+      prevNodesKeyRef.current = nodesKey;
+      prevEdgesKeyRef.current = edgesKey;
+      isExternalSyncRef.current = false;
+      return;
+    }
+
+    if (nodesKey === prevNodesKeyRef.current && edgesKey === prevEdgesKeyRef.current) {
+      return;
+    }
+
+    prevNodesKeyRef.current = nodesKey;
+    prevEdgesKeyRef.current = edgesKey;
+
+    const nodesToStore = nodes.map(({ selected, dragging, ...rest }) => rest);
+    const edgesToStore = edges.map(({ data, ...rest }) => rest);
+    updateCurrentScenario(nodesToStore, edgesToStore);
+  }, [nodes, edges, updateCurrentScenario, currentState, makeNodesKey, makeEdgesKey]);
+
   // Синхронизация scenarioStore -> ReactFlow.
-  // CONTRACT:
-  // - Любое внешнее изменение currentState.nodes/edges (загрузка сценария, импорт JSON)
-  //   должно обновить канвас без перезагрузки страницы.
-  // - При этом не должно запускаться обратное обновление scenarioStore (см. ниже).
   useEffect(() => {
     if (!currentState) {
-      if (nodes.length || edges.length) {
+      if (lastAppliedStoreSignatureRef.current !== '') {
+        lastAppliedStoreSignatureRef.current = '';
         isExternalSyncRef.current = true;
         setNodes([]);
         setEdges([]);
@@ -641,40 +655,26 @@ function InnerEditor() {
       return;
     }
 
+    if (nodesRef.current.some(n => Boolean(n.dragging))) {
+      return;
+    }
+
+    if (storeGraphSignature === lastAppliedStoreSignatureRef.current) {
+      return;
+    }
+
+    lastAppliedStoreSignatureRef.current = storeGraphSignature;
+
     const scenarioNodes = currentState.nodes || [];
     const scenarioEdges = currentState.edges || [];
-
-    // ВАЖНО:
-    // Если в состоянии сценария ещё нет узлов/рёбер (пустой сценарий),
-    // но на канвасе уже есть локальные nodes/edges, значит изменения пришли
-    // ИЗ РЕДАКТОРА (React Flow → scenarioStore), а не снаружи.
-    // В таком случае нельзя затирать канвас пустым состоянием store,
-    // иначе только что добавленный блок "исчезает".
-    if (
-      scenarioNodes.length === 0 &&
-      scenarioEdges.length === 0 &&
-      (nodes.length > 0 || edges.length > 0)
-    ) {
-      return;
-    }
-
-    const stateNodesKey = makeNodesKey(scenarioNodes);
-    const stateEdgesKey = makeEdgesKey(scenarioEdges);
-    const currentNodesKey = makeNodesKey(nodes);
-    const currentEdgesKey = makeEdgesKey(edges);
-
-    const nodesChanged = stateNodesKey !== currentNodesKey;
-    const edgesChanged = stateEdgesKey !== currentEdgesKey;
-
-    if (!nodesChanged && !edgesChanged) {
-      return;
-    }
+    const edgesNormalized = normalizeScenarioEdges(scenarioNodes, scenarioEdges);
 
     isExternalSyncRef.current = true;
     setNodes(scenarioNodes);
 
-    const validatedEdges = scenarioEdges.filter(e => validateEdge(e, scenarioNodes));
-    const edgesWithDelete = validatedEdges.map(e => ({
+    const nodeIds = new Set(scenarioNodes.map(n => n.id));
+    const edgesSafe = edgesNormalized.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+    const edgesWithDelete = edgesSafe.map(e => ({
       ...e,
       data: {
         ...e.data,
@@ -682,7 +682,7 @@ function InnerEditor() {
       },
     }));
     setEdges(edgesWithDelete);
-  }, [currentState, nodes, edges, setNodes, setEdges, validateEdge, makeNodesKey, makeEdgesKey]);
+  }, [storeGraphSignature, currentState, setNodes, setEdges]);
 
   // Обработчики изменений для ReactFlow с синхронизацией обратно в Zustand
   const onNodesChange = useCallback(
@@ -702,42 +702,6 @@ function InnerEditor() {
     },
     [onNodesChangeInternal]
   );
-
-  // Синхронизация React Flow → scenarioStore (единый источник правды).
-  // CONTRACT:
-  // - Локальное редактирование на канвасе (drag, изменение настроек) должно вызывать
-  //   updateCurrentScenario c debounce автосохранения.
-  // - Внешние обновления из scenarioStore (load/import), помеченные isExternalSyncRef,
-  //   НЕ должны вызывать повторный updateCurrentScenario.
-  const prevNodesKeyRef = useRef<string>('');
-  const prevEdgesKeyRef = useRef<string>('');
-
-  useEffect(() => {
-    if (!currentState) return;
-
-    const nodesKey = makeNodesKey(nodes);
-    const edgesKey = makeEdgesKey(edges);
-
-    if (isExternalSyncRef.current) {
-      // Внешнее обновление уже записало новые nodes/edges в ReactFlow.
-      // Синхронизируем только кеш ключей и сбрасываем флаг, без updateCurrentScenario.
-      prevNodesKeyRef.current = nodesKey;
-      prevEdgesKeyRef.current = edgesKey;
-      isExternalSyncRef.current = false;
-      return;
-    }
-
-    if (nodesKey === prevNodesKeyRef.current && edgesKey === prevEdgesKeyRef.current) {
-      return;
-    }
-
-    prevNodesKeyRef.current = nodesKey;
-    prevEdgesKeyRef.current = edgesKey;
-
-    const nodesToStore = nodes.map(({ selected, dragging, ...rest }) => rest);
-    const edgesToStore = edges.map(({ data, ...rest }) => rest);
-    updateCurrentScenario(nodesToStore, edgesToStore);
-  }, [nodes, edges, updateCurrentScenario, currentState]);
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange[]) => {
@@ -1264,73 +1228,6 @@ function InnerEditor() {
     // Если не авторизован - каталог не загружается, редактор показывается пустым
   }, [loadCatalog, user]);
 
-  // Инициализация nodes и edges из scenarioStore при монтировании компонента
-  useEffect(() => {
-    // Инициализация nodes - загружаем все сразу при первой загрузке
-    if (
-      isInitialLoadRef.current &&
-      currentState &&
-      currentState.nodes.length > 0 &&
-      nodes.length === 0
-    ) {
-      setNodes(currentState.nodes);
-
-      // Принудительно исправляем видимость всех nodes после загрузки
-      // Используем несколько попыток с задержками, так как React Flow может устанавливать стили асинхронно
-      const fixVisibility = (attempt = 0) => {
-        if (attempt > 10) return; // Максимум 10 попыток
-
-        currentState.nodes.forEach(node => {
-          const nodeElement = document.querySelector(`[data-id="${node.id}"]`) as HTMLElement;
-          if (nodeElement) {
-            // Всегда устанавливаем видимость, независимо от текущего состояния
-            nodeElement.style.setProperty('visibility', 'visible', 'important');
-            nodeElement.style.setProperty('opacity', '1', 'important');
-            nodeElement.style.setProperty('display', 'block', 'important');
-
-            const innerDiv = nodeElement.querySelector('div:first-child') as HTMLElement;
-            if (innerDiv) {
-              innerDiv.style.setProperty('visibility', 'visible', 'important');
-              innerDiv.style.setProperty('opacity', '1', 'important');
-              innerDiv.style.setProperty('display', 'flex', 'important');
-            }
-          }
-        });
-
-        // Повторяем исправление с задержками
-        if (attempt < 10) {
-          setTimeout(() => fixVisibility(attempt + 1), 50 * (attempt + 1));
-        }
-      };
-
-      // Начинаем исправление видимости сразу и с задержками
-      setTimeout(() => fixVisibility(0), 50);
-      setTimeout(() => fixVisibility(0), 100);
-      setTimeout(() => fixVisibility(0), 200);
-      setTimeout(() => fixVisibility(0), 500);
-      setTimeout(() => fixVisibility(0), 1000);
-
-      isInitialLoadRef.current = false;
-    }
-
-    // Инициализация edges
-    if (
-      currentState &&
-      currentState.edges.length > 0 &&
-      edges.length === 0 &&
-      handleDeleteEdgeRef.current
-    ) {
-      const edgesWithDelete = currentState.edges.map(e => ({
-        ...e,
-        data: {
-          ...e.data,
-          onDelete: handleDeleteEdgeRef.current,
-        },
-      }));
-      setEdges(edgesWithDelete);
-    }
-  }, [currentState, nodes.length, edges.length, setNodes, setEdges]);
-
   // Установка начального viewport ОДИН раз при монтировании
   useEffect(() => {
     setViewport({ x: 0, y: 0, zoom: 0.6 }, { duration: 0 });
@@ -1391,9 +1288,6 @@ function InnerEditor() {
     }),
     []
   );
-
-  // Стабильная ссылка на функцию удаления через useRef для избежания бесконечного цикла
-  const handleDeleteEdgeRef = React.useRef<(edgeId: string) => void>();
 
   handleDeleteEdgeRef.current = (edgeId: string) => {
     // Удаляем из React Flow (синхронизация с Zustand произойдет через useEffect)
@@ -1512,71 +1406,37 @@ function InnerEditor() {
         return;
       }
 
-      // Access granted - proceed with creating node
-      const newNode: Node = {
-        id: nanoid(),
-        type: 'default',
-        position,
-        data: {
-          blockId: block.id,
-          title: block.title,
-          icon: block.icon,
-          color: block.color,
-          settings: {}, // All user config goes here
-        },
-        style: {
-          borderColor: block.color,
-        },
-      };
-
-      // Debug: log the created node structure
-      debugNodeStructure(newNode);
-
-      // Добавляем новый узел в React Flow (scenarioStore синхронизируется через useEffect)
-      setNodes(nds => [...nds, newNode]);
+      // Access granted — создаём узел со смещением, чтобы несколько добавлений подряд не лежали в одной точке
+      setNodes(nds => {
+        const idx = nds.length;
+        const staggerX = (idx % 6) * 56;
+        const staggerY = Math.floor(idx / 6) * 56;
+        const newNode: Node = {
+          id: nanoid(),
+          type: 'default',
+          position: { x: position.x + staggerX, y: position.y + staggerY },
+          data: {
+            blockId: block.id,
+            title: block.title,
+            icon: block.icon,
+            color: block.color,
+            settings: {},
+          },
+          style: {
+            borderColor: block.color,
+          },
+        };
+        debugNodeStructure(newNode);
+        return [...nds, newNode];
+      });
       showToast(`Блок "${block.title}" добавлен`, 'success');
 
-      // КРИТИЧНО: Принудительно делаем узел видимым (через несколько попыток, т.к. React Flow может перезаписывать стили)
-      const ensureNodeVisible = (attempts = 0) => {
-        const nodeElement = document.querySelector(`[data-id="${newNode.id}"]`) as HTMLElement;
-        if (nodeElement) {
-          // Принудительно устанавливаем видимость через CSS variables и inline стили
-          nodeElement.style.setProperty('visibility', 'visible', 'important');
-          nodeElement.style.setProperty('opacity', '1', 'important');
-          nodeElement.style.setProperty('display', 'block', 'important');
-
-          // Также устанавливаем для внутреннего div
-          const innerDiv = nodeElement.firstElementChild as HTMLElement;
-          if (innerDiv && innerDiv.tagName === 'DIV') {
-            innerDiv.style.setProperty('visibility', 'visible', 'important');
-            innerDiv.style.setProperty('opacity', '1', 'important');
-            innerDiv.style.setProperty('display', 'flex', 'important');
-          }
-
-          // Если узел все еще скрыт и у нас есть попытки - повторяем
-          const computedVisibility = window.getComputedStyle(nodeElement).visibility;
-          if (computedVisibility === 'hidden' && attempts < 20) {
-            setTimeout(() => ensureNodeVisible(attempts + 1), 50);
-          }
-        } else if (attempts < 20) {
-          // Узел еще не появился в DOM - повторяем
-          setTimeout(() => ensureNodeVisible(attempts + 1), 50);
-        }
-      };
-
-      // Запускаем сразу и через задержки (более частые проверки для надежности)
-      ensureNodeVisible();
-      setTimeout(() => ensureNodeVisible(), 10);
-      setTimeout(() => ensureNodeVisible(), 50);
-      setTimeout(() => ensureNodeVisible(), 100);
-      setTimeout(() => ensureNodeVisible(), 200);
-      setTimeout(() => ensureNodeVisible(), 300);
-      setTimeout(() => ensureNodeVisible(), 500);
-      setTimeout(() => ensureNodeVisible(), 800);
-      setTimeout(() => ensureNodeVisible(), 1200);
-      setTimeout(() => ensureNodeVisible(), 2000);
+      // Подстраховка: новый узел попадает в видимую область (без агрессивного зума)
+      requestAnimationFrame(() => {
+        fitView({ padding: 0.2, duration: 220, maxZoom: 1.15, minZoom: 0.35 });
+      });
     },
-    [setNodes, showToast]
+    [setNodes, showToast, fitView, user]
   );
 
   // Handle drop block from library (legacy drag-n-drop support)
@@ -1656,26 +1516,6 @@ function InnerEditor() {
       }
 
       addBlockAtPosition(block, finalPosition);
-
-      // НЕ используем fitView - это вызывает автомасштабирование
-      setTimeout(() => {
-        const addedNode = nodes[nodes.length - 1];
-        if (addedNode) {
-          const nodeElement = document.querySelector(`[data-id="${addedNode.id}"]`) as HTMLElement;
-          if (nodeElement) {
-            nodeElement.style.setProperty('visibility', 'visible', 'important');
-            nodeElement.style.setProperty('opacity', '1', 'important');
-            nodeElement.style.setProperty('display', 'block', 'important');
-
-            const innerDiv = nodeElement.firstElementChild as HTMLElement;
-            if (innerDiv && innerDiv.tagName === 'DIV') {
-              innerDiv.style.setProperty('visibility', 'visible', 'important');
-              innerDiv.style.setProperty('opacity', '1', 'important');
-              innerDiv.style.setProperty('display', 'flex', 'important');
-            }
-          }
-        }
-      }, 100);
     },
     [selectedNode, nodes, screenToFlowPosition, getViewport, addBlockAtPosition, reactFlowWrapper]
   );
@@ -1738,12 +1578,12 @@ function InnerEditor() {
 
           // Validate file structure
           if (!data.nodes || !Array.isArray(data.nodes)) {
-            showToast('Некорректный формат файла: отсутствует nodes', 'error');
+            showToast('Некорректный формат файла: нет списка узлов', 'error');
             return;
           }
 
           if (!data.edges || !Array.isArray(data.edges)) {
-            showToast('Некорректный формат файла: отсутствует edges', 'error');
+            showToast('Некорректный формат файла: нет списка связей', 'error');
             return;
           }
 
@@ -1754,7 +1594,7 @@ function InnerEditor() {
 
           if (invalidNodes.length > 0) {
             showToast(
-              `Некорректная структура узлов: ${invalidNodes.length} узлов без settings`,
+              `Некорректная структура узлов: у ${invalidNodes.length} узлов нет настроек`,
               'error'
             );
             return;
@@ -1940,8 +1780,8 @@ function InnerEditor() {
             nodesDraggable={!isReadOnly}
             nodesConnectable={!isReadOnly}
             elementsSelectable={!isReadOnly}
-            // Панорамирование: ЛКМ на пустом месте ИЛИ с зажатым пробелом
-            panOnDrag={true}
+            // Только СКМ/ПКМ переносят холст; ЛКМ — перетаскивание узлов (иначе конфликт с pan)
+            panOnDrag={[1, 2]}
             panOnScroll={true}
             zoomOnScroll={true}
             zoomOnPinch={true}
@@ -1957,7 +1797,7 @@ function InnerEditor() {
             minZoom={0.3}
             maxZoom={1.5}
             defaultViewport={{ x: 0, y: 0, zoom: 0.6 }}
-            onlyRenderVisibleElements
+            onlyRenderVisibleElements={false}
             // Режим соединения
             connectionMode={ConnectionMode.Loose}
             connectOnClick={true}

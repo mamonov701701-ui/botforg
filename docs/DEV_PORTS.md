@@ -9,12 +9,12 @@
 
 ## Где это настроено
 
-- `scripts/start-dev.ps1`  
-  - Освобождает порты `8001` и `5173`.  
-  - Запускает backend:
-    - `python -m uvicorn backend.main:app --host 0.0.0.0 --port 8001`  
-  - Запускает frontend:
-    - `cd frontend && npm run dev` (Vite на 5173).
+- `scripts/start-dev.ps1` (Windows, одна команда из корня репозитория)  
+  - Освобождает порты `8001`, `5173` и запасной `5174` (если Vite ушёл на него).  
+  - `python -m alembic upgrade head`, затем фоновый backend с `--reload` и фоновый frontend.  
+  - Логи: `scripts/.dev-backend-YYYYMMDD-HHMMSS.log`, `scripts/.dev-frontend-YYYYMMDD-HHMMSS.log` (новые имена на каждый запуск).  
+  - После старта проверяет `http://127.0.0.1:8001/healthz` и `http://127.0.0.1:5173/`; при ошибке выводит хвост логов и завершается с кодом `1`.  
+- `scripts/stop-dev.ps1` — остановка процессов на портах `8001`, `5173`, `5174`.
 
 - `frontend/vite.config.js`
   - `server.port = 5173`

@@ -5,7 +5,6 @@
 import { create } from 'zustand';
 import { Node, Edge } from 'reactflow';
 import * as scenarioAPI from '../api/scenarios';
-import { useEditorStore } from './editorStore';
 import { buildRuntimeGraph, RuntimeGraph } from '../utils/runtimeNormalization';
 
 interface ScenarioState {
@@ -56,6 +55,8 @@ interface ScenarioStore {
   syncFromEditor: () => void;
   saveCurrentScenario: () => Promise<void>;
   deleteScenario: (scenarioId: number) => Promise<void>;
+  /** Только имя; граф и currentState.nodes/edges не трогаем */
+  renameScenario: (scenarioId: number, name: string) => Promise<void>;
 
   saveToLibrary: (data: {
     name?: string;
@@ -269,15 +270,8 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
       get().updateCurrentScenario(nodes, edges);
     },
 
-    // Синхронизация с editorStore (вызывается при изменениях в React Flow)
-    syncFromEditor: () => {
-      const editorStore = useEditorStore.getState();
-      const { currentState } = get();
-
-      if (currentState) {
-        get().updateCurrentScenario(editorStore.nodes, editorStore.edges);
-      }
-    },
+    // Устарело: граф в currentState; синхронизация из EditorV2Shell (RF → updateCurrentScenario).
+    syncFromEditor: () => undefined,
 
     // Save current scenario
     saveCurrentScenario: async () => {
@@ -331,6 +325,21 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
         const mainScenario = remainingScenarios.find(s => s.is_main);
         get().selectScenario(mainScenario ? mainScenario.id : remainingScenarios[0].id);
       }
+    },
+
+    renameScenario: async (scenarioId: number, name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        throw new Error('Имя сценария не может быть пустым');
+      }
+      const updated = await scenarioAPI.updateScenario(scenarioId, { name: trimmed });
+      set(state => ({
+        scenarios: state.scenarios.map(s => (s.id === scenarioId ? updated : s)),
+        currentState:
+          state.currentScenarioId === scenarioId && state.currentState
+            ? { ...state.currentState, name: updated.name }
+            : state.currentState,
+      }));
     },
 
     // Save to library

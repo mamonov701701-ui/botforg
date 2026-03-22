@@ -29,7 +29,7 @@ const CATEGORIES = [
   { value: 'payment', label: '💳 Оплата' },
   { value: 'support', label: '🎧 Поддержка' },
   { value: 'catalog', label: '📦 Каталог' },
-  { value: 'faq', label: '❓ FAQ' },
+  { value: 'faq', label: '❓ Частые вопросы' },
   { value: 'form', label: '📄 Форма' },
   { value: 'promo', label: '🎁 Акции' },
   { value: 'other', label: '⚙️ Другое' },

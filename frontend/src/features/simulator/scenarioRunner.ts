@@ -54,12 +54,13 @@ export interface SimulatorState {
   lastUserInput: string | null;
 }
 
+/** Результат шага: всегда `context` (полный RuntimeContext), не поле `state`. */
 export interface RunStepResult {
   context: RuntimeContext;
   waitingForUser: boolean;
 }
 
-function findStartNode(nodes: Node[]): Node | null {
+export function findStartNode(nodes: Node[]): Node | null {
   // Явно ищем блок, помеченный как start.
   const explicit = nodes.find(n => {
     const data: any = n.data || {};

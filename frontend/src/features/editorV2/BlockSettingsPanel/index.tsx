@@ -104,7 +104,6 @@ export default function BlockSettingsPanel({
   isReadOnly = false,
 }: Props) {
   const catalog = useEditorStore(state => state.catalog);
-  const setNodesZustand = useEditorStore(state => state.setNodes);
   const showToast = useEditorStore(state => state.showToast);
   const setValidationResult = useValidationStore(state => state.setValidationResult);
   const [hasChanges, setHasChanges] = useState(false);
@@ -160,21 +159,8 @@ export default function BlockSettingsPanel({
         },
       });
     } else {
-      setNodesZustand(nodes =>
-        nodes.map(n =>
-          n.id === selectedNode.id
-            ? {
-                ...n,
-                data: {
-                  ...n.data,
-                  settings: {
-                    ...n.data.settings,
-                    [fieldName]: value,
-                  },
-                },
-              }
-            : n
-        )
+      console.warn(
+        'BlockSettingsPanel: передайте onUpdateNode (граф в scenarioStore / React Flow).'
       );
     }
   };
@@ -195,19 +181,8 @@ export default function BlockSettingsPanel({
         },
       });
     } else {
-      setNodesZustand(nodes =>
-        nodes.map(n =>
-          n.id === selectedNode.id
-            ? {
-                ...n,
-                data: {
-                  ...n.data,
-                  title: newTitle,
-                  // Иконка остается неизменной - не трогаем data.icon
-                },
-              }
-            : n
-        )
+      console.warn(
+        'BlockSettingsPanel: передайте onUpdateNode (граф в scenarioStore / React Flow).'
       );
     }
   };

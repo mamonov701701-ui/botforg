@@ -127,7 +127,7 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
             type="text"
             value={urlInput}
             onChange={handleUrlChange}
-            placeholder="https://example.com/image.jpg"
+            placeholder="Ссылка на изображение, напр. https://site.ru/photo.jpg"
             style={{
               width: '100%',
               padding: '10px 36px 10px 12px',

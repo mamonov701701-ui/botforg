@@ -38,8 +38,6 @@ interface EditorStore {
   setPlan: (plan: PlanType) => void;
   setRole: (role: RoleType) => void;
   setCatalog: (catalog: BlockCatalogItem[]) => void;
-  setNodes: (nodes: Node[] | ((prev: Node[]) => Node[])) => void;
-  setEdges: (edges: Edge[] | ((prev: Edge[]) => Edge[])) => void;
   setSearchQuery: (query: string) => void;
   loadCatalog: (plan?: PlanType, role?: RoleType) => Promise<void>;
   showToast: (message: string, type: ToastType) => void;

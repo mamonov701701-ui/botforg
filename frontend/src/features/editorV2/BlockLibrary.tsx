@@ -3,6 +3,7 @@ import { Star, Clock, ChevronDown, ChevronRight, Search, X } from 'lucide-react'
 import { useEditorStore } from '../../stores/editorStore';
 import { useAuthStore } from '../../stores/authStore';
 import { BlockCatalogItem } from '../../types/blocks';
+import { planLabelRu } from './planLabels';
 
 // Category names mapping
 const CATEGORY_LABELS: Record<string, string> = {
@@ -12,7 +13,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   business: 'Бизнесовые',
   service: 'Сервисные',
   system: 'Системные',
-  ai: 'AI',
+  ai: 'ИИ',
   custom: 'Дополнительные',
 };
 
@@ -371,10 +372,9 @@ const BlockLibrary: React.FC = () => {
             padding: '2px 6px',
             background: 'rgba(59, 130, 246, 0.2)',
             borderRadius: 4,
-            textTransform: 'uppercase',
           }}
         >
-          {plan}
+          {planLabelRu(plan)}
         </span>
       </h3>
 

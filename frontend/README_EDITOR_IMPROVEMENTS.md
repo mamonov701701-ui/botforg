@@ -159,6 +159,14 @@
 2. Убедиться, что `onDeleteBlock` передаётся корректно
 3. Проверить логику удаления связанных рёбер
 
+---
+
+## Editor V2 (`src/features/editorV2/`)
+
+Актуальный редактор сценариев — **Editor V2**, не устаревший `Editor.jsx` из списка файлов выше.
+
+- Сводка для разработчиков: **[docs/development/EDITOR_V2_SCENARIO_AND_PREVIEW.md](../docs/development/EDITOR_V2_SCENARIO_AND_PREVIEW.md)** — меню сценария, модалки, `scenarioStore`, нормализация рёбер (`flowHandleCompatibility`), предпросмотр (`BotSimulator` ↔ `scenarioRunner`, поле **`context`**, не `state`).
+
 ## Заключение
 
 Все основные задачи выполнены:
