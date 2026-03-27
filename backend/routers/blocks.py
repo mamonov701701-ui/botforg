@@ -41,6 +41,15 @@ def load_blocks_catalog() -> List[BlockCatalogItem]:
         )
 
 
+@router.get("/learn-catalog", response_model=List[BlockCatalogItem])
+def get_blocks_learn_catalog():
+    """
+    Полный каталог блоков для страницы «Возможности» / обучения.
+    Без авторизации — только описания и схемы полей из публичного JSON.
+    """
+    return [b for b in load_blocks_catalog() if not b.disabled]
+
+
 @router.get("", response_model=List[BlockCatalogItem])
 def get_blocks(
     plan: Optional[str] = Query(
@@ -69,7 +78,7 @@ def get_blocks(
 
     # Определяем plan пользователя (по умолчанию "free", можно расширить логику)
     user_plan = plan or "free"
-    
+
     # Определяем role пользователя из его данных
     # Маппинг ролей из модели User в роли блоков
     role_mapping = {
@@ -93,6 +102,8 @@ def get_blocks(
         block for block in filtered_blocks if user_role in block.permissions
     ]
 
+    filtered_blocks = [b for b in filtered_blocks if not b.disabled]
+
     return filtered_blocks
 
 
@@ -104,6 +115,6 @@ def get_categories(
     Получение списка всех доступных категорий блоков.
     Требует авторизации.
     """
-    blocks = load_blocks_catalog()
+    blocks = [b for b in load_blocks_catalog() if not b.disabled]
     categories = list(set(block.category for block in blocks))
     return sorted(categories)

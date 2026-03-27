@@ -63,11 +63,27 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
     };
   }, [hoverTimeout]);
 
+  const visibleCatalog = useMemo(
+    () => getFilteredCatalog(),
+    [catalog, searchQuery, getFilteredCatalog]
+  );
+
+  const visibleCategories = useMemo(
+    () => CATEGORY_ORDER.filter(cat => visibleCatalog.some(b => b.category === cat)),
+    [visibleCatalog]
+  );
+
+  useEffect(() => {
+    if (!isOpen || visibleCategories.length === 0) return;
+    if (!visibleCategories.includes(activeTab)) {
+      setActiveTab(visibleCategories[0]);
+    }
+  }, [isOpen, visibleCategories, activeTab]);
+
   // Filter blocks by active tab and search
   const filteredBlocks = useMemo(() => {
-    const filtered = getFilteredCatalog();
-    return filtered.filter(block => block.category === activeTab);
-  }, [catalog, searchQuery, plan, role, activeTab, getFilteredCatalog]);
+    return visibleCatalog.filter(block => block.category === activeTab);
+  }, [visibleCatalog, activeTab]);
 
   const handleBlockClick = (block: BlockCatalogItem) => {
     // Position will be calculated by parent (viewport center or near selected node)
@@ -266,8 +282,8 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
             overflowX: 'auto',
           }}
         >
-          {CATEGORY_ORDER.map(categoryKey => {
-            const count = catalog.filter(b => b.category === categoryKey).length;
+          {visibleCategories.map(categoryKey => {
+            const count = visibleCatalog.filter(b => b.category === categoryKey).length;
             const isActive = activeTab === categoryKey;
             return (
               <button

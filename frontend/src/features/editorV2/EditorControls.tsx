@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Eye } from 'lucide-react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Plus, Eye, BookOpen } from 'lucide-react';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import ScenarioHubDropdown from './ScenarioHubDropdown';
 import NewScenarioNameModal from './NewScenarioNameModal';
 import AddScenarioFromMineModal from './AddScenarioFromMineModal';
@@ -629,6 +629,27 @@ const EditorControls: React.FC<EditorControlsProps> = ({
             <Eye size={16} />
             <span>Предпросмотр</span>
           </button>
+
+          <Link
+            to="/features?tab=blocks"
+            title="Справка по блокам: что делает каждый шаг в сценарии"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 12px',
+              borderRadius: 999,
+              border: '1px solid transparent',
+              color: '#94a3b8',
+              fontSize: 12,
+              fontWeight: 500,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <BookOpen size={15} />
+            <span>Справка по блокам</span>
+          </Link>
 
           {/* SaveDropdown — в read-only только экспорт */}
           <SaveDropdown

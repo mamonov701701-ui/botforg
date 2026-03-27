@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { Node } from 'reactflow';
 import {
   AlertCircle,
@@ -13,8 +13,16 @@ import {
 } from 'lucide-react';
 import { useEditorStore } from '../../../stores/editorStore';
 import { useValidationStore } from '../../../stores/validationStore';
-import { validateNodeSettings } from '../../../utils/schemaValidation';
+import {
+  validateNodeSettings,
+  isMessageBlockMediaValidationMessage,
+} from '../../../utils/schemaValidation';
+import {
+  messageMediaListRowCompatibleWithDeclared,
+  type MessageMediaKind,
+} from '../../../utils/messageMedia';
 import { FieldRenderer } from './FieldRenderer';
+import { MessageBlockSettingsForm } from './MessageBlockSettingsForm';
 import { BlockConfigField } from '../../../types/blocks';
 
 interface Props {
@@ -124,15 +132,37 @@ export default function BlockSettingsPanel({
     setShowAdvanced(false);
   }, [selectedNode.id]);
 
-  // Validate on mount and when settings change
+  const selectedNodeRef = useRef(selectedNode);
+  selectedNodeRef.current = selectedNode;
+  const settingsJson = JSON.stringify(selectedNode.data?.settings ?? {});
+
+  // Валидация: debounce + сравнение с предыдущим результатом, чтобы не писать в store на каждый символ
+  // (это вызывало каскад обновлений validation → узлы → сценарий).
   useEffect(() => {
-    if (block) {
-      const validation = validateNodeSettings(selectedNode, block);
-      setValidationResult(selectedNode.id, validation);
-    }
-  }, [selectedNode, block, setValidationResult]);
+    if (!block) return;
+
+    const t = window.setTimeout(() => {
+      const node = selectedNodeRef.current;
+      const validation = validateNodeSettings(node, block);
+      const prev = useValidationStore.getState().getNodeValidation(node.id);
+      const same =
+        prev &&
+        prev.isValid === validation.isValid &&
+        prev.missingFields.length === validation.missingFields.length &&
+        prev.missingFields.every((m, i) => m === validation.missingFields[i]);
+      if (same) return;
+      setValidationResult(node.id, validation);
+    }, 60);
+
+    return () => clearTimeout(t);
+  }, [block, settingsJson, selectedNode.id, setValidationResult]);
 
   const initialSettings = selectedNode.data.settings || {};
+
+  const liveMessageSchema = useMemo(() => {
+    if (block?.id !== 'message' || !block) return null;
+    return validateNodeSettings(selectedNode, block);
+  }, [block, selectedNode.id, settingsJson]);
 
   const isFieldDirty = (fieldName: string, value: any) => {
     const initial = initialSettings?.[fieldName];
@@ -142,6 +172,57 @@ export default function BlockSettingsPanel({
   // Handle field change - updates node.data.settings
   const handleFieldChange = (fieldName: string, value: any) => {
     if (isReadOnly) return;
+
+    // Смена типа медиа: один тип на весь блок — убираем несовместимые вложения и при «Без медиа» очищаем список.
+    if (onUpdateNode && block?.id === 'message' && fieldName === 'mediaType') {
+      const prev = selectedNode.data.settings || {};
+      const oldType = prev.mediaType;
+      const newType = value;
+
+      const mediaLabels: Record<string, string> = {
+        none: 'Без медиа',
+        image: 'Картинка / фото',
+        gif: 'GIF / анимация',
+        video: 'Видео',
+      };
+
+      let nextSettings: Record<string, unknown> = { ...prev, mediaType: value };
+
+      if (newType === 'none') {
+        nextSettings = { ...nextSettings, mediaList: [], mediaUrl: '' };
+        if (Array.isArray(prev.mediaList) && prev.mediaList.length > 0) {
+          showToast('Тип «Без медиа»: список вложений очищен.', 'info');
+        }
+      } else if (newType !== 'none' && Array.isArray(prev.mediaList) && prev.mediaList.length > 0) {
+        const declared = newType as MessageMediaKind;
+        const filtered = prev.mediaList.filter((row: unknown) =>
+          messageMediaListRowCompatibleWithDeclared(row, declared)
+        );
+        const removed = prev.mediaList.length - filtered.length;
+        if (removed > 0) {
+          const typeLabel = mediaLabels[String(newType)] ?? newType;
+          const reason =
+            oldType === newType
+              ? 'не соответствовали выбранному типу медиа'
+              : 'не соответствовали новому типу';
+          showToast(
+            `Тип медиа — ${typeLabel}. Удалено вложений: ${removed} (${reason}).`,
+            'warning'
+          );
+          nextSettings = { ...nextSettings, mediaList: filtered };
+        }
+      }
+
+      setHasChanges(true);
+      onUpdateNode(selectedNode.id, {
+        data: {
+          ...selectedNode.data,
+          settings: nextSettings,
+        },
+      });
+      return;
+    }
+
     if (!hasChanges && isFieldDirty(fieldName, value)) {
       setHasChanges(true);
     }
@@ -197,7 +278,12 @@ export default function BlockSettingsPanel({
         showToast('Настройки блока сохранены', 'success');
         setHasChanges(false);
       } else {
-        showToast('Исправьте ошибки перед сохранением', 'warning');
+        const parts = validation.missingFields;
+        const detail =
+          parts.length <= 4
+            ? parts.join('; ')
+            : `${parts.slice(0, 4).join('; ')}; … (+${parts.length - 4})`;
+        showToast(`Исправьте ошибки перед сохранением: ${detail}`, 'warning');
       }
     }
   };
@@ -235,13 +321,16 @@ export default function BlockSettingsPanel({
     });
   };
 
-  // Count validation errors
+  // Count validation errors (для «Сообщение» — полная схема, включая кнопки и медиа)
   const validationErrors = useMemo(() => {
     if (!block?.configSchema) return 0;
+    if (block.id === 'message' && liveMessageSchema) {
+      return liveMessageSchema.isValid ? 0 : liveMessageSchema.missingFields.length;
+    }
     return block.configSchema.filter(field =>
       validateField(field, selectedNode.data.settings?.[field.name])
     ).length;
-  }, [block, selectedNode.data.settings]);
+  }, [block, selectedNode.data.settings, liveMessageSchema]);
 
   // Специальная обработка для системного блока "start"
   if (!block) {
@@ -547,242 +636,285 @@ export default function BlockSettingsPanel({
         </div>
 
         {block.configSchema && block.configSchema.length > 0 ? (
-          <>
-            {/* Основные настройки */}
-            <div
-              style={{
-                marginBottom: 12,
-                fontSize: 11,
-                textTransform: 'uppercase',
-                letterSpacing: 0.6,
-                color: '#6b7280',
-              }}
-            >
-              Основные настройки
-            </div>
-            {block.configSchema
-              .filter(f => !f.isAdvanced)
-              .map(field => {
-                const error = validateField(field, selectedNode.data.settings?.[field.name]);
-                const isExpanded = expandedFields.has(field.name);
+          block.id === 'message' &&
+          block.configSchema.some(f => f.name === 'text') &&
+          block.configSchema.some(f => f.name === 'buttons') ? (
+            <>
+              <div
+                style={{
+                  marginBottom: 12,
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.6,
+                  color: '#6b7280',
+                }}
+              >
+                Содержимое сообщения
+              </div>
+              <MessageBlockSettingsForm
+                settings={(selectedNode.data.settings || {}) as Record<string, unknown>}
+                onFieldChange={handleFieldChange}
+                isReadOnly={isReadOnly}
+                textFieldConfig={
+                  block.configSchema.find(f => f.name === 'text') as BlockConfigField
+                }
+                buttonsFieldConfig={
+                  block.configSchema.find(f => f.name === 'buttons') as BlockConfigField
+                }
+                liveMessageSchema={liveMessageSchema}
+                validateField={validateField}
+              />
+            </>
+          ) : (
+            <>
+              {/* Основные настройки */}
+              <div
+                style={{
+                  marginBottom: 12,
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.6,
+                  color: '#6b7280',
+                }}
+              >
+                Основные настройки
+              </div>
+              {block.configSchema
+                .filter(f => !f.isAdvanced)
+                .map(field => {
+                  const mediaExtra =
+                    block.id === 'message' && field.name === 'mediaList' && liveMessageSchema
+                      ? liveMessageSchema.missingFields.filter(isMessageBlockMediaValidationMessage)
+                      : [];
+                  const baseErr = validateField(field, selectedNode.data.settings?.[field.name]);
+                  const error =
+                    mediaExtra.length > 0
+                      ? [baseErr, ...mediaExtra].filter(Boolean).join(' · ')
+                      : baseErr;
+                  const isExpanded = expandedFields.has(field.name);
 
-                return (
-                  <div
-                    key={field.name}
-                    style={{
-                      marginBottom: 16,
-                      padding: 12,
-                      background: error ? 'rgba(239, 68, 68, 0.1)' : 'rgba(30, 41, 59, 0.5)',
-                      borderRadius: 8,
-                      border: error ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid transparent',
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    {/* Field header with description toggle */}
+                  return (
                     <div
+                      key={field.name}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        marginBottom: 8,
+                        marginBottom: 16,
+                        padding: 12,
+                        background: error ? 'rgba(239, 68, 68, 0.1)' : 'rgba(30, 41, 59, 0.5)',
+                        borderRadius: 8,
+                        border: error
+                          ? '1px solid rgba(239, 68, 68, 0.3)'
+                          : '1px solid transparent',
+                        transition: 'all 0.2s ease',
                       }}
                     >
-                      <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>
-                        {field.label || field.name}
-                        {field.required && (
-                          <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>
-                        )}
-                      </span>
-                      {field.description && (
-                        <button
-                          onClick={() => toggleFieldExpand(field.name)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            color: '#6b7280',
-                            padding: 2,
-                            display: 'flex',
-                          }}
-                        >
-                          <Info size={14} />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Field description */}
-                    {field.description && isExpanded && (
+                      {/* Field header with description toggle */}
                       <div
                         style={{
-                          fontSize: 11,
-                          color: '#9ca3af',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
                           marginBottom: 8,
-                          padding: '6px 8px',
-                          background: '#1f2937',
-                          borderRadius: 4,
-                          animation: 'fadeIn 0.2s ease',
                         }}
                       >
-                        {field.description}
-                      </div>
-                    )}
-
-                    {/* Field input */}
-                    <FieldRenderer
-                      field={field}
-                      value={selectedNode.data.settings?.[field.name] ?? field.default}
-                      onChange={v => handleFieldChange(field.name, v)}
-                      error={error}
-                      allSettings={selectedNode.data.settings}
-                      isReadOnly={isReadOnly}
-                      onResetToDefault={
-                        typeof field.default !== 'undefined'
-                          ? () => handleFieldChange(field.name, field.default)
-                          : undefined
-                      }
-                    />
-                  </div>
-                );
-              })}
-
-            {/* Расширенные настройки */}
-            {block.configSchema.some(f => f.isAdvanced) && (
-              <div style={{ marginBottom: 16 }}>
-                <button
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    background: showAdvanced ? '#1a1a2e' : 'transparent',
-                    border: '1px solid #374151',
-                    borderRadius: 8,
-                    color: '#9ca3af',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.background = '#1a1a2e';
-                    e.currentTarget.style.borderColor = '#3b82f6';
-                  }}
-                  onMouseLeave={e => {
-                    if (!showAdvanced) e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.borderColor = '#374151';
-                  }}
-                >
-                  <span>⚙️ Расширенные настройки</span>
-                  <span
-                    style={{
-                      transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0)',
-                      transition: 'transform 0.2s',
-                    }}
-                  >
-                    ▼
-                  </span>
-                </button>
-
-                {showAdvanced && (
-                  <div style={{ marginTop: 12, animation: 'fadeIn 0.2s ease' }}>
-                    {block.configSchema
-                      .filter(f => f.isAdvanced)
-                      .map(field => {
-                        const error = validateField(
-                          field,
-                          selectedNode.data.settings?.[field.name]
-                        );
-                        const isExpanded = expandedFields.has(field.name);
-
-                        return (
-                          <div
-                            key={field.name}
+                        <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>
+                          {field.label || field.name}
+                          {field.required && (
+                            <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>
+                          )}
+                        </span>
+                        {field.description && (
+                          <button
+                            onClick={() => toggleFieldExpand(field.name)}
                             style={{
-                              marginBottom: 12,
-                              padding: 12,
-                              background: error
-                                ? 'rgba(239, 68, 68, 0.1)'
-                                : 'rgba(30, 41, 59, 0.5)',
-                              borderRadius: 8,
-                              border: error
-                                ? '1px solid rgba(239, 68, 68, 0.3)'
-                                : '1px solid transparent',
-                              transition: 'all 0.2s ease',
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: '#6b7280',
+                              padding: 2,
+                              display: 'flex',
                             }}
                           >
-                            {/* Field header */}
+                            <Info size={14} />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Field description */}
+                      {field.description && isExpanded && (
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: '#9ca3af',
+                            marginBottom: 8,
+                            padding: '6px 8px',
+                            background: '#1f2937',
+                            borderRadius: 4,
+                            animation: 'fadeIn 0.2s ease',
+                          }}
+                        >
+                          {field.description}
+                        </div>
+                      )}
+
+                      {/* Field input */}
+                      <FieldRenderer
+                        field={field}
+                        value={selectedNode.data.settings?.[field.name] ?? field.default}
+                        onChange={v => handleFieldChange(field.name, v)}
+                        error={error}
+                        allSettings={selectedNode.data.settings}
+                        isReadOnly={isReadOnly}
+                        blockId={selectedNode.data.blockId}
+                        onResetToDefault={
+                          typeof field.default !== 'undefined'
+                            ? () => handleFieldChange(field.name, field.default)
+                            : undefined
+                        }
+                      />
+                    </div>
+                  );
+                })}
+
+              {/* Расширенные настройки */}
+              {block.id !== 'message' && block.configSchema.some(f => f.isAdvanced) && (
+                <div style={{ marginBottom: 16 }}>
+                  <button
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      background: showAdvanced ? '#1a1a2e' : 'transparent',
+                      border: '1px solid #374151',
+                      borderRadius: 8,
+                      color: '#9ca3af',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = '#1a1a2e';
+                      e.currentTarget.style.borderColor = '#3b82f6';
+                    }}
+                    onMouseLeave={e => {
+                      if (!showAdvanced) e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.borderColor = '#374151';
+                    }}
+                  >
+                    <span>⚙️ Расширенные настройки</span>
+                    <span
+                      style={{
+                        transform: showAdvanced ? 'rotate(180deg)' : 'rotate(0)',
+                        transition: 'transform 0.2s',
+                      }}
+                    >
+                      ▼
+                    </span>
+                  </button>
+
+                  {showAdvanced && (
+                    <div style={{ marginTop: 12, animation: 'fadeIn 0.2s ease' }}>
+                      {block.configSchema
+                        .filter(f => f.isAdvanced)
+                        .map(field => {
+                          const error = validateField(
+                            field,
+                            selectedNode.data.settings?.[field.name]
+                          );
+                          const isExpanded = expandedFields.has(field.name);
+
+                          return (
                             <div
+                              key={field.name}
                               style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                marginBottom: 8,
+                                marginBottom: 12,
+                                padding: 12,
+                                background: error
+                                  ? 'rgba(239, 68, 68, 0.1)'
+                                  : 'rgba(30, 41, 59, 0.5)',
+                                borderRadius: 8,
+                                border: error
+                                  ? '1px solid rgba(239, 68, 68, 0.3)'
+                                  : '1px solid transparent',
+                                transition: 'all 0.2s ease',
                               }}
                             >
-                              <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>
-                                {field.label || field.name}
-                                {field.required && (
-                                  <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>
-                                )}
-                              </span>
-                              {field.description && (
-                                <button
-                                  onClick={() => toggleFieldExpand(field.name)}
-                                  style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    color: '#6b7280',
-                                    padding: 2,
-                                    display: 'flex',
-                                  }}
-                                >
-                                  <Info size={14} />
-                                </button>
-                              )}
-                            </div>
-
-                            {/* Field description */}
-                            {field.description && isExpanded && (
+                              {/* Field header */}
                               <div
                                 style={{
-                                  fontSize: 11,
-                                  color: '#9ca3af',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
                                   marginBottom: 8,
-                                  padding: '6px 8px',
-                                  background: '#1f2937',
-                                  borderRadius: 4,
-                                  animation: 'fadeIn 0.2s ease',
                                 }}
                               >
-                                {field.description}
+                                <span style={{ fontWeight: 600, fontSize: 13, color: '#e5e7eb' }}>
+                                  {field.label || field.name}
+                                  {field.required && (
+                                    <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>
+                                  )}
+                                </span>
+                                {field.description && (
+                                  <button
+                                    onClick={() => toggleFieldExpand(field.name)}
+                                    style={{
+                                      background: 'none',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      color: '#6b7280',
+                                      padding: 2,
+                                      display: 'flex',
+                                    }}
+                                  >
+                                    <Info size={14} />
+                                  </button>
+                                )}
                               </div>
-                            )}
 
-                            {/* Field input */}
-                            <FieldRenderer
-                              field={field}
-                              value={selectedNode.data.settings?.[field.name] ?? field.default}
-                              onChange={v => handleFieldChange(field.name, v)}
-                              error={error}
-                              allSettings={selectedNode.data.settings}
-                              isReadOnly={isReadOnly}
-                              onResetToDefault={
-                                typeof field.default !== 'undefined'
-                                  ? () => handleFieldChange(field.name, field.default)
-                                  : undefined
-                              }
-                            />
-                          </div>
-                        );
-                      })}
-                  </div>
-                )}
-              </div>
-            )}
-          </>
+                              {/* Field description */}
+                              {field.description && isExpanded && (
+                                <div
+                                  style={{
+                                    fontSize: 11,
+                                    color: '#9ca3af',
+                                    marginBottom: 8,
+                                    padding: '6px 8px',
+                                    background: '#1f2937',
+                                    borderRadius: 4,
+                                    animation: 'fadeIn 0.2s ease',
+                                  }}
+                                >
+                                  {field.description}
+                                </div>
+                              )}
+
+                              {/* Field input */}
+                              <FieldRenderer
+                                field={field}
+                                value={selectedNode.data.settings?.[field.name] ?? field.default}
+                                onChange={v => handleFieldChange(field.name, v)}
+                                error={error}
+                                allSettings={selectedNode.data.settings}
+                                isReadOnly={isReadOnly}
+                                blockId={selectedNode.data.blockId}
+                                onResetToDefault={
+                                  typeof field.default !== 'undefined'
+                                    ? () => handleFieldChange(field.name, field.default)
+                                    : undefined
+                                }
+                              />
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )
         ) : (
           <div
             style={{

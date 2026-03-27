@@ -1,12 +1,16 @@
 import React from 'react';
 import { FieldProps } from './types';
 import { Plus, Trash2, GripVertical } from 'lucide-react';
+import {
+  normalizeMessageButtonAction,
+  type MessageButtonAction,
+} from '../../../../utils/messageButton';
 
 interface Button {
   id?: string;
   label: string;
-  branch?: string;
   action?: string;
+  url?: string;
 }
 
 export const ButtonListField: React.FC<FieldProps> = ({
@@ -15,6 +19,7 @@ export const ButtonListField: React.FC<FieldProps> = ({
   onChange,
   error,
   isReadOnly,
+  actionStyle = 'select',
 }) => {
   const buttons: Button[] = Array.isArray(value) ? value : [];
 
@@ -54,157 +59,232 @@ export const ButtonListField: React.FC<FieldProps> = ({
 
   return (
     <div>
-      {/* Список кнопок */}
       {buttons.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-          {buttons.map((button, index) => (
-            <div
-              key={index}
-              style={{
-                background: '#1a1a2e',
-                border: '1px solid #374151',
-                borderRadius: 8,
-                padding: 12,
-                display: 'flex',
-                gap: 8,
-                alignItems: 'flex-start',
-              }}
-            >
-              {/* Drag handle / reorder */}
+          {buttons.map((button, index) => {
+            const uiAction: MessageButtonAction = normalizeMessageButtonAction(button.action);
+            return (
               <div
+                key={index}
                 style={{
+                  background: '#1a1a2e',
+                  border: '1px solid #374151',
+                  borderRadius: 8,
+                  padding: 12,
                   display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 4,
-                  color: '#6b7280',
-                  padding: '4px 0',
+                  gap: 8,
+                  alignItems: 'flex-start',
                 }}
               >
-                <button
-                  type="button"
-                  disabled={isReadOnly || index === 0}
-                  onClick={() => moveButton(index, index - 1)}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    color: isReadOnly || index === 0 ? '#1f2937' : '#6b7280',
-                    cursor: isReadOnly || index === 0 ? 'default' : 'pointer',
-                    fontSize: 12,
-                    padding: 0,
-                  }}
-                >
-                  ▲
-                </button>
-                <GripVertical size={16} />
-                <button
-                  type="button"
-                  disabled={isReadOnly || index === buttons.length - 1}
-                  onClick={() => moveButton(index, index + 1)}
-                  style={{
-                    border: 'none',
-                    background: 'transparent',
-                    color: isReadOnly || index === buttons.length - 1 ? '#1f2937' : '#6b7280',
-                    cursor: isReadOnly || index === buttons.length - 1 ? 'default' : 'pointer',
-                    fontSize: 12,
-                    padding: 0,
-                  }}
-                >
-                  ▼
-                </button>
-              </div>
-
-              {/* Поля кнопки */}
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {/* Идентификатор кнопки */}
                 <div
                   style={{
-                    fontSize: 11,
-                    color: '#9ca3af',
                     display: 'flex',
-                    justifyContent: 'space-between',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 4,
+                    color: '#6b7280',
+                    padding: '4px 0',
                   }}
                 >
-                  <span>ID: {button.id || `btn_${index + 1}`}</span>
-                  <span style={{ opacity: 0.8 }}>#{index + 1}</span>
+                  <button
+                    type="button"
+                    disabled={isReadOnly || index === 0}
+                    onClick={() => moveButton(index, index - 1)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: isReadOnly || index === 0 ? '#1f2937' : '#6b7280',
+                      cursor: isReadOnly || index === 0 ? 'default' : 'pointer',
+                      fontSize: 12,
+                      padding: 0,
+                    }}
+                  >
+                    ▲
+                  </button>
+                  <GripVertical size={16} />
+                  <button
+                    type="button"
+                    disabled={isReadOnly || index === buttons.length - 1}
+                    onClick={() => moveButton(index, index + 1)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      color: isReadOnly || index === buttons.length - 1 ? '#1f2937' : '#6b7280',
+                      cursor: isReadOnly || index === buttons.length - 1 ? 'default' : 'pointer',
+                      fontSize: 12,
+                      padding: 0,
+                    }}
+                  >
+                    ▼
+                  </button>
                 </div>
 
-                {/* Текст кнопки */}
-                <input
-                  type="text"
-                  value={button.label || ''}
-                  onChange={e => updateButton(index, { label: e.target.value })}
-                  placeholder="Текст кнопки..."
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: isReadOnly ? '#020617' : '#0f1729',
-                    border: '1px solid #374151',
-                    borderRadius: 6,
-                    color: '#fff',
-                    fontSize: 13,
-                    cursor: isReadOnly ? 'default' : 'text',
-                    opacity: isReadOnly ? 0.85 : 1,
-                  }}
-                />
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {actionStyle !== 'radio' && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: '#9ca3af',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                      }}
+                    >
+                      <span>ID: {button.id || `btn_${index + 1}`}</span>
+                      <span style={{ opacity: 0.8 }}>#{index + 1}</span>
+                    </div>
+                  )}
 
-                {/* Действие кнопки */}
-                <select
-                  value={button.action || 'next'}
-                  onChange={e => updateButton(index, { action: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: isReadOnly ? '#020617' : '#0f1729',
-                    border: '1px solid #374151',
-                    borderRadius: 6,
-                    color: '#9ca3af',
-                    fontSize: 12,
-                    cursor: isReadOnly ? 'default' : 'pointer',
-                    opacity: isReadOnly ? 0.85 : 1,
-                  }}
+                  <input
+                    type="text"
+                    value={button.label || ''}
+                    onChange={e => updateButton(index, { label: e.target.value })}
+                    placeholder="Текст кнопки..."
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      background: isReadOnly ? '#020617' : '#0f1729',
+                      border: '1px solid #374151',
+                      borderRadius: 6,
+                      color: '#fff',
+                      fontSize: 13,
+                      cursor: isReadOnly ? 'default' : 'text',
+                      opacity: isReadOnly ? 0.85 : 1,
+                    }}
+                  />
+
+                  {actionStyle === 'radio' ? (
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        padding: '8px 0',
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          cursor: isReadOnly ? 'default' : 'pointer',
+                          fontSize: 13,
+                          color: '#e5e7eb',
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name={`msg_btn_${index}_${field.name}`}
+                          checked={uiAction === 'next'}
+                          disabled={isReadOnly}
+                          onChange={() => updateButton(index, { action: 'next', url: undefined })}
+                          style={{ accentColor: '#3b82f6' }}
+                        />
+                        Продолжить сценарий
+                      </label>
+                      <label
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          cursor: isReadOnly ? 'default' : 'pointer',
+                          fontSize: 13,
+                          color: '#e5e7eb',
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name={`msg_btn_${index}_${field.name}`}
+                          checked={uiAction === 'url'}
+                          disabled={isReadOnly}
+                          onChange={() => updateButton(index, { action: 'url' })}
+                          style={{ accentColor: '#3b82f6' }}
+                        />
+                        Открыть ссылку
+                      </label>
+                    </div>
+                  ) : (
+                    <select
+                      value={uiAction}
+                      onChange={e => {
+                        const v = e.target.value as MessageButtonAction;
+                        if (v === 'next') {
+                          updateButton(index, { action: 'next', url: undefined });
+                        } else {
+                          updateButton(index, { action: 'url' });
+                        }
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: isReadOnly ? '#020617' : '#0f1729',
+                        border: '1px solid #374151',
+                        borderRadius: 6,
+                        color: '#9ca3af',
+                        fontSize: 12,
+                        cursor: isReadOnly ? 'default' : 'pointer',
+                        opacity: isReadOnly ? 0.85 : 1,
+                      }}
+                      disabled={isReadOnly}
+                    >
+                      <option value="next">Продолжить сценарий</option>
+                      <option value="url">Открыть ссылку</option>
+                    </select>
+                  )}
+
+                  {uiAction === 'url' && (
+                    <input
+                      type="url"
+                      value={button.url || ''}
+                      onChange={e => updateButton(index, { url: e.target.value })}
+                      placeholder="https://…"
+                      readOnly={isReadOnly}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        background: isReadOnly ? '#020617' : '#0f1729',
+                        border: '1px solid #374151',
+                        borderRadius: 6,
+                        color: '#e5e7eb',
+                        fontSize: 13,
+                        cursor: isReadOnly ? 'default' : 'text',
+                      }}
+                    />
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => removeButton(index)}
                   disabled={isReadOnly}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#ef4444',
+                    cursor: isReadOnly ? 'default' : 'pointer',
+                    padding: 4,
+                    borderRadius: 4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: isReadOnly ? 0.4 : 1,
+                  }}
+                  onMouseEnter={e => {
+                    if (!isReadOnly) {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'transparent';
+                  }}
                 >
-                  <option value="next">Продолжить сценарий</option>
-                  <option value="branch">Перейти по ветке (скоро)</option>
-                  <option value="url">Открыть ссылку (скоро)</option>
-                </select>
+                  <Trash2 size={16} />
+                </button>
               </div>
-
-              {/* Удалить кнопку */}
-              <button
-                type="button"
-                onClick={() => removeButton(index)}
-                disabled={isReadOnly}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#ef4444',
-                  cursor: isReadOnly ? 'default' : 'pointer',
-                  padding: 4,
-                  borderRadius: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: isReadOnly ? 0.4 : 1,
-                }}
-                onMouseEnter={e => {
-                  if (!isReadOnly) {
-                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'transparent';
-                }}
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Кнопка добавления */}
       <button
         type="button"
         onClick={addButton}
@@ -241,7 +321,6 @@ export const ButtonListField: React.FC<FieldProps> = ({
         {buttons.length === 0 ? 'Добавить кнопку' : 'Добавить ещё кнопку'}
       </button>
 
-      {/* Подсказка */}
       {buttons.length === 0 && (
         <div
           style={{
@@ -249,10 +328,12 @@ export const ButtonListField: React.FC<FieldProps> = ({
             fontSize: 11,
             color: '#6b7280',
             textAlign: 'center',
+            lineHeight: 1.45,
           }}
         >
-          Кнопки помогают пользователю быстро ответить. ID кнопок используется в условиях и
-          переходах.
+          {actionStyle === 'radio'
+            ? 'По желанию. «Продолжить сценарий» — проведите ребро от выхода кнопки на холсте. «Открыть ссылку» — укажите адрес.'
+            : 'Кнопки помогают пользователю быстро ответить. Для «Продолжить сценарий» проведите ребро от выхода кнопки на холсте; для «Открыть ссылку» укажите URL.'}
         </div>
       )}
 

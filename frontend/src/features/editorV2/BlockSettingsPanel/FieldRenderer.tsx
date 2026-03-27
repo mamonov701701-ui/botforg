@@ -16,7 +16,15 @@ import { MediaListField } from './fields/MediaListField';
 import { FieldProps } from './fields/types';
 
 export const FieldRenderer: React.FC<FieldProps> = props => {
-  const { field, allSettings } = props;
+  const { field, allSettings, blockId } = props;
+
+  // Параметры Telegram API без эффекта в предпросмотре редактора — не показываем, значения в JSON сохраняются.
+  if (
+    blockId === 'message' &&
+    (field.name === 'disablePreview' || field.name === 'saveLastMessageId')
+  ) {
+    return null;
+  }
 
   // Проверка dependsOn - если поле зависит от другого и условие не выполнено, не показываем
   if (field.dependsOn && allSettings) {

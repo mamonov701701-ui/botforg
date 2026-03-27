@@ -10,7 +10,7 @@ import Home from './pages/Home';
 import Pricing from './pages/Pricing';
 import MarketplacePage from './pages/MarketplacePage';
 import DeveloperTemplatesPage from './pages/DeveloperTemplatesPage';
-import Features from './pages/Features';
+import FeaturesPage from './pages/features/FeaturesPage';
 import NotFound from './pages/NotFound';
 import Login from './pages/Login';
 import AuthGate from './features/auth/AuthGate';
@@ -58,7 +58,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               </AuthGate>
             }
           />
-          <Route path="features" element={<Features />} />
+          <Route path="features" element={<FeaturesPage />} />
           <Route path="auth/verify" element={<VerifyEmail />} />
           <Route path="auth/reset" element={<ResetPassword />} />
           {/* Быстрый вход в редактор:

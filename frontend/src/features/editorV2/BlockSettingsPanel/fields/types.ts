@@ -11,4 +11,8 @@ export interface FieldProps {
   onResetToDefault?: () => void;
   /** Разрешено ли редактирование (демо-режим / read-only) */
   isReadOnly?: boolean;
+  /** ID типа блока из каталога (message, input, …) */
+  blockId?: string;
+  /** Действия кнопок: выпадающий список или радио (блок «Сообщение») */
+  actionStyle?: 'select' | 'radio';
 }

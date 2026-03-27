@@ -85,6 +85,10 @@ class BlockCatalogItem(BaseModel):
     configSchema: List[BlockConfigField] = Field(
         default_factory=list, description="Схема настроек"
     )
+    disabled: bool = Field(
+        default=False,
+        description="Если true — блок не показывается в редакторе и API каталога",
+    )
 
     @field_validator("planAccess")
     @classmethod

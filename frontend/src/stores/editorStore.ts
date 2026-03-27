@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { nanoid } from 'nanoid';
 import { BlockCatalogItem, PlanType, RoleType } from '../types/blocks';
 import { fetchBlocksCatalog } from '../api/blocks';
+import { isSimulatorSupportedBlockId } from '../constants/simulatorSupportedBlocks';
 
 export type ToastType = 'info' | 'warning' | 'error' | 'success';
 
@@ -157,10 +158,14 @@ export const useEditorStore = create<EditorStore>()(
       // Computed getters
       getFilteredCatalog: () => {
         const { catalog, searchQuery } = get();
-        if (!searchQuery.trim()) return catalog;
+        let list = catalog.filter(
+          block => isSimulatorSupportedBlockId(block.id) && !block.disabled
+        );
+
+        if (!searchQuery.trim()) return list;
 
         const query = searchQuery.toLowerCase();
-        return catalog.filter(
+        return list.filter(
           block =>
             block.title.toLowerCase().includes(query) ||
             block.description.toLowerCase().includes(query)
@@ -169,14 +174,22 @@ export const useEditorStore = create<EditorStore>()(
 
       getFavoriteBlocks: () => {
         const { catalog, favoriteBlockIds } = get();
-        return catalog.filter(block => favoriteBlockIds.includes(block.id));
+        return catalog.filter(
+          block =>
+            favoriteBlockIds.includes(block.id) &&
+            isSimulatorSupportedBlockId(block.id) &&
+            !block.disabled
+        );
       },
 
       getRecentBlocks: () => {
         const { catalog, recentBlockIds } = get();
         return recentBlockIds
           .map(id => catalog.find(block => block.id === id))
-          .filter((block): block is BlockCatalogItem => block !== undefined);
+          .filter(
+            (block): block is BlockCatalogItem =>
+              block !== undefined && isSimulatorSupportedBlockId(block.id) && !block.disabled
+          );
       },
     }),
     {

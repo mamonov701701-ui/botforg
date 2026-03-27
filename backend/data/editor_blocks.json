@@ -55,14 +55,14 @@
           {"value": "video", "label": "Видео"}
         ],
         "default": "none",
-        "description": "Можно прикрепить картинку, GIF или видео к сообщению"
+        "description": "Один тип на весь блок: ниже можно добавлять только вложения этого типа (несколько файлов одного вида). Смешанные картинка+видео в одном сообщении не поддерживаются."
       },
       {
         "name": "mediaList",
         "type": "media_list",
         "label": "Медиа-файлы",
         "required": false,
-        "description": "Добавьте один или несколько медиа-файлов (изображения, GIF, видео)",
+        "description": "Список файлов или ссылок того же типа, что выбран в поле «Тип медиа» выше.",
         "dependsOn": {
           "field": "mediaType",
           "value": "none",
@@ -80,7 +80,7 @@
           {"value": "HTML", "label": "HTML"}
         ],
         "default": "Plain",
-        "description": "Выберите как форматировать текст сообщения",
+        "description": "В предпросмотре чата: обычный текст; Markdown (**жирный**, __курсив__, [ссылки](url)); HTML (ограниченный набор тегов через санитайзер). В Telegram итог может отличаться.",
         "isAdvanced": true
       },
       {
@@ -100,6 +100,33 @@
         "default": false,
         "description": "Если включено, бот сможет редактировать это сообщение позже",
         "isAdvanced": true
+      }
+    ]
+  },
+  {
+    "id": "input",
+    "title": "Ввод",
+    "category": "basic",
+    "description": "Задаёт вопрос пользователю и сохраняет его ответ в переменную для следующих шагов.",
+    "icon": "⌨️",
+    "color": "#06B6D4",
+    "planAccess": ["free", "pro", "enterprise"],
+    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
+    "configSchema": [
+      {
+        "name": "text",
+        "type": "text",
+        "label": "Вопрос или подсказка пользователю",
+        "required": true,
+        "description": "Текст, который увидит пользователь перед вводом ответа",
+        "placeholder": "Например: Как вас зовут?"
+      },
+      {
+        "name": "variableName",
+        "type": "string",
+        "label": "Имя переменной для ответа",
+        "required": true,
+        "description": "Под этим именем ответ сохранится и будет доступен в условиях и сообщениях"
       }
     ]
   },
@@ -145,6 +172,13 @@
         "required": true
       },
       {
+        "name": "conditionKey",
+        "type": "string",
+        "label": "Дополнительный ключ (необязательно)",
+        "required": false,
+        "description": "Если задан, может использоваться вместо имени переменной при настройке веток"
+      },
+      {
         "name": "operator",
         "type": "select",
         "label": "Оператор",
@@ -160,449 +194,9 @@
     ]
   },
   {
-    "id": "payment",
-    "title": "Оплата",
-    "category": "business",
-    "description": "Прием платежа от пользователя.",
-    "icon": "💳",
-    "color": "#4CAF50",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer"],
-    "configSchema": [
-      {
-        "name": "amount",
-        "type": "number",
-        "label": "Сумма",
-        "required": true
-      },
-      {
-        "name": "currency",
-        "type": "select",
-        "label": "Валюта",
-        "required": true,
-        "options": ["RUB", "USD", "EUR"],
-        "default": "RUB"
-      },
-      {
-        "name": "description",
-        "type": "text",
-        "label": "Описание платежа",
-        "required": true
-      },
-      {
-        "name": "provider",
-        "type": "select",
-        "label": "Платежная система",
-        "required": true,
-        "options": ["YooKassa", "Stripe", "CloudPayments", "Telegram"]
-      },
-      {
-        "name": "saveCard",
-        "type": "boolean",
-        "label": "Сохранить карту",
-        "required": false,
-        "default": false
-      }
-    ]
-  },
-  {
-    "id": "subscription",
-    "title": "Подписка",
-    "category": "business",
-    "description": "Управление подписками пользователей.",
-    "icon": "🔄",
-    "color": "#00BCD4",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer"],
-    "configSchema": [
-      {
-        "name": "planId",
-        "type": "string",
-        "label": "ID тарифа",
-        "required": true
-      },
-      {
-        "name": "period",
-        "type": "select",
-        "label": "Период",
-        "required": true,
-        "options": ["monthly", "quarterly", "yearly"]
-      },
-      {
-        "name": "trialDays",
-        "type": "number",
-        "label": "Пробный период (дней)",
-        "required": false,
-        "default": 0
-      },
-      {
-        "name": "autoRenew",
-        "type": "boolean",
-        "label": "Автопродление",
-        "required": false,
-        "default": true
-      }
-    ]
-  },
-  {
-    "id": "invoice",
-    "title": "Счет на оплату",
-    "category": "business",
-    "description": "Создание и отправка счета на оплату.",
-    "icon": "📄",
-    "color": "#3F51B5",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer"],
-    "configSchema": [
-      {
-        "name": "items",
-        "type": "json",
-        "label": "Позиции счета",
-        "required": true
-      },
-      {
-        "name": "dueDate",
-        "type": "datetime",
-        "label": "Срок оплаты",
-        "required": false
-      },
-      {
-        "name": "sendEmail",
-        "type": "boolean",
-        "label": "Отправить на email",
-        "required": false,
-        "default": true
-      }
-    ]
-  },
-  {
-    "id": "discount",
-    "title": "Скидка",
-    "category": "business",
-    "description": "Применение скидки или промокода.",
-    "icon": "🏷️",
-    "color": "#E91E63",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer"],
-    "configSchema": [
-      {
-        "name": "type",
-        "type": "select",
-        "label": "Тип скидки",
-        "required": true,
-        "options": ["percentage", "fixed", "promocode"]
-      },
-      {
-        "name": "value",
-        "type": "number",
-        "label": "Значение",
-        "required": true
-      },
-      {
-        "name": "code",
-        "type": "string",
-        "label": "Промокод",
-        "required": false
-      },
-      {
-        "name": "expiresAt",
-        "type": "datetime",
-        "label": "Действует до",
-        "required": false
-      }
-    ]
-  },
-  {
-    "id": "api_call",
-    "title": "HTTP-запрос",
-    "category": "service",
-    "description": "Выполнение HTTP запроса к внешнему API.",
-    "icon": "🌐",
-    "color": "#607D8B",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "developer"],
-    "configSchema": [
-      {
-        "name": "url",
-        "type": "string",
-        "label": "URL",
-        "required": true
-      },
-      {
-        "name": "method",
-        "type": "select",
-        "label": "Метод",
-        "required": true,
-        "options": ["GET", "POST", "PUT", "DELETE", "PATCH"],
-        "default": "GET"
-      },
-      {
-        "name": "headers",
-        "type": "json",
-        "label": "Заголовки",
-        "required": false
-      },
-      {
-        "name": "body",
-        "type": "json",
-        "label": "Тело запроса",
-        "required": false
-      },
-      {
-        "name": "timeout",
-        "type": "number",
-        "label": "Таймаут (сек)",
-        "required": false,
-        "default": 30
-      },
-      {
-        "name": "saveResponse",
-        "type": "string",
-        "label": "Сохранить ответ в переменную",
-        "required": false
-      }
-    ]
-  },
-  {
-    "id": "webhook",
-    "title": "Вебхук",
-    "category": "service",
-    "description": "Прием входящих webhook-уведомлений.",
-    "icon": "🔗",
-    "color": "#795548",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "developer"],
-    "configSchema": [
-      {
-        "name": "endpoint",
-        "type": "string",
-        "label": "Эндпоинт",
-        "required": true
-      },
-      {
-        "name": "secret",
-        "type": "string",
-        "label": "Секретный ключ",
-        "required": false
-      },
-      {
-        "name": "validateSignature",
-        "type": "boolean",
-        "label": "Проверять подпись",
-        "required": false,
-        "default": true
-      }
-    ]
-  },
-  {
-    "id": "email",
-    "title": "Электронная почта",
-    "category": "service",
-    "description": "Отправка email сообщения.",
-    "icon": "📧",
-    "color": "#F44336",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer"],
-    "configSchema": [
-      {
-        "name": "to",
-        "type": "string",
-        "label": "Адрес получателя",
-        "required": true
-      },
-      {
-        "name": "subject",
-        "type": "string",
-        "label": "Тема письма",
-        "required": true
-      },
-      {
-        "name": "body",
-        "type": "text",
-        "label": "Текст письма",
-        "required": true
-      },
-      {
-        "name": "html",
-        "type": "boolean",
-        "label": "HTML формат",
-        "required": false,
-        "default": false
-      },
-      {
-        "name": "attachments",
-        "type": "multiselect",
-        "label": "Вложения",
-        "required": false,
-        "options": []
-      }
-    ]
-  },
-  {
-    "id": "sms",
-    "title": "SMS-сообщение",
-    "category": "service",
-    "description": "Отправка SMS сообщения.",
-    "icon": "📱",
-    "color": "#009688",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer"],
-    "configSchema": [
-      {
-        "name": "phone",
-        "type": "string",
-        "label": "Номер телефона",
-        "required": true
-      },
-      {
-        "name": "text",
-        "type": "text",
-        "label": "Текст сообщения",
-        "required": true
-      },
-      {
-        "name": "provider",
-        "type": "select",
-        "label": "Провайдер",
-        "required": true,
-        "options": ["Twilio", "SMS.ru", "SMSC"]
-      }
-    ]
-  },
-  {
-    "id": "variable",
-    "title": "Переменная",
-    "category": "system",
-    "description": "Сохранение или изменение переменной.",
-    "icon": "🗄️",
-    "color": "#673AB7",
-    "planAccess": ["free", "pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
-    "configSchema": [
-      {
-        "name": "name",
-        "type": "string",
-        "label": "Имя переменной",
-        "required": true
-      },
-      {
-        "name": "value",
-        "type": "string",
-        "label": "Значение",
-        "required": false
-      },
-      {
-        "name": "type",
-        "type": "select",
-        "label": "Тип",
-        "required": false,
-        "options": ["string", "number", "boolean", "object", "array"],
-        "default": "string"
-      },
-      {
-        "name": "scope",
-        "type": "select",
-        "label": "Область видимости",
-        "required": false,
-        "options": ["local", "session", "global"],
-        "default": "session"
-      }
-    ]
-  },
-  {
-    "id": "log",
-    "title": "Лог",
-    "category": "system",
-    "description": "Запись события в журнал.",
-    "icon": "📄",
-    "color": "#9E9E9E",
-    "planAccess": ["free", "pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
-    "configSchema": [
-      {
-        "name": "message",
-        "type": "text",
-        "label": "Сообщение",
-        "required": true
-      },
-      {
-        "name": "level",
-        "type": "select",
-        "label": "Уровень",
-        "required": false,
-        "options": ["info", "warning", "error", "debug"],
-        "default": "info"
-      },
-      {
-        "name": "includeContext",
-        "type": "boolean",
-        "label": "Включить контекст",
-        "required": false,
-        "default": true
-      }
-    ]
-  },
-  {
-    "id": "error_handler",
-    "title": "Обработчик ошибок",
-    "category": "system",
-    "description": "Обработка ошибок и исключений.",
-    "icon": "⚠️",
-    "color": "#FF5722",
-    "planAccess": ["free", "pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
-    "configSchema": [
-      {
-        "name": "errorTypes",
-        "type": "multiselect",
-        "label": "Типы ошибок",
-        "required": false,
-        "options": ["network", "timeout", "validation", "runtime", "all"]
-      },
-      {
-        "name": "action",
-        "type": "select",
-        "label": "Действие",
-        "required": true,
-        "options": ["retry", "skip", "stop", "fallback"]
-      },
-      {
-        "name": "retryCount",
-        "type": "number",
-        "label": "Попыток повтора",
-        "required": false,
-        "default": 3
-      }
-    ]
-  },
-  {
-    "id": "router",
-    "title": "Роутер",
-    "category": "system",
-    "description": "Маршрутизация по нескольким направлениям.",
-    "icon": "🔁",
-    "color": "#00BCD4",
-    "planAccess": ["free", "pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
-    "configSchema": [
-      {
-        "name": "routes",
-        "type": "json",
-        "label": "Маршруты",
-        "required": true
-      },
-      {
-        "name": "defaultRoute",
-        "type": "string",
-        "label": "Маршрут по умолчанию",
-        "required": false
-      }
-    ]
-  },
-  {
     "id": "go_to_scenario",
     "title": "Перейти в сценарий",
-    "category": "system",
+    "category": "basic",
     "description": "Позволяет перейти в другой сценарий бота.",
     "icon": "↪️",
     "color": "#5C6BC0",
@@ -650,287 +244,75 @@
     ]
   },
   {
-    "id": "ai_chat",
-    "title": "ИИ Чат",
-    "category": "ai",
-    "description": "Взаимодействие с AI ассистентом через чат.",
-    "icon": "🤖",
-    "color": "#8BC34A",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "developer"],
+    "id": "variable",
+    "title": "Переменная",
+    "category": "system",
+    "description": "Сохранение или изменение переменной.",
+    "icon": "🗄️",
+    "color": "#673AB7",
+    "planAccess": ["free", "pro", "enterprise"],
+    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
     "configSchema": [
       {
-        "name": "model",
-        "type": "select",
-        "label": "Модель",
-        "required": true,
-        "options": ["gpt-4", "gpt-3.5-turbo", "claude-3", "gemini-pro"]
+        "name": "name",
+        "type": "string",
+        "label": "Имя переменной",
+        "required": true
       },
       {
-        "name": "systemPrompt",
-        "type": "text",
-        "label": "Системный промпт",
+        "name": "value",
+        "type": "string",
+        "label": "Значение",
         "required": false
       },
       {
-        "name": "temperature",
-        "type": "number",
-        "label": "Температура",
+        "name": "type",
+        "type": "select",
+        "label": "Тип",
         "required": false,
-        "default": 0.7
+        "options": ["string", "number", "boolean", "object", "array"],
+        "default": "string"
       },
       {
-        "name": "maxTokens",
-        "type": "number",
-        "label": "Максимум токенов",
+        "name": "scope",
+        "type": "select",
+        "label": "Область видимости",
         "required": false,
-        "default": 1000
-      },
-      {
-        "name": "saveHistory",
-        "type": "boolean",
-        "label": "Сохранять историю",
-        "required": false,
-        "default": true
+        "options": ["local", "session", "global"],
+        "default": "session"
       }
     ]
   },
   {
-    "id": "ai_image",
-    "title": "ИИ Генерация изображений",
-    "category": "ai",
-    "description": "Генерация изображений с помощью AI.",
-    "icon": "🖼️",
-    "color": "#CDDC39",
-    "planAccess": ["enterprise"],
-    "permissions": ["owner", "admin", "developer"],
-    "configSchema": [
-      {
-        "name": "prompt",
-        "type": "text",
-        "label": "Промпт",
-        "required": true
-      },
-      {
-        "name": "model",
-        "type": "select",
-        "label": "Модель",
-        "required": true,
-        "options": ["dall-e-3", "midjourney", "stable-diffusion"]
-      },
-      {
-        "name": "size",
-        "type": "select",
-        "label": "Размер",
-        "required": false,
-        "options": ["256x256", "512x512", "1024x1024"],
-        "default": "1024x1024"
-      },
-      {
-        "name": "quality",
-        "type": "select",
-        "label": "Качество",
-        "required": false,
-        "options": ["standard", "hd"],
-        "default": "standard"
-      }
-    ]
-  },
-  {
-    "id": "ai_text_analysis",
-    "title": "ИИ Анализ текста",
-    "category": "ai",
-    "description": "Анализ и обработка текста с помощью AI.",
-    "icon": "🔍",
-    "color": "#FFC107",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "developer"],
-    "configSchema": [
-      {
-        "name": "text",
-        "type": "text",
-        "label": "Текст для анализа",
-        "required": true
-      },
-      {
-        "name": "analysisType",
-        "type": "multiselect",
-        "label": "Тип анализа",
-        "required": true,
-        "options": ["sentiment", "keywords", "summary", "entities", "topics"]
-      },
-      {
-        "name": "language",
-        "type": "select",
-        "label": "Язык",
-        "required": false,
-        "options": ["auto", "ru", "en"],
-        "default": "auto"
-      }
-    ]
-  },
-  {
-    "id": "ai_voice",
-    "title": "ИИ Синтез речи",
-    "category": "ai",
-    "description": "Преобразование текста в речь.",
-    "icon": "🎤",
-    "color": "#FF9800",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "developer"],
-    "configSchema": [
-      {
-        "name": "text",
-        "type": "text",
-        "label": "Текст",
-        "required": true
-      },
-      {
-        "name": "voice",
-        "type": "select",
-        "label": "Голос",
-        "required": true,
-        "options": ["alloy", "echo", "fable", "onyx", "nova", "shimmer"]
-      },
-      {
-        "name": "speed",
-        "type": "number",
-        "label": "Скорость",
-        "required": false,
-        "default": 1.0
-      },
-      {
-        "name": "format",
-        "type": "select",
-        "label": "Формат",
-        "required": false,
-        "options": ["mp3", "opus", "aac", "flac"],
-        "default": "mp3"
-      }
-    ]
-  },
-  {
-    "id": "custom_code",
-    "title": "Пользовательский код",
-    "category": "custom",
-    "description": "Выполнение произвольного JavaScript кода.",
-    "icon": "💻",
+    "id": "action",
+    "title": "Действие",
+    "category": "system",
+    "description": "Служебный шаг: при необходимости показать короткий текст, записать значение в переменную и перейти к следующему блоку.",
+    "icon": "⚙️",
     "color": "#607D8B",
-    "planAccess": ["enterprise"],
-    "permissions": ["owner", "admin"],
+    "planAccess": ["free", "pro", "enterprise"],
+    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
     "configSchema": [
       {
-        "name": "code",
+        "name": "text",
         "type": "text",
-        "label": "Код",
-        "required": true
+        "label": "Текст в чате (необязательно)",
+        "required": false,
+        "description": "Если заполнено, пользователь увидит это сообщение от бота на этом шаге"
       },
       {
-        "name": "timeout",
-        "type": "number",
-        "label": "Таймаут (мс)",
-        "required": false,
-        "default": 5000
-      },
-      {
-        "name": "sandbox",
-        "type": "boolean",
-        "label": "Изолированная среда",
-        "required": false,
-        "default": true
-      }
-    ]
-  },
-  {
-    "id": "custom_plugin",
-    "title": "Плагин",
-    "category": "custom",
-    "description": "Загрузка и выполнение пользовательского плагина.",
-    "icon": "📦",
-    "color": "#9C27B0",
-    "planAccess": ["enterprise"],
-    "permissions": ["owner", "admin"],
-    "configSchema": [
-      {
-        "name": "pluginId",
+        "name": "setVariable",
         "type": "string",
-        "label": "ID плагина",
-        "required": true
-      },
-      {
-        "name": "config",
-        "type": "json",
-        "label": "Конфигурация",
-        "required": false
-      }
-    ]
-  },
-  {
-    "id": "custom_template",
-    "title": "Пользовательский шаблон",
-    "category": "custom",
-    "description": "Встраивание готового шаблона в сценарий.",
-    "icon": "📋",
-    "color": "#3F51B5",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "manager_template", "developer"],
-    "configSchema": [
-      {
-        "name": "templateId",
-        "type": "string",
-        "label": "ID шаблона",
-        "required": true
-      },
-      {
-        "name": "passVariables",
-        "type": "multiselect",
-        "label": "Передаваемые переменные",
+        "label": "Имя переменной для записи",
         "required": false,
-        "options": []
+        "description": "Если указано вместе со значением — переменная обновится перед переходом дальше"
       },
       {
-        "name": "inheritContext",
-        "type": "boolean",
-        "label": "Наследовать контекст",
-        "required": false,
-        "default": true
-      }
-    ]
-  },
-  {
-    "id": "custom_integration",
-    "title": "Интеграция",
-    "category": "custom",
-    "description": "Подключение к внешним сервисам через интеграцию.",
-    "icon": "🔌",
-    "color": "#00BCD4",
-    "planAccess": ["pro", "enterprise"],
-    "permissions": ["owner", "admin", "developer"],
-    "configSchema": [
-      {
-        "name": "serviceType",
-        "type": "select",
-        "label": "Тип сервиса",
-        "required": true,
-        "options": ["CRM", "Analytics", "Storage", "Messaging", "Custom"]
-      },
-      {
-        "name": "credentials",
-        "type": "json",
-        "label": "Учетные данные",
-        "required": true
-      },
-      {
-        "name": "action",
+        "name": "value",
         "type": "string",
-        "label": "Действие",
-        "required": true
-      },
-      {
-        "name": "params",
-        "type": "json",
-        "label": "Параметры",
-        "required": false
+        "label": "Значение для переменной",
+        "required": false,
+        "description": "Можно ввести $lastUserInput, чтобы подставить последний ответ пользователя"
       }
     ]
   }

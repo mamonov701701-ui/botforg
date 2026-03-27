@@ -48,7 +48,11 @@ export interface BlockCatalogItem {
   planAccess: ('free' | 'pro' | 'enterprise')[];
   permissions: ('owner' | 'admin' | 'manager_template' | 'developer' | 'support' | 'viewer')[];
   configSchema: BlockConfigField[];
+  /** Скрыть в библиотеке (не отдаётся с бэкенда при true) */
+  disabled?: boolean;
 }
 
 export type PlanType = 'free' | 'pro' | 'enterprise';
 export type RoleType = 'owner' | 'admin' | 'manager_template' | 'developer' | 'support' | 'viewer';
+
+export type { MessageButtonAction, MessageFlowButton } from '../utils/messageButton';

@@ -1,6 +1,13 @@
 import React, { useState, useRef } from 'react';
-import { Upload, Link as LinkIcon, X, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { Upload, Link as LinkIcon, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { uploadMedia } from '../../../../api/media';
+import {
+  fileInputAcceptForMessageMedia,
+  fileMatchesDeclaredMessageMedia,
+  inferMessageMediaKindFromFile,
+  inferMessageMediaKindFromUrl,
+  messageMediaItemMatchesDeclared,
+} from '../../../../utils/messageMedia';
 
 interface MediaItem {
   url: string;
@@ -14,6 +21,10 @@ interface MediaListFieldProps {
   onChange: (items: MediaItem[]) => void;
   error?: string;
   mediaType?: 'none' | 'image' | 'gif' | 'video';
+  /** Скрыть серый блок «один тип на весь блок» (подсказка уже выше по форме) */
+  hideScopeHint?: boolean;
+  /** Плоский UI: без «карточек», компактный переключатель файл / URL */
+  variant?: 'default' | 'compact';
 }
 
 export const MediaListField: React.FC<MediaListFieldProps> = ({
@@ -21,7 +32,10 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
   onChange,
   error,
   mediaType = 'none',
+  hideScopeHint = false,
+  variant = 'default',
 }) => {
+  const compact = variant === 'compact';
   // Убеждаемся, что value всегда массив
   const mediaList = Array.isArray(value) ? value : value === null || value === undefined ? [] : [];
   const [uploading, setUploading] = useState(false);
@@ -41,15 +55,23 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
       return;
     }
 
-    // Определяем тип файла по MIME
-    let detectedType: 'image' | 'gif' | 'video' = 'image';
-    if (file.type === 'image/gif') {
-      detectedType = 'gif';
-    } else if (file.type.startsWith('video/')) {
-      detectedType = 'video';
-    } else if (file.type.startsWith('image/')) {
-      detectedType = 'image';
+    if (mediaType && mediaType !== 'none' && !fileMatchesDeclaredMessageMedia(mediaType, file)) {
+      const label =
+        mediaType === 'image'
+          ? 'JPEG, PNG или WebP'
+          : mediaType === 'gif'
+            ? 'GIF'
+            : 'MP4, WebM, QuickTime или MPEG';
+      setUploadError(
+        `Файл не соответствует выбранному типу «${mediaType}». Ожидается: ${label}. Получено: ${file.type || 'неизвестный тип'}`
+      );
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
     }
+
+    const detectedType = inferMessageMediaKindFromFile(file);
 
     // Проверка размера (50MB)
     if (file.size > 50 * 1024 * 1024) {
@@ -68,9 +90,10 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
       const fullUrl = result.url.startsWith('http') ? result.url : `${API_URL}${result.url}`;
 
+      const itemType = mediaType && mediaType !== 'none' ? mediaType : detectedType;
       const newItem: MediaItem = {
         url: fullUrl,
-        type: detectedType,
+        type: itemType,
         source: 'upload',
         fileName: result.fileName,
       };
@@ -97,23 +120,36 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
       return;
     }
 
-    // Определяем тип по расширению или оставляем image по умолчанию
-    let detectedType: 'image' | 'gif' | 'video' = 'image';
-    const urlLower = urlInput.toLowerCase();
-    if (urlLower.includes('.gif')) {
-      detectedType = 'gif';
-    } else if (urlLower.match(/\.(mp4|mpeg|mov|avi|webm)$/)) {
-      detectedType = 'video';
+    const trimmed = urlInput.trim();
+    const detectedType = inferMessageMediaKindFromUrl(trimmed);
+
+    if (
+      mediaType &&
+      mediaType !== 'none' &&
+      !messageMediaItemMatchesDeclared(mediaType, detectedType)
+    ) {
+      if (mediaType === 'video') {
+        setUploadError('Для видео укажите прямую ссылку на файл (.mp4, .webm, .mov и т.п.).');
+      } else if (mediaType === 'gif') {
+        setUploadError('Для GIF укажите ссылку на .gif или загрузите GIF-файл.');
+      } else {
+        setUploadError(
+          'Для картинки нужна ссылка на изображение (не GIF и не видео), либо смените тип медиа.'
+        );
+      }
+      return;
     }
 
+    const itemType = mediaType && mediaType !== 'none' ? mediaType : detectedType;
     const newItem: MediaItem = {
-      url: urlInput.trim(),
-      type: detectedType,
+      url: trimmed,
+      type: itemType,
       source: 'url',
     };
 
     onChange([...mediaList, newItem]);
     setUrlInput('');
+    setUploadError(null);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -127,71 +163,179 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
 
   return (
     <div style={{ width: '100%' }}>
-      {/* Переключатель источника */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          marginBottom: 12,
-          padding: 4,
-          background: '#1f2937',
-          borderRadius: 6,
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => setCurrentSource('upload')}
+      {error && (
+        <div
           style={{
-            flex: 1,
-            padding: '6px 12px',
-            fontSize: 12,
-            fontWeight: 500,
-            border: 'none',
-            borderRadius: 4,
-            cursor: 'pointer',
-            background: currentSource === 'upload' ? '#3b82f6' : 'transparent',
-            color: currentSource === 'upload' ? '#fff' : '#9ca3af',
-            transition: 'all 0.2s ease',
+            marginBottom: compact ? 8 : 10,
+            padding: compact ? '6px 8px' : '8px 10px',
+            background: compact ? 'rgba(239, 68, 68, 0.08)' : 'rgba(239, 68, 68, 0.12)',
+            border: compact ? 'none' : '1px solid rgba(239, 68, 68, 0.45)',
+            borderLeft: compact ? '3px solid #ef4444' : undefined,
+            borderRadius: compact ? 4 : 8,
+            fontSize: 11,
+            color: '#fecaca',
+            lineHeight: 1.45,
           }}
         >
-          <Upload
-            size={14}
-            style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }}
-          />
-          Загрузить
-        </button>
-        <button
-          type="button"
-          onClick={() => setCurrentSource('url')}
-          style={{
-            flex: 1,
-            padding: '6px 12px',
-            fontSize: 12,
-            fontWeight: 500,
-            border: 'none',
-            borderRadius: 4,
-            cursor: 'pointer',
-            background: currentSource === 'url' ? '#3b82f6' : 'transparent',
-            color: currentSource === 'url' ? '#fff' : '#9ca3af',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <LinkIcon
-            size={14}
-            style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }}
-          />
-          URL
-        </button>
-      </div>
+          {error}
+        </div>
+      )}
 
-      {/* Поле для добавления нового медиа */}
-      {currentSource === 'upload' ? (
+      {mediaType && mediaType !== 'none' && !hideScopeHint && (
+        <div
+          style={{
+            fontSize: 11,
+            color: '#94a3b8',
+            marginBottom: 12,
+            lineHeight: 1.45,
+            padding: '8px 10px',
+            background: 'rgba(51, 65, 85, 0.35)',
+            borderRadius: 8,
+            border: '1px solid rgba(71, 85, 105, 0.5)',
+          }}
+        >
+          <strong style={{ color: '#e2e8f0' }}>Один тип на весь блок.</strong> Тип медиа выбирается
+          выше и действует на все вложения. Здесь можно добавлять только{' '}
+          {mediaType === 'image'
+            ? 'изображения (JPEG, PNG, WebP)'
+            : mediaType === 'gif'
+              ? 'GIF'
+              : 'видео (MP4, WebM, QuickTime и т.п.)'}
+          . Смешанные типы в одном сообщении не поддерживаются.
+        </div>
+      )}
+
+      {/* Переключатель источника */}
+      {compact ? (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            marginBottom: 10,
+          }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            id={inputId}
+            accept={
+              mediaType && mediaType !== 'none'
+                ? fileInputAcceptForMessageMedia(mediaType)
+                : 'image/*,video/*'
+            }
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{
+              padding: '7px 14px',
+              fontSize: 13,
+              fontWeight: 500,
+              border: '1px solid #475569',
+              borderRadius: 6,
+              background: '#1e293b',
+              color: '#e2e8f0',
+              cursor: uploading ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              opacity: uploading ? 0.6 : 1,
+            }}
+          >
+            <Upload size={15} />
+            {uploading ? 'Загрузка…' : 'Добавить файл'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentSource(currentSource === 'url' ? 'upload' : 'url')}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: '6px 0',
+              fontSize: 12,
+              color: currentSource === 'url' ? '#60a5fa' : '#6b7280',
+              cursor: 'pointer',
+              textDecoration: currentSource === 'url' ? 'underline' : 'none',
+            }}
+          >
+            По ссылке
+          </button>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            marginBottom: 12,
+            padding: 4,
+            background: '#1f2937',
+            borderRadius: 6,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setCurrentSource('upload')}
+            style={{
+              flex: 1,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 500,
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              background: currentSource === 'upload' ? '#3b82f6' : 'transparent',
+              color: currentSource === 'upload' ? '#fff' : '#9ca3af',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <Upload
+              size={14}
+              style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }}
+            />
+            Загрузить
+          </button>
+          <button
+            type="button"
+            onClick={() => setCurrentSource('url')}
+            style={{
+              flex: 1,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 500,
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              background: currentSource === 'url' ? '#3b82f6' : 'transparent',
+              color: currentSource === 'url' ? '#fff' : '#9ca3af',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <LinkIcon
+              size={14}
+              style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }}
+            />
+            URL
+          </button>
+        </div>
+      )}
+
+      {/* Поле для добавления нового медиа (режим «классический») */}
+      {!compact && currentSource === 'upload' && (
         <div style={{ marginBottom: 12 }}>
           <input
             ref={fileInputRef}
             type="file"
             id={inputId}
-            accept="image/*,video/*"
+            accept={
+              mediaType && mediaType !== 'none'
+                ? fileInputAcceptForMessageMedia(mediaType)
+                : 'image/*,video/*'
+            }
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
@@ -231,7 +375,8 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
             {uploading ? 'Загрузка...' : 'Добавить файл'}
           </button>
         </div>
-      ) : (
+      )}
+      {!compact && currentSource === 'url' && (
         <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
           <input
             type="text"
@@ -284,25 +429,77 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
           </button>
         </div>
       )}
+      {compact && currentSource === 'url' && (
+        <div style={{ marginBottom: 10, display: 'flex', gap: 8 }}>
+          <input
+            type="text"
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            onKeyPress={e => {
+              if (e.key === 'Enter') {
+                handleAddUrl();
+              }
+            }}
+            placeholder="https://…"
+            style={{
+              flex: 1,
+              padding: '8px 10px',
+              fontSize: 13,
+              border: error ? '1px solid #ef4444' : '1px solid #475569',
+              borderRadius: 6,
+              background: '#0f172a',
+              color: '#e5e7eb',
+              outline: 'none',
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleAddUrl}
+            disabled={!urlInput.trim()}
+            style={{
+              padding: '8px 12px',
+              fontSize: 13,
+              fontWeight: 500,
+              border: 'none',
+              borderRadius: 6,
+              background: urlInput.trim() ? '#3b82f6' : '#374151',
+              color: '#fff',
+              cursor: urlInput.trim() ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Добавить
+          </button>
+        </div>
+      )}
 
       {/* Список добавленных медиа */}
       {mediaList.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: compact ? 0 : 8 }}>
           {mediaList.map((item, index) => (
             <div
               key={index}
-              style={{
-                padding: 12,
-                border: '1px solid #22c55e',
-                borderRadius: 8,
-                background: 'rgba(34, 197, 94, 0.1)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-              }}
+              style={
+                compact
+                  ? {
+                      padding: '8px 0',
+                      borderBottom: '1px solid #334155',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 6,
+                    }
+                  : {
+                      padding: 12,
+                      border: '1px solid #22c55e',
+                      borderRadius: 8,
+                      background: 'rgba(34, 197, 94, 0.1)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }
+              }
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <CheckCircle size={16} color="#22c55e" />
+                <CheckCircle size={16} color={compact ? '#64748b' : '#22c55e'} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div
                     style={{
@@ -356,7 +553,7 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
                     width: '100%',
                     borderRadius: 6,
                     overflow: 'hidden',
-                    border: '1px solid rgba(34, 197, 94, 0.3)',
+                    border: compact ? '1px solid #334155' : '1px solid rgba(34, 197, 94, 0.3)',
                     background: '#1e293b',
                   }}
                 >
@@ -366,7 +563,7 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
                     style={{
                       width: '100%',
                       height: 'auto',
-                      maxHeight: '150px',
+                      maxHeight: compact ? 100 : 150,
                       objectFit: 'contain',
                       display: 'block',
                     }}
@@ -381,17 +578,25 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
                 <div
                   style={{
                     width: '100%',
-                    height: '100px',
+                    height: compact ? 72 : 100,
                     borderRadius: 6,
                     overflow: 'hidden',
-                    border: '1px solid rgba(34, 197, 94, 0.3)',
+                    border: compact ? '1px solid #334155' : '1px solid rgba(34, 197, 94, 0.3)',
                     background: '#1e293b',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <div style={{ fontSize: 32, color: '#22c55e', opacity: 0.5 }}>▶</div>
+                  <div
+                    style={{
+                      fontSize: compact ? 24 : 32,
+                      color: compact ? '#64748b' : '#22c55e',
+                      opacity: 0.5,
+                    }}
+                  >
+                    ▶
+                  </div>
                 </div>
               )}
             </div>
@@ -417,10 +622,6 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
           <AlertCircle size={14} />
           {uploadError}
         </div>
-      )}
-
-      {error && !uploadError && (
-        <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>{error}</div>
       )}
     </div>
   );

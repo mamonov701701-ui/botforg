@@ -35,6 +35,7 @@ import { useUiStore } from '../../stores/uiStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { validateAllNodes, debugNodeStructure } from '../../utils/validateNode';
 import { canAccessBlock, getAccessDeniedMessage, logAccessDenied } from '../../utils/accessControl';
+import { isSimulatorSupportedBlockId } from '../../constants/simulatorSupportedBlocks';
 import { isEditorDemoMode } from '../../constants/roles';
 import DemoModeBanner from '../../components/DemoModeBanner';
 import { useValidationStore } from '../../stores/validationStore';
@@ -569,6 +570,8 @@ function InnerEditor() {
   // Актуальные nodes для проверки dragging без подписки store→RF на каждый кадр drag
   const nodesRef = useRef<Node[]>(nodes);
   nodesRef.current = nodes;
+  const edgesRef = useRef<Edge[]>(edges);
+  edgesRef.current = edges;
 
   // Флаг внешней синхронизации (scenarioStore -> ReactFlow), чтобы избежать циклов.
   const isExternalSyncRef = useRef(false);
@@ -617,14 +620,26 @@ function InnerEditor() {
 
   const prevNodesKeyRef = useRef<string>('');
   const prevEdgesKeyRef = useRef<string>('');
+  /** Debounce RF→store: каждый ключ при быстром вводе в панели настроек раньше вызывал updateCurrentScenario → смену storeGraphSignature → повторный setNodes из store → петлю ререндеров / Maximum update depth */
+  const rfToStoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!currentState) return;
+    if (!currentState) {
+      if (rfToStoreTimeoutRef.current) {
+        clearTimeout(rfToStoreTimeoutRef.current);
+        rfToStoreTimeoutRef.current = null;
+      }
+      return;
+    }
 
     const nodesKey = makeNodesKey(nodes);
     const edgesKey = makeEdgesKey(edges);
 
     if (isExternalSyncRef.current) {
+      if (rfToStoreTimeoutRef.current) {
+        clearTimeout(rfToStoreTimeoutRef.current);
+        rfToStoreTimeoutRef.current = null;
+      }
       prevNodesKeyRef.current = nodesKey;
       prevEdgesKeyRef.current = edgesKey;
       isExternalSyncRef.current = false;
@@ -635,12 +650,26 @@ function InnerEditor() {
       return;
     }
 
-    prevNodesKeyRef.current = nodesKey;
-    prevEdgesKeyRef.current = edgesKey;
+    if (rfToStoreTimeoutRef.current) {
+      clearTimeout(rfToStoreTimeoutRef.current);
+      rfToStoreTimeoutRef.current = null;
+    }
 
-    const nodesToStore = nodes.map(({ selected, dragging, ...rest }) => rest);
-    const edgesToStore = edges.map(({ data, ...rest }) => rest);
-    updateCurrentScenario(nodesToStore, edgesToStore);
+    rfToStoreTimeoutRef.current = setTimeout(() => {
+      rfToStoreTimeoutRef.current = null;
+      const n = nodesRef.current.map(({ selected, dragging, ...rest }) => rest);
+      const e = edgesRef.current.map(({ data, ...rest }) => rest);
+      updateCurrentScenario(n, e);
+      prevNodesKeyRef.current = makeNodesKey(nodesRef.current);
+      prevEdgesKeyRef.current = makeEdgesKey(edgesRef.current);
+    }, 80);
+
+    return () => {
+      if (rfToStoreTimeoutRef.current) {
+        clearTimeout(rfToStoreTimeoutRef.current);
+        rfToStoreTimeoutRef.current = null;
+      }
+    };
   }, [nodes, edges, updateCurrentScenario, currentState, makeNodesKey, makeEdgesKey]);
 
   // Синхронизация scenarioStore -> ReactFlow.
@@ -1393,6 +1422,11 @@ function InnerEditor() {
       // Get current plan and role from store
       const { plan, role } = useEditorStore.getState();
 
+      if (!isSimulatorSupportedBlockId(block.id)) {
+        showToast('Этот тип блока не поддерживается в редакторе и предпросмотре', 'error');
+        return;
+      }
+
       // Check access - validate before creating node
       if (!canAccessBlock(block, plan, role)) {
         // Log denied attempt for analytics
@@ -1780,8 +1814,8 @@ function InnerEditor() {
             nodesDraggable={!isReadOnly}
             nodesConnectable={!isReadOnly}
             elementsSelectable={!isReadOnly}
-            // Только СКМ/ПКМ переносят холст; ЛКМ — перетаскивание узлов (иначе конфликт с pan)
-            panOnDrag={[1, 2]}
+            // ЛКМ по пустому полю — панорама холста; по узлу — перетаскивание узла (как в legacy Editor)
+            panOnDrag={true}
             panOnScroll={true}
             zoomOnScroll={true}
             zoomOnPinch={true}

@@ -39,10 +39,12 @@
 Обе функции возвращают **`RunStepResult`**:
 
 ```ts
-{ context: RuntimeContext; waitingForUser: boolean }
+{ context: RuntimeContext; waitingForUser: boolean; deadEndFromStart?: boolean }
 ```
 
 Поля **`state` нет.** В UI состояние симулятора — это **`SimulatorState`**, его нужно собирать из **`context`** (например `currentNodeId`, `history`, `variables`, `lastUserInput`).
+
+После блоков **`start`** и **`message`** (без кнопок) указатель **`currentNodeId`** переводится на цель **`resolveNextNodeId`** (есть fallback на первое исходящее ребро). Иначе «Дальше» снова выполнял бы тот же узел и не показывал бы следующий блок.
 
 Ошибка вида `Cannot read properties of undefined (reading 'history')` возникает, если деструктурировать несуществующее `state` вместо `context`.
 
@@ -61,3 +63,5 @@
 - `frontend/src/features/simulator/BotSimulator.tsx`
 - `frontend/src/features/simulator/scenarioRunner.ts`
 - `frontend/src/stores/scenarioStore.ts`
+- `frontend/src/pages/features/FeaturesPage.tsx` — раздел «Возможности», вкладка «Блоки редактора»; ссылка из редактора (`/features?tab=blocks`).
+- `docs/user/editor_block_message.md` — пользовательская инструкция по блоку «Сообщение» для этой вкладки.

@@ -1,11 +1,26 @@
 import { Node } from 'reactflow';
 import { BlockCatalogItem, BlockConfigField } from '../types/blocks';
+import { normalizeMessageButtonAction } from './messageButton';
+import {
+  inferMessageMediaKindFromUrl,
+  messageMediaItemMatchesDeclared,
+  type MessageMediaKind,
+} from './messageMedia';
 
 export interface ValidationResult {
   nodeId: string;
   isValid: boolean;
   missingFields: string[];
   blockTitle?: string;
+}
+
+/** Сообщения validateNodeSettings для блока message, относящиеся к медиа (для подсветки поля «Медиа-файлы»). */
+export function isMessageBlockMediaValidationMessage(msg: string): boolean {
+  return (
+    msg.startsWith('Медиа') ||
+    msg.includes('Медиа-файлы') ||
+    msg.toLowerCase().includes('медиа-файл')
+  );
 }
 
 /**
@@ -80,6 +95,15 @@ export function validateNodeSettings(
         if (!button.label || button.label.trim() === '') {
           missingFields.push(`Текст кнопки ${index + 1}`);
         }
+        const act = normalizeMessageButtonAction(button.action);
+        if (act === 'url') {
+          const u = (button.url || '').trim();
+          if (!u) {
+            missingFields.push(`URL кнопки ${index + 1}`);
+          } else if (!/^https?:\/\//i.test(u)) {
+            missingFields.push(`URL кнопки ${index + 1}: укажите адрес с http:// или https://`);
+          }
+        }
       });
 
       // Ограничение количества кнопок
@@ -88,15 +112,56 @@ export function validateNodeSettings(
       }
     }
 
-    // Валидация медиа
+    // Валидация медиа (актуально: mediaList; legacy: mediaUrl)
     if (settings.mediaType && settings.mediaType !== 'none') {
-      if (!settings.mediaUrl || settings.mediaUrl.trim() === '') {
-        missingFields.push('Ссылка на медиа-файл');
-      } else if (
-        !settings.mediaUrl.startsWith('http://') &&
-        !settings.mediaUrl.startsWith('https://')
-      ) {
-        missingFields.push('Ссылка должна начинаться с http:// или https://');
+      const declared = settings.mediaType as MessageMediaKind;
+      const list = settings.mediaList;
+      const legacyUrl = String((settings as { mediaUrl?: unknown }).mediaUrl ?? '').trim();
+
+      const pushMismatch = (indexLabel: string) => {
+        const hint =
+          declared === 'image'
+            ? 'ожидается изображение (JPEG, PNG, WebP)'
+            : declared === 'gif'
+              ? 'ожидается GIF'
+              : 'ожидается видео (например MP4, WebM, MOV)';
+        missingFields.push(`Медиа ${indexLabel}: несовпадение с типом «${declared}» (${hint})`);
+      };
+
+      if (Array.isArray(list) && list.length > 0) {
+        list.forEach((raw: Record<string, unknown>, index: number) => {
+          const url = String(raw?.url ?? '').trim();
+          if (!url) {
+            missingFields.push(`Медиа ${index + 1}: укажите файл или ссылку`);
+            return;
+          }
+          if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            missingFields.push(
+              `Медиа ${index + 1}: ссылка должна начинаться с http:// или https://`
+            );
+            return;
+          }
+          const inferred = inferMessageMediaKindFromUrl(url);
+          const stored =
+            raw?.type === 'gif' || raw?.type === 'video' || raw?.type === 'image' ? raw.type : null;
+          const ok =
+            messageMediaItemMatchesDeclared(declared, inferred) ||
+            (stored != null && messageMediaItemMatchesDeclared(declared, stored));
+          if (!ok) {
+            pushMismatch(String(index + 1));
+          }
+        });
+      } else if (legacyUrl) {
+        if (!legacyUrl.startsWith('http://') && !legacyUrl.startsWith('https://')) {
+          missingFields.push('Медиа: ссылка должна начинаться с http:// или https://');
+        } else {
+          const inferred = inferMessageMediaKindFromUrl(legacyUrl);
+          if (!messageMediaItemMatchesDeclared(declared, inferred)) {
+            pushMismatch('(ссылка)');
+          }
+        }
+      } else {
+        missingFields.push('Медиа-файлы: добавьте хотя бы один файл или ссылку');
       }
     }
   }

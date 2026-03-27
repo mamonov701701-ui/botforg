@@ -57,4 +57,7 @@ backend/migrations/versions/__pycache__/
 
 # QA Tester Agent (generated)
 qa_artifacts/
+
+# Локальные загрузки пользователей (не в репозиторий)
+uploads/
 ########################################
