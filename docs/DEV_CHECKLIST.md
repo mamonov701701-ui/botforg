@@ -15,14 +15,17 @@
 
 ```powershell
 cd C:\Users\mamon\botforg
-.\scripts\start-dev.ps1
+npm run dev
 ```
+
+(то же самое: `.\scripts\start-dev.ps1`.)
 
 Что делает скрипт:
 
-- освобождает порты `8001` и `5173`;
-- запускает backend (uvicorn) в отдельном окне CMD на `http://localhost:8001`;
-- запускает frontend (Vite) в другом окне CMD на `http://localhost:5173`.
+- освобождает порты `8001`, `5173`, `5174`;
+- применяет миграции (`alembic upgrade head` из корня);
+- поднимает backend и frontend в фоне (логи в `scripts/.dev-*-*.log`);
+- проверяет `/healthz`, ответ фронта и пробу `POST /auth/email/login` (ожидается 401 или 422).
 
 Альтернатива — ручной запуск:
 

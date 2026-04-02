@@ -4,10 +4,14 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { fetchBlocksLearnCatalog } from '../../api/blocks';
 import type { BlockCatalogItem } from '../../types/blocks';
 import { SIMULATOR_SUPPORTED_BLOCK_IDS } from '../../constants/simulatorSupportedBlocks';
-import editorBlockMessageMd from '../../../../docs/user/editor_block_message.md?raw';
-import { BLOCK_GUIDE_RU, LEARNING_BLOCK_TEASER, LEARNING_BLOCK_TITLE } from './blockGuideRu';
+import {
+  BLOCK_GUIDE_RU,
+  GUIDE_SECTIONS_AFTER_CONFIGURE,
+  GUIDE_SECTIONS_BEFORE_CONFIGURE,
+  LEARNING_BLOCK_TEASER,
+  LEARNING_BLOCK_TITLE,
+} from './blockGuideRu';
 import { LEARN_CATALOG_FALLBACK } from './learnCatalogFallback';
-import { docMarkdownToSafeHtml } from './renderDocMarkdown';
 
 type TabId = 'overview' | 'learning' | 'blocks' | 'videos' | 'policy';
 
@@ -28,11 +32,6 @@ const CATEGORY_LABELS: Record<BlockCatalogItem['category'], string> = {
   custom: 'Расширения',
 };
 
-function MessageBlockDocContent() {
-  const docHtml = useMemo(() => docMarkdownToSafeHtml(editorBlockMessageMd), []);
-  return <div className="block-doc-md" dangerouslySetInnerHTML={{ __html: docHtml }} />;
-}
-
 function formatConfigureLines(
   block: BlockCatalogItem,
   hints?: Record<string, string>
@@ -41,7 +40,7 @@ function formatConfigureLines(
   const advanced: string[] = [];
   for (const f of block.configSchema) {
     const label = hints?.[f.name] ?? f.label;
-    const line = `${label}${f.required ? ' — обязательно' : ' — по желанию'}`;
+    const line = `${label}${f.required ? ' — обязательное поле' : ' — необязательное поле'}`;
     if (f.isAdvanced) advanced.push(line);
     else main.push(line);
   }
@@ -53,59 +52,58 @@ function BlockCardInnerContent({ block }: { block: BlockCatalogItem }) {
   const hints = guide?.friendlyFieldHints;
   const { main, advanced } = formatConfigureLines(block, hints);
 
-  if (block.id === 'message') {
-    return <MessageBlockDocContent />;
-  }
-
-  if (guide) {
+  if (!guide) {
     return (
-      <>
-        <section>
-          <h4 className="text-sm font-medium text-[var(--accent)] mb-1">Что делает</h4>
-          <p className="text-sm text-[var(--text-muted)] leading-relaxed">{guide.whatItDoes}</p>
-        </section>
-        <section>
-          <h4 className="text-sm font-medium text-[var(--accent)] mb-1">Когда использовать</h4>
-          <p className="text-sm text-[var(--text-muted)] leading-relaxed">{guide.whenToUse}</p>
-        </section>
-        <section>
-          <h4 className="text-sm font-medium text-[var(--accent)] mb-1">Что нужно настроить</h4>
-          {main.length === 0 && advanced.length === 0 ? (
-            <p className="text-sm text-[var(--text-muted)] leading-relaxed">
-              Конкретные поля этого шага отображаются в боковой панели при выборе блока в редакторе
-              сценариев — смысл настроек раскрыт в разделах выше и в примере.
-            </p>
-          ) : (
-            <>
-              <ul className="text-sm text-[var(--text-muted)] list-disc pl-5 space-y-1">
-                {main.map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
-              </ul>
-              {advanced.length > 0 && (
-                <p className="text-xs text-[var(--text-muted)] mt-2 opacity-90">
-                  Дополнительно (в расширенных настройках блока): {advanced.join(' · ')}
-                </p>
-              )}
-            </>
-          )}
-        </section>
-        <section>
-          <h4 className="text-sm font-medium text-[var(--warning)] mb-1">Типичные ошибки</h4>
-          <p className="text-sm text-[var(--text-muted)] leading-relaxed">{guide.mistakes}</p>
-        </section>
-        <section>
-          <h4 className="text-sm font-medium text-[var(--accent)] mb-1">Пример</h4>
-          <p className="text-sm text-[var(--text-muted)] leading-relaxed">{guide.example}</p>
-        </section>
-      </>
+      <p className="text-sm text-[var(--text-muted)]">
+        Текст для этого блока не найден в справочнике. Откройте настройки блока в редакторе
+        сценария.
+      </p>
     );
   }
 
   return (
-    <p className="text-sm text-[var(--text-muted)]">
-      Подсказка для этого блока в разработке. Смотрите подписи полей в редакторе.
-    </p>
+    <>
+      {GUIDE_SECTIONS_BEFORE_CONFIGURE.map(({ title, key }) => (
+        <section key={key}>
+          <h4 className="text-sm font-medium text-[var(--accent)] mb-1">{title}</h4>
+          <p className="text-sm text-[var(--text-muted)] leading-relaxed">{guide[key]}</p>
+        </section>
+      ))}
+      <section>
+        <h4 className="text-sm font-medium text-[var(--accent)] mb-1">Что нужно настроить</h4>
+        <p className="text-sm text-[var(--text-muted)] leading-relaxed mb-2">
+          {guide.whatToConfigure}
+        </p>
+        {main.length === 0 && advanced.length === 0 ? null : (
+          <>
+            <ul className="text-sm text-[var(--text-muted)] list-disc pl-5 space-y-1">
+              {main.map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+            {advanced.length > 0 && (
+              <p className="text-xs text-[var(--text-muted)] mt-2 opacity-90">
+                Расширенные настройки блока: {advanced.join(' · ')}
+              </p>
+            )}
+          </>
+        )}
+      </section>
+      {GUIDE_SECTIONS_AFTER_CONFIGURE.map(({ title, key }) => (
+        <section key={key}>
+          <h4 className="text-sm font-medium text-[var(--accent)] mb-1">{title}</h4>
+          <p className="text-sm text-[var(--text-muted)] leading-relaxed">{guide[key]}</p>
+        </section>
+      ))}
+      <section>
+        <h4 className="text-sm font-medium text-[var(--accent)] mb-1">Чек-лист</h4>
+        <ul className="text-sm text-[var(--text-muted)] list-disc pl-5 space-y-1">
+          {guide.checklist.map((item, i) => (
+            <li key={i}>{item}</li>
+          ))}
+        </ul>
+      </section>
+    </>
   );
 }
 
@@ -299,11 +297,16 @@ export default function FeaturesPage() {
         learnTitle,
         b.description,
         teaser,
-        g?.whatItDoes,
+        g?.purpose,
         g?.whenToUse,
+        g?.whenNotToUse,
+        g?.whatToConfigure,
+        g?.limitations,
+        g?.howItWorks,
+        g?.howPreviewWorks,
         g?.mistakes,
         g?.example,
-        b.id === 'message' ? editorBlockMessageMd : '',
+        g?.checklist?.join(' '),
         CATEGORY_LABELS[b.category],
       ]
         .filter(Boolean)

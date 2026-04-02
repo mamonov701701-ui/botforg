@@ -135,7 +135,16 @@ export async function loginEmail(email: string, password: string) {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || errorData.message || 'Ошибка входа');
+    const detail = errorData.detail;
+    let message = 'Ошибка входа';
+    if (typeof detail === 'string') {
+      message = detail;
+    } else if (Array.isArray(detail) && detail[0]?.msg) {
+      message = String(detail[0].msg);
+    } else if (errorData.message) {
+      message = String(errorData.message);
+    }
+    throw new Error(message);
   }
 
   const data = await response.json();

@@ -47,7 +47,6 @@ from backend.routers import channels as channels_router
 from backend.routers import channel_webhooks as channel_webhooks_router
 from backend.routers import max as max_router
 from backend.routers import whatsapp as whatsapp_router
-from backend.middleware.pd_access_log import PDAccessLogMiddleware
 import backend.channels  # noqa: F401 — регистрация адаптеров каналов
 from backend.settings import settings
 
@@ -70,9 +69,8 @@ app.add_middleware(
     same_site="lax",
 )
 
-# Логирование доступа к ПДн (152-ФЗ)
-app.add_middleware(PDAccessLogMiddleware)
-# Добавляем security middleware
+# Security: чистый ASGI (SecurityASGIMiddleware), не второй BaseHTTPMiddleware — иначе uvicorn + POST ломаются.
+# ПДн-лог в том же слое. Рядом только SessionMiddleware (BaseHTTPMiddleware) — см. backend/middleware/security.py
 app.add_middleware(SecurityMiddleware)
 
 # Настройка CORS - разрешаем localhost + туннели

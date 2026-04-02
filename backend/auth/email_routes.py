@@ -163,10 +163,10 @@ async def login(
     except HTTPException:
         raise
     except Exception as e:
-        # Log the actual error
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        logger.exception("login internal error: %s", e)
+        if settings.ENVIRONMENT == "development":
+            raise HTTPException(status_code=500, detail=f"Ошибка входа: {e!s}")
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
 @router.get("/verify")

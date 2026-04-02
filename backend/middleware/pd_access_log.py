@@ -1,4 +1,7 @@
-"""Логирование доступа к персональным данным (152-ФЗ): endpoint + user_id + timestamp."""
+"""Устарело: логирование ПДн перенесено в SecurityASGIMiddleware (см. backend/middleware/security.py).
+
+Файл сохранён для справки по формату логов модуля pd_access.
+"""
 import logging
 from datetime import datetime, timezone
 

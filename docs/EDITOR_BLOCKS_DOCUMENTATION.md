@@ -259,7 +259,7 @@ BlockSettingsPanel/
 - ✅ Инспектор для отладки (вывод в консоль)
 - ✅ Справка по блоку
 
-### 4.3 Страница «Возможности», обучающий каталог и инструкция блока «Сообщение»
+### 4.3 Страница «Возможности», обучающий каталог и единая справка по блокам
 
 📁 **Маршрут:** `/features` (вкладка с подписью «Блоки редактора», query-параметр `?tab=blocks`).
 
@@ -267,15 +267,14 @@ BlockSettingsPanel/
 
 **Исходники интерфейса:**
 - `frontend/src/pages/features/FeaturesPage.tsx` — вкладки раздела, поиск, фильтр категорий, аккордеон карточек (одновременно раскрыта не более одной карточки).
-- `frontend/src/pages/features/learnCatalogFallback.ts` — локальный каталог блоков, если API недоступен.
-- `frontend/src/pages/features/blockGuideRu.ts` — обучающие тексты и краткие подписи карточек (`LEARNING_BLOCK_TEASER`).
-- `frontend/src/pages/features/renderDocMarkdown.ts` — преобразование Markdown в безопасный HTML (библиотека `marked`, очистка `DOMPurify`).
+- `frontend/src/pages/features/learnCatalogFallback.ts` — локальный каталог блоков, если ответ сервера с каталогом недоступен.
+- `frontend/src/pages/features/blockGuideRu.ts` — **единый** пользовательский текст по всем блокам (десять разделов на блок), краткие подписи карточек (`LEARNING_BLOCK_TEASER`, `LEARNING_BLOCK_TITLE`).
 
-**Инструкция блока «Сообщение»:** единственный источник текста для полной справки в карточке — файл **`docs/user/editor_block_message.md`**, импортируется в сборку как «сырой» текст (`*.md?raw`). При изменении инструкции править только этот файл.
+**Где править инструкции:** `frontend/src/pages/features/blockGuideRu.ts` (объект `BLOCK_GUIDE_RU`). Файл `docs/user/editor_block_message.md` содержит только указатель на этот исходник.
 
 **Каталог с сервера:** список блоков и схемы полей подмешиваются из `GET /blocks/learn-catalog` (см. `frontend/src/api/blocks.ts`); в интерфейсе обучения показываются только блоки из списка `frontend/src/constants/simulatorSupportedBlocks.ts`.
 
-**Техническая спека блока «Сообщение» (для разработки и агентов):** `docs/technical/block_message_spec.md`.
+**Техническая справка по всем блокам для агента:** `docs/technical/editor_blocks_bf_agent.md`. Отчёт о стандартизации: `docs/technical/EDITOR_BLOCKS_STANDARDIZATION_REPORT.md`. Узкоспециальная спека сообщения (если актуальна): `docs/technical/block_message_spec.md`.
 
 ---
 

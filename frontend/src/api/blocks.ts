@@ -6,11 +6,12 @@
 import { get } from './client';
 import { BlockCatalogItem } from '../types/blocks';
 
-/** URL каталога для страницы «Возможности»: прокси dev или явный backend через VITE_API_URL */
+import { apiOrigin } from './devApiOrigin';
+
+/** Каталог блоков: в dev — только прокси Vite; в prod — VITE_API_URL при необходимости. */
 function resolveLearnCatalogUrl(): string {
-  const raw = import.meta.env.VITE_API_URL;
-  if (typeof raw === 'string' && raw.trim() !== '') {
-    const base = raw.replace(/\/$/, '');
+  const base = apiOrigin();
+  if (base) {
     return `${base}/blocks/learn-catalog`;
   }
   return '/blocks/learn-catalog';

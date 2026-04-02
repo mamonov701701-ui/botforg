@@ -20,16 +20,9 @@ python test_all_login.py
    Get-NetTCPConnection -LocalPort 8001 -State Listen
    ```
 
-2. Если нет — запустите:
-   ```powershell
-   cd backend
-   .\venv\Scripts\Activate.ps1
-   uvicorn main:app --reload --port 8001
-   ```
+2. Если нет — из **корня репозитория**: `npm run dev` или `.\scripts\start-dev.ps1` (поднимает и backend, и frontend; см. [DEV_PORTS.md](./DEV_PORTS.md)).
 
-3. Проверьте файл `frontend/src/api/useAuthApi.js`:
-   - API_URL должен быть `http://localhost:8001`
-   - Content-Type должен быть `application/x-www-form-urlencoded`
+3. Вход в ЛК идёт через **`POST /auth/email/login`** (JSON), см. `frontend/src/api/auth.ts`. Убедитесь, что открываете приложение как **`http://localhost:5173`**, а не HTML-файл с диска (иначе нет прокси на `/auth`).
 
 ---
 
@@ -96,10 +89,7 @@ cd backend
 ## Проверка конфигурации
 
 ### .env файл
-Файл должен называться `.env.development` (с точкой!) и содержать:
-```
-VITE_API_URL=http://localhost:8001
-```
+Файл `frontend/.env.development` с `VITE_API_URL=http://localhost:8001` нужен для **production build / preview**. В **Vite dev** запросы из `client.ts` идут относительно `http://localhost:5173` и проксируются на 8001 — прямой `:8001` из браузера не обязателен и для медиа отключён намеренно (`devApiOrigin.ts`).
 
 ### vite.config.js
 Должен содержать прокси:
@@ -112,10 +102,9 @@ proxy: {
 }
 ```
 
-### useAuthApi.js
-```javascript
-const API_URL = 'http://localhost:8001'; // НЕ 8000!
-```
+### Клиент API (актуально)
+- `frontend/src/api/client.ts` — относительные URL в dev (через прокси Vite).
+- `frontend/src/api/devApiOrigin.ts` — в dev не подставляет `http://localhost:8001` для медиа/каталогов.
 
 ---
 

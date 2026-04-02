@@ -1,165 +1,170 @@
+"""
+Безопасность и логирование доступа к ПДн (152-ФЗ).
+
+ВАЖНО: не использовать второй слой BaseHTTPMiddleware поверх SessionMiddleware —
+под uvicorn это даёт anyio.EndOfStream и ложный 500 на POST с телом (/auth/email/login).
+
+Основной стек — класс SecurityASGIMiddleware (чистый ASGI, без BaseHTTPMiddleware).
+"""
+
+import json
 import logging
-import re
 import time
-import traceback
 from collections import defaultdict
+from http.cookies import SimpleCookie
 from typing import Dict
 
-from fastapi import Request, Response
-from fastapi.responses import JSONResponse
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Receive, Scope, Send
 
+from backend.core.security import verify_jwt_token
 from backend.settings import settings
 
-# Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+pd_logger = logging.getLogger("pd_access")
+
+_PD_ACCESS_PREFIXES = ("/me", "/legal/consent", "/privacy")
+
+_SECURITY_RESPONSE_HEADERS: list[tuple[bytes, bytes]] = [
+    (b"x-frame-options", b"DENY"),
+    (b"x-content-type-options", b"nosniff"),
+    (b"referrer-policy", b"no-referrer"),
+    (b"x-xss-protection", b"1; mode=block"),
+]
 
 
-class SecurityMiddleware(BaseHTTPMiddleware):
+def _session_from_cookie(cookie_header: str | None) -> str | None:
+    if not cookie_header:
+        return None
+    jar = SimpleCookie()
+    jar.load(cookie_header)
+    morsel = jar.get("session")
+    return morsel.value if morsel else None
+
+
+def _pd_user_id_from_headers(headers: Headers) -> int | None:
+    auth = headers.get("authorization")
+    if auth and auth.lower().startswith("bearer "):
+        token = auth[7:].strip()
+        user_id, _ = verify_jwt_token(token)
+        return user_id
+    ch = headers.get("cookie")
+    sid = _session_from_cookie(ch)
+    if sid:
+        user_id, _ = verify_jwt_token(sid)
+        return user_id
+    return None
+
+
+async def _send_json(send: Send, status: int, payload: dict) -> None:
+    body = json.dumps(payload).encode("utf-8")
+    hdrs = [
+        [b"content-type", b"application/json; charset=utf-8"],
+        *_SECURITY_RESPONSE_HEADERS,
+    ]
+    await send({"type": "http.response.start", "status": status, "headers": hdrs})
+    await send({"type": "http.response.body", "body": body})
+
+
+class SecurityASGIMiddleware:
+    """
+    Чистый ASGI: не наследует BaseHTTPMiddleware.
+    Совместим с SessionMiddleware (единственный BaseHTTPMiddleware в цепочке до приложения).
+    """
+
     def __init__(self, app: ASGIApp):
-        super().__init__(app)
+        self.app = app
         self.rate_limit_store: Dict[str, list] = defaultdict(list)
-        self.max_requests = 1000  # Увеличиваем лимит для тестов
+        self.max_requests = 1000
         self.window_seconds = 60
 
-    async def dispatch(self, request: Request, call_next):
-        # Отключаем rate limiting в тестовом режиме
-        if settings.TESTING:
-            response = await call_next(request)
-            # Добавляем заголовки безопасности
-            response.headers["X-Frame-Options"] = "DENY"
-            response.headers["X-Content-Type-Options"] = "nosniff"
-            response.headers["Referrer-Policy"] = "no-referrer"
-            response.headers["X-XSS-Protection"] = "1; mode=block"
-            return response
-
-        client_ip = self._get_client_ip(request)
-
-        if getattr(settings, "ENVIRONMENT", "") != "development":
-            if not self._check_rate_limit(client_ip):
-                logger.warning(f"Rate limit exceeded for IP: {client_ip}")
-                return JSONResponse(
-                    status_code=429, content={"detail": "Too many requests"}
-                )
-
-        self._log_request(request, client_ip)
-        try:
-            response = await call_next(request)
-        except Exception as exc:
-            from fastapi import HTTPException
-            if isinstance(exc, HTTPException):
-                raise
-            logger.exception("Unhandled in middleware: %s", exc)
-            if getattr(settings, "ENVIRONMENT", "") == "development":
-                tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-                return JSONResponse(
-                    status_code=500,
-                    content={"detail": f"{exc!s}\n\n{tb}"},
-                )
-            return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
-
-        # Добавляем заголовки безопасности
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-
-        self._log_response(response, client_ip)
-        return response
-
-    def _get_client_ip(self, request: Request) -> str:
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
+    def _client_ip(self, scope: Scope, req_headers: Headers) -> str:
+        xff = req_headers.get("x-forwarded-for")
+        if xff:
+            return xff.split(",")[0].strip()
+        client = scope.get("client")
+        return client[0] if client else "unknown"
 
     def _check_rate_limit(self, client_ip: str) -> bool:
         now = time.time()
-        requests = self.rate_limit_store[client_ip]
-        requests = [
-            req_time for req_time in requests if now - req_time < self.window_seconds
-        ]
-        self.rate_limit_store[client_ip] = requests
-
-        if len(requests) >= self.max_requests:
+        window = self.rate_limit_store[client_ip]
+        window = [t for t in window if now - t < self.window_seconds]
+        self.rate_limit_store[client_ip] = window
+        if len(window) >= self.max_requests:
             return False
-
-        requests.append(now)
+        window.append(now)
         return True
 
-    def _log_request(self, request: Request, client_ip: str):
-        path = request.url.path
-        method = request.method
-        logger.info(f"Request: {method} {path} from {client_ip}")
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-    def _log_response(self, response: Response, client_ip: str):
-        status_code = response.status_code
-        if status_code >= 400:
-            logger.warning(f"Response: {status_code} to {client_ip}")
+        req_headers = Headers(scope=scope)
+        path = scope["path"] or ""
+        method = scope["method"]
+        client_ip = self._client_ip(scope, req_headers)
+
+        if settings.TESTING:
+            async def send_testing(message: dict) -> None:
+                if message["type"] == "http.response.start":
+                    mh = MutableHeaders(raw=message["headers"])
+                    for k, v in _SECURITY_RESPONSE_HEADERS:
+                        mh.append(k.decode(), v.decode())
+                    self._log_after_start(method, path, message["status"], client_ip)
+                    self._maybe_pd(method, path, req_headers, message["status"])
+                await send(message)
+
+            self._log_request(method, path, client_ip)
+            await self.app(scope, receive, send_testing)
+            return
+
+        if getattr(settings, "ENVIRONMENT", "") != "development":
+            if not self._check_rate_limit(client_ip):
+                logger.warning("Rate limit exceeded for IP: %s", client_ip)
+                await _send_json(send, 429, {"detail": "Too many requests"})
+                return
+
+        self._log_request(method, path, client_ip)
+
+        async def send_wrapper(message: dict) -> None:
+            if message["type"] == "http.response.start":
+                mh = MutableHeaders(raw=message["headers"])
+                for k, v in _SECURITY_RESPONSE_HEADERS:
+                    mh.append(k.decode(), v.decode())
+                status = message["status"]
+                self._log_after_start(method, path, status, client_ip)
+                self._maybe_pd(method, path, req_headers, status)
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+    def _log_request(self, method: str, path: str, client_ip: str) -> None:
+        logger.info("Request: %s %s from %s", method, path, client_ip)
+
+    def _log_after_start(self, method: str, path: str, status: int, client_ip: str) -> None:
+        if status >= 400:
+            logger.warning("Response: %s to %s (%s %s)", status, client_ip, method, path)
         else:
-            logger.info(f"Response: {status_code} to {client_ip}")
+            logger.info("Response: %s to %s (%s %s)", status, client_ip, method, path)
+
+    def _maybe_pd(self, method: str, path: str, headers: Headers, status: int) -> None:
+        if not any(path == p or path.startswith(p + "/") for p in _PD_ACCESS_PREFIXES):
+            return
+        from datetime import datetime, timezone
+
+        user_id = _pd_user_id_from_headers(headers)
+        ts = datetime.now(timezone.utc).isoformat()
+        pd_logger.info(
+            "PD_ACCESS endpoint=%s method=%s user_id=%s timestamp=%s status=%s",
+            path,
+            method,
+            user_id,
+            ts,
+            status,
+        )
 
 
-class InputValidationMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app: ASGIApp):
-        super().__init__(app)
-
-    async def dispatch(self, request: Request, call_next):
-        # Проверяем заголовки на подозрительные паттерны
-        if self._has_suspicious_headers(request):
-            logger.warning(f"Suspicious headers from {request.client.host}")
-            return JSONResponse(
-                status_code=400, content={"detail": "Invalid request headers"}
-            )
-
-        # Проверяем body на SQL инъекции (если есть)
-        if request.method in ["POST", "PUT", "PATCH"]:
-            try:
-                body = await request.body()
-                if body and self._has_sql_injection(body.decode()):
-                    logger.warning(
-                        f"Potential SQL injection from {request.client.host}"
-                    )
-                    return JSONResponse(
-                        status_code=400, content={"detail": "Invalid request data"}
-                    )
-            except Exception:
-                # Silently continue if body parsing fails (e.g., not JSON)
-                pass
-
-        return await call_next(request)
-
-    def _has_suspicious_headers(self, request: Request) -> bool:
-        """Проверяем подозрительные заголовки"""
-        suspicious_patterns = [
-            r"<script",
-            r"javascript:",
-            r"on\w+\s*=",
-            r"union\s+select",
-            r"drop\s+table",
-            r"delete\s+from",
-        ]
-
-        for header_name, header_value in request.headers.items():
-            for pattern in suspicious_patterns:
-                if re.search(pattern, header_value, re.IGNORECASE):
-                    return True
-        return False
-
-    def _has_sql_injection(self, content: str) -> bool:
-        """Проверяем на SQL инъекции"""
-        sql_patterns = [
-            r"(\b(union|select|insert|update|delete|drop|create|alter)\b)",
-            r"(\b(and|or)\b\s+\d+\s*=\s*\d+)",
-            r"(\b(and|or)\b\s+['\"]\w+['\"]\s*=\s*['\"]\w+['\"])",
-            r"(--|\#|\/\*)",
-            r"(\bxp_cmdshell\b)",
-            r"(\bexec\b\s*\()",
-        ]
-
-        for pattern in sql_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                return True
-        return False
+# Обратная совместимость импорта в main.py / тестах
+SecurityMiddleware = SecurityASGIMiddleware

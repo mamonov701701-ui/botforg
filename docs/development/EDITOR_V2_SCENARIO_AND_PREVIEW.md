@@ -64,4 +64,4 @@
 - `frontend/src/features/simulator/scenarioRunner.ts`
 - `frontend/src/stores/scenarioStore.ts`
 - `frontend/src/pages/features/FeaturesPage.tsx` — раздел «Возможности», вкладка «Блоки редактора»; ссылка из редактора (`/features?tab=blocks`).
-- `docs/user/editor_block_message.md` — пользовательская инструкция по блоку «Сообщение» для этой вкладки.
+- `frontend/src/pages/features/blockGuideRu.ts` — пользовательские инструкции по всем блокам для вкладки «Блоки редактора»; `docs/user/editor_block_message.md` — указатель на этот исходник.

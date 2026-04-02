@@ -4,11 +4,12 @@
 
 ---
 
-## 📅 Последнее обновление: 26.03.2026
+## 📅 Последнее обновление: 31.03.2026
 
 ### ✅ Добавлено:
-- **Раздел «Возможности» → «Блоки редактора»** (`/features`, вкладка с подписью «Блоки редактора») — карточки блоков в режиме аккордеона: краткое описание и кнопка «Открыть инструкцию»; полный текст для блока «Сообщение» подгружается из файла [user/editor_block_message.md](./user/editor_block_message.md) без дублирования в коде. Техническая спека блока для разработки: [technical/block_message_spec.md](./technical/block_message_spec.md). Подробности в разделе 4.3 файла [EDITOR_BLOCKS_DOCUMENTATION.md](./EDITOR_BLOCKS_DOCUMENTATION.md).
+- **Раздел «Возможности» → «Блоки редактора»** (`/features`, вкладка с подписью «Блоки редактора») — карточки блоков в режиме аккордеона: краткое описание и единый текст инструкции по всем блокам из исходника `frontend/src/pages/features/blockGuideRu.ts`. Обзор для агента: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md); отчёт о приведении к одному формату: [technical/EDITOR_BLOCKS_STANDARDIZATION_REPORT.md](./technical/EDITOR_BLOCKS_STANDARDIZATION_REPORT.md). Подробности в разделе 4.3 файла [EDITOR_BLOCKS_DOCUMENTATION.md](./EDITOR_BLOCKS_DOCUMENTATION.md).
 - **Редактор V2 — хаб сценариев** — компактное меню сценария бота, модалки «новый сценарий» и «добавить из моих» (копия в текущего бота), нормализация рёбер под handles узлов, предпросмотр без краша по контракту `context` / `RunStepResult`. См. [EDITOR_V2_SCENARIO_AND_PREVIEW.md](./development/EDITOR_V2_SCENARIO_AND_PREVIEW.md).
+- **Авторизация и middleware** — практические заметки по цепочке запросов и телу `POST`: [development/AUTH_AND_MIDDLEWARE.md](./development/AUTH_AND_MIDDLEWARE.md).
 
 ### ✅ Ранее в продукте:
 - **Модерация шаблонов маркетплейса** — жизненный цикл: draft → pending → approved/rejected
@@ -18,8 +19,8 @@
 ### ✅ Исправления:
 - **Предпросмотр сценария** — контракт `context` из `scenarioRunner`, нормализация handles рёбер
 - **Редактор сценариев** - исправлена проблема с исчезновением блоков после перетаскивания
-- **Авторизация** - модальное окно входа/регистрации работает корректно
-- **Документация** - обновлены инструкции по входу и сбросу пароля
+- **Авторизация и локальный запуск** — доработаны маршруты входа, middleware и скрипт `start-dev`; подробности в [LOGIN_TROUBLESHOOTING.md](./LOGIN_TROUBLESHOOTING.md) и [AUTH_AND_MIDDLEWARE.md](./development/AUTH_AND_MIDDLEWARE.md)
+- **Документация** - обновлены инструкции по входу, портам и справке блоков редактора
 
 ### 👤 Данные для входа:
 ```
@@ -59,7 +60,7 @@
 - [Основная инструкция по работе](./user/ИНСТРУКЦИЯ.md) - полное руководство для пользователей
 - [Быстрый старт](./user/QUICK_START.md) - запуск системы сценариев за 3 шага
 - [Тестирование сценариев](./user/TESTING_SCENARIOS.md) - инструкция по тестированию
-- [Инструкция по блоку «Сообщение»](./user/editor_block_message.md) - текст для экрана «Возможности» → «Блоки редактора» (источник для интерфейса)
+- [Указатель на справку по блоку «Сообщение»](./user/editor_block_message.md) — актуальный текст в коде: `blockGuideRu.ts`; техническая справка агента: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md)
 
 ### **Техническая документация** (`technical/`)
 - [API Документация](./technical/API_DOCS.md) - полное описание REST API
@@ -69,6 +70,7 @@
 ### **Документация разработки** (`development/`)
 - [Статус готовности системы](./development/SYSTEM_READY.md) - текущее состояние проекта
 - [Редактор V2: сценарии и предпросмотр](./development/EDITOR_V2_SCENARIO_AND_PREVIEW.md) — store, handles, BotSimulator
+- [Авторизация и middleware (uvicorn, POST-тело)](./development/AUTH_AND_MIDDLEWARE.md) — почему нельзя два BaseHTTPMiddleware подряд с Session
 
 ---
 

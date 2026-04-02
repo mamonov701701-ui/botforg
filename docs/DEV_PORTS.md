@@ -9,24 +9,26 @@
 
 ## Где это настроено
 
+- **`npm run dev`** в **корне репозитория** (обёртка над `scripts/start-dev.ps1`, Windows).
 - `scripts/start-dev.ps1` (Windows, одна команда из корня репозитория)  
-  - Освобождает порты `8001`, `5173` и запасной `5174` (если Vite ушёл на него).  
-  - `python -m alembic upgrade head`, затем фоновый backend с `--reload` и фоновый frontend.  
-  - Логи: `scripts/.dev-backend-YYYYMMDD-HHMMSS.log`, `scripts/.dev-frontend-YYYYMMDD-HHMMSS.log` (новые имена на каждый запуск).  
-  - После старта проверяет `http://127.0.0.1:8001/healthz` и `http://127.0.0.1:5173/`; при ошибке выводит хвост логов и завершается с кодом `1`.  
+  - Текст в консоли — **на английском** (совместимость **Windows PowerShell 5.1** и UTF-8 без BOM: кириллица в том же файле ломала разбор скрипта).  
+  - Освобождает порты `8001`, `5173`, `5174`.  
+  - **Python:** предпочтительно `backend\venv\Scripts\python.exe` (тот же интерпретатор, что для uvicorn); иначе `python` из PATH.  
+  - `$pyExe -m alembic upgrade head`, затем фоновый backend и фоновый `npm run dev` во frontend.  
+  - Логи: `scripts/.dev-backend-YYYYMMDD-HHMMSS.log`, `scripts/.dev-frontend-YYYYMMDD-HHMMSS.log`.  
+  - После старта: `GET /healthz`, `GET` фронта, **`POST /auth/email/login`** (ожидается **401** или **422**, не **500**).  
 - `scripts/stop-dev.ps1` — остановка процессов на портах `8001`, `5173`, `5174`.
 
 - `frontend/vite.config.js`
-  - `server.port = 5173`
-  - `proxy` для API:
-    - `/auth`, `/api`, `/blocks`, `/scenarios`, `/me`, `/bots`, `/analytics`, `/chat`, `/legal`, `/privacy`, `/plans`
-    - **target всегда**: `http://localhost:8001`
+  - `server.port = 5173`, **`strictPort: true`** (если порт занят — ошибка, а не тихий переход на 5174)
+  - `resolve.alias`: `@` → `src`
+  - `proxy` для API (всё на `http://localhost:8001`):
+    - `/auth`, `/api`, `/blocks`, `/scenarios`, `/me`, `/bots`, `/analytics`, `/chat`, `/legal`, `/privacy`, `/plans`, **`/media`**, **`/uploads`**
 
 - `frontend/.env.development`
-  - `VITE_API_URL=http://localhost:8001`
+  - `VITE_API_URL` используется **в production-сборке**; **в dev** запросы API идут **относительными путями** через прокси (`src/api/devApiOrigin.ts`), чтобы не было прямых обращений к `:8001` из браузера и типичного `ERR_CONNECTION_REFUSED`, если открыт только фронт.
 
-- `frontend/src/api/useAuthApi.js`
-  - `const API_URL = 'http://localhost:8001'; // НЕ 8000!`
+- **Вход в ЛК:** только `POST /auth/email/login` (JSON) — см. `frontend/src/api/auth.ts`, модалка `features/auth/AuthModal.tsx`. Устаревший `/auth/login` (form) в dev не используется.
 
 ## Правила для разработки
 

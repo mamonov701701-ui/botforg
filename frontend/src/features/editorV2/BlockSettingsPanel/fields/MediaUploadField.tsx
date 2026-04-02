@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, Link as LinkIcon, X, CheckCircle, AlertCircle } from 'lucide-react';
 import { uploadMedia } from '../../../../api/media';
+import { apiOrigin } from '../../../../api/devApiOrigin';
 
 interface MediaUploadFieldProps {
   value: string;
@@ -82,9 +83,10 @@ export const MediaUploadField: React.FC<MediaUploadFieldProps> = ({
     try {
       const result = await uploadMedia(file);
 
-      // Формируем полный URL
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      const fullUrl = result.url.startsWith('http') ? result.url : `${API_URL}${result.url}`;
+      const origin = apiOrigin();
+      const fullUrl = result.url.startsWith('http')
+        ? result.url
+        : `${origin}${result.url.startsWith('/') ? '' : '/'}${result.url}`;
       onChange(fullUrl);
       setUploadError(null);
     } catch (err: any) {

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, Link as LinkIcon, CheckCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { uploadMedia } from '../../../../api/media';
+import { apiOrigin } from '../../../../api/devApiOrigin';
 import {
   fileInputAcceptForMessageMedia,
   fileMatchesDeclaredMessageMedia,
@@ -87,8 +88,10 @@ export const MediaListField: React.FC<MediaListFieldProps> = ({
 
     try {
       const result = await uploadMedia(file);
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
-      const fullUrl = result.url.startsWith('http') ? result.url : `${API_URL}${result.url}`;
+      const origin = apiOrigin();
+      const fullUrl = result.url.startsWith('http')
+        ? result.url
+        : `${origin}${result.url.startsWith('/') ? '' : '/'}${result.url}`;
 
       const itemType = mediaType && mediaType !== 'none' ? mediaType : detectedType;
       const newItem: MediaItem = {

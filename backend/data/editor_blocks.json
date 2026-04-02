@@ -33,7 +33,7 @@
         "type": "text",
         "label": "Что отправить пользователю?",
         "required": true,
-        "description": "Напишите текст сообщения. Можно использовать переменные в формате {{имя}}",
+        "description": "Текст сообщения. Допускаются подстановки в двойных фигурных скобках по правилам редактора.",
         "placeholder": "Например: Здравствуйте! Рады вас видеть!"
       },
       {
@@ -51,7 +51,7 @@
         "options": [
           {"value": "none", "label": "Без медиа"},
           {"value": "image", "label": "Картинка / фото"},
-          {"value": "gif", "label": "GIF / анимация"},
+          {"value": "gif", "label": "Гиф / анимация"},
           {"value": "video", "label": "Видео"}
         ],
         "default": "none",
@@ -76,11 +76,11 @@
         "required": false,
         "options": [
           {"value": "Plain", "label": "Обычный текст"},
-          {"value": "Markdown", "label": "Markdown (жирный, курсив, ссылки)"},
-          {"value": "HTML", "label": "HTML"}
+          {"value": "Markdown", "label": "Формат с разметкой (жирный, курсив, ссылки)"},
+          {"value": "HTML", "label": "Формат разметки"}
         ],
         "default": "Plain",
-        "description": "В предпросмотре чата: обычный текст; Markdown (**жирный**, __курсив__, [ссылки](url)); HTML (ограниченный набор тегов через санитайзер). В Telegram итог может отличаться.",
+        "description": "В предпросмотре чата: обычный текст; формат с разметкой (**жирный**, __курсив__, [текст ссылки](полный интернет-адрес)); формат разметки (ограниченный набор тегов через санитайзер). В конечном канале отображение задаётся правилами выбранного канала.",
         "isAdvanced": true
       },
       {
@@ -95,10 +95,10 @@
       {
         "name": "saveLastMessageId",
         "type": "boolean",
-        "label": "Сохранить ID сообщения",
+        "label": "Сохранить идентификатор сообщения",
         "required": false,
         "default": false,
-        "description": "Если включено, бот сможет редактировать это сообщение позже",
+        "description": "Если включено, бот сможет править это сообщение позже в мессенджере",
         "isAdvanced": true
       }
     ]
@@ -183,7 +183,15 @@
         "type": "select",
         "label": "Оператор",
         "required": true,
-        "options": ["equals", "notEquals", "contains", "greaterThan", "lessThan", "isEmpty", "isNotEmpty"]
+        "options": [
+          {"value": "equals", "label": "Равно"},
+          {"value": "notEquals", "label": "Не равно"},
+          {"value": "contains", "label": "Содержит"},
+          {"value": "greaterThan", "label": "Больше"},
+          {"value": "lessThan", "label": "Меньше"},
+          {"value": "isEmpty", "label": "Пусто"},
+          {"value": "isNotEmpty", "label": "Не пусто"}
+        ]
       },
       {
         "name": "value",
@@ -270,7 +278,13 @@
         "type": "select",
         "label": "Тип",
         "required": false,
-        "options": ["string", "number", "boolean", "object", "array"],
+        "options": [
+          {"value": "string", "label": "Текст"},
+          {"value": "number", "label": "Число"},
+          {"value": "boolean", "label": "Да или нет"},
+          {"value": "object", "label": "Объект"},
+          {"value": "array", "label": "Список"}
+        ],
         "default": "string"
       },
       {
@@ -278,7 +292,11 @@
         "type": "select",
         "label": "Область видимости",
         "required": false,
-        "options": ["local", "session", "global"],
+        "options": [
+          {"value": "local", "label": "Локально"},
+          {"value": "session", "label": "Сессия"},
+          {"value": "global", "label": "Общая"}
+        ],
         "default": "session"
       }
     ]
@@ -312,7 +330,7 @@
         "type": "string",
         "label": "Значение для переменной",
         "required": false,
-        "description": "Можно ввести $lastUserInput, чтобы подставить последний ответ пользователя"
+        "description": "Можно ввести строку подстановки последнего ответа пользователя из подсказки редактора к этому полю."
       }
     ]
   }

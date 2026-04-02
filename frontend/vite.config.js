@@ -6,6 +6,11 @@ import react from '@vitejs/plugin-react';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
   plugins: [
     react(),
     {
@@ -40,7 +45,8 @@ export default defineConfig({
     // Backend API (см. proxy ниже): http://localhost:8001
     host: '0.0.0.0',
     port: 5173,
-    strictPort: false,
+    // Иначе при занятом 5173 Vite уходит на 5174, а start-dev.ps1 и документация ждут только 5173
+    strictPort: true,
     cors: true,
     fs: {
       allow: [path.resolve(__dirname, '..')],
@@ -97,6 +103,16 @@ export default defineConfig({
         secure: false,
       },
       '/plans': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/media': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/uploads': {
         target: 'http://localhost:8001',
         changeOrigin: true,
         secure: false,

@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+import { apiOrigin } from './devApiOrigin';
 
 export interface MediaUploadResponse {
   url: string;
@@ -12,7 +12,8 @@ export async function uploadMedia(file: File): Promise<MediaUploadResponse> {
 
   const token = localStorage.getItem('auth_token');
 
-  const response = await fetch(`${API_URL}/media/upload`, {
+  const base = apiOrigin();
+  const response = await fetch(`${base}/media/upload`, {
     method: 'POST',
     body: formData,
     credentials: 'include',
@@ -32,7 +33,8 @@ export async function uploadMedia(file: File): Promise<MediaUploadResponse> {
 export async function deleteMedia(filename: string): Promise<void> {
   const token = localStorage.getItem('auth_token');
 
-  const response = await fetch(`${API_URL}/media/${filename}`, {
+  const base = apiOrigin();
+  const response = await fetch(`${base}/media/${filename}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: {
