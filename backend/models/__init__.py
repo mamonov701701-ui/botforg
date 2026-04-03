@@ -39,6 +39,20 @@ from backend.models.market import (
 )
 from backend.models.legal import Consent
 from backend.models.plan import Plan
+from backend.models.constructor_core import (
+    PlatformUser,
+    CtorBot,
+    CtorBotUser,
+    CtorScenario,
+    CtorBlock,
+    CtorBlockEdge,
+    CtorBotVariableDefinition,
+    CtorBotUserVariable,
+    CtorBotTag,
+    CtorBotUserTag,
+    CtorBotUserSession,
+    CtorBotUserEvent,
+)
 
 __all__ = [
     "User",
@@ -96,4 +110,16 @@ __all__ = [
     "MarketOrderStatus",
     "Consent",
     "Plan",
+    "PlatformUser",
+    "CtorBot",
+    "CtorBotUser",
+    "CtorScenario",
+    "CtorBlock",
+    "CtorBlockEdge",
+    "CtorBotVariableDefinition",
+    "CtorBotUserVariable",
+    "CtorBotTag",
+    "CtorBotUserTag",
+    "CtorBotUserSession",
+    "CtorBotUserEvent",
 ]

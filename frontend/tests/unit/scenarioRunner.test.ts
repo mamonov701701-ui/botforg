@@ -434,10 +434,10 @@ describe('preview scenarios (runUntilUserPauseOrEnd)', () => {
     const graph: ScenarioGraph = {
       nodes: [
         node('s', 'start'),
-        node('in', 'input', { text: 'Имя?', variableName: 'u' }),
+        node('in', 'input', { question_text: 'Имя?', variable_key: 'u' }),
         node('m', 'message', { text: 'Ок' }),
       ],
-      edges: [edge('e1', 's', 'in'), edge('e2', 'in', 'm')],
+      edges: [edge('e1', 's', 'in'), edge('e2', 'in', 'm', { sourceHandle: 'success' })],
     };
     let sim = createInitialSimulatorState(graph);
     let r = runUntilUserPauseOrEnd(sim);
@@ -449,6 +449,44 @@ describe('preview scenarios (runUntilUserPauseOrEnd)', () => {
     r = runUntilUserPauseOrEnd(contextToSim(afterInput.context));
     expect(r.context.history.some(h => h.text === 'Ок')).toBe(true);
     expect(r.context.variables.u).toBe('Иван');
+  });
+
+  it('C2: legacy text + variableName still works', () => {
+    const graph: ScenarioGraph = {
+      nodes: [
+        node('s', 'start'),
+        node('in', 'input', { text: 'Имя?', variableName: 'legacy_u' }),
+        node('m', 'message', { text: 'Ок' }),
+      ],
+      edges: [edge('e1', 's', 'in'), edge('e2', 'in', 'm', { sourceHandle: 'success' })],
+    };
+    let sim = createInitialSimulatorState(graph);
+    let r = runUntilUserPauseOrEnd(sim);
+    sim = contextToSim(r.context);
+    const afterInput = applyUserChoice(sim, { label: 'Анн' });
+    expect(afterInput.context.variables.legacy_u).toBe('Анн');
+    expect(afterInput.context.variables.last_input).toBe('Анн');
+  });
+
+  it('C3: validation fail keeps waiting without error edge', () => {
+    const graph: ScenarioGraph = {
+      nodes: [
+        node('s', 'start'),
+        node('in', 'input', {
+          question_text: 'Число?',
+          variable_key: 'n',
+          validation: { type: 'number' },
+        }),
+      ],
+      edges: [edge('e1', 's', 'in')],
+    };
+    let sim = createInitialSimulatorState(graph);
+    let r = runUntilUserPauseOrEnd(sim);
+    sim = contextToSim(r.context);
+    const bad = applyUserChoice(sim, { label: 'не число' });
+    expect(bad.waitingForUser).toBe(true);
+    expect(bad.context.currentNodeId).toBe('in');
+    expect(bad.context.history.some(h => h.meta?.variant === 'error')).toBe(true);
   });
 
   it('D: Start → Condition → ветвление по значению', () => {

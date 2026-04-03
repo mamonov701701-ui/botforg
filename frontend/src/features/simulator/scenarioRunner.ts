@@ -10,6 +10,12 @@ import {
   parseModeForSimulator,
   type MessageMediaItem,
 } from '../../utils/messageMedia';
+import { renderForSimulator } from '../../lib/templateRender';
+import {
+  getNormalizedInputSettings,
+  migrateInputNodeSettings,
+  validateInputAnswer,
+} from '../../utils/inputBlock';
 
 /**
  * Формальная модель исполнения сценария для симулятора.
@@ -48,6 +54,9 @@ export interface SimulatorMessage {
     kind?: NodeKind;
     /** Системные подсказки и диагностика (не как обычное сообщение бота) */
     variant?: 'system' | 'error';
+    /** Блок «Ввод»: подсказка и пустой ответ для предпросмотра */
+    inputPlaceholder?: string;
+    inputAllowEmpty?: boolean;
   };
 }
 
@@ -177,6 +186,19 @@ function getOutgoingEdges(edges: Edge[], nodeId: string) {
   return edges.filter(e => e.source === nodeId);
 }
 
+function pickInputSuccessEdge(outgoing: Edge[]): Edge | null {
+  if (outgoing.length === 0) return null;
+  const bySuccess = outgoing.find(e => (e.sourceHandle || '') === 'success');
+  if (bySuccess) return bySuccess;
+  const nonError = outgoing.filter(e => (e.sourceHandle || '') !== 'error');
+  if (nonError.length > 0) return nonError[0];
+  return null;
+}
+
+function pickInputErrorEdge(outgoing: Edge[]): Edge | null {
+  return outgoing.find(e => (e.sourceHandle || '') === 'error') ?? null;
+}
+
 function systemLine(text: string, variant: 'system' | 'error' = 'system'): SimulatorMessage {
   return {
     id: `sys_${variant}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -258,11 +280,29 @@ function resolveNextNodeId(
   return outgoing[0].target;
 }
 
-function buildMessageFromNode(node: Node, kind: NodeKind): SimulatorMessage {
-  const settings: any = node.data?.settings || {};
+function buildMessageFromNode(
+  node: Node,
+  kind: NodeKind,
+  runtime?: RuntimeContext | null
+): SimulatorMessage {
+  const rawSettings = { ...((node.data?.settings || {}) as object) };
+  const settings: any =
+    kind === 'input'
+      ? migrateInputNodeSettings(rawSettings as Record<string, unknown>)
+      : rawSettings;
   const data: any = node.data || {};
-  const text: string =
-    settings.text || settings.title || data.title || data.label || `Блок ${node.id}`;
+  const rawText: string =
+    kind === 'input'
+      ? String(
+          settings.question_text ??
+            settings.text ??
+            settings.title ??
+            data.title ??
+            data.label ??
+            `Блок ${node.id}`
+        )
+      : settings.text || settings.title || data.title || data.label || `Блок ${node.id}`;
+  const text = runtime ? renderForSimulator(rawText, runtime).renderedText : rawText;
 
   const buttons:
     | {
@@ -273,12 +313,18 @@ function buildMessageFromNode(node: Node, kind: NodeKind): SimulatorMessage {
       }[]
     | undefined =
     Array.isArray(settings.buttons) && settings.buttons.length
-      ? settings.buttons.map((btn: any, index: number) => ({
-          id: btn?.id || `btn_${index}`,
-          label: btn?.label || `Вариант ${index + 1}`,
-          sourceHandle: `button_${index}`,
-          action: normalizeMessageButtonAction(btn?.action),
-        }))
+      ? settings.buttons.map((btn: any, index: number) => {
+          const rawLabel = btn?.label || `Вариант ${index + 1}`;
+          const label = runtime
+            ? renderForSimulator(String(rawLabel), runtime).renderedText
+            : rawLabel;
+          return {
+            id: btn?.id || `btn_${index}`,
+            label,
+            sourceHandle: `button_${index}`,
+            action: normalizeMessageButtonAction(btn?.action),
+          };
+        })
       : undefined;
 
   const mediaArr = normalizeMessageMediaFromSettings(settings as Record<string, unknown>);
@@ -294,6 +340,12 @@ function buildMessageFromNode(node: Node, kind: NodeKind): SimulatorMessage {
     meta: {
       nodeId: node.id,
       kind,
+      ...(kind === 'input'
+        ? {
+            inputPlaceholder: settings.placeholder ? String(settings.placeholder) : undefined,
+            inputAllowEmpty: settings.required === false,
+          }
+        : {}),
     },
   };
 }
@@ -357,7 +409,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
       return { context, waitingForUser: false };
     }
     const kind = getNodeKind(start);
-    const msg = buildMessageFromNode(start, kind);
+    const msg = buildMessageFromNode(start, kind, context);
     const hasButtons = !!msg.buttons?.length;
     const showStartBubble = shouldShowStartBubble(start);
 
@@ -424,7 +476,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
 
   switch (kind) {
     case 'message': {
-      const msg = buildMessageFromNode(node, kind);
+      const msg = buildMessageFromNode(node, kind, context);
       const hasButtons = !!msg.buttons?.length;
       if (hasButtons) {
         context = {
@@ -454,7 +506,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
     }
 
     case 'input': {
-      const msg = buildMessageFromNode(node, kind);
+      const msg = buildMessageFromNode(node, kind, context);
       context = {
         ...context,
         history: [...context.history, msg],
@@ -689,7 +741,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
     }
 
     case 'start': {
-      const msg = buildMessageFromNode(node, kind);
+      const msg = buildMessageFromNode(node, kind, context);
       const hasButtons = !!msg.buttons?.length;
       if (hasButtons) {
         context = {
@@ -726,7 +778,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
 
     case 'unknown':
     default: {
-      const msg = buildMessageFromNode(node, kind);
+      const msg = buildMessageFromNode(node, kind, context);
       const nextId = resolveNextNodeId(context, node, {});
       let hist = [...context.history, msg];
       if (nextId === null) {
@@ -890,17 +942,74 @@ export function applyUserChoice(
 
   const kind = getNodeKind(node);
 
-  let updatedVariables = { ...baseVariables };
+  const historyAfterChoice = isButtonChoice ? state.history : [...state.history, userMessage];
+
   if (kind === 'input') {
-    const data: any = node.data || {};
-    const settings: any = data.settings || {};
-    const varName: string | undefined = settings.variableName ?? settings.name;
-    if (varName) {
-      updatedVariables[varName] = payload.label;
+    const settings = migrateInputNodeSettings({ ...((node.data as any)?.settings || {}) });
+    const outgoing = getOutgoingEdges(graph.edges, node.id);
+    const errEdge = pickInputErrorEdge(outgoing);
+    const ans = validateInputAnswer(settings, payload.label);
+
+    if (!ans.ok) {
+      const errHist = [...historyAfterChoice, systemLine(ans.message, 'error')];
+      if (errEdge) {
+        return {
+          context: {
+            ...ctxFromState(state),
+            variables: { ...baseVariables },
+            lastUserInput: payload.label,
+            history: errHist,
+            currentNodeId: errEdge.target,
+          },
+          waitingForUser: false,
+        };
+      }
+      return {
+        context: {
+          ...ctxFromState(state),
+          variables: { ...baseVariables },
+          lastUserInput: payload.label,
+          history: errHist,
+          currentNodeId: state.currentNodeId,
+        },
+        waitingForUser: true,
+      };
     }
+
+    const norm = getNormalizedInputSettings(settings);
+    const varKey = norm.variable_key.trim();
+    let updatedVariables = { ...baseVariables };
+    if (varKey) {
+      updatedVariables[varKey] = ans.storedValue;
+    }
+    updatedVariables.last_input = ans.lastInputText;
+
+    const succ = pickInputSuccessEdge(outgoing);
+    let nextNodeId = succ?.target ?? null;
+    let historyAfter = historyAfterChoice;
+    if (nextNodeId === null) {
+      historyAfter = [
+        ...historyAfter,
+        systemLine(
+          'В сценарии нет перехода из блока «Ввод». Подключите исходящую связь «Успех» после ввода текста.',
+          'error'
+        ),
+      ];
+    }
+
+    return {
+      context: {
+        ...ctxFromState(state),
+        variables: updatedVariables,
+        lastUserInput: ans.lastInputText,
+        history: historyAfter,
+        currentNodeId: nextNodeId,
+      },
+      waitingForUser: false,
+    };
   }
 
-  const historyAfterChoice = isButtonChoice ? state.history : [...state.history, userMessage];
+  let updatedVariables = { ...baseVariables };
 
   if (kind === 'message' && isButtonChoice) {
     const btn = findMessageButtonByPayload(node, payload);

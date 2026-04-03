@@ -63,6 +63,9 @@ interface ChatPreviewProps {
   /** Ожидается свободный текст (блок «Ввод») */
   showTextInput?: boolean;
   onSubmitText?: (text: string) => void;
+  textInputPlaceholder?: string;
+  /** Если true — можно отправить пустую строку (блок с required: false) */
+  textInputAllowEmpty?: boolean;
   /** Сообщение, у которого кнопки сейчас активны (остальные — как архив, без клика) */
   activeButtonMessageId?: string | null;
   /** Индикатор «бот печатает» во время паузы wait */
@@ -78,6 +81,8 @@ const ChatPreview: React.FC<ChatPreviewProps> = ({
   onButtonClick,
   showTextInput = false,
   onSubmitText,
+  textInputPlaceholder = 'Введите ответ…',
+  textInputAllowEmpty = false,
   activeButtonMessageId = null,
   showTypingIndicator = false,
 }) => {
@@ -96,9 +101,9 @@ const ChatPreview: React.FC<ChatPreviewProps> = ({
   }, [messages, showTextInput, showTypingIndicator]);
 
   const submit = () => {
-    const t = draft.trim();
-    if (!t || !onSubmitText) return;
-    onSubmitText(t);
+    if (!onSubmitText) return;
+    if (!textInputAllowEmpty && !draft.trim()) return;
+    onSubmitText(draft);
     setDraft('');
   };
 
@@ -384,7 +389,7 @@ const ChatPreview: React.FC<ChatPreviewProps> = ({
                 submit();
               }
             }}
-            placeholder="Введите ответ…"
+            placeholder={textInputPlaceholder}
             style={{
               flex: 1,
               padding: '10px 12px',
@@ -398,16 +403,16 @@ const ChatPreview: React.FC<ChatPreviewProps> = ({
           <button
             type="button"
             onClick={submit}
-            disabled={!draft.trim()}
+            disabled={!textInputAllowEmpty && !draft.trim()}
             style={{
               padding: '10px 16px',
               borderRadius: 12,
               border: 'none',
-              background: draft.trim() ? '#3b82f6' : '#1e293b',
-              color: draft.trim() ? '#fff' : '#64748b',
+              background: textInputAllowEmpty || draft.trim() ? '#3b82f6' : '#1e293b',
+              color: textInputAllowEmpty || draft.trim() ? '#fff' : '#64748b',
               fontSize: 13,
               fontWeight: 600,
-              cursor: draft.trim() ? 'pointer' : 'default',
+              cursor: textInputAllowEmpty || draft.trim() ? 'pointer' : 'default',
               whiteSpace: 'nowrap',
             }}
           >

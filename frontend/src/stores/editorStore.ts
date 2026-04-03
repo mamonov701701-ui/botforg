@@ -17,12 +17,30 @@ export interface Toast {
 // Max items to store in recent blocks
 const MAX_RECENT_BLOCKS = 10;
 
+function arraysShallowEqual(a: string[], b: string[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/** Ключи ctor Bot Variables для validateScenarioConsistency (обновляет редактор при загрузке). */
+export interface EditorScenarioValidationVars {
+  definedVariableKeys: string[];
+  systemVariableKeys: string[];
+}
+
 interface EditorStore {
   // Catalog data
   catalog: BlockCatalogItem[];
   plan: PlanType;
   role: RoleType;
   isLoading: boolean;
+
+  /** Источник для computeEditorScenarioValidation в scenarioStore.saveCurrentScenario */
+  editorScenarioValidationVars: EditorScenarioValidationVars;
 
   // Search filter
   searchQuery: string;
@@ -39,6 +57,10 @@ interface EditorStore {
   setPlan: (plan: PlanType) => void;
   setRole: (role: RoleType) => void;
   setCatalog: (catalog: BlockCatalogItem[]) => void;
+  setEditorScenarioValidationVars: (
+    definedVariableKeys: string[],
+    systemVariableKeys: string[]
+  ) => void;
   setSearchQuery: (query: string) => void;
   loadCatalog: (plan?: PlanType, role?: RoleType) => Promise<void>;
   showToast: (message: string, type: ToastType) => void;
@@ -61,6 +83,7 @@ export const useEditorStore = create<EditorStore>()(
     (set, get) => ({
       // Initial state
       catalog: [],
+      editorScenarioValidationVars: { definedVariableKeys: [], systemVariableKeys: [] },
       plan: 'free',
       role: 'developer',
       isLoading: false,
@@ -82,6 +105,20 @@ export const useEditorStore = create<EditorStore>()(
       },
 
       setCatalog: catalog => set({ catalog }),
+
+      setEditorScenarioValidationVars: (definedVariableKeys, systemVariableKeys) =>
+        set(state => {
+          const prev = state.editorScenarioValidationVars;
+          if (
+            arraysShallowEqual(prev.definedVariableKeys, definedVariableKeys) &&
+            arraysShallowEqual(prev.systemVariableKeys, systemVariableKeys)
+          ) {
+            return state;
+          }
+          return {
+            editorScenarioValidationVars: { definedVariableKeys, systemVariableKeys },
+          };
+        }),
 
       setSearchQuery: query => set({ searchQuery: query }),
 

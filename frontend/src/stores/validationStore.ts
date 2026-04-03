@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ValidationResult } from '../utils/schemaValidation';
+import { validationResultEqual, validationResultsMapEqual } from '../utils/validationCompare';
 
 interface ValidationStore {
   validationResults: Map<string, ValidationResult>;
@@ -19,6 +20,10 @@ export const useValidationStore = create<ValidationStore>((set, get) => ({
 
   setValidationResult: (nodeId, result) => {
     set(state => {
+      const prev = state.validationResults.get(nodeId);
+      if (prev && validationResultEqual(prev, result)) {
+        return state;
+      }
       const newMap = new Map(state.validationResults);
       newMap.set(nodeId, result);
       return { validationResults: newMap };
@@ -28,7 +33,12 @@ export const useValidationStore = create<ValidationStore>((set, get) => ({
   setAllValidationResults: results => {
     const newMap = new Map<string, ValidationResult>();
     results.forEach(r => newMap.set(r.nodeId, r));
-    set({ validationResults: newMap });
+    set(state => {
+      if (validationResultsMapEqual(state.validationResults, newMap)) {
+        return state;
+      }
+      return { validationResults: newMap };
+    });
   },
 
   clearValidation: () => {

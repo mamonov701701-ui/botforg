@@ -64,4 +64,17 @@ describe('flowHandleCompatibility', () => {
     const out = normalizeScenarioEdges(nodes, edges);
     expect(out[0].sourceHandle).toBe('button_0');
   });
+
+  it('input node exposes success and error sources', () => {
+    const sets = getNodeHandleSets(n('i', 'input'));
+    expect(sets.sourceHandles.has('success')).toBe(true);
+    expect(sets.sourceHandles.has('error')).toBe(true);
+  });
+
+  it('normalizes legacy right exit from input to success', () => {
+    const nodes = [n('i', 'input')];
+    const edges: Edge[] = [{ id: 'e1', source: 'i', target: 't', sourceHandle: 'right' } as Edge];
+    const out = normalizeScenarioEdges(nodes, edges);
+    expect(out[0].sourceHandle).toBe('success');
+  });
 });

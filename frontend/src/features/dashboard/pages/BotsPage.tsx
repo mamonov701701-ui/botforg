@@ -759,6 +759,31 @@ export default function BotsPage() {
                       <button
                         onClick={e => {
                           e.stopPropagation();
+                          navigate(`/dashboard/bots/${bot.id}/crm/users`);
+                          setMenuOpenId(null);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          background: 'transparent',
+                          border: 'none',
+                          borderRadius: '4px',
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          color: 'var(--text)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <Users size={16} /> CRM: пользователи
+                      </button>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
                           if (!canStartStop) {
                             toast.warning(getAccessDeniedMessage('bot_start_stop'));
                             return;

@@ -7,6 +7,7 @@
 ## 📅 Последнее обновление: 31.03.2026
 
 ### ✅ Добавлено:
+- **Валидация редактора и диагностика сценария** — стабильные селекторы store, сравнение результатов перед записью (без лишних циклов рендера), безопасная загрузка определений переменных при ошибках API, модалка «Проверка сценария» и связанные утилиты. См. [development/EDITOR_VALIDATION_AND_DIAGNOSTICS.md](./development/EDITOR_VALIDATION_AND_DIAGNOSTICS.md).
 - **Раздел «Возможности» → «Блоки редактора»** (`/features`, вкладка с подписью «Блоки редактора») — карточки блоков в режиме аккордеона: краткое описание и единый текст инструкции по всем блокам из исходника `frontend/src/pages/features/blockGuideRu.ts`. Обзор для агента: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md); отчёт о приведении к одному формату: [technical/EDITOR_BLOCKS_STANDARDIZATION_REPORT.md](./technical/EDITOR_BLOCKS_STANDARDIZATION_REPORT.md). Подробности в разделе 4.3 файла [EDITOR_BLOCKS_DOCUMENTATION.md](./EDITOR_BLOCKS_DOCUMENTATION.md).
 - **Редактор V2 — хаб сценариев** — компактное меню сценария бота, модалки «новый сценарий» и «добавить из моих» (копия в текущего бота), нормализация рёбер под handles узлов, предпросмотр без краша по контракту `context` / `RunStepResult`. См. [EDITOR_V2_SCENARIO_AND_PREVIEW.md](./development/EDITOR_V2_SCENARIO_AND_PREVIEW.md).
 - **Авторизация и middleware** — практические заметки по цепочке запросов и телу `POST`: [development/AUTH_AND_MIDDLEWARE.md](./development/AUTH_AND_MIDDLEWARE.md).
@@ -63,6 +64,7 @@
 - [Указатель на справку по блоку «Сообщение»](./user/editor_block_message.md) — актуальный текст в коде: `blockGuideRu.ts`; техническая справка агента: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md)
 
 ### **Техническая документация** (`technical/`)
+- [Реляционное ядро конструктора (ctor_* таблицы)](./technical/CONSTRUCTOR_CORE_DB.md) — `platform_users`, граф блоков, переменные и события
 - [API Документация](./technical/API_DOCS.md) - полное описание REST API
 - [Применение миграций](./technical/APPLY_MIGRATION.md) - инструкции по миграциям БД
 - [Миграция базовых ролей](./technical/MIGRATION_BASE_ROLES.md) - детали миграции ролей
@@ -70,6 +72,7 @@
 ### **Документация разработки** (`development/`)
 - [Статус готовности системы](./development/SYSTEM_READY.md) - текущее состояние проекта
 - [Редактор V2: сценарии и предпросмотр](./development/EDITOR_V2_SCENARIO_AND_PREVIEW.md) — store, handles, BotSimulator
+- [Редактор V2: валидация и диагностика](./development/EDITOR_VALIDATION_AND_DIAGNOSTICS.md) — пайплайн проверки, Zustand, устойчивость к ошибкам API переменных
 - [Авторизация и middleware (uvicorn, POST-тело)](./development/AUTH_AND_MIDDLEWARE.md) — почему нельзя два BaseHTTPMiddleware подряд с Session
 
 ---

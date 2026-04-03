@@ -53,6 +53,10 @@
 - `history` в UI всегда как массив (через хелпер маппинга из `context`).
 - При отсутствии `context` или пустом графе — сообщение пользователю на русском, без падения всего дерева React.
 
+## Валидация и диагностика
+
+Проверка обязательных полей блоков и консистентности сценария (переменные, связи, плейсхолдеры): отдельный документ **[EDITOR_VALIDATION_AND_DIAGNOSTICS.md](./EDITOR_VALIDATION_AND_DIAGNOSTICS.md)** — store’ы, guards, `fetchVariableDefinitionsSafe`, debounce автопроверки.
+
 ## Связанные файлы
 
 - `frontend/src/features/editorV2/ScenarioHubDropdown.tsx`

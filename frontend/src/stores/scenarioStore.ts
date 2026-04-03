@@ -5,7 +5,34 @@
 import { create } from 'zustand';
 import { Node, Edge } from 'reactflow';
 import * as scenarioAPI from '../api/scenarios';
+import type { BlockCatalogItem } from '../types/blocks';
+import type { ScenarioDiagnostic } from '../utils/scenarioConsistency';
+import { computeEditorScenarioValidation } from '../utils/scenarioSaveCompute';
+import { SAVE_VALIDATION_BLOCKED_MESSAGE } from '../utils/scenarioValidationMessages';
 import { buildRuntimeGraph, RuntimeGraph } from '../utils/runtimeNormalization';
+import { migrateScenarioNodes } from '../utils/scenarioContentMigration';
+import { useEditorStore } from './editorStore';
+import { useValidationStore } from './validationStore';
+import { useScenarioDiagnosticsStore } from './scenarioDiagnosticsStore';
+
+/** Опции save/publish: при необходимости переопределить данные из editorStore */
+export interface SaveCurrentScenarioOptions {
+  catalog?: BlockCatalogItem[];
+  definedVariableKeys?: string[];
+  systemVariableKeys?: string[];
+  scenarios?: Array<{ id: number; name: string }>;
+}
+
+export interface SaveCurrentScenarioResult {
+  saved: boolean;
+  blocked: boolean;
+  diagnostics: ScenarioDiagnostic[];
+  errorMessage?: string;
+}
+
+export interface PublishCurrentScenarioResult extends SaveCurrentScenarioResult {
+  published: boolean;
+}
 
 interface ScenarioState {
   id: number | null;
@@ -53,7 +80,12 @@ interface ScenarioStore {
   createScenario: (data: scenarioAPI.ScenarioCreate) => Promise<scenarioAPI.Scenario>;
   updateCurrentScenario: (nodes: Node[], edges: Edge[]) => void;
   syncFromEditor: () => void;
-  saveCurrentScenario: () => Promise<void>;
+  saveCurrentScenario: (opts?: SaveCurrentScenarioOptions) => Promise<SaveCurrentScenarioResult>;
+
+  /** Сохранить, затем POST /publish; та же валидация, что и при save */
+  publishCurrentScenario: (
+    opts?: SaveCurrentScenarioOptions
+  ) => Promise<PublishCurrentScenarioResult>;
   deleteScenario: (scenarioId: number) => Promise<void>;
   /** Только имя; граф и currentState.nodes/edges не трогаем */
   renameScenario: (scenarioId: number, name: string) => Promise<void>;
@@ -203,7 +235,7 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
         id: scenario.id,
         name: scenario.name,
         icon: scenario.icon || 'FileText',
-        nodes: scenario.content?.nodes || [],
+        nodes: migrateScenarioNodes(scenario.content?.nodes || []),
         edges: scenario.content?.edges || [],
         isDirty: false,
         hasValidationErrors: false,
@@ -267,22 +299,73 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
     // - помечает сценарий как isDirty;
     // - запускает debounce автосохранения и сохранение draft в localStorage.
     importFromJson: (nodes: Node[], edges: Edge[]) => {
-      get().updateCurrentScenario(nodes, edges);
+      get().updateCurrentScenario(migrateScenarioNodes(nodes), edges);
     },
 
     // Устарело: граф в currentState; синхронизация из EditorV2Shell (RF → updateCurrentScenario).
     syncFromEditor: () => undefined,
 
-    // Save current scenario
-    saveCurrentScenario: async () => {
+    saveCurrentScenario: async (opts?: SaveCurrentScenarioOptions) => {
       const { currentScenarioId, currentState } = get();
-      if (!currentScenarioId || !currentState) return;
+      if (!currentScenarioId || !currentState) {
+        return {
+          saved: false,
+          blocked: false,
+          diagnostics: [],
+          errorMessage: 'Нет активного сценария для сохранения',
+        };
+      }
 
-      set({ isSaving: true, saveStatus: 'saving', lastSaveError: null });
+      const ed = useEditorStore.getState();
+      const catalog = opts?.catalog ?? ed.catalog;
+      const vars = ed.editorScenarioValidationVars;
+      const definedVariableKeys = opts?.definedVariableKeys ?? vars.definedVariableKeys;
+      const systemVariableKeys = opts?.systemVariableKeys ?? vars.systemVariableKeys;
+      const scenarios = opts?.scenarios ?? get().scenarios;
+
+      const v = computeEditorScenarioValidation(
+        currentState.nodes,
+        currentState.edges,
+        catalog,
+        scenarios,
+        definedVariableKeys,
+        systemVariableKeys
+      );
+
+      useValidationStore.getState().setAllValidationResults(v.results);
+      useScenarioDiagnosticsStore.getState().setDiagnostics(v.diagnostics);
+
+      if (v.blocked) {
+        set(state => ({
+          currentState: state.currentState
+            ? { ...state.currentState, hasValidationErrors: true }
+            : null,
+          isSaving: false,
+          saveStatus: 'idle',
+        }));
+        return {
+          saved: false,
+          blocked: true,
+          diagnostics: v.diagnostics,
+          errorMessage: SAVE_VALIDATION_BLOCKED_MESSAGE,
+        };
+      }
+
+      set({
+        isSaving: true,
+        saveStatus: 'saving',
+        lastSaveError: null,
+      });
+      set(state => ({
+        currentState: state.currentState
+          ? { ...state.currentState, hasValidationErrors: false }
+          : null,
+      }));
+
       try {
         const updated = await scenarioAPI.updateScenario(currentScenarioId, {
           content: {
-            nodes: currentState.nodes,
+            nodes: migrateScenarioNodes(currentState.nodes),
             edges: currentState.edges,
           },
         });
@@ -296,6 +379,11 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
           lastSaveError: null,
           lastSaved: new Date(),
         }));
+        return {
+          saved: true,
+          blocked: false,
+          diagnostics: v.diagnostics,
+        };
       } catch (error: any) {
         console.error('Failed to save scenario:', error);
         const errMsg = error?.message || 'Ошибка сохранения';
@@ -306,6 +394,49 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
         });
         if (error.status === 401) {
           throw new Error('Для сохранения сценариев необходимо войти в систему');
+        }
+        throw error;
+      }
+    },
+
+    publishCurrentScenario: async (opts?: SaveCurrentScenarioOptions) => {
+      const saveRes = await get().saveCurrentScenario(opts);
+      if (!saveRes.saved) {
+        return { ...saveRes, published: false };
+      }
+
+      const id = get().currentScenarioId;
+      if (!id) {
+        return {
+          saved: true,
+          published: false,
+          blocked: false,
+          diagnostics: saveRes.diagnostics,
+          errorMessage: 'Нет активного сценария',
+        };
+      }
+
+      try {
+        const updated = await scenarioAPI.publishScenario(id);
+        set(state => ({
+          scenarios: state.scenarios.map(s => (s.id === id ? updated : s)),
+        }));
+        return {
+          saved: true,
+          published: true,
+          blocked: false,
+          diagnostics: saveRes.diagnostics,
+        };
+      } catch (error: any) {
+        console.error('Failed to publish scenario:', error);
+        const errMsg = error?.message || 'Ошибка публикации';
+        set({
+          isSaving: false,
+          saveStatus: 'error',
+          lastSaveError: errMsg,
+        });
+        if (error.status === 401) {
+          throw new Error('Для публикации сценариев необходимо войти в систему');
         }
         throw error;
       }
@@ -390,11 +521,13 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
 
     // Валидация
     setValidationStatus: hasErrors => {
-      set(state => ({
-        currentState: state.currentState
-          ? { ...state.currentState, hasValidationErrors: hasErrors }
-          : null,
-      }));
+      set(state => {
+        if (!state.currentState) return state;
+        if (state.currentState.hasValidationErrors === hasErrors) return state;
+        return {
+          currentState: { ...state.currentState, hasValidationErrors: hasErrors },
+        };
+      });
     },
 
     // Utility

@@ -2,6 +2,17 @@
 
 Все значимые изменения в проекте BotForg будут документироваться в этом файле.
 
+## [2026-03-31] - Редактор: валидация, диагностика, устойчивость store
+
+### Добавлено
+- Документация для разработчиков: `docs/development/EDITOR_VALIDATION_AND_DIAGNOSTICS.md` (пайплайн проверки, Zustand guard’ы, `fetchVariableDefinitionsSafe`, тесты).
+- Обновлены оглавление `docs/README.md`, чек-лист `docs/DEV_CHECKLIST.md`, пользовательская `docs/user/ИНСТРУКЦИЯ.md` (раздел про проверку сценария), ссылка из `docs/development/EDITOR_V2_SCENARIO_AND_PREVIEW.md`.
+
+### Изменено (фронтенд, кратко)
+- Сравнение результатов валидации перед записью в store (`validationCompare.ts`, `setValidationResult`, `setAllValidationResults`).
+- Стабильные селекторы диагностик по узлу; `setEditorScenarioValidationVars` не обновляет store при тех же ключах переменных.
+- Безопасная загрузка определений переменных при ошибках API; русскоязычные тексты UI проверки сценария где применимо.
+
 ## [2026-02-02] - Модерация шаблонов маркетплейса
 
 ### Добавлено

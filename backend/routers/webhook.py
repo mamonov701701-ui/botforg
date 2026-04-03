@@ -1,12 +1,19 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional, Tuple
 
 import requests
 from backend.database import SessionLocal
 from backend.models.bot import BotInstance
 from backend.models.bot_user_state import BotUserState
+from backend.models.constructor_core import CtorBotUser
 from backend.models.payment import Payment
 from backend.models.template import Template
+from backend.services.constructor.repositories.ctor_sessions_repository import (
+    CtorSessionsRepository,
+)
+from backend.services.message_template.runtime_outbound import render_outbound_message_text
+from backend.utils.ctor_bot_resolve import resolve_ctor_bot_id
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -22,6 +29,45 @@ def get_db():
 
 
 TELEGRAM_API = "https://api.telegram.org/bot"
+
+
+def _telegram_template_text_from_node(node: dict) -> str:
+    """Текст исходящего сообщения: editor v2 (`settings.text`) или legacy (`data.label`)."""
+    data = node.get("data") or {}
+    settings = data.get("settings") or {}
+    raw = settings.get("text")
+    if isinstance(raw, str) and raw.strip():
+        return raw
+    lab = data.get("label")
+    if isinstance(lab, str):
+        return lab
+    return ""
+
+
+def _resolve_ctor_telegram_user(
+    db: Session, *, platform_bot_id: int, chat_id
+) -> Tuple[Optional[int], Optional[int]]:
+    """
+    ctor_bot_users для Telegram: связка ctor-бота с platform Bot.id и chat_id.
+    Возвращает (bot_user_id, session_id) или (None, None).
+    """
+    ctor_bid = resolve_ctor_bot_id(db, platform_bot_id)
+    if not ctor_bid:
+        return None, None
+    external = str(chat_id)
+    bu = (
+        db.query(CtorBotUser)
+        .filter(
+            CtorBotUser.bot_id == ctor_bid,
+            CtorBotUser.channel == "telegram",
+            CtorBotUser.external_user_id == external,
+        )
+        .first()
+    )
+    if not bu:
+        return None, None
+    sess = CtorSessionsRepository(db).find_active_for_bot_user(bu.id)
+    return bu.id, (sess.id if sess else None)
 
 
 @router.post("/webhook/{bot_id}")
@@ -103,7 +149,12 @@ async def telegram_webhook(
                     state.current_node_id = next_node["id"]
                     db.commit()
                     send_node_message(
-                        token, chat_id, next_node, find_edges_from(next_node["id"])
+                        db,
+                        token,
+                        chat_id,
+                        next_node,
+                        find_edges_from(next_node["id"]),
+                        platform_bot_id=bot_id,
                     )
         return {"ok": True}
     # Проверяем статус пользователя - если забанен или отписался, не обрабатываем
@@ -187,7 +238,9 @@ async def telegram_webhook(
         ]
         state.last_interaction_at = now
         db.commit()
-        send_node_message(token, chat_id, node, find_edges_from(node["id"]))
+        send_node_message(
+            db, token, chat_id, node, find_edges_from(node["id"]), platform_bot_id=bot_id
+        )
         return {"ok": True}
     node = find_node(state.current_node_id)
     if not node:
@@ -259,7 +312,12 @@ async def telegram_webhook(
                 state.last_interaction_at = datetime.now(timezone.utc)
                 db.commit()
                 send_node_message(
-                    token, chat_id, next_node, find_edges_from(next_node["id"])
+                    db,
+                    token,
+                    chat_id,
+                    next_node,
+                    find_edges_from(next_node["id"]),
+                    platform_bot_id=bot_id,
                 )
             else:
                 requests.post(
@@ -352,24 +410,58 @@ async def telegram_webhook(
     )
     state.history = hist
     db.commit()
-    send_node_message(token, chat_id, next_node, find_edges_from(next_node["id"]))
+    send_node_message(
+        db,
+        token,
+        chat_id,
+        next_node,
+        find_edges_from(next_node["id"]),
+        platform_bot_id=bot_id,
+    )
     return {"ok": True}
 
 
-def send_node_message(token, chat_id, node, edges):
-    text = node["data"]["label"]
+def send_node_message(
+    db: Session,
+    token,
+    chat_id,
+    node,
+    edges,
+    *,
+    platform_bot_id: int,
+):
+    ctor_uid, sess_id = _resolve_ctor_telegram_user(
+        db, platform_bot_id=platform_bot_id, chat_id=chat_id
+    )
+    text = _telegram_template_text_from_node(node)
+    if ctor_uid is not None and text:
+        text = render_outbound_message_text(
+            db,
+            bot_user_id=ctor_uid,
+            template_text=text,
+            session_id=sess_id,
+        )
+    if not text:
+        text = (node.get("data") or {}).get("label") or " "
     reply_markup = None
-    if node["type"] == "button" and edges:
-        buttons = [
-            [
-                {
-                    "text": e.get("data", {}).get("label", "Далее"),
-                    "callback_data": e.get("data", {}).get("label", "Далее"),
-                }
-            ]
-            for e in edges
-            if e.get("data", {}).get("label")
-        ]
+    if node.get("type") == "button" and edges:
+        buttons = []
+        for e in edges:
+            raw_label = e.get("data", {}).get("label")
+            if not raw_label:
+                continue
+            raw_label = str(raw_label)
+            display_label = raw_label
+            if ctor_uid is not None and "{{" in raw_label:
+                display_label = render_outbound_message_text(
+                    db,
+                    bot_user_id=ctor_uid,
+                    template_text=raw_label,
+                    session_id=sess_id,
+                )
+            buttons.append(
+                [{"text": display_label, "callback_data": raw_label}]
+            )
         reply_markup = {"inline_keyboard": buttons}
     requests.post(
         f"{TELEGRAM_API}{token}/sendMessage",

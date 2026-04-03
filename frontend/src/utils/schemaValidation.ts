@@ -6,6 +6,7 @@ import {
   messageMediaItemMatchesDeclared,
   type MessageMediaKind,
 } from './messageMedia';
+import { validateInputBlockConfigFields, migrateInputNodeSettings } from './inputBlock';
 
 export interface ValidationResult {
   nodeId: string;
@@ -35,13 +36,24 @@ export function validateNodeSettings(
     return {
       nodeId: node.id,
       isValid: false,
-      missingFields: ['Block definition not found'],
+      missingFields: ['Описание блока не найдено в каталоге'],
       blockTitle: node.data.title,
     };
   }
 
   const missingFields: string[] = [];
   const settings = node.data.settings || {};
+
+  if (block.id === 'input') {
+    const migrated = migrateInputNodeSettings({ ...settings } as Record<string, unknown>);
+    missingFields.push(...validateInputBlockConfigFields(migrated));
+    return {
+      nodeId: node.id,
+      isValid: missingFields.length === 0,
+      missingFields,
+      blockTitle: block.title,
+    };
+  }
 
   // Check each required field from configSchema
   if (block.configSchema) {

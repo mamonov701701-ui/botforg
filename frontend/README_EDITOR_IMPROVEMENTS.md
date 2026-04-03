@@ -1,5 +1,7 @@
 # Улучшения редактора блоков
 
+Актуальная архитектура **валидации и диагностики сценария** (store, debounce, API переменных): в корне репозитория см. `docs/development/EDITOR_VALIDATION_AND_DIAGNOSTICS.md`.
+
 ## Выполненные задачи
 
 ### 1. ✅ Мемоизация nodeTypes/edgeTypes

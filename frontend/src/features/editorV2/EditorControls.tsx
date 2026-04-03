@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Plus, Eye, BookOpen } from 'lucide-react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import ScenarioHubDropdown from './ScenarioHubDropdown';
@@ -17,6 +17,12 @@ import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
 import { getBots, type Bot } from '../../api/bot';
 import { hasAccessToAction } from '../../constants/roles';
+import { SAVE_VALIDATION_BLOCKED_MESSAGE } from '../../utils/editorScenarioValidation';
+import { hasScenarioWarnings } from '../../utils/scenarioConsistency';
+import { useScenarioDiagnosticsStore } from '../../stores/scenarioDiagnosticsStore';
+import { useValidationStore } from '../../stores/validationStore';
+import { computeScenarioValidationSummary } from '../../utils/scenarioDiagnosticUi';
+import { EditorValidationSummaryBar } from './EditorValidationSummaryBar';
 
 /** Разбор JSON импорта сценария (React Flow: nodes + edges). */
 function parseScenarioImportPayload(
@@ -42,6 +48,8 @@ function parseScenarioImportPayload(
 interface EditorControlsProps {
   onExport?: () => void;
   onSave?: () => void;
+  /** Открыть модалку «Проверка сценария» (и при необходимости обновить диагностику) */
+  onOpenScenarioCheck?: () => void;
   onOpenBlockLibrary?: () => void;
   hasUnsavedChanges?: boolean;
   /** Демо-режим: только просмотр, без редактирования */
@@ -51,6 +59,7 @@ interface EditorControlsProps {
 const EditorControls: React.FC<EditorControlsProps> = ({
   onExport,
   onSave,
+  onOpenScenarioCheck,
   onOpenBlockLibrary,
   hasUnsavedChanges = false,
   isReadOnly = false,
@@ -95,7 +104,17 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   const { user } = useAuthStore();
   const { openAuth } = useUiStore();
 
-  const canEditScenario = hasAccessToAction(user?.role, 'scenario_edit');
+  const canEditScenario = hasAccessToAction(
+    user?.role as import('../../constants/roles').RoleValue,
+    'scenario_edit'
+  );
+
+  const diagnosticsList = useScenarioDiagnosticsStore(s => s.list);
+  const validationResults = useValidationStore(s => s.validationResults);
+  const { errorNodeCount, warningCount } = useMemo(
+    () => computeScenarioValidationSummary({ validationResults, diagnostics: diagnosticsList }),
+    [validationResults, diagnosticsList]
+  );
 
   // Модальные окна
   const [isSaveToLibraryOpen, setIsSaveToLibraryOpen] = useState(false);
@@ -425,8 +444,19 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     }
 
     try {
-      await saveCurrentScenario();
-      showToast('Сценарий сохранён', 'success');
+      const result = await saveCurrentScenario();
+      if (result.blocked) {
+        showToast(result.errorMessage || SAVE_VALIDATION_BLOCKED_MESSAGE, 'error');
+        return;
+      }
+      if (result.saved) {
+        if (hasScenarioWarnings(result.diagnostics)) {
+          const w = result.diagnostics.filter(d => d.severity === 'warning').length;
+          showToast(`Сценарий сохранён. Предупреждений консистентности: ${w}`, 'warning');
+        } else {
+          showToast('Сценарий сохранён', 'success');
+        }
+      }
     } catch (error: any) {
       // Обработка ошибок авторизации
       if (error.status === 401) {
@@ -559,6 +589,21 @@ const EditorControls: React.FC<EditorControlsProps> = ({
             onRenameScenario={isReadOnly || !canEditScenario ? undefined : handleRenameScenario}
           />
         </div>
+
+        {/* Разделитель */}
+        <div
+          style={{
+            width: 1,
+            height: 32,
+            background: '#374151',
+          }}
+        />
+
+        <EditorValidationSummaryBar
+          errorNodeCount={errorNodeCount}
+          warningCount={warningCount}
+          onClick={onOpenScenarioCheck}
+        />
 
         {/* Разделитель */}
         <div

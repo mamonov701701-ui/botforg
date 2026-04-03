@@ -21,6 +21,7 @@ from backend.routers import auth
 from backend.routers import billing as billing_router
 from backend.routers import blocks as blocks_router
 from backend.routers import bot as bot_router
+from backend.routers import bot_crm as bot_crm_router
 from backend.routers import bot_template as bot_template_router
 from backend.routers import editor as editor_router
 from backend.routers import message as message_router
@@ -107,6 +108,7 @@ app.include_router(plans_router.router)
 # app.include_router(auth.router, prefix="/auth")  # ОТКЛЮЧЕН - используем email_routes вместо этого
 app.include_router(templates.router)  # без prefix
 app.include_router(bot_router.router, prefix="/bots")
+app.include_router(bot_crm_router.router, prefix="/bots")
 app.include_router(review_router.router)  # без prefix
 app.include_router(user_template_router.router, prefix="/user-templates")
 app.include_router(bot_template_router.router, prefix="/bot-templates")

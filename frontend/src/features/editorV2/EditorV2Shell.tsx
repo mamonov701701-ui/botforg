@@ -1,4 +1,5 @@
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -39,7 +40,14 @@ import { isSimulatorSupportedBlockId } from '../../constants/simulatorSupportedB
 import { isEditorDemoMode } from '../../constants/roles';
 import DemoModeBanner from '../../components/DemoModeBanner';
 import { useValidationStore } from '../../stores/validationStore';
-import { validateAllNodesWithSchema, hasValidationErrors } from '../../utils/schemaValidation';
+import {
+  useScenarioDiagnosticsStore,
+  SCENARIO_DIAGNOSTICS_EMPTY_NODE,
+} from '../../stores/scenarioDiagnosticsStore';
+import type { ScenarioDiagnostic } from '../../utils/scenarioConsistency';
+import { formatScenarioDiagnosticsTooltip } from '../../utils/scenarioDiagnosticUi';
+import { runEditorValidationPipeline } from '../../utils/editorScenarioValidation';
+import { fetchVariableDefinitionsSafe } from '../../api/botMessageTemplate';
 import ValidationModal from './ValidationModal';
 import ExportConfirmModal from './ExportConfirmModal';
 import BlockLibraryModal from './BlockLibraryModal';
@@ -87,6 +95,7 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
   const title = data?.title ?? 'Блок';
   const isStartNode = data?.blockId === 'start';
   const isMessageNode = data?.blockId === 'message';
+  const isInputNode = data?.blockId === 'input';
   const borderColor = data?.color || '#2f6dff';
 
   // Получаем кнопки для блока message
@@ -100,13 +109,35 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
     [id]
   );
   const validation = useValidationStore(validationSelector);
-  const isInvalid = validation && !validation.isValid;
+  const consistencySelector = useMemo(
+    () => (state: { byNodeId: Map<string, ScenarioDiagnostic[]> }) =>
+      state.byNodeId.get(id) ?? SCENARIO_DIAGNOSTICS_EMPTY_NODE,
+    [id]
+  );
+  const consistencyIssues = useScenarioDiagnosticsStore(
+    consistencySelector
+  ) as ScenarioDiagnostic[];
+  const hasConsistencyError = consistencyIssues.some(x => x.severity === 'error');
+  const hasConsistencyWarning =
+    !hasConsistencyError && consistencyIssues.some(x => x.severity === 'warning');
+  const isSchemaInvalid = validation && !validation.isValid;
+  const isInvalid = isSchemaInvalid || hasConsistencyError;
+  const schemaTooltipLines =
+    isSchemaInvalid && validation?.missingFields?.length
+      ? validation.missingFields.map((f: string) => `Не заполнено: ${f}`)
+      : undefined;
+  const diagnosticsTooltip = formatScenarioDiagnosticsTooltip(
+    consistencyIssues,
+    schemaTooltipLines
+  );
 
   return (
     <div
       style={{
         background: '#fff',
-        border: `4px solid ${isInvalid ? '#ef4444' : borderColor}`,
+        border: `4px solid ${
+          isInvalid ? '#ef4444' : hasConsistencyWarning ? '#f59e0b' : borderColor
+        }`,
         borderRadius: 32,
         padding: '16px 20px',
         minWidth: 264,
@@ -192,6 +223,119 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             className="react-flow__handle-visible"
           />
         </>
+      ) : isInputNode ? (
+        <>
+          <Handle
+            id="top"
+            type="target"
+            position={Position.Top}
+            isConnectable={true}
+            style={{
+              background: '#00ff00',
+              width: 19.4,
+              height: 19.4,
+              border: '3px solid #fff',
+              top: -9.7,
+              zIndex: 10000,
+              transition: 'all 0.2s ease',
+            }}
+            className="react-flow__handle-visible"
+          />
+          <Handle
+            id="left"
+            type="target"
+            position={Position.Left}
+            isConnectable={true}
+            style={{
+              background: '#00ff00',
+              width: 19.4,
+              height: 19.4,
+              border: '3px solid #fff',
+              left: -9.7,
+              zIndex: 10000,
+              transition: 'all 0.2s ease',
+            }}
+            className="react-flow__handle-visible"
+          />
+          <div
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: '2px solid rgba(0, 0, 0, 0.08)',
+              marginLeft: -18,
+              marginRight: -18,
+              width: 'calc(100% + 36px)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                padding: '10px 16px',
+                borderRadius: 10,
+                background: 'linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%)',
+                color: '#fff',
+                fontWeight: 600,
+                fontSize: 13,
+                textAlign: 'center',
+              }}
+            >
+              ✓ Успех (после валидного ввода)
+              <Handle
+                id="success"
+                type="source"
+                position={Position.Right}
+                isConnectable={true}
+                style={{
+                  background: '#FFB300',
+                  width: 19.4,
+                  height: 19.4,
+                  border: '3px solid #fff',
+                  right: -11.7,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 10001,
+                  position: 'absolute',
+                }}
+                className="react-flow__handle-visible"
+              />
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                padding: '10px 16px',
+                borderRadius: 10,
+                background: 'linear-gradient(180deg, #64748b 0%, #475569 100%)',
+                color: '#f1f5f9',
+                fontWeight: 600,
+                fontSize: 13,
+                textAlign: 'center',
+              }}
+            >
+              ✗ Ошибка валидации (опционально)
+              <Handle
+                id="error"
+                type="source"
+                position={Position.Right}
+                isConnectable={true}
+                style={{
+                  background: '#FFB300',
+                  width: 19.4,
+                  height: 19.4,
+                  border: '3px solid #fff',
+                  right: -11.7,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 10001,
+                  position: 'absolute',
+                }}
+                className="react-flow__handle-visible"
+              />
+            </div>
+          </div>
+        </>
       ) : (
         /* Для остальных блоков - 4 Handle (со всех сторон)
            Зелёный = входящий (target), Оранжевый = исходящий (source) */
@@ -270,26 +414,70 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
         </>
       )}
 
-      {/* Validation error badge */}
-      {isInvalid && (
+      {/* Ошибки / предупреждения проверки сценария */}
+      {(isInvalid || hasConsistencyWarning) && (
         <div
           style={{
             position: 'absolute',
             bottom: 8,
             right: 8,
-            background: '#ef4444',
-            borderRadius: '50%',
-            width: 28,
-            height: 28,
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 16,
-            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 4,
+            pointerEvents: 'none',
+            zIndex: 20,
           }}
-          title={`Заполните обязательные поля: ${validation.missingFields.join(', ')}`}
         >
-          ⚠️
+          {isInvalid && (
+            <div
+              role="img"
+              aria-label="Ошибки проверки"
+              style={{
+                background: '#ef4444',
+                color: '#fff',
+                borderRadius: 999,
+                minWidth: 26,
+                height: 26,
+                padding: '0 7px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 13,
+                fontWeight: 800,
+                boxShadow: '0 2px 8px rgba(239, 68, 68, 0.45)',
+              }}
+              title={diagnosticsTooltip || 'Есть ошибки схемы или консистентности'}
+            >
+              !
+            </div>
+          )}
+          {!isInvalid && hasConsistencyWarning && (
+            <div
+              role="img"
+              aria-label="Предупреждения проверки"
+              style={{
+                background: '#f59e0b',
+                color: '#111',
+                borderRadius: 999,
+                minWidth: 26,
+                height: 26,
+                padding: '0 7px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 14,
+                fontWeight: 800,
+                boxShadow: '0 2px 8px rgba(245, 158, 11, 0.45)',
+              }}
+              title={
+                formatScenarioDiagnosticsTooltip(consistencyIssues) ||
+                'Предупреждения консистентности'
+              }
+            >
+              ⚠
+            </div>
+          )}
         </div>
       )}
 
@@ -558,9 +746,45 @@ function InnerEditor() {
   // Важно: используем отдельные селекторы, а не один объект,
   // чтобы избежать предупреждения useSyncExternalStore про getSnapshot
   const currentState = useScenarioStore(state => state.currentState);
-  const scenarios = useScenarioStore(state => state.scenarios);
   const updateCurrentScenario = useScenarioStore(state => state.updateCurrentScenario);
-  const setValidationStatus = useScenarioStore(state => state.setValidationStatus);
+  const setEditorScenarioValidationVars = useEditorStore(s => s.setEditorScenarioValidationVars);
+  const { id: routeBotId } = useParams<{ id: string }>();
+  const [ctorVarKeys, setCtorVarKeys] = useState<string[]>([]);
+  const [ctorSysKeys, setCtorSysKeys] = useState<string[]>([]);
+
+  useEffect(() => {
+    setEditorScenarioValidationVars(ctorVarKeys, ctorSysKeys);
+  }, [ctorVarKeys, ctorSysKeys, setEditorScenarioValidationVars]);
+
+  useEffect(() => {
+    const bid = routeBotId ? parseInt(routeBotId, 10) : NaN;
+    if (!Number.isFinite(bid)) {
+      setCtorVarKeys([]);
+      setCtorSysKeys([]);
+      return;
+    }
+    let cancelled = false;
+    fetchVariableDefinitionsSafe(bid)
+      .then(res => {
+        if (cancelled) return;
+        if (res.ctor_bot_linked && res.items?.length) {
+          setCtorVarKeys(res.items.map(i => i.key));
+          setCtorSysKeys(res.items.filter(i => i.is_system).map(i => i.key));
+        } else {
+          setCtorVarKeys([]);
+          setCtorSysKeys([]);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCtorVarKeys([]);
+          setCtorSysKeys([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [routeBotId]);
 
   // КРИТИЧНО: nodes и edges через useNodesState и useEdgesState для правильной работы ReactFlow
   // React Flow управляет своим внутренним state, Zustand используется ТОЛЬКО для добавления новых блоков
@@ -741,11 +965,18 @@ function InnerEditor() {
 
   // Далее обработчики изменений edges остаются, но хранение в scenarioStore уже настроено выше
 
-  const { setAllValidationResults } = useValidationStore();
-  const invalidNodesCount = useValidationStore(state => {
-    const results = Array.from(state.validationResults.values());
-    return results.filter(r => !r.isValid).length;
-  });
+  const validationResultsMap = useValidationStore(state => state.validationResults);
+  const scenarioDiagnosticsList = useScenarioDiagnosticsStore(state => state.list);
+  const exportErrorNodeCount = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of validationResultsMap.values()) {
+      if (!r.isValid) ids.add(r.nodeId);
+    }
+    for (const d of scenarioDiagnosticsList) {
+      if (d.severity === 'error') ids.add(d.blockId);
+    }
+    return ids.size;
+  }, [validationResultsMap, scenarioDiagnosticsList]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | undefined>(undefined);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [isValidationModalOpen, setIsValidationModalOpen] = useState(false);
@@ -1054,44 +1285,36 @@ function InnerEditor() {
     }
   }, []);
 
-  // Validate all nodes - стабильная функция без зависимости от nodes
-  const runValidation = useCallback(
-    (nodesToValidate?: Node[]) => {
-      const targetNodes = nodesToValidate ?? nodes;
-      // Передаём scenarios для валидации блоков go_to_scenario
-      const results = validateAllNodesWithSchema(targetNodes, catalog, scenarios);
-      setAllValidationResults(results);
-      return results;
-    },
-    [catalog, setAllValidationResults, scenarios]
-  );
+  const runValidation = useCallback((nodesToValidate?: Node[], edgesToValidate?: Edge[]) => {
+    const targetNodes = nodesToValidate ?? nodesRef.current;
+    const targetEdges = edgesToValidate ?? edgesRef.current;
+    return runEditorValidationPipeline(targetNodes, targetEdges, { syncStores: true });
+  }, []);
 
-  // Auto-validate on nodes change с debounce чтобы избежать бесконечного цикла
+  // Auto-validate при изменении графа в store (контент узлов, рёбра) и ctor-ключах
   useEffect(() => {
-    // Пропускаем начальную загрузку чтобы избежать лишних рендеров
-    if (isInitialLoadRef.current && nodes.length === 0) {
+    if (isInitialLoadRef.current && !storeGraphSignature) {
       return;
     }
     isInitialLoadRef.current = false;
 
-    // Очищаем предыдущий timeout
     if (validationTimeoutRef.current) {
       clearTimeout(validationTimeoutRef.current);
     }
 
-    // Debounce валидацию на 100ms чтобы избежать каскадных обновлений
     validationTimeoutRef.current = setTimeout(() => {
-      const results = runValidation(nodes);
-      const hasErrors = hasValidationErrors(results);
-      setValidationStatus(hasErrors);
-    }, 100);
+      const st = useScenarioStore.getState().currentState;
+      const n = st?.nodes && st.nodes.length > 0 ? st.nodes : nodesRef.current;
+      const e = st?.edges && st.edges.length >= 0 ? st.edges : edgesRef.current;
+      runValidation(n, e);
+    }, 120);
 
     return () => {
       if (validationTimeoutRef.current) {
         clearTimeout(validationTimeoutRef.current);
       }
     };
-  }, [nodes.length]); // Зависим только от длины, не от самих nodes
+  }, [storeGraphSignature, ctorVarKeys, ctorSysKeys, catalog, runValidation]);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return undefined;
@@ -1167,9 +1390,9 @@ function InnerEditor() {
 
   // Export with validation - использует performExport
   const handleExport = useCallback(() => {
-    const validationResults = runValidation();
+    const { blocked } = runValidation();
 
-    if (hasValidationErrors(validationResults)) {
+    if (blocked) {
       setIsExportConfirmOpen(true);
       return;
     }
@@ -1454,7 +1677,16 @@ function InnerEditor() {
             title: block.title,
             icon: block.icon,
             color: block.color,
-            settings: {},
+            settings:
+              block.id === 'input'
+                ? {
+                    question_text: '',
+                    variable_key: '',
+                    required: true,
+                    trim: true,
+                    validation: { type: 'string' },
+                  }
+                : {},
           },
           style: {
             borderColor: block.color,
@@ -1639,8 +1871,7 @@ function InnerEditor() {
           setEdges(data.edges);
           setSelectedNodeId(undefined);
 
-          // Run validation
-          runValidation();
+          runValidation(data.nodes as Node[], data.edges as Edge[]);
 
           showToast('Сценарий импортирован', 'success');
         } catch (error) {
@@ -1658,6 +1889,27 @@ function InnerEditor() {
     runValidation();
     setIsValidationModalOpen(true);
   }, [runValidation]);
+
+  const handleNavigateToNodeFromValidation = useCallback(
+    (nodeId: string) => {
+      const target = nodes.find(n => n.id === nodeId);
+      setSelectedNodeId(nodeId);
+      setIsPanelVisible(true);
+      setIsValidationModalOpen(false);
+      window.requestAnimationFrame(() => {
+        if (target) {
+          fitView({
+            nodes: [{ id: nodeId } as Node],
+            duration: 400,
+            padding: 0.22,
+            maxZoom: 1.35,
+            minZoom: 0.12,
+          });
+        }
+      });
+    },
+    [nodes, fitView]
+  );
 
   return (
     <div
@@ -1679,12 +1931,13 @@ function InnerEditor() {
       <ValidationModal
         isOpen={isValidationModalOpen}
         onClose={() => setIsValidationModalOpen(false)}
+        onNavigateToNode={handleNavigateToNodeFromValidation}
       />
 
       {/* Export Confirmation Modal */}
       <ExportConfirmModal
         isOpen={isExportConfirmOpen}
-        errorCount={invalidNodesCount}
+        errorCount={exportErrorNodeCount}
         onConfirm={() => performExport(edges)}
         onCancel={() => setIsExportConfirmOpen(false)}
       />
@@ -1705,6 +1958,7 @@ function InnerEditor() {
         isReadOnly={isReadOnly}
         onExport={handleExport}
         onSave={handleSave}
+        onOpenScenarioCheck={handleValidate}
         onOpenBlockLibrary={() => {
           if (!user) {
             showToast('Для доступа к библиотеке блоков необходимо войти в систему', 'error');

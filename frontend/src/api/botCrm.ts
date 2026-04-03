@@ -1,0 +1,268 @@
+/**
+ * Mini-CRM API (ctor-пользователи, переменные, теги платформенного бота).
+ * Пути: /bots/{botId}/crm/...
+ */
+import api from './client';
+
+export const SNAKE_KEY_RE = /^[a-z][a-z0-9_]*$/;
+
+export function validateSnakeKey(key: string): string | undefined {
+  const t = key.trim();
+  if (!t) return 'Введите ключ';
+  if (!SNAKE_KEY_RE.test(t)) return 'Только snake_case: a-z, цифры, _, с буквы';
+  return undefined;
+}
+
+export interface CrmTagBrief {
+  key: string;
+  label?: string | null;
+  color?: string | null;
+}
+
+export interface CrmUserListItem {
+  id: number;
+  display_name: string;
+  channel: string;
+  phone?: string | null;
+  email?: string | null;
+  tags: CrmTagBrief[];
+  last_message_at?: string | null;
+  current_scenario_id?: number | null;
+  current_scenario_name?: string | null;
+  current_block_id?: number | null;
+  current_block_label?: string | null;
+  session_status?: string | null;
+  created_at: string;
+}
+
+export interface CrmUserListResponse {
+  total: number;
+  page: number;
+  page_size: number;
+  items: CrmUserListItem[];
+}
+
+export interface CrmSession {
+  id: number;
+  scenario_id: number;
+  scenario_name?: string | null;
+  current_block_id?: number | null;
+  current_block_label?: string | null;
+  status: string;
+  updated_at: string;
+  started_at: string;
+}
+
+export interface CrmUserDetail {
+  id: number;
+  bot_id: number;
+  channel: string;
+  external_user_id: string;
+  username?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  language_code?: string | null;
+  status: string;
+  last_message_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  display_name: string;
+  session?: CrmSession | null;
+}
+
+export interface CrmUserVariable {
+  key: string;
+  definition_id: number;
+  data_type: string;
+  scope: string;
+  is_system: boolean;
+  value: unknown;
+}
+
+export interface CrmEvent {
+  id: number;
+  event_type: string;
+  created_at: string;
+  session_id?: number | null;
+  scenario_id?: number | null;
+  block_id?: number | null;
+  payload_json?: Record<string, unknown> | null;
+}
+
+export interface CrmVariableDef {
+  id: number;
+  key: string;
+  label?: string | null;
+  data_type: string;
+  is_system: boolean;
+  is_archived: boolean;
+  used_in_blocks_count: number;
+  updated_at: string;
+}
+
+export interface CrmVariableUsageRef {
+  block_id: number;
+  scenario_id: number;
+  scenario_name: string;
+  block_type: string;
+  block_name?: string | null;
+}
+
+export interface CrmTagDef {
+  id: number;
+  key: string;
+  label?: string | null;
+  color?: string | null;
+  users_count: number;
+  updated_at: string;
+}
+
+export async function crmListUsers(
+  botId: number,
+  params?: {
+    page?: number;
+    page_size?: number;
+    q?: string;
+    channel?: string;
+    tag_keys?: string;
+    active_since?: string;
+    active_until?: string;
+  }
+): Promise<CrmUserListResponse> {
+  const q = new URLSearchParams();
+  if (params?.page != null) q.set('page', String(params.page));
+  if (params?.page_size != null) q.set('page_size', String(params.page_size));
+  if (params?.q) q.set('q', params.q);
+  if (params?.channel) q.set('channel', params.channel);
+  if (params?.tag_keys) q.set('tag_keys', params.tag_keys);
+  if (params?.active_since) q.set('active_since', params.active_since);
+  if (params?.active_until) q.set('active_until', params.active_until);
+  const suffix = q.toString() ? `?${q}` : '';
+  return api.get(`/bots/${botId}/crm/users${suffix}`);
+}
+
+export async function crmUserDetail(botId: number, botUserId: number): Promise<CrmUserDetail> {
+  return api.get(`/bots/${botId}/crm/users/${botUserId}`);
+}
+
+export async function crmUserVariables(
+  botId: number,
+  botUserId: number
+): Promise<CrmUserVariable[]> {
+  return api.get(`/bots/${botId}/crm/users/${botUserId}/variables`);
+}
+
+export async function crmSetUserVariable(
+  botId: number,
+  botUserId: number,
+  key: string,
+  value: unknown
+): Promise<CrmUserVariable> {
+  return api.put(`/bots/${botId}/crm/users/${botUserId}/variables`, { key, value });
+}
+
+export async function crmUserTags(
+  botId: number,
+  botUserId: number
+): Promise<{ id: number; key: string; label?: string | null; color?: string | null }[]> {
+  return api.get(`/bots/${botId}/crm/users/${botUserId}/tags`);
+}
+
+export async function crmAddUserTag(botId: number, botUserId: number, key: string): Promise<void> {
+  await api.post(`/bots/${botId}/crm/users/${botUserId}/tags`, { key });
+}
+
+export async function crmRemoveUserTag(
+  botId: number,
+  botUserId: number,
+  tagKey: string
+): Promise<void> {
+  await api.delete(`/bots/${botId}/crm/users/${botUserId}/tags/${encodeURIComponent(tagKey)}`);
+}
+
+export async function crmUserEvents(
+  botId: number,
+  botUserId: number,
+  limit = 50,
+  offset = 0
+): Promise<CrmEvent[]> {
+  return api.get(`/bots/${botId}/crm/users/${botUserId}/events?limit=${limit}&offset=${offset}`);
+}
+
+export async function crmListVariableDefs(
+  botId: number,
+  includeArchived = false
+): Promise<CrmVariableDef[]> {
+  return api.get(
+    `/bots/${botId}/crm/variables?include_archived=${includeArchived ? 'true' : 'false'}`
+  );
+}
+
+export async function crmVariableUsage(
+  botId: number,
+  varKey: string
+): Promise<CrmVariableUsageRef[]> {
+  return api.get(`/bots/${botId}/crm/variables/${encodeURIComponent(varKey)}/usage`);
+}
+
+export async function crmCreateVariable(
+  botId: number,
+  body: {
+    key: string;
+    label?: string;
+    data_type?: string;
+    scope?: string;
+    description?: string;
+  }
+): Promise<CrmVariableDef> {
+  return api.post(`/bots/${botId}/crm/variables`, body);
+}
+
+export async function crmPatchVariable(
+  botId: number,
+  varKey: string,
+  body: {
+    label?: string;
+    description?: string;
+    data_type?: string;
+    is_archived?: boolean;
+  }
+): Promise<CrmVariableDef> {
+  return api.patch(`/bots/${botId}/crm/variables/${encodeURIComponent(varKey)}`, body);
+}
+
+export async function crmListTags(botId: number): Promise<CrmTagDef[]> {
+  return api.get(`/bots/${botId}/crm/tags`);
+}
+
+export async function crmCreateTag(
+  botId: number,
+  body: { key: string; label?: string; color?: string; description?: string }
+): Promise<CrmTagDef> {
+  return api.post(`/bots/${botId}/crm/tags`, body);
+}
+
+export async function crmPatchTag(
+  botId: number,
+  tagKey: string,
+  body: { label?: string; color?: string; description?: string }
+): Promise<CrmTagDef> {
+  return api.patch(`/bots/${botId}/crm/tags/${encodeURIComponent(tagKey)}`, body);
+}
+
+export async function crmDeleteTag(botId: number, tagKey: string): Promise<void> {
+  await api.delete(`/bots/${botId}/crm/tags/${encodeURIComponent(tagKey)}`);
+}
+
+export async function crmUsersByTag(
+  botId: number,
+  tagKey: string,
+  page = 1,
+  pageSize = 25
+): Promise<CrmUserListResponse> {
+  return api.get(
+    `/bots/${botId}/crm/tags/${encodeURIComponent(tagKey)}/users?page=${page}&page_size=${pageSize}`
+  );
+}

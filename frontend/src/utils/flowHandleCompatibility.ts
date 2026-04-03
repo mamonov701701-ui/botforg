@@ -15,6 +15,7 @@ export function getNodeHandleSets(node: Node): {
   const blockId = (data.blockId || data.type || '').toString().toLowerCase();
   const isStart = blockId === 'start';
   const isMessage = blockId === 'message';
+  const isInput = blockId === 'input';
   const buttons = isMessage && Array.isArray(data.settings?.buttons) ? data.settings.buttons : [];
   const hasButtons = buttons.length > 0;
 
@@ -31,6 +32,12 @@ export function getNodeHandleSets(node: Node): {
     return {
       targetHandles: new Set(['top']),
       sourceHandles: sources,
+    };
+  }
+  if (isInput) {
+    return {
+      targetHandles: new Set(['top', 'left']),
+      sourceHandles: new Set(['success', 'error']),
     };
   }
   return {
@@ -59,23 +66,39 @@ export function normalizeScenarioEdges(nodes: Node[], edges: Edge[]): Edge[] {
 }
 
 function normalizeOneEdge(edge: Edge, byId: Map<string, Node>): Edge {
-  const src = byId.get(edge.source);
-  const tgt = byId.get(edge.target);
-  if (!src || !tgt) return edge;
-
-  const s = getNodeHandleSets(src);
-  const t = getNodeHandleSets(tgt);
+  const src = edge.source ? byId.get(edge.source) : undefined;
+  const tgt = edge.target ? byId.get(edge.target) : undefined;
 
   let sourceHandle =
     edge.sourceHandle === '' || edge.sourceHandle == null ? undefined : edge.sourceHandle;
-  if (sourceHandle != null && !s.sourceHandles.has(sourceHandle)) {
-    sourceHandle = pickFallbackSource(s.sourceHandles);
+
+  if (src) {
+    const s = getNodeHandleSets(src);
+    const srcBlock = ((src.data as any)?.blockId || (src.data as any)?.type || '')
+      .toString()
+      .toLowerCase();
+    if (
+      srcBlock === 'input' &&
+      (sourceHandle === 'right' ||
+        sourceHandle === 'bottom' ||
+        sourceHandle === undefined ||
+        sourceHandle === '')
+    ) {
+      sourceHandle = 'success';
+    }
+
+    if (sourceHandle != null && !s.sourceHandles.has(sourceHandle)) {
+      sourceHandle = pickFallbackSource(s.sourceHandles);
+    }
   }
 
   let targetHandle =
     edge.targetHandle === '' || edge.targetHandle == null ? undefined : edge.targetHandle;
-  if (targetHandle != null && !t.targetHandles.has(targetHandle)) {
-    targetHandle = pickFallbackTarget(t.targetHandles);
+  if (tgt) {
+    const t = getNodeHandleSets(tgt);
+    if (targetHandle != null && !t.targetHandles.has(targetHandle)) {
+      targetHandle = pickFallbackTarget(t.targetHandles);
+    }
   }
 
   return { ...edge, sourceHandle, targetHandle };
@@ -86,18 +109,22 @@ export function listInvalidFlowEdges(nodes: Node[], edges: Edge[]): string[] {
   const byId = new Map(nodes.map(n => [n.id, n]));
   const issues: string[] = [];
   for (const e of edges) {
-    const src = byId.get(e.source);
-    const tgt = byId.get(e.target);
-    if (!src || !tgt) continue;
-    const s = getNodeHandleSets(src);
-    const t = getNodeHandleSets(tgt);
+    const src = e.source ? byId.get(e.source) : undefined;
+    const tgt = e.target ? byId.get(e.target) : undefined;
+    if (!src && !tgt) continue;
     const sh = e.sourceHandle && e.sourceHandle !== '' ? e.sourceHandle : null;
     const th = e.targetHandle && e.targetHandle !== '' ? e.targetHandle : null;
-    if (sh && !s.sourceHandles.has(sh)) {
-      issues.push(`ребро ${e.id}: несовместимый sourceHandle «${sh}»`);
+    if (src) {
+      const s = getNodeHandleSets(src);
+      if (sh && !s.sourceHandles.has(sh)) {
+        issues.push(`ребро ${e.id}: несовместимый sourceHandle «${sh}»`);
+      }
     }
-    if (th && !t.targetHandles.has(th)) {
-      issues.push(`ребро ${e.id}: несовместимый targetHandle «${th}»`);
+    if (tgt) {
+      const t = getNodeHandleSets(tgt);
+      if (th && !t.targetHandles.has(th)) {
+        issues.push(`ребро ${e.id}: несовместимый targetHandle «${th}»`);
+      }
     }
   }
   return issues;

@@ -16,11 +16,47 @@ from backend.utils.bot_access import (
     get_accessible_bot_owner_ids,
 )
 from backend.utils.plan_limits import check_max_bots
+from backend.utils.ctor_bot_resolve import resolve_ctor_bot_id
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+
+from backend.services.constructor.repositories.ctor_variables_repository import (
+    CtorVariablesRepository,
+)
+from backend.services.message_template.diagnostics import (
+    ctor_definitions_to_api_items,
+    diagnose_message_template,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+class VariableDefinitionOut(BaseModel):
+    key: str
+    label: str | None = None
+    data_type: str
+    is_system: bool
+    scope: str | None = None
+
+
+class VariableDefinitionsResponse(BaseModel):
+    ctor_bot_linked: bool
+    ctor_bot_id: int | None = None
+    items: list[VariableDefinitionOut] = Field(default_factory=list)
+
+
+class MessageTemplateDiagnosticsRequest(BaseModel):
+    text: str = ""
+
+
+class MessageTemplateDiagnosticsResponse(BaseModel):
+    placeholder_keys: list[str] = Field(default_factory=list)
+    unknown_keys: list[str] = Field(default_factory=list)
+    defined_variable_keys: list[str] = Field(default_factory=list)
+    system_keys: list[str] = Field(default_factory=list)
+    ctor_bot_linked: bool = False
 
 
 def verify_telegram_token(token: str) -> dict:
@@ -327,6 +363,52 @@ async def get_bots(
         ))
     
     return {"total": len(bot_items), "items": bot_items}
+
+
+@router.get("/{bot_id}/variable-definitions", response_model=VariableDefinitionsResponse)
+async def list_bot_variable_definitions(
+    bot_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Список ctor_bot_variable_definitions для бота редактора (вставка {{ key }})."""
+    check_bot_access(bot_id, current_user.id, db)
+    ctor_bid = resolve_ctor_bot_id(db, bot_id)
+    if not ctor_bid:
+        return VariableDefinitionsResponse(ctor_bot_linked=False, ctor_bot_id=None, items=[])
+    repo = CtorVariablesRepository(db)
+    rows = repo.list_definitions_for_bot(ctor_bid)
+    items = [VariableDefinitionOut(**x) for x in ctor_definitions_to_api_items(rows)]
+    return VariableDefinitionsResponse(
+        ctor_bot_linked=True, ctor_bot_id=ctor_bid, items=items
+    )
+
+
+@router.post(
+    "/{bot_id}/message-template-diagnostics",
+    response_model=MessageTemplateDiagnosticsResponse,
+)
+async def message_template_diagnostics(
+    bot_id: int,
+    body: MessageTemplateDiagnosticsRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """Какие плейсхолдеры в тексте сообщения неизвестны для определений бота."""
+    check_bot_access(bot_id, current_user.id, db)
+    ctor_bid = resolve_ctor_bot_id(db, bot_id)
+    if not ctor_bid:
+        return MessageTemplateDiagnosticsResponse(ctor_bot_linked=False)
+    repo = CtorVariablesRepository(db)
+    rows = repo.list_definitions_for_bot(ctor_bid)
+    d = diagnose_message_template(body.text, rows)
+    return MessageTemplateDiagnosticsResponse(
+        placeholder_keys=d.placeholder_keys,
+        unknown_keys=d.unknown_keys,
+        defined_variable_keys=d.defined_variable_keys,
+        system_keys=d.system_keys,
+        ctor_bot_linked=True,
+    )
 
 
 @router.get("/{bot_id}", response_model=BotOut)

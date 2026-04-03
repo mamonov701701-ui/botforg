@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState, useRef } from 'react';
+import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import { Node } from 'reactflow';
 import {
   AlertCircle,
@@ -23,7 +23,15 @@ import {
 } from '../../../utils/messageMedia';
 import { FieldRenderer } from './FieldRenderer';
 import { MessageBlockSettingsForm } from './MessageBlockSettingsForm';
+import { InputBlockSettingsForm } from './InputBlockSettingsForm';
 import { BlockConfigField } from '../../../types/blocks';
+import { useScenarioStore } from '../../../stores/scenarioStore';
+import {
+  useScenarioDiagnosticsStore,
+  SCENARIO_DIAGNOSTICS_EMPTY_NODE,
+} from '../../../stores/scenarioDiagnosticsStore';
+import { getScenarioDiagnosticUiModel } from '../../../utils/scenarioDiagnosticUi';
+import type { ScenarioDiagnostic } from '../../../utils/scenarioConsistency';
 
 interface Props {
   selectedNode: Node;
@@ -113,6 +121,7 @@ export default function BlockSettingsPanel({
 }: Props) {
   const catalog = useEditorStore(state => state.catalog);
   const showToast = useEditorStore(state => state.showToast);
+  const currentBotId = useScenarioStore(state => state.currentBotId);
   const setValidationResult = useValidationStore(state => state.setValidationResult);
   const [hasChanges, setHasChanges] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -157,10 +166,31 @@ export default function BlockSettingsPanel({
     return () => clearTimeout(t);
   }, [block, settingsJson, selectedNode.id, setValidationResult]);
 
+  const nodeDiagPick = useCallback(
+    (s: { byNodeId: Map<string, ScenarioDiagnostic[]> }) => s.byNodeId.get(selectedNode.id),
+    [selectedNode.id]
+  );
+  const scenarioDiagnosticsRaw = useScenarioDiagnosticsStore(nodeDiagPick);
+  const scenarioDiagnosticsForNode =
+    scenarioDiagnosticsRaw === undefined ? SCENARIO_DIAGNOSTICS_EMPTY_NODE : scenarioDiagnosticsRaw;
+  const scenarioDiagErrors = useMemo(
+    () => scenarioDiagnosticsForNode.filter(d => d.severity === 'error'),
+    [scenarioDiagnosticsForNode]
+  );
+  const scenarioDiagWarnings = useMemo(
+    () => scenarioDiagnosticsForNode.filter(d => d.severity === 'warning'),
+    [scenarioDiagnosticsForNode]
+  );
+
   const initialSettings = selectedNode.data.settings || {};
 
   const liveMessageSchema = useMemo(() => {
     if (block?.id !== 'message' || !block) return null;
+    return validateNodeSettings(selectedNode, block);
+  }, [block, selectedNode.id, settingsJson]);
+
+  const liveInputSchema = useMemo(() => {
+    if (block?.id !== 'input' || !block) return null;
     return validateNodeSettings(selectedNode, block);
   }, [block, selectedNode.id, settingsJson]);
 
@@ -269,13 +299,41 @@ export default function BlockSettingsPanel({
   };
 
   // Handle save - показывает подтверждение (изменения уже применены)
-  const handleSave = () => {
+  const handleSave = async () => {
     if (block) {
       const validation = validateNodeSettings(selectedNode, block);
       setValidationResult(selectedNode.id, validation);
 
       if (validation.isValid) {
-        showToast('Настройки блока сохранены', 'success');
+        let showedPlaceholderWarning = false;
+        if (
+          block.id === 'message' &&
+          currentBotId &&
+          typeof selectedNode.data.settings?.text === 'string' &&
+          selectedNode.data.settings.text.includes('{{')
+        ) {
+          try {
+            const { postMessageTemplateDiagnostics } = await import(
+              '../../../api/botMessageTemplate'
+            );
+            const d = await postMessageTemplateDiagnostics(
+              currentBotId,
+              selectedNode.data.settings.text
+            );
+            if (d.ctor_bot_linked && d.unknown_keys?.length) {
+              showToast(
+                `Сохранено. Неизвестные плейсхолдеры: ${d.unknown_keys.join(', ')}`,
+                'warning'
+              );
+              showedPlaceholderWarning = true;
+            }
+          } catch {
+            /* нет сети или нет связки ctor */
+          }
+        }
+        if (!showedPlaceholderWarning) {
+          showToast('Настройки блока сохранены', 'success');
+        }
         setHasChanges(false);
       } else {
         const parts = validation.missingFields;
@@ -323,14 +381,18 @@ export default function BlockSettingsPanel({
 
   // Count validation errors (для «Сообщение» — полная схема, включая кнопки и медиа)
   const validationErrors = useMemo(() => {
-    if (!block?.configSchema) return 0;
+    if (!block) return 0;
+    if (block.id === 'input' && liveInputSchema) {
+      return liveInputSchema.isValid ? 0 : liveInputSchema.missingFields.length;
+    }
+    if (!block.configSchema) return 0;
     if (block.id === 'message' && liveMessageSchema) {
       return liveMessageSchema.isValid ? 0 : liveMessageSchema.missingFields.length;
     }
     return block.configSchema.filter(field =>
       validateField(field, selectedNode.data.settings?.[field.name])
     ).length;
-  }, [block, selectedNode.data.settings, liveMessageSchema]);
+  }, [block, selectedNode.data.settings, liveMessageSchema, liveInputSchema]);
 
   // Специальная обработка для системного блока "start"
   if (!block) {
@@ -455,7 +517,7 @@ export default function BlockSettingsPanel({
                 {selectedNode.data.title || block.title}
               </div>
               {/* Validation status badge */}
-              {block.configSchema && block.configSchema.length > 0 && (
+              {((block.configSchema && block.configSchema.length > 0) || block.id === 'input') && (
                 <Tooltip
                   text={validationErrors > 0 ? `${validationErrors} ошибок` : 'Всё заполнено'}
                 >
@@ -566,6 +628,123 @@ export default function BlockSettingsPanel({
         )}
       </div>
 
+      {(scenarioDiagErrors.length > 0 || scenarioDiagWarnings.length > 0) && (
+        <div
+          style={{
+            padding: '12px 16px',
+            borderBottom: '1px solid #1f2937',
+            background: 'rgba(30, 41, 59, 0.65)',
+          }}
+        >
+          {scenarioDiagErrors.length > 0 && (
+            <div style={{ marginBottom: scenarioDiagWarnings.length ? 14 : 0 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#fecaca',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Ошибки проверки сценария
+              </div>
+              <ul
+                style={{
+                  margin: 0,
+                  padding: 0,
+                  listStyle: 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                {scenarioDiagErrors.map((d, i) => {
+                  const ui = getScenarioDiagnosticUiModel(d);
+                  return (
+                    <li
+                      key={`e-${d.code}-${i}`}
+                      style={{
+                        padding: 10,
+                        borderRadius: 8,
+                        background: 'rgba(127, 29, 29, 0.35)',
+                        border: '1px solid rgba(185, 28, 28, 0.5)',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: '#fecaca', fontSize: 13 }}>
+                        {ui.title}
+                      </div>
+                      <div style={{ color: '#e5e7eb', fontSize: 13, marginTop: 4 }}>{ui.body}</div>
+                      {ui.actionHint && (
+                        <div
+                          style={{ color: '#93c5fd', fontSize: 12, marginTop: 8, lineHeight: 1.45 }}
+                        >
+                          {ui.actionHint}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+          {scenarioDiagWarnings.length > 0 && (
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#fde68a',
+                  marginBottom: 8,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                }}
+              >
+                Предупреждения
+              </div>
+              <ul
+                style={{
+                  margin: 0,
+                  padding: 0,
+                  listStyle: 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 10,
+                }}
+              >
+                {scenarioDiagWarnings.map((d, i) => {
+                  const ui = getScenarioDiagnosticUiModel(d);
+                  return (
+                    <li
+                      key={`w-${d.code}-${i}`}
+                      style={{
+                        padding: 10,
+                        borderRadius: 8,
+                        background: 'rgba(120, 53, 15, 0.3)',
+                        border: '1px solid rgba(180, 83, 9, 0.45)',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: '#fcd34d', fontSize: 13 }}>
+                        {ui.title}
+                      </div>
+                      <div style={{ color: '#fef3c7', fontSize: 13, marginTop: 4 }}>{ui.body}</div>
+                      {ui.actionHint && (
+                        <div
+                          style={{ color: '#fde68a', fontSize: 12, marginTop: 8, lineHeight: 1.45 }}
+                        >
+                          {ui.actionHint}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Form Fields */}
       <div
         style={{
@@ -635,7 +814,15 @@ export default function BlockSettingsPanel({
           </div>
         </div>
 
-        {block.configSchema && block.configSchema.length > 0 ? (
+        {block.id === 'input' ? (
+          <>
+            <InputBlockSettingsForm
+              settings={(selectedNode.data.settings || {}) as Record<string, unknown>}
+              onFieldChange={handleFieldChange}
+              isReadOnly={isReadOnly}
+            />
+          </>
+        ) : block.configSchema && block.configSchema.length > 0 ? (
           block.id === 'message' &&
           block.configSchema.some(f => f.name === 'text') &&
           block.configSchema.some(f => f.name === 'buttons') ? (
@@ -663,6 +850,7 @@ export default function BlockSettingsPanel({
                 }
                 liveMessageSchema={liveMessageSchema}
                 validateField={validateField}
+                platformBotId={currentBotId}
               />
             </>
           ) : (

@@ -114,19 +114,62 @@
     "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
     "configSchema": [
       {
-        "name": "text",
+        "name": "question_text",
         "type": "text",
-        "label": "Вопрос или подсказка пользователю",
+        "label": "Текст вопроса",
         "required": true,
         "description": "Текст, который увидит пользователь перед вводом ответа",
         "placeholder": "Например: Как вас зовут?"
       },
       {
-        "name": "variableName",
+        "name": "variable_key",
         "type": "string",
-        "label": "Имя переменной для ответа",
+        "label": "Ключ переменной (snake_case)",
         "required": true,
-        "description": "Под этим именем ответ сохранится и будет доступен в условиях и сообщениях"
+        "description": "Служебный идентификатор: латиница a–z, цифры и _; первая символ — буква"
+      },
+      {
+        "name": "variable_label",
+        "type": "string",
+        "label": "Название переменной",
+        "required": false,
+        "description": "Человекочитаемая подпись в конструкторе"
+      },
+      {
+        "name": "placeholder",
+        "type": "string",
+        "label": "Placeholder",
+        "required": false,
+        "description": "Подсказка в поле ввода у пользователя"
+      },
+      {
+        "name": "required",
+        "type": "boolean",
+        "label": "Обязательный ответ",
+        "required": false,
+        "default": true
+      },
+      {
+        "name": "trim",
+        "type": "boolean",
+        "label": "Обрезать пробелы по краям",
+        "required": false,
+        "default": true
+      },
+      {
+        "name": "validation",
+        "type": "json",
+        "label": "Правила валидации",
+        "required": false,
+        "default": { "type": "string" },
+        "description": "type: string | number | email | phone | date; опционально min_length, max_length, regex"
+      },
+      {
+        "name": "error_message",
+        "type": "string",
+        "label": "Сообщение об ошибке",
+        "required": false,
+        "description": "Текст при ошибке валидации (иначе — стандартные подсказки)"
       }
     ]
   },

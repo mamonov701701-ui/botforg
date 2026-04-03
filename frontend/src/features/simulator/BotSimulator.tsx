@@ -422,6 +422,8 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
           onButtonClick={handleUserChoice}
           showTextInput={showTextInput}
           onSubmitText={handleFreeText}
+          textInputPlaceholder={lastInteractiveBot?.meta?.inputPlaceholder || 'Введите ответ…'}
+          textInputAllowEmpty={Boolean(lastInteractiveBot?.meta?.inputAllowEmpty)}
           activeButtonMessageId={activeButtonMessageId}
           showTypingIndicator={Boolean(waitDelayMs != null && waitDelayMs > 0)}
         />

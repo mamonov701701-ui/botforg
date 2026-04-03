@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './styles/theme.css';
 import './output.css';
 import SiteLayout from './layouts/SiteLayout';
@@ -34,6 +34,11 @@ import PlatformUsersPage from './features/dashboard/pages/PlatformUsersPage';
 import PlatformAnalyticsPage from './features/dashboard/pages/PlatformAnalyticsPage';
 import UserDetailPage from './features/dashboard/pages/UserDetailPage';
 import MessagesPage from './features/dashboard/pages/MessagesPage';
+import BotCrmLayout from './features/dashboard/crm/BotCrmLayout';
+import BotCrmUsersPage from './features/dashboard/crm/BotCrmUsersPage';
+import BotCrmUserDetailPage from './features/dashboard/crm/BotCrmUserDetailPage';
+import BotCrmVariablesPage from './features/dashboard/crm/BotCrmVariablesPage';
+import BotCrmTagsPage from './features/dashboard/crm/BotCrmTagsPage';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -100,6 +105,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="messages" element={<MessagesPage />} />
             <Route path="bf-team" element={<BFTeamPage />} />
             <Route path="settings" element={<SettingsPage />} />
+
+            <Route path="bots/:botId/crm" element={<BotCrmLayout />}>
+              <Route index element={<Navigate to="users" replace />} />
+              <Route path="users" element={<BotCrmUsersPage />} />
+              <Route path="users/:ctorUserId" element={<BotCrmUserDetailPage />} />
+              <Route path="variables" element={<BotCrmVariablesPage />} />
+              <Route path="tags" element={<BotCrmTagsPage />} />
+            </Route>
 
             {/* Platform admin routes */}
             <Route path="platform" element={<PlatformOverviewPage />} />

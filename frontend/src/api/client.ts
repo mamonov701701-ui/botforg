@@ -101,7 +101,18 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
       throw new ApiError(errorMessage, response.status);
     }
 
-    return response.json();
+    if (response.status === 204) {
+      return null;
+    }
+    const text = await response.text();
+    if (!text) {
+      return null;
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
   } catch (error: any) {
     clearTimeout(timeout);
     if (error.name === 'AbortError') {

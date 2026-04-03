@@ -20,6 +20,7 @@
  */
 
 import type { Node, Edge } from 'reactflow';
+import { migrateInputNodeSettings } from './inputBlock';
 
 /**
  * Нормализованный вид одного runtime‑узла.
@@ -86,14 +87,18 @@ export interface RuntimeGraph {
  */
 export function normalizeNodeForRuntime(node: Node): RuntimeNode {
   const data: any = node.data || {};
+  const rawSettings =
+    data.settings && typeof data.settings === 'object' ? { ...data.settings } : {};
+  const settings =
+    String(data.blockId || data.type || '').toLowerCase() === 'input'
+      ? migrateInputNodeSettings(rawSettings as Record<string, unknown>)
+      : rawSettings;
 
   return {
     id: node.id,
     blockId: String(data.blockId || data.type || 'unknown'),
     title: typeof data.title === 'string' ? data.title : undefined,
-    settings: (data.settings && typeof data.settings === 'object'
-      ? { ...data.settings }
-      : {}) as Record<string, unknown>,
+    settings: settings as Record<string, unknown>,
   };
 }
 
