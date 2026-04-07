@@ -19,6 +19,7 @@ import {
   type CrmEvent,
   type CrmTagDef,
 } from '../../../api/botCrm';
+import { getVariableDataTypeLabel } from '../../../utils/uiLabels';
 
 export default function BotCrmUserDetailPage() {
   const { botId, ctorUserId } = useParams<{ botId: string; ctorUserId: string }>();
@@ -223,11 +224,11 @@ export default function BotCrmUserDetailPage() {
                     <code>{row.key}</code>
                     {row.is_system ? (
                       <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--text-muted)' }}>
-                        system
+                        системная
                       </span>
                     ) : null}
                   </td>
-                  <td style={{ padding: 8 }}>{row.data_type}</td>
+                  <td style={{ padding: 8 }}>{getVariableDataTypeLabel(row.data_type)}</td>
                   <td style={{ padding: 8 }}>
                     {editingKey === row.key ? (
                       <input
@@ -306,7 +307,7 @@ export default function BotCrmUserDetailPage() {
           <h4 style={{ margin: '0 0 8px' }}>Добавить переменную</h4>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
             <input
-              placeholder="ключ_snake"
+              placeholder="Системное имя (например city)"
               value={newVarKey}
               onChange={e => setNewVarKey(e.target.value)}
               style={{
@@ -318,7 +319,7 @@ export default function BotCrmUserDetailPage() {
               }}
             />
             <input
-              placeholder="значение"
+              placeholder="Значение"
               value={newVarVal}
               onChange={e => setNewVarVal(e.target.value)}
               style={{

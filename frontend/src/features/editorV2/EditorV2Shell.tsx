@@ -48,6 +48,8 @@ import type { ScenarioDiagnostic } from '../../utils/scenarioConsistency';
 import { formatScenarioDiagnosticsTooltip } from '../../utils/scenarioDiagnosticUi';
 import { runEditorValidationPipeline } from '../../utils/editorScenarioValidation';
 import { fetchVariableDefinitionsSafe } from '../../api/botMessageTemplate';
+import { getNormalizedInputSettings, migrateInputNodeSettings } from '../../utils/inputBlock';
+import { getVariableDataTypeLabel } from '../../utils/uiLabels';
 import ValidationModal from './ValidationModal';
 import ExportConfirmModal from './ExportConfirmModal';
 import BlockLibraryModal from './BlockLibraryModal';
@@ -89,6 +91,10 @@ const ConnectionLine = ({
   );
 };
 
+function getInputNodeOutputCountLabel(separateErrorBranch: boolean): string {
+  return separateErrorBranch ? '2 выхода' : '1 выход';
+}
+
 // КРИТИЧНО: CustomNode должен быть определен ВНЕ компонента InnerEditor,
 // чтобы не пересоздаваться при каждом рендере
 const CustomNode = React.memo(({ data, id, selected }: any) => {
@@ -96,11 +102,21 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
   const isStartNode = data?.blockId === 'start';
   const isMessageNode = data?.blockId === 'message';
   const isInputNode = data?.blockId === 'input';
+  const showInputErrorBranch = data?.settings?.separate_error_branch !== false;
   const borderColor = data?.color || '#2f6dff';
 
   // Получаем кнопки для блока message
   const buttons = isMessageNode && data?.settings?.buttons ? data.settings.buttons : [];
   const hasButtons = buttons.length > 0;
+  const inputSettings = isInputNode
+    ? getNormalizedInputSettings(
+        migrateInputNodeSettings((data?.settings as Record<string, unknown>) || {})
+      )
+    : null;
+  const inputAnswerName = inputSettings?.variable_label?.trim() || 'Ответ пользователя';
+  const inputAnswerTypeLabel = inputSettings
+    ? getVariableDataTypeLabel(inputSettings.validation.type)
+    : 'Текст';
 
   // Get validation status - мемоизированный селектор
   // Используем useMemo чтобы селектор не пересоздавался
@@ -302,38 +318,40 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
                 className="react-flow__handle-visible"
               />
             </div>
-            <div
-              style={{
-                position: 'relative',
-                padding: '10px 16px',
-                borderRadius: 10,
-                background: 'linear-gradient(180deg, #64748b 0%, #475569 100%)',
-                color: '#f1f5f9',
-                fontWeight: 600,
-                fontSize: 13,
-                textAlign: 'center',
-              }}
-            >
-              ✗ Ошибка валидации (опционально)
-              <Handle
-                id="error"
-                type="source"
-                position={Position.Right}
-                isConnectable={true}
+            {showInputErrorBranch && (
+              <div
                 style={{
-                  background: '#FFB300',
-                  width: 19.4,
-                  height: 19.4,
-                  border: '3px solid #fff',
-                  right: -11.7,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  zIndex: 10001,
-                  position: 'absolute',
+                  position: 'relative',
+                  padding: '10px 16px',
+                  borderRadius: 10,
+                  background: 'linear-gradient(180deg, #64748b 0%, #475569 100%)',
+                  color: '#f1f5f9',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  textAlign: 'center',
                 }}
-                className="react-flow__handle-visible"
-              />
-            </div>
+              >
+                ✗ Ошибка валидации (опционально)
+                <Handle
+                  id="error"
+                  type="source"
+                  position={Position.Right}
+                  isConnectable={true}
+                  style={{
+                    background: '#FFB300',
+                    width: 19.4,
+                    height: 19.4,
+                    border: '3px solid #fff',
+                    right: -11.7,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: 10001,
+                    position: 'absolute',
+                  }}
+                  className="react-flow__handle-visible"
+                />
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -513,6 +531,50 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
           {title}
         </div>
       </div>
+
+      {isInputNode && (
+        <div
+          style={{
+            marginTop: 8,
+            width: '100%',
+            maxWidth: 320,
+            padding: '8px 10px',
+            borderRadius: 10,
+            border: '1px solid rgba(2, 132, 199, 0.25)',
+            background: 'rgba(14, 165, 233, 0.08)',
+            color: '#0f172a',
+            lineHeight: 1.35,
+            fontSize: 12,
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 600,
+              marginBottom: 4,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={`Сохраняет: ${inputAnswerName}`}
+          >
+            Сохраняет: {inputAnswerName}
+          </div>
+          <div style={{ opacity: 0.85, marginBottom: 6 }}>Тип: {inputAnswerTypeLabel}</div>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '2px 8px',
+              borderRadius: 999,
+              fontSize: 11,
+              fontWeight: 600,
+              background: 'rgba(15, 23, 42, 0.08)',
+            }}
+          >
+            {getInputNodeOutputCountLabel(showInputErrorBranch)}
+          </div>
+        </div>
+      )}
 
       {/* Превью медиа для блока message - сначала медиа */}
       {isMessageNode &&
@@ -1682,8 +1744,11 @@ function InnerEditor() {
                 ? {
                     question_text: '',
                     variable_key: '',
+                    variable_key_manual: false,
+                    variable_label: '',
                     required: true,
                     trim: true,
+                    separate_error_branch: false,
                     validation: { type: 'string' },
                   }
                 : {},
@@ -2232,7 +2297,24 @@ function InnerEditor() {
                   ? undefined
                   : (nodeId, updates) => {
                       setNodes(nodes =>
-                        nodes.map(n => (n.id === nodeId ? { ...n, ...updates } : n))
+                        nodes.map(n => {
+                          if (n.id !== nodeId) return n;
+                          const nextData = updates.data
+                            ? {
+                                ...(n.data || {}),
+                                ...updates.data,
+                                settings: {
+                                  ...((n.data as any)?.settings || {}),
+                                  ...((updates.data as any)?.settings || {}),
+                                },
+                              }
+                            : n.data;
+                          return {
+                            ...n,
+                            ...updates,
+                            data: nextData,
+                          };
+                        })
                       );
                     }
               }

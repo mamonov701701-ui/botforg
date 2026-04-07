@@ -119,11 +119,15 @@ export default function BotCrmTagsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--text-muted)' }}>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>key</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>label</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>color</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>польз.</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>updated</th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>
+                  Системное имя
+                </th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Название</th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Цвет</th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>
+                  Пользователей
+                </th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Обновлено</th>
                 <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }} />
               </tr>
             </thead>
@@ -238,7 +242,7 @@ export default function BotCrmTagsPage() {
           >
             <h3 style={{ marginTop: 0 }}>Новый тег</h3>
             <label style={{ display: 'block', fontSize: 13, marginBottom: 8 }}>
-              Ключ
+              Системное имя (для конструктора)
               <input
                 value={key}
                 onChange={e => setKey(e.target.value)}
@@ -255,7 +259,7 @@ export default function BotCrmTagsPage() {
               />
             </label>
             <label style={{ display: 'block', fontSize: 13, marginBottom: 8 }}>
-              Подпись
+              Название
               <input
                 value={label}
                 onChange={e => setLabel(e.target.value)}
@@ -338,7 +342,7 @@ export default function BotCrmTagsPage() {
           >
             <h3 style={{ marginTop: 0 }}>Тег «{editRow.key}»</h3>
             <label style={{ display: 'block', fontSize: 13, marginBottom: 8 }}>
-              Подпись
+              Название
               <input
                 value={label}
                 onChange={e => setLabel(e.target.value)}

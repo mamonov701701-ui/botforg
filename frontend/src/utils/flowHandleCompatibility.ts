@@ -35,9 +35,10 @@ export function getNodeHandleSets(node: Node): {
     };
   }
   if (isInput) {
+    const hasErrorBranch = data.settings?.separate_error_branch !== false;
     return {
       targetHandles: new Set(['top', 'left']),
-      sourceHandles: new Set(['success', 'error']),
+      sourceHandles: hasErrorBranch ? new Set(['success', 'error']) : new Set(['success']),
     };
   }
   return {

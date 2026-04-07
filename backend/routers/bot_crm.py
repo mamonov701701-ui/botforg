@@ -54,6 +54,11 @@ def _ctor_dep(bot_id: int, db: Session, user: User) -> int:
     return cid
 
 
+def _ctor_dep_optional(bot_id: int, db: Session, user: User) -> Optional[int]:
+    check_bot_access(bot_id, user.id, db)
+    return resolve_ctor_bot_id(db, bot_id)
+
+
 def _require_write(bot_id: int, db: Session, user: User) -> None:
     bot = check_bot_access(bot_id, user.id, db)
     if not check_bot_edit_permission(bot, user.id, db):
@@ -283,7 +288,9 @@ def crm_list_users(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    ctor_id = _ctor_dep(bot_id, db, user)
+    ctor_id = _ctor_dep_optional(bot_id, db, user)
+    if not ctor_id:
+        return BotUserListOut(total=0, page=page, page_size=page_size, items=[])
     tk = [t.strip() for t in tag_keys.split(",")] if tag_keys else None
     total, rows = list_bot_users(
         db,
@@ -546,7 +553,9 @@ def crm_list_variable_defs(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    ctor_id = _ctor_dep(bot_id, db, user)
+    ctor_id = _ctor_dep_optional(bot_id, db, user)
+    if not ctor_id:
+        return []
     usage_map, _ = build_variable_usage_maps(db, ctor_id)
     rows = list_variable_definitions_rows(db, ctor_id, include_archived=include_archived)
     return [
@@ -681,7 +690,9 @@ def crm_list_tags(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    ctor_id = _ctor_dep(bot_id, db, user)
+    ctor_id = _ctor_dep_optional(bot_id, db, user)
+    if not ctor_id:
+        return []
     repo = CtorTagsRepository(db)
     rows = repo.list_tags_for_bot(ctor_id)
     if not rows:

@@ -382,7 +382,7 @@ export default function SettingsPage() {
                 }}
               >
                 <option value="ru">Русский</option>
-                <option value="en">English</option>
+                <option value="en">Английский</option>
               </select>
             </div>
 

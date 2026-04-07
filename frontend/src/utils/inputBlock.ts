@@ -18,6 +18,8 @@ export interface NormalizedInputSettings {
   question_text: string;
   variable_key: string;
   variable_label?: string;
+  variable_key_manual?: boolean;
+  separate_error_branch?: boolean;
   placeholder?: string;
   required: boolean;
   trim: boolean;
@@ -29,6 +31,68 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+const CYR_MAP: Record<string, string> = {
+  а: 'a',
+  б: 'b',
+  в: 'v',
+  г: 'g',
+  д: 'd',
+  е: 'e',
+  ё: 'e',
+  ж: 'zh',
+  з: 'z',
+  и: 'i',
+  й: 'y',
+  к: 'k',
+  л: 'l',
+  м: 'm',
+  н: 'n',
+  о: 'o',
+  п: 'p',
+  р: 'r',
+  с: 's',
+  т: 't',
+  у: 'u',
+  ф: 'f',
+  х: 'h',
+  ц: 'ts',
+  ч: 'ch',
+  ш: 'sh',
+  щ: 'sch',
+  ъ: '',
+  ы: 'y',
+  ь: '',
+  э: 'e',
+  ю: 'yu',
+  я: 'ya',
+};
+
+export function generateInputVariableKeyFromLabel(label: string): string {
+  const low = (label || '').toLowerCase().trim();
+  if (!low) return '';
+  let out = '';
+  for (const ch of low) {
+    if (/[a-z0-9]/.test(ch)) {
+      out += ch;
+      continue;
+    }
+    if (CYR_MAP[ch] !== undefined) {
+      out += CYR_MAP[ch];
+      continue;
+    }
+    out += '_';
+  }
+  out = out
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!out) out = 'answer';
+  if (!/^[a-z]/.test(out)) out = `v_${out}`;
+  if (out.endsWith('_')) out = out.replace(/_+$/g, '');
+  if (!out) out = 'answer';
+  return out;
 }
 
 /** Миграция legacy: text → question_text, variableName|name → variable_key */
@@ -57,6 +121,7 @@ export function migrateInputNodeSettings(raw: Record<string, unknown>): Record<s
 
   if (next.required === undefined) next.required = true;
   if (next.trim === undefined) next.trim = true;
+  if (next.separate_error_branch === undefined) next.separate_error_branch = true;
 
   let v = asRecord(next.validation);
   const t = v.type;
@@ -85,6 +150,8 @@ export function getNormalizedInputSettings(raw: Record<string, unknown>): Normal
     question_text: typeof m.question_text === 'string' ? m.question_text : '',
     variable_key: typeof m.variable_key === 'string' ? m.variable_key : '',
     variable_label: typeof m.variable_label === 'string' ? m.variable_label : undefined,
+    variable_key_manual: m.variable_key_manual === true,
+    separate_error_branch: m.separate_error_branch !== false,
     placeholder: typeof m.placeholder === 'string' ? m.placeholder : undefined,
     required: m.required !== false,
     trim: m.trim !== false,
@@ -95,11 +162,11 @@ export function getNormalizedInputSettings(raw: Record<string, unknown>): Normal
 
 export function validateInputVariableKey(key: string): string | undefined {
   const k = (key || '').trim();
-  if (!k) return 'Укажите ключ переменной';
+  if (!k) return 'Укажите, как сохранить ответ пользователя';
   if (!INPUT_VARIABLE_KEY_PATTERN.test(k)) {
-    return 'Только snake_case: с буквы a–z, далее латиница, цифры и знак _';
+    return 'Используйте короткое имя латиницей: только буквы, цифры и _';
   }
-  if (k.endsWith('_')) return 'Ключ не может оканчиваться на _';
+  if (k.endsWith('_')) return 'Название не должно заканчиваться на _';
   return undefined;
 }
 
@@ -194,10 +261,10 @@ export function validateInputAnswer(
 
   switch (vt) {
     case 'number': {
-      const n = Number(text.replace(',', '.'));
-      if (!Number.isFinite(n)) {
-        return { ok: false, message: s.error_message?.trim() || 'Ожидается число' };
+      if (!/^\d+$/.test(text)) {
+        return { ok: false, message: s.error_message?.trim() || 'Введите только цифры' };
       }
+      const n = Number(text);
       return { ok: true, storedValue: n, lastInputText: text };
     }
     case 'email': {

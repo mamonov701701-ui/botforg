@@ -13,6 +13,7 @@ import {
   type CrmVariableDef,
   type CrmVariableUsageRef,
 } from '../../../api/botCrm';
+import { getVariableDataTypeLabel } from '../../../utils/uiLabels';
 
 export default function BotCrmVariablesPage() {
   const { botId } = useParams<{ botId: string }>();
@@ -135,12 +136,14 @@ export default function BotCrmVariablesPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ textAlign: 'left', color: 'var(--text-muted)' }}>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>key</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>label</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>data_type</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>system</th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>
+                  Системное имя
+                </th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Название</th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Тип данных</th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Системная</th>
                 <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>в блоках</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>updated</th>
+                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Обновлено</th>
                 <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }} />
               </tr>
             </thead>
@@ -151,12 +154,12 @@ export default function BotCrmVariablesPage() {
                     <code>{r.key}</code>
                     {r.is_archived ? (
                       <span style={{ marginLeft: 6, fontSize: 10, color: '#fbbf24' }}>
-                        archived
+                        в архиве
                       </span>
                     ) : null}
                   </td>
                   <td style={{ padding: 8 }}>{r.label || '—'}</td>
-                  <td style={{ padding: 8 }}>{r.data_type}</td>
+                  <td style={{ padding: 8 }}>{getVariableDataTypeLabel(r.data_type)}</td>
                   <td style={{ padding: 8 }}>{r.is_system ? 'да' : ''}</td>
                   <td style={{ padding: 8 }}>{r.used_in_blocks_count}</td>
                   <td style={{ padding: 8, whiteSpace: 'nowrap' }}>
@@ -286,7 +289,7 @@ export default function BotCrmVariablesPage() {
           >
             <h3 style={{ marginTop: 0 }}>Новая переменная</h3>
             <label style={{ display: 'block', fontSize: 13, marginBottom: 8 }}>
-              Ключ (snake_case)
+              Системное имя (для конструктора)
               <input
                 value={key}
                 onChange={e => setKey(e.target.value)}
@@ -303,7 +306,7 @@ export default function BotCrmVariablesPage() {
               />
             </label>
             <label style={{ display: 'block', fontSize: 13, marginBottom: 8 }}>
-              Подпись
+              Название
               <input
                 value={label}
                 onChange={e => setLabel(e.target.value)}
@@ -335,11 +338,11 @@ export default function BotCrmVariablesPage() {
                   color: 'var(--text)',
                 }}
               >
-                <option value="string">string</option>
-                <option value="number">number</option>
-                <option value="boolean">boolean</option>
-                <option value="datetime">datetime</option>
-                <option value="json">json</option>
+                <option value="string">{getVariableDataTypeLabel('string')}</option>
+                <option value="number">{getVariableDataTypeLabel('number')}</option>
+                <option value="boolean">{getVariableDataTypeLabel('boolean')}</option>
+                <option value="datetime">{getVariableDataTypeLabel('datetime')}</option>
+                <option value="json">{getVariableDataTypeLabel('json')}</option>
               </select>
             </label>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

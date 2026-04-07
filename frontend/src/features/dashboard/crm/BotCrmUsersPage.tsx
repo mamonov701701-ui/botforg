@@ -10,6 +10,7 @@ import {
   type CrmUserListItem,
   type CrmTagDef,
 } from '../../../api/botCrm';
+import { getChannelLabel } from '../../../utils/uiLabels';
 
 export default function BotCrmUsersPage() {
   const { botId } = useParams<{ botId: string }>();
@@ -140,10 +141,10 @@ export default function BotCrmUsersPage() {
               }}
             >
               <option value="">Все</option>
-              <option value="telegram">telegram</option>
-              <option value="whatsapp">whatsapp</option>
-              <option value="webchat">webchat</option>
-              <option value="max">max</option>
+              <option value="telegram">{getChannelLabel('telegram')}</option>
+              <option value="whatsapp">{getChannelLabel('whatsapp')}</option>
+              <option value="webchat">{getChannelLabel('webchat')}</option>
+              <option value="max">{getChannelLabel('max')}</option>
             </select>
           </div>
           <div>
@@ -253,6 +254,21 @@ export default function BotCrmUsersPage() {
 
         {loading ? (
           <p style={{ color: 'var(--text-muted)' }}>Загрузка…</p>
+        ) : items.length === 0 ? (
+          <div
+            style={{
+              padding: '14px 12px',
+              borderRadius: 8,
+              border: '1px solid var(--border)',
+              background: 'var(--card)',
+              color: 'var(--text-muted)',
+              fontSize: 13,
+              lineHeight: 1.45,
+            }}
+          >
+            Здесь отображаются данные пользователей из реальных каналов. Ответы из предпросмотра
+            сюда не сохраняются.
+          </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -300,7 +316,7 @@ export default function BotCrmUsersPage() {
                     <td style={{ padding: '10px 8px', color: 'var(--text)', fontWeight: 500 }}>
                       {row.display_name}
                     </td>
-                    <td style={{ padding: '10px 8px' }}>{row.channel}</td>
+                    <td style={{ padding: '10px 8px' }}>{getChannelLabel(row.channel)}</td>
                     <td style={{ padding: '10px 8px' }}>{row.phone || '—'}</td>
                     <td style={{ padding: '10px 8px' }}>{row.email || '—'}</td>
                     <td style={{ padding: '10px 8px' }}>

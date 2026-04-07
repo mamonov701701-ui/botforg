@@ -48,6 +48,7 @@ from backend.routers import channels as channels_router
 from backend.routers import channel_webhooks as channel_webhooks_router
 from backend.routers import max as max_router
 from backend.routers import whatsapp as whatsapp_router
+from backend.routers import webhook as webhook_router
 import backend.channels  # noqa: F401 — регистрация адаптеров каналов
 from backend.settings import settings
 
@@ -136,6 +137,7 @@ app.include_router(channels_router.router)
 app.include_router(max_router.router)
 app.include_router(whatsapp_router.router)
 app.include_router(channel_webhooks_router.router)
+app.include_router(webhook_router.router)
 
 # Настройка раздачи статических файлов для загруженных медиа
 UPLOAD_DIR = Path("uploads/media")

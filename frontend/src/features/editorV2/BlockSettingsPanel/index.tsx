@@ -127,6 +127,7 @@ export default function BlockSettingsPanel({
   const [showHelp, setShowHelp] = useState(false);
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Find block definition from catalog
   const block = useMemo(
@@ -139,6 +140,7 @@ export default function BlockSettingsPanel({
     setHasChanges(false);
     setShowHelp(false);
     setShowAdvanced(false);
+    setShowDiagnostics(false);
   }, [selectedNode.id]);
 
   const selectedNodeRef = useRef(selectedNode);
@@ -264,7 +266,6 @@ export default function BlockSettingsPanel({
         data: {
           ...selectedNode.data,
           settings: {
-            ...selectedNode.data.settings,
             [fieldName]: value,
           },
         },
@@ -393,6 +394,25 @@ export default function BlockSettingsPanel({
       validateField(field, selectedNode.data.settings?.[field.name])
     ).length;
   }, [block, selectedNode.data.settings, liveMessageSchema, liveInputSchema]);
+
+  const totalScenarioDiagIssues = scenarioDiagErrors.length + scenarioDiagWarnings.length;
+
+  const getDiagnosticTargetLabel = (d: ScenarioDiagnostic): string | null => {
+    switch (d.code) {
+      case 'InputVariableKeyInvalid':
+      case 'InputVariableKeyMissing':
+        return 'Ключ переменной';
+      case 'MessageUnknownPlaceholder':
+      case 'RequiredFieldMissing':
+        return 'Текст вопроса';
+      case 'MissingOutgoingEdge':
+        return 'Исходящая связь';
+      case 'ConditionUnknownVariable':
+        return 'Условие';
+      default:
+        return null;
+    }
+  };
 
   // Специальная обработка для системного блока "start"
   if (!block) {
@@ -636,20 +656,48 @@ export default function BlockSettingsPanel({
             background: 'rgba(30, 41, 59, 0.65)',
           }}
         >
-          {scenarioDiagErrors.length > 0 && (
-            <div style={{ marginBottom: scenarioDiagWarnings.length ? 14 : 0 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: '#fecaca',
-                  marginBottom: 8,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                Ошибки проверки сценария
-              </div>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: scenarioDiagErrors.length > 0 ? '#fecaca' : '#fde68a',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 8,
+            }}
+          >
+            <span>
+              {scenarioDiagErrors.length > 0
+                ? `⚠ ${totalScenarioDiagIssues} ${totalScenarioDiagIssues === 1 ? 'ошибка' : 'ошибки'} в блоке`
+                : `❗ ${totalScenarioDiagIssues} предупреждения в блоке`}
+            </span>
+            <button
+              onClick={() => setShowDiagnostics(v => !v)}
+              style={{
+                border: '1px solid #334155',
+                background: 'rgba(15, 23, 42, 0.45)',
+                color: '#cbd5e1',
+                borderRadius: 6,
+                padding: '4px 8px',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {showDiagnostics ? 'Скрыть' : 'Показать'}
+            </button>
+          </div>
+          {showDiagnostics && (
+            <div
+              style={{
+                marginTop: 8,
+                maxHeight: 120,
+                overflowY: 'auto',
+                paddingRight: 2,
+              }}
+            >
               <ul
                 style={{
                   margin: 0,
@@ -657,84 +705,45 @@ export default function BlockSettingsPanel({
                   listStyle: 'none',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 10,
+                  gap: 6,
                 }}
               >
-                {scenarioDiagErrors.map((d, i) => {
+                {[...scenarioDiagErrors, ...scenarioDiagWarnings].map((d, i) => {
                   const ui = getScenarioDiagnosticUiModel(d);
+                  const isError = d.severity === 'error';
+                  const targetLabel = getDiagnosticTargetLabel(d);
                   return (
                     <li
-                      key={`e-${d.code}-${i}`}
+                      key={`${d.severity}-${d.code}-${i}`}
                       style={{
-                        padding: 10,
-                        borderRadius: 8,
-                        background: 'rgba(127, 29, 29, 0.35)',
-                        border: '1px solid rgba(185, 28, 28, 0.5)',
+                        borderRadius: 6,
+                        border: isError
+                          ? '1px solid rgba(185, 28, 28, 0.45)'
+                          : '1px solid rgba(180, 83, 9, 0.45)',
+                        background: isError ? 'rgba(127, 29, 29, 0.2)' : 'rgba(120, 53, 15, 0.2)',
+                        padding: '6px 8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: '#fecaca', fontSize: 13 }}>
-                        {ui.title}
-                      </div>
-                      <div style={{ color: '#e5e7eb', fontSize: 13, marginTop: 4 }}>{ui.body}</div>
-                      {ui.actionHint && (
-                        <div
-                          style={{ color: '#93c5fd', fontSize: 12, marginTop: 8, lineHeight: 1.45 }}
+                      <span style={{ color: isError ? '#fca5a5' : '#fcd34d' }}>
+                        {isError ? '⚠' : '❗'}
+                      </span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#e2e8f0' }}>{ui.title}</span>
+                      {targetLabel && (
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: '#93c5fd',
+                            border: '1px solid rgba(59, 130, 246, 0.35)',
+                            borderRadius: 999,
+                            padding: '2px 6px',
+                            whiteSpace: 'nowrap',
+                          }}
                         >
-                          {ui.actionHint}
-                        </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
-          {scenarioDiagWarnings.length > 0 && (
-            <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: '#fde68a',
-                  marginBottom: 8,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                Предупреждения
-              </div>
-              <ul
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  listStyle: 'none',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                }}
-              >
-                {scenarioDiagWarnings.map((d, i) => {
-                  const ui = getScenarioDiagnosticUiModel(d);
-                  return (
-                    <li
-                      key={`w-${d.code}-${i}`}
-                      style={{
-                        padding: 10,
-                        borderRadius: 8,
-                        background: 'rgba(120, 53, 15, 0.3)',
-                        border: '1px solid rgba(180, 83, 9, 0.45)',
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: '#fcd34d', fontSize: 13 }}>
-                        {ui.title}
-                      </div>
-                      <div style={{ color: '#fef3c7', fontSize: 13, marginTop: 4 }}>{ui.body}</div>
-                      {ui.actionHint && (
-                        <div
-                          style={{ color: '#fde68a', fontSize: 12, marginTop: 8, lineHeight: 1.45 }}
-                        >
-                          {ui.actionHint}
-                        </div>
+                          {targetLabel}
+                        </span>
                       )}
                     </li>
                   );
@@ -819,6 +828,16 @@ export default function BlockSettingsPanel({
             <InputBlockSettingsForm
               settings={(selectedNode.data.settings || {}) as Record<string, unknown>}
               onFieldChange={handleFieldChange}
+              onSettingsPatch={patch => {
+                if (isReadOnly || !onUpdateNode) return;
+                setHasChanges(true);
+                onUpdateNode(selectedNode.id, {
+                  data: {
+                    ...selectedNode.data,
+                    settings: patch,
+                  },
+                });
+              }}
               isReadOnly={isReadOnly}
             />
           </>

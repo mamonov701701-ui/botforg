@@ -9,6 +9,11 @@ from backend.models.bot_user_state import BotUserState
 from backend.models.constructor_core import CtorBotUser
 from backend.models.payment import Payment
 from backend.models.template import Template
+from backend.services.scenario_flow.input_block import (
+    apply_input_success_to_ctor_user,
+    pick_error_target_id,
+    pick_success_target_id,
+)
 from backend.services.constructor.repositories.ctor_sessions_repository import (
     CtorSessionsRepository,
 )
@@ -45,7 +50,14 @@ def _telegram_template_text_from_node(node: dict) -> str:
 
 
 def _resolve_ctor_telegram_user(
-    db: Session, *, platform_bot_id: int, chat_id
+    db: Session,
+    *,
+    platform_bot_id: int,
+    chat_id,
+    username: Optional[str] = None,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    create_if_missing: bool = False,
 ) -> Tuple[Optional[int], Optional[int]]:
     """
     ctor_bot_users для Telegram: связка ctor-бота с platform Bot.id и chat_id.
@@ -64,6 +76,19 @@ def _resolve_ctor_telegram_user(
         )
         .first()
     )
+    if not bu and create_if_missing:
+        bu = CtorBotUser(
+            bot_id=ctor_bid,
+            channel="telegram",
+            external_user_id=external,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            status="active",
+        )
+        db.add(bu)
+        db.commit()
+        db.refresh(bu)
     if not bu:
         return None, None
     sess = CtorSessionsRepository(db).find_active_for_bot_user(bu.id)
@@ -170,6 +195,10 @@ async def telegram_webhook(
             state.status = "active"
     
     text = update.get("message", {}).get("text")
+    tg_from = (message or {}).get("from", {}) if message else {}
+    tg_username = tg_from.get("username")
+    tg_first_name = tg_from.get("first_name")
+    tg_last_name = tg_from.get("last_name")
     is_start = text == "/start" or (text and text.startswith("/start")) or not state
     
     # Извлекаем UTM-параметры и entry_point из команды /start
@@ -365,10 +394,52 @@ async def telegram_webhook(
     next_edge = None
     if node["type"] == "button" and button_label:
         next_edge = find_edge_by_label(node["id"], button_label)
-    elif node["type"] == "input" and user_text:
-        next_edge = (
-            find_edges_from(node["id"])[0] if find_edges_from(node["id"]) else None
+    elif node["type"] == "input" and user_text is not None:
+        outgoing = find_edges_from(node["id"])
+        settings = (node.get("data") or {}).get("settings") or {}
+        ctor_bid = resolve_ctor_bot_id(db, bot_id)
+        ctor_uid, _ = _resolve_ctor_telegram_user(
+            db,
+            platform_bot_id=bot_id,
+            chat_id=chat_id,
+            username=tg_username,
+            first_name=tg_first_name,
+            last_name=tg_last_name,
+            create_if_missing=True,
         )
+        if ctor_uid is not None and ctor_bid is not None:
+            save_res = apply_input_success_to_ctor_user(
+                db,
+                bot_id=ctor_bid,
+                bot_user_id=ctor_uid,
+                settings=settings,
+                raw_answer=user_text,
+                commit=True,
+            )
+            if not save_res.ok:
+                err_target_id = pick_error_target_id(outgoing, node["id"])
+                if err_target_id:
+                    next_edge = next(
+                        (e for e in outgoing if e.get("target") == err_target_id),
+                        None,
+                    )
+                else:
+                    requests.post(
+                        f"{TELEGRAM_API}{token}/sendMessage",
+                        json={
+                            "chat_id": chat_id,
+                            "text": save_res.error or "Ответ не прошёл проверку. Попробуйте ещё раз.",
+                        },
+                    )
+                    return {"ok": True}
+            else:
+                success_target_id = pick_success_target_id(outgoing, node["id"])
+                next_edge = next(
+                    (e for e in outgoing if e.get("target") == success_target_id),
+                    outgoing[0] if outgoing else None,
+                )
+        else:
+            next_edge = outgoing[0] if outgoing else None
     elif node["type"] == "condition":
         # (опционально) — пока просто по первому исходящему
         next_edge = (

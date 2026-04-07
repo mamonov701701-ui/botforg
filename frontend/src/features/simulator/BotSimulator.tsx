@@ -367,6 +367,21 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
             <X size={18} />
           </button>
         </div>
+        <div
+          style={{
+            margin: '0 12px 8px',
+            padding: '8px 10px',
+            borderRadius: 8,
+            background: 'rgba(59, 130, 246, 0.12)',
+            border: '1px solid rgba(59,130,246,0.35)',
+            color: '#bfdbfe',
+            fontSize: 11,
+            lineHeight: 1.45,
+          }}
+        >
+          Данные из предпросмотра не сохраняются в CRM. Для проверки сохранения используйте
+          подключённый канал.
+        </div>
 
         {fatalPreviewError && (
           <div
