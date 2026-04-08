@@ -16,6 +16,8 @@ import {
   migrateInputNodeSettings,
   validateInputAnswer,
 } from '../../utils/inputBlock';
+import { evaluateConditionSettings, resolveConditionYesNoEdges } from '../../utils/conditionBlock';
+import { normalizeActionSettings } from '../../utils/actionBlock';
 
 /**
  * Формальная модель исполнения сценария для симулятора.
@@ -69,6 +71,57 @@ export interface RuntimeVariables {
   [key: string]: any;
 }
 
+/** Теги пользователя в предпросмотре (без бэкенда). */
+export const PREVIEW_USER_TAGS_VARIABLE = '__preview_user_tags';
+export const PREVIEW_USER_STATUS_VARIABLE = '__preview_user_status';
+export const PREVIEW_USER_FIELDS_VARIABLE = '__preview_user_fields';
+export const PREVIEW_EXECUTION_TRACE_VARIABLE = '__preview_execution_trace';
+
+export function getPreviewUserTags(variables: RuntimeVariables): string[] {
+  const raw = variables[PREVIEW_USER_TAGS_VARIABLE];
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map(x => String(x).trim()).filter(Boolean))];
+}
+
+function setPreviewUserTags(variables: RuntimeVariables, tags: string[]): RuntimeVariables {
+  return { ...variables, [PREVIEW_USER_TAGS_VARIABLE]: tags };
+}
+
+function applyPreviewTagAction(
+  variables: RuntimeVariables,
+  actionType: string,
+  tagKey: string
+): RuntimeVariables {
+  const key = tagKey.trim();
+  if (!key) return variables;
+  const cur = new Set(getPreviewUserTags(variables));
+  if (actionType === 'add_tag') cur.add(key);
+  else if (actionType === 'remove_tag') cur.delete(key);
+  return setPreviewUserTags(variables, [...cur]);
+}
+
+function setPreviewUserStatus(
+  variables: RuntimeVariables,
+  status: string | null
+): RuntimeVariables {
+  return { ...variables, [PREVIEW_USER_STATUS_VARIABLE]: status };
+}
+
+function setPreviewUserField(
+  variables: RuntimeVariables,
+  key: string,
+  value: string | null
+): RuntimeVariables {
+  const prev = variables[PREVIEW_USER_FIELDS_VARIABLE];
+  const map: Record<string, string> =
+    prev && typeof prev === 'object' && !Array.isArray(prev)
+      ? { ...(prev as Record<string, string>) }
+      : {};
+  if (value == null) delete map[key];
+  else map[key] = value;
+  return { ...variables, [PREVIEW_USER_FIELDS_VARIABLE]: map };
+}
+
 export interface RuntimeContext {
   graph: ScenarioGraph;
   /** id сценария → граф (все сценарии текущего бота для предпросмотра переходов) */
@@ -103,6 +156,7 @@ export interface RunStepResult {
    * Раннер остановился на блоке «Ожидание»: UI показывает паузу `pendingWaitMs`, затем вызывает `completeWaitStep`.
    */
   pendingWaitMs?: number;
+  stopReason?: string;
 }
 
 /** Верхняя граница реальной задержки в предпросмотре (часы/дни в сценарии не замирают на минуты). */
@@ -128,7 +182,7 @@ export function parseWaitDurationMs(raw: unknown): number {
   return 1200;
 }
 
-/** Сравнение значения переменной с conditionValue на рёбрах (числа/строки/boolean). */
+/** Сравнение значений для маршрутизации (legacy / кнопки). */
 export function valuesEqualForConditionRoute(a: unknown, b: unknown): boolean {
   if (Object.is(a, b)) return true;
   if (a == null && b == null) return true;
@@ -142,6 +196,56 @@ export function valuesEqualForConditionRoute(a: unknown, b: unknown): boolean {
     return true;
   }
   return String(a).trim() === String(b).trim();
+}
+
+function conditionCompareValue(
+  context: RuntimeContext,
+  settings: Record<string, unknown>
+): unknown {
+  const keyRaw = settings.conditionKey ?? settings.variable;
+  const key = typeof keyRaw === 'string' ? keyRaw.trim() : '';
+  if (key) {
+    return context.variables[key] ?? context.lastUserInput ?? null;
+  }
+  return context.lastUserInput ?? null;
+}
+
+function evaluateTagConditionForPreview(
+  settings: Record<string, unknown>,
+  variables: RuntimeVariables
+): boolean {
+  const op = String(settings.operator || 'equals');
+  const selectedTag = String(settings.variable || '').trim();
+  const userTags = getPreviewUserTags(variables);
+
+  switch (op) {
+    case 'equals':
+      return selectedTag ? userTags.includes(selectedTag) : false;
+    case 'notEquals':
+      return selectedTag ? !userTags.includes(selectedTag) : true;
+    case 'isEmpty':
+      return userTags.length === 0;
+    case 'isNotEmpty':
+      return userTags.length > 0;
+    default:
+      return selectedTag ? userTags.includes(selectedTag) : false;
+  }
+}
+
+/** IF / ELSE: ветки по edge.data.conditionBranch («true» / «нет»), иначе fallback по порядку id. */
+function pickConditionTargetId(context: RuntimeContext, node: Node): string | null {
+  const data: any = node.data || {};
+  const settings: Record<string, unknown> = { ...(data.settings || {}) };
+  const outgoingAll = getOutgoingEdges(context.graph.edges, node.id);
+  const { yes: yesEdge, no: noEdge } = resolveConditionYesNoEdges(outgoingAll);
+  if (!yesEdge && !noEdge) return null;
+  const sourceType = String(settings.conditionSourceType || '').trim();
+  const condOk =
+    sourceType === 'user_tag'
+      ? evaluateTagConditionForPreview(settings, context.variables)
+      : evaluateConditionSettings(settings, conditionCompareValue(context, settings));
+  if (condOk) return yesEdge?.target ?? null;
+  return noEdge?.target ?? yesEdge?.target ?? null;
 }
 
 function ctxFromState(state: SimulatorState): RuntimeContext {
@@ -208,6 +312,31 @@ function systemLine(text: string, variant: 'system' | 'error' = 'system'): Simul
   };
 }
 
+function appendExecutionTrace(
+  variables: RuntimeVariables,
+  entry: { scenarioId: number | null; nodeId: string; kind: NodeKind; note?: string }
+): RuntimeVariables {
+  const prev = variables[PREVIEW_EXECUTION_TRACE_VARIABLE];
+  const list = Array.isArray(prev) ? [...prev] : [];
+  list.push({
+    t: Date.now(),
+    scenarioId: entry.scenarioId,
+    nodeId: entry.nodeId,
+    kind: entry.kind,
+    note: entry.note || '',
+  });
+  return { ...variables, [PREVIEW_EXECUTION_TRACE_VARIABLE]: list };
+}
+
+function findExplicitStartNode(nodes: Node[]): Node | null {
+  return (
+    nodes.find(n => {
+      const data: any = n.data || {};
+      return data.blockId === 'start' || data.type === 'start';
+    }) || null
+  );
+}
+
 /** Старт без текста и без кнопок не показываем в чате (как в мессенджере: вход сразу в первый шаг). */
 function shouldShowStartBubble(node: Node): boolean {
   const data: any = node.data || {};
@@ -259,20 +388,10 @@ function resolveNextNodeId(
   }
 
   if (kind === 'condition') {
-    const settings: any = data.settings || {};
-    const key: string | undefined = settings.conditionKey ?? settings.variable;
-    if (key) {
-      const value = context.variables[key] ?? context.lastUserInput ?? null;
-      const byCondition = outgoing.find(e => {
-        const cv = (e.data as any)?.conditionValue;
-        if (cv === undefined) return false;
-        return valuesEqualForConditionRoute(cv, value);
-      });
-      if (byCondition) return byCondition.target;
-    }
+    return pickConditionTargetId(context, fromNode);
   }
 
-  /** Клик по кнопке message/start без подходящего ребра — не падать на «первое попавшееся». */
+  /** Клик по inline-кнопке message/start без подходящего ребра — не падать на «первое попавшееся». */
   if ((kind === 'message' || kind === 'start') && hasButtonChoice) {
     return null;
   }
@@ -304,14 +423,15 @@ function buildMessageFromNode(
       : settings.text || settings.title || data.title || data.label || `Блок ${node.id}`;
   const text = runtime ? renderForSimulator(rawText, runtime).renderedText : rawText;
 
-  const buttons:
-    | {
-        id: string;
-        label: string;
-        sourceHandle?: string | null;
-        action?: MessageButtonAction;
-      }[]
-    | undefined =
+  type Btn = {
+    id: string;
+    label: string;
+    sourceHandle?: string | null;
+    action?: MessageButtonAction;
+  };
+
+  let buttons: Btn[] | undefined;
+  buttons =
     Array.isArray(settings.buttons) && settings.buttons.length
       ? settings.buttons.map((btn: any, index: number) => {
           const rawLabel = btn?.label || `Вариант ${index + 1}`;
@@ -473,6 +593,14 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
   }
 
   const kind = getNodeKind(node);
+  context = {
+    ...context,
+    variables: appendExecutionTrace(context.variables, {
+      scenarioId: context.activeScenarioId,
+      nodeId: node.id,
+      kind,
+    }),
+  };
 
   switch (kind) {
     case 'message': {
@@ -502,7 +630,11 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
         history: hist,
         currentNodeId: nextId,
       };
-      return { context, waitingForUser: false };
+      return {
+        context,
+        waitingForUser: false,
+        stopReason: nextId === null ? 'Нет исходящего ребра из блока «Сообщение»' : undefined,
+      };
     }
 
     case 'input': {
@@ -516,49 +648,39 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
     }
 
     case 'condition': {
-      const outgoing = getOutgoingEdges(context.graph.edges, node.id);
-      const settings: any = node.data?.settings || {};
-      const key: string | undefined = settings.conditionKey ?? settings.variable;
-      let nextId: string | null = null;
+      const outgoingAll = getOutgoingEdges(context.graph.edges, node.id);
       const extra: SimulatorMessage[] = [];
 
-      if (outgoing.length === 0) {
+      if (outgoingAll.length === 0) {
         extra.push(
           systemLine(
             'У блока «Условие» нет исходящих связей — добавьте ветки в редакторе.',
             'error'
           )
         );
-      } else if (key) {
-        const value = context.variables[key] ?? context.lastUserInput ?? null;
-        const withCv = outgoing.filter(e => (e.data as any)?.conditionValue !== undefined);
-        if (withCv.length > 0) {
-          const match = outgoing.find(e => {
-            const cv = (e.data as any)?.conditionValue;
-            if (cv === undefined) return false;
-            return valuesEqualForConditionRoute(cv, value);
-          });
-          if (match) {
-            nextId = match.target;
-          } else {
-            extra.push(
-              systemLine(
-                `Условие: значение «${String(value)}» не совпало ни с одной подписанной веткой — выполняется запасной переход. Проверьте подписи на стрелках и переменную «${key}».`
-              )
-            );
-            nextId = outgoing[0]?.target ?? null;
-          }
-        } else {
-          nextId = outgoing[0]?.target ?? null;
-        }
       } else {
-        nextId = outgoing[0]?.target ?? null;
+        if (outgoingAll.length > 2) {
+          extra.push(
+            systemLine(
+              'Используются только первые две ветки. Остальные связи этого блока в предпросмотре не учитываются.'
+            )
+          );
+        }
+        if (outgoingAll.length === 1) {
+          extra.push(
+            systemLine(
+              'Добавьте вторую ветку (Нет). Сейчас при невыполнении условия используется та же связь, что и при «Да».'
+            )
+          );
+        }
       }
 
-      if (nextId === null && outgoing.length > 0) {
+      const nextId = pickConditionTargetId(context, node);
+
+      if (nextId === null && outgoingAll.length > 0) {
         extra.push(
           systemLine(
-            'Не удалось выбрать ветку после «Условие». Проверьте переменную и связи.',
+            'Не удалось выбрать ветку после «Условие». Проверьте оператор, значение и связи.',
             'error'
           )
         );
@@ -575,29 +697,67 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
     case 'action': {
       const data: any = node.data || {};
       const settings: any = data.settings || {};
-      const varName: string | undefined = settings.setVariable;
+      const normalized = normalizeActionSettings(settings);
       let vars = context.variables;
-      if (varName) {
-        const raw = settings.value;
-        let value = raw;
-        if (raw === '$lastUserInput') {
-          value = context.lastUserInput ?? null;
+
+      if (normalized.mode === 'tag') {
+        const tag = normalized.tag;
+        if (tag && normalized.tagAction) {
+          vars = applyPreviewTagAction(
+            vars,
+            normalized.tagAction === 'add' ? 'add_tag' : 'remove_tag',
+            tag
+          );
         }
-        vars = {
-          ...context.variables,
-          [varName]: value,
-        };
+      } else if (normalized.mode === 'status') {
+        if (normalized.statusAction === 'set' && normalized.status) {
+          vars = setPreviewUserStatus(vars, normalized.status);
+        } else if (normalized.statusAction === 'clear') {
+          vars = setPreviewUserStatus(vars, null);
+        }
+      } else if (normalized.mode === 'field') {
+        const key = normalized.fieldKey;
+        if (key && normalized.fieldAction === 'set') {
+          vars = setPreviewUserField(vars, key, normalized.fieldValue);
+        } else if (key && normalized.fieldAction === 'clear') {
+          vars = setPreviewUserField(vars, key, null);
+        }
+      } else {
+        // legacy fallback for old scenarios
+        const actionType = settings.actionType;
+        const tagKey =
+          typeof settings.tag === 'string'
+            ? settings.tag.trim()
+            : settings.tag != null
+              ? String(settings.tag).trim()
+              : '';
+        if ((actionType === 'add_tag' || actionType === 'remove_tag') && tagKey) {
+          vars = applyPreviewTagAction(vars, actionType, tagKey);
+        } else {
+          const varName: string | undefined = settings.setVariable;
+          if (varName) {
+            const raw = settings.value;
+            let value = raw;
+            if (raw === '$lastUserInput') {
+              value = context.lastUserInput ?? null;
+            }
+            vars = {
+              ...context.variables,
+              [varName]: value,
+            };
+          }
+        }
       }
-      const userText = (settings.text || '').toString().trim();
       const nextId = resolveNextNodeId({ ...context, variables: vars }, node, {});
       let hist = context.history;
-      if (userText) {
+      const message = normalized.message.trim();
+      if (message) {
         hist = [
           ...hist,
           {
             id: `action_${node.id}_${Date.now()}`,
             from: 'bot' as const,
-            text: userText,
+            text: message,
             meta: { nodeId: node.id, kind: 'action' as const },
           },
         ];
@@ -699,7 +859,11 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
           history: [...context.history, hopMsg, errTail()],
           currentNodeId: nextId,
         };
-        return { context, waitingForUser: false };
+        return {
+          context,
+          waitingForUser: false,
+          stopReason: 'Целевой сценарий не найден',
+        };
       }
 
       const normalizedTarget: ScenarioGraph = {
@@ -712,7 +876,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
         entry = normalizedTarget.nodes.some(n => n.id === targetNodeId) ? targetNodeId : null;
       }
       if (!entry) {
-        const st = findStartNode(normalizedTarget.nodes);
+        const st = findExplicitStartNode(normalizedTarget.nodes);
         entry = st?.id ?? null;
       }
 
@@ -723,11 +887,15 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
           history: [
             ...context.history,
             hopMsg,
-            systemLine('Целевой сценарий пуст — нечего выполнять.', 'error'),
+            systemLine('В целевом сценарии нет стартового блока — переход невозможен.', 'error'),
           ],
           currentNodeId: nextId,
         };
-        return { context, waitingForUser: false };
+        return {
+          context,
+          waitingForUser: false,
+          stopReason: 'В целевом сценарии нет стартового блока',
+        };
       }
 
       context = {
@@ -773,6 +941,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
         context,
         waitingForUser: false,
         deadEndFromStart: nextId === null,
+        stopReason: nextId === null ? 'Нет исходящего ребра из стартового блока' : undefined,
       };
     }
 
@@ -795,21 +964,44 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
         history: hist,
         currentNodeId: nextId,
       };
-      return { context, waitingForUser: false };
+      return {
+        context,
+        waitingForUser: false,
+        stopReason: nextId === null ? 'Нет исходящего ребра из блока' : undefined,
+      };
     }
   }
+}
+
+/**
+ * Активный граф сценария: после go_to_scenario `state.graph` должен совпадать с `graphsByScenarioId`,
+ * но при рассинхроне берём граф из bundle по activeScenarioId (иначе completeWaitStep не находит wait).
+ */
+function getActiveScenarioGraph(state: SimulatorState): ScenarioGraph {
+  const sid = state.activeScenarioId;
+  if (sid != null && state.graphsByScenarioId[sid]) {
+    const g = state.graphsByScenarioId[sid];
+    return {
+      nodes: g.nodes,
+      edges: normalizeScenarioEdges(g.nodes, g.edges || []),
+    };
+  }
+  return state.graph;
 }
 
 /**
  * После реальной задержки в UI: добавить отметку о паузе и перейти к следующему узлу.
  */
 export function completeWaitStep(state: SimulatorState): RunStepResult {
-  const graph = state.graph;
+  const graph = getActiveScenarioGraph(state);
   const node = graph.nodes.find(n => n.id === state.currentNodeId);
   if (!node || getNodeKind(node) !== 'wait') {
     return { context: ctxFromState(state), waitingForUser: false };
   }
-  let context = ctxFromState(state);
+  let context: RuntimeContext = {
+    ...ctxFromState(state),
+    graph,
+  };
   const settings: any = node.data?.settings || {};
   const dur = settings.duration;
   const label =
@@ -881,20 +1073,30 @@ export function runUntilUserPauseOrEnd(
       lastUserInput: c.lastUserInput,
     };
     if (last.waitingForUser) {
-      return { ...last, context: c };
+      return { ...last, context: c, stopReason: 'Блок ожидает ввод пользователя' };
     }
     if (last.pendingWaitMs != null) {
       return { ...last, context: c };
     }
     if (c.currentNodeId == null) {
-      return { ...last, context: c };
+      return { ...last, context: c, stopReason: last.stopReason || 'Сценарий завершён' };
     }
   }
 
+  const withTraceVars = appendExecutionTrace(sim.variables, {
+    scenarioId: sim.activeScenarioId,
+    nodeId: sim.currentNodeId || 'unknown',
+    kind: 'unknown',
+    note: 'stop:max_steps',
+  });
   return {
-    context: ctxFromState(sim),
+    context: {
+      ...ctxFromState(sim),
+      variables: withTraceVars,
+    },
     waitingForUser: false,
     stalledMaxSteps: true,
+    stopReason: 'Выполнение остановлено: возможно зацикливание сценария',
   };
 }
 
@@ -1083,14 +1285,6 @@ export function applyUserChoice(
           isNext
             ? 'Для кнопки «Продолжить сценарий» нет исходящей связи на холсте. Проведите ребро от этого выхода кнопки к следующему блоку.'
             : 'Нет перехода к следующему шагу. Проверьте связи блока «Сообщение».',
-          'error'
-        ),
-      ];
-    } else if (kind === 'input') {
-      historyAfter = [
-        ...historyAfter,
-        systemLine(
-          'В сценарии нет перехода из блока «Ввод». Подключите исходящую связь после ввода текста.',
           'error'
         ),
       ];

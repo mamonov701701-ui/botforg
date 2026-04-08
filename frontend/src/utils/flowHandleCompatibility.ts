@@ -41,6 +41,12 @@ export function getNodeHandleSets(node: Node): {
       sourceHandles: hasErrorBranch ? new Set(['success', 'error']) : new Set(['success']),
     };
   }
+  if (blockId === 'condition') {
+    return {
+      targetHandles: new Set(['top']),
+      sourceHandles: new Set(['condition_yes', 'condition_no']),
+    };
+  }
   return {
     targetHandles: new Set(['top', 'left']),
     sourceHandles: new Set(['right', 'bottom']),
@@ -88,7 +94,17 @@ function normalizeOneEdge(edge: Edge, byId: Map<string, Node>): Edge {
       sourceHandle = 'success';
     }
 
-    if (sourceHandle != null && !s.sourceHandles.has(sourceHandle)) {
+    if (srcBlock === 'condition') {
+      const invalid = sourceHandle == null || !s.sourceHandles.has(sourceHandle);
+      if (invalid) {
+        const branch = (edge.data as { conditionBranch?: unknown } | undefined)?.conditionBranch;
+        if (branch === 'true') sourceHandle = 'condition_yes';
+        else if (branch === 'false') sourceHandle = 'condition_no';
+        else if (sourceHandle === 'right') sourceHandle = 'condition_yes';
+        else if (sourceHandle === 'bottom') sourceHandle = 'condition_no';
+        else sourceHandle = pickFallbackSource(s.sourceHandles);
+      }
+    } else if (sourceHandle != null && !s.sourceHandles.has(sourceHandle)) {
       sourceHandle = pickFallbackSource(s.sourceHandles);
     }
   }
@@ -96,6 +112,12 @@ function normalizeOneEdge(edge: Edge, byId: Map<string, Node>): Edge {
   let targetHandle =
     edge.targetHandle === '' || edge.targetHandle == null ? undefined : edge.targetHandle;
   if (tgt) {
+    const tgtBlock = ((tgt.data as any)?.blockId || (tgt.data as any)?.type || '')
+      .toString()
+      .toLowerCase();
+    if (tgtBlock === 'condition' && targetHandle === 'left') {
+      targetHandle = 'top';
+    }
     const t = getNodeHandleSets(tgt);
     if (targetHandle != null && !t.targetHandles.has(targetHandle)) {
       targetHandle = pickFallbackTarget(t.targetHandles);

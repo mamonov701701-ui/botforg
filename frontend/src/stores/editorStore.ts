@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid';
 import { BlockCatalogItem, PlanType, RoleType } from '../types/blocks';
 import { fetchBlocksCatalog } from '../api/blocks';
 import { isSimulatorSupportedBlockId } from '../constants/simulatorSupportedBlocks';
+import { mergeClientCatalogBlocks } from '../constants/clientCatalogMerge';
 
 export type ToastType = 'info' | 'warning' | 'error' | 'success';
 
@@ -16,6 +17,16 @@ export interface Toast {
 
 // Max items to store in recent blocks
 const MAX_RECENT_BLOCKS = 10;
+
+function isBlockedLegacyBlock(block: BlockCatalogItem): boolean {
+  const id = String(block.id || '')
+    .trim()
+    .toLowerCase();
+  const title = String(block.title || '')
+    .trim()
+    .toLowerCase();
+  return id === 'choice' || title === 'выбор';
+}
 
 function arraysShallowEqual(a: string[], b: string[]): boolean {
   if (a === b) return true;
@@ -127,7 +138,8 @@ export const useEditorStore = create<EditorStore>()(
         // Бэкенд автоматически использует данные авторизованного пользователя
         set({ isLoading: true });
         try {
-          const catalog = await fetchBlocksCatalog();
+          const rawCatalog = await fetchBlocksCatalog();
+          const catalog = mergeClientCatalogBlocks(rawCatalog);
           set({ catalog, isLoading: false });
         } catch (error: any) {
           console.error('Failed to load catalog:', error);
@@ -196,7 +208,8 @@ export const useEditorStore = create<EditorStore>()(
       getFilteredCatalog: () => {
         const { catalog, searchQuery } = get();
         let list = catalog.filter(
-          block => isSimulatorSupportedBlockId(block.id) && !block.disabled
+          block =>
+            isSimulatorSupportedBlockId(block.id) && !block.disabled && !isBlockedLegacyBlock(block)
         );
 
         if (!searchQuery.trim()) return list;
@@ -215,6 +228,7 @@ export const useEditorStore = create<EditorStore>()(
           block =>
             favoriteBlockIds.includes(block.id) &&
             isSimulatorSupportedBlockId(block.id) &&
+            !isBlockedLegacyBlock(block) &&
             !block.disabled
         );
       },
@@ -225,7 +239,10 @@ export const useEditorStore = create<EditorStore>()(
           .map(id => catalog.find(block => block.id === id))
           .filter(
             (block): block is BlockCatalogItem =>
-              block !== undefined && isSimulatorSupportedBlockId(block.id) && !block.disabled
+              block !== undefined &&
+              isSimulatorSupportedBlockId(block.id) &&
+              !isBlockedLegacyBlock(block) &&
+              !block.disabled
           );
       },
     }),

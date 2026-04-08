@@ -1,5 +1,5 @@
 /**
- * Блоки, которые обрабатывает scenarioRunner (предпросмотр).
+ * Блоки, которые обрабатывает scenarioRunner (предпросмотр) и попадают в библиотеку редактора.
  * Должны совпадать с getNodeKind в scenarioRunner.ts.
  */
 export const SIMULATOR_SUPPORTED_BLOCK_IDS = [

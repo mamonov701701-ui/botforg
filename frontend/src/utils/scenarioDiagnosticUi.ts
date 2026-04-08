@@ -19,6 +19,8 @@ const CODE_TITLES: Record<ScenarioDiagnosticCode, string> = {
   InputVariableKeyMissing: 'Не указан ключ переменной',
   MessageUnknownPlaceholder: 'Неизвестный плейсхолдер в тексте',
   ConditionUnknownVariable: 'Неизвестная переменная в условии',
+  ConditionTooManyBranches: 'Слишком много веток у условия',
+  ConditionSecondBranchMissing: 'Нет второй ветки у условия',
   MissingOutgoingEdge: 'Нет исходящей связи',
   RequiredFieldMissing: 'Обязательное поле',
 };
@@ -31,6 +33,8 @@ const CODE_ACTION_HINTS: Partial<Record<ScenarioDiagnosticCode, string>> = {
     'Объявите переменную в конструкторе бота или используйте {{user.*}} / {{system.*}} по справке.',
   ConditionUnknownVariable:
     'Выберите объявленную переменную или выражение user.* / system.* из справки плейсхолдеров.',
+  ConditionTooManyBranches: 'Оставьте ровно две исходящие связи: первая — «Да», вторая — «Нет».',
+  ConditionSecondBranchMissing: 'Добавьте вторую связь от блока «Условие» для ветки «Нет».',
   MissingOutgoingEdge:
     'Потяните связь от оранжевого выхода «Успех» (или от единственного не-error выхода) к следующему блоку.',
   RequiredFieldMissing: 'Заполните отмеченные обязательные поля в панели настроек этого блока.',

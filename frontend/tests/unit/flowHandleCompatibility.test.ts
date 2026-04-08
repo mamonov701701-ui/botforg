@@ -77,4 +77,32 @@ describe('flowHandleCompatibility', () => {
     const out = normalizeScenarioEdges(nodes, edges);
     expect(out[0].sourceHandle).toBe('success');
   });
+
+  it('condition node: top target only, yes/no sources', () => {
+    const sets = getNodeHandleSets(n('c', 'condition'));
+    expect([...sets.targetHandles]).toEqual(['top']);
+    expect([...sets.sourceHandles].sort()).toEqual(['condition_no', 'condition_yes']);
+  });
+
+  it('normalizes condition exit using conditionBranch when handles are legacy', () => {
+    const nodes = [n('c', 'condition')];
+    const edges: Edge[] = [
+      {
+        id: 'e1',
+        source: 'c',
+        target: 'a',
+        sourceHandle: 'bottom',
+        data: { conditionBranch: 'true' },
+      } as Edge,
+    ];
+    const out = normalizeScenarioEdges(nodes, edges);
+    expect(out[0].sourceHandle).toBe('condition_yes');
+  });
+
+  it('normalizes incoming targetHandle left on condition to top', () => {
+    const nodes = [n('c', 'condition')];
+    const edges: Edge[] = [{ id: 'e1', source: 'x', target: 'c', targetHandle: 'left' } as Edge];
+    const out = normalizeScenarioEdges(nodes, edges);
+    expect(out[0].targetHandle).toBe('top');
+  });
 });

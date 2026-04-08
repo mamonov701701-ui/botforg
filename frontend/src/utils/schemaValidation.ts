@@ -7,6 +7,7 @@ import {
   type MessageMediaKind,
 } from './messageMedia';
 import { validateInputBlockConfigFields, migrateInputNodeSettings } from './inputBlock';
+import { normalizeActionSettings } from './actionBlock';
 
 export interface ValidationResult {
   nodeId: string;
@@ -96,6 +97,37 @@ export function validateNodeSettings(
     // Если выбран режим "с конкретного шага", проверяем наличие targetNodeId
     if (settings.startMode === 'from_step' && !settings.targetNodeId) {
       missingFields.push('Конкретный шаг');
+    }
+  }
+
+  if (block.id === 'action') {
+    const normalized = normalizeActionSettings(settings as Record<string, unknown>);
+    if (normalized.mode === 'tag') {
+      if (!normalized.tagAction) missingFields.push('Выберите действие с тегом');
+      if (!normalized.tag) missingFields.push('Укажите тег');
+    } else if (normalized.mode === 'status') {
+      if (!normalized.statusAction) missingFields.push('Выберите действие со статусом');
+      if (normalized.statusAction === 'set' && !normalized.status)
+        missingFields.push('Укажите статус');
+    } else if (normalized.mode === 'field') {
+      if (!normalized.fieldAction) missingFields.push('Выберите действие с полем');
+      if (!normalized.fieldKey) missingFields.push('Укажите поле пользователя');
+      if (normalized.fieldAction === 'set' && !normalized.fieldValue.trim()) {
+        missingFields.push('Укажите значение');
+      }
+    } else {
+      const legacyActionType = settings.actionType;
+      const legacyVar =
+        typeof settings.setVariable === 'string' ? String(settings.setVariable).trim() : '';
+      const legacyTag = typeof settings.tag === 'string' ? String(settings.tag).trim() : '';
+      const isLegacyTagAction = legacyActionType === 'add_tag' || legacyActionType === 'remove_tag';
+      if (legacyVar) {
+        // legacy сценарий: сохраняем совместимость, не ломаем валидацией
+      } else if (isLegacyTagAction) {
+        if (!legacyTag) missingFields.push('Укажите тег');
+      } else {
+        missingFields.push('Что изменить');
+      }
     }
   }
 

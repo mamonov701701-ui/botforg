@@ -14,12 +14,17 @@ describe('scenarioDiagnosticUi', () => {
       'InputVariableKeyMissing',
       'MessageUnknownPlaceholder',
       'ConditionUnknownVariable',
+      'ConditionTooManyBranches',
+      'ConditionSecondBranchMissing',
       'MissingOutgoingEdge',
       'RequiredFieldMissing',
     ] as const;
     for (const code of codes) {
       const d: ScenarioDiagnostic = {
-        severity: code === 'MessageUnknownPlaceholder' ? 'warning' : 'error',
+        severity:
+          code === 'MessageUnknownPlaceholder' || code === 'ConditionSecondBranchMissing'
+            ? 'warning'
+            : 'error',
         blockId: 'n1',
         code,
         message: 'Детали от валидатора',

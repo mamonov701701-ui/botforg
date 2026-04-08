@@ -8,6 +8,9 @@ import {
   completeWaitStep,
   runUntilUserPauseOrEnd,
   valuesEqualForConditionRoute,
+  PREVIEW_USER_TAGS_VARIABLE,
+  PREVIEW_USER_STATUS_VARIABLE,
+  PREVIEW_USER_FIELDS_VARIABLE,
   type ScenarioGraph,
   type SimulatorState,
   type RuntimeContext,
@@ -200,13 +203,17 @@ describe('scenarioRunner execution model', () => {
     expect(context.currentNodeId).toBe('z');
   });
 
-  it('condition node selects edge by conditionValue (conditionKey)', () => {
-    const cond = node('c1', 'condition', { conditionKey: 'route' });
+  it('condition: IF true → первая связь (Да), conditionValue игнорируется', () => {
+    const cond = node('c1', 'condition', {
+      variable: 'route',
+      operator: 'equals',
+      value: 'B',
+    });
     const graph: ScenarioGraph = {
       nodes: [cond, node('A', 'message'), node('B', 'message')],
       edges: [
-        edge('e1', 'c1', 'A', { data: { conditionValue: 'A' } as any }),
-        edge('e2', 'c1', 'B', { data: { conditionValue: 'B' } as any }),
+        edge('e1', 'c1', 'A', { data: { conditionValue: 'noise' } as any }),
+        edge('e2', 'c1', 'B', { data: { conditionValue: 'other' } as any }),
       ],
     };
     const { context } = stepFromCurrentNode(
@@ -215,25 +222,46 @@ describe('scenarioRunner execution model', () => {
         variables: { route: 'B' },
       })
     );
-    expect(context.currentNodeId).toBe('B');
+    expect(context.currentNodeId).toBe('A');
   });
 
-  it('condition node uses settings.variable as catalog field', () => {
-    const cond = node('c1', 'condition', { variable: 'flag', operator: 'equals', value: '1' });
+  it('condition: IF false → вторая связь (Нет)', () => {
+    const cond = node('c1', 'condition', { variable: 'flag', operator: 'equals', value: 'yes' });
     const graph: ScenarioGraph = {
       nodes: [cond, node('A', 'message'), node('B', 'message')],
-      edges: [
-        edge('e1', 'c1', 'A', { data: { conditionValue: 'yes' } as any }),
-        edge('e2', 'c1', 'B', { data: { conditionValue: 'no' } as any }),
-      ],
+      edges: [edge('e1', 'c1', 'A'), edge('e2', 'c1', 'B')],
     };
     const { context } = stepFromCurrentNode(
       S(graph, {
         currentNodeId: 'c1',
-        variables: { flag: 'yes' },
+        variables: { flag: 'no' },
       })
     );
-    expect(context.currentNodeId).toBe('A');
+    expect(context.currentNodeId).toBe('B');
+  });
+
+  it('condition: explicit conditionBranch overrides edge id order', () => {
+    const cond = node('c1', 'condition', {
+      variable: 'route',
+      operator: 'equals',
+      value: 'B',
+    });
+    const graph: ScenarioGraph = {
+      nodes: [cond, node('A', 'message'), node('B', 'message')],
+      edges: [
+        edge('e1', 'c1', 'A', { data: { conditionBranch: 'false' as const } }),
+        edge('e2', 'c1', 'B', { data: { conditionBranch: 'true' as const } }),
+      ],
+    };
+    const { context: whenTrue } = stepFromCurrentNode(
+      S(graph, { currentNodeId: 'c1', variables: { route: 'B' } })
+    );
+    expect(whenTrue.currentNodeId).toBe('B');
+
+    const { context: whenFalse } = stepFromCurrentNode(
+      S(graph, { currentNodeId: 'c1', variables: { route: 'other' } })
+    );
+    expect(whenFalse.currentNodeId).toBe('A');
   });
 
   it('action node auto-continues to next node', () => {
@@ -372,6 +400,65 @@ describe('scenarioRunner execution model', () => {
     expect(step2.context.history.length).toBeGreaterThan(context.history.length);
     expect(step2.context.currentNodeId).toBe('mb');
   });
+
+  it('go_to_scenario keeps variables/tags/status/fields/last_input', () => {
+    const graphA: ScenarioGraph = {
+      nodes: [node('hop', 'go_to_scenario', { targetScenarioId: 2 })],
+      edges: [],
+    };
+    const graphB: ScenarioGraph = {
+      nodes: [node('sb', 'start'), node('mb', 'message', { text: 'B' })],
+      edges: [edge('eb', 'sb', 'mb')],
+    };
+    const state = S(graphA, {
+      currentNodeId: 'hop',
+      graphsByScenarioId: { 2: graphB },
+      scenarioTitlesById: { 2: 'B' },
+      variables: {
+        foo: 'bar',
+        [PREVIEW_USER_TAGS_VARIABLE]: ['vip'],
+        [PREVIEW_USER_STATUS_VARIABLE]: 'active',
+        [PREVIEW_USER_FIELDS_VARIABLE]: { city: 'Moscow' },
+      },
+      lastUserInput: 'last text',
+    });
+    const r = stepFromCurrentNode(state);
+    expect(r.context.activeScenarioId).toBe(2);
+    expect(r.context.variables.foo).toBe('bar');
+    expect(r.context.variables[PREVIEW_USER_TAGS_VARIABLE]).toEqual(['vip']);
+    expect(r.context.variables[PREVIEW_USER_STATUS_VARIABLE]).toBe('active');
+    expect(r.context.variables[PREVIEW_USER_FIELDS_VARIABLE]).toEqual({ city: 'Moscow' });
+    expect(r.context.lastUserInput).toBe('last text');
+  });
+
+  it('go_to_scenario: missing target scenario returns readable error', () => {
+    const graphA: ScenarioGraph = {
+      nodes: [node('hop', 'go_to_scenario', { targetScenarioId: 999 })],
+      edges: [],
+    };
+    const r = stepFromCurrentNode(S(graphA, { currentNodeId: 'hop' }));
+    expect(r.stopReason).toBe('Целевой сценарий не найден');
+    expect(r.context.history.some(h => h.meta?.variant === 'error')).toBe(true);
+  });
+
+  it('go_to_scenario: target without explicit start returns readable error', () => {
+    const graphA: ScenarioGraph = {
+      nodes: [node('hop', 'go_to_scenario', { targetScenarioId: 2 })],
+      edges: [],
+    };
+    const graphB: ScenarioGraph = {
+      nodes: [node('x', 'message', { text: 'no start' })],
+      edges: [],
+    };
+    const r = stepFromCurrentNode(
+      S(graphA, {
+        currentNodeId: 'hop',
+        graphsByScenarioId: { 2: graphB },
+      })
+    );
+    expect(r.stopReason).toBe('В целевом сценарии нет стартового блока');
+    expect(r.context.history.some(h => h.text.includes('нет стартового блока'))).toBe(true);
+  });
 });
 
 function contextToSim(c: RuntimeContext): SimulatorState {
@@ -489,40 +576,92 @@ describe('preview scenarios (runUntilUserPauseOrEnd)', () => {
     expect(bad.context.history.some(h => h.meta?.variant === 'error')).toBe(true);
   });
 
-  it('D: Start → Condition → ветвление по значению', () => {
+  it('D: Start → Condition → ветвление по operator/value (ложь → Нет)', () => {
     const graph: ScenarioGraph = {
       nodes: [
         node('s', 'start'),
-        node('c', 'condition', { variable: 'route' }),
+        node('c', 'condition', { variable: 'route', operator: 'equals', value: 'yes' }),
         node('A', 'message', { text: 'Ветка A' }),
         node('B', 'message', { text: 'Ветка B' }),
       ],
-      edges: [
-        edge('e0', 's', 'c'),
-        edge('e1', 'c', 'A', { data: { conditionValue: 'yes' } }),
-        edge('e2', 'c', 'B', { data: { conditionValue: 'no' } }),
-      ],
+      edges: [edge('e0', 's', 'c'), edge('e1', 'c', 'A'), edge('e2', 'c', 'B')],
     };
     const r = runUntilUserPauseOrEnd(createInitialSimulatorState(graph));
-    // переменная не задана: value null — ни одно ребро не совпало, fallback первое исходящее → A
     expect(r.context.currentNodeId).toBeNull();
-    expect(r.context.history.some(h => h.text === 'Ветка A')).toBe(true);
+    expect(r.context.history.some(h => h.text === 'Ветка B')).toBe(true);
   });
 
-  it('D: число в переменной совпадает со строкой на ребре', () => {
+  it('D: число и equals со строкой — первая ветка при совпадении', () => {
     const graph: ScenarioGraph = {
       nodes: [
-        node('c', 'condition', { variable: 'n' }),
+        node('c', 'condition', { variable: 'n', operator: 'equals', value: '5' }),
         node('A', 'message', { text: 'A' }),
         node('B', 'message', { text: 'B' }),
       ],
-      edges: [
-        edge('e1', 'c', 'A', { data: { conditionValue: '5' } }),
-        edge('e2', 'c', 'B', { data: { conditionValue: '6' } }),
-      ],
+      edges: [edge('e1', 'c', 'A'), edge('e2', 'c', 'B')],
     };
     const r = stepFromCurrentNode(S(graph, { currentNodeId: 'c', variables: { n: 5 } }));
     expect(r.context.currentNodeId).toBe('A');
+  });
+
+  it('condition tag equals: selected tag exists -> yes branch', () => {
+    const graph: ScenarioGraph = {
+      nodes: [
+        node('c', 'condition', {
+          conditionSourceType: 'user_tag',
+          variable: 'Прошел игру',
+          operator: 'equals',
+          value: 'что угодно',
+        }),
+        node('A', 'message', { text: 'A' }),
+        node('B', 'message', { text: 'B' }),
+      ],
+      edges: [edge('e1', 'c', 'A'), edge('e2', 'c', 'B')],
+    };
+    const r = stepFromCurrentNode(
+      S(graph, { currentNodeId: 'c', variables: { [PREVIEW_USER_TAGS_VARIABLE]: ['Прошел игру'] } })
+    );
+    expect(r.context.currentNodeId).toBe('A');
+  });
+
+  it('condition tag equals: selected tag missing -> no branch', () => {
+    const graph: ScenarioGraph = {
+      nodes: [
+        node('c', 'condition', {
+          conditionSourceType: 'user_tag',
+          variable: 'лала',
+          operator: 'equals',
+          value: 'Прошел игру',
+        }),
+        node('A', 'message', { text: 'A' }),
+        node('B', 'message', { text: 'B' }),
+      ],
+      edges: [edge('e1', 'c', 'A'), edge('e2', 'c', 'B')],
+    };
+    const r = stepFromCurrentNode(
+      S(graph, { currentNodeId: 'c', variables: { [PREVIEW_USER_TAGS_VARIABLE]: ['Прошел игру'] } })
+    );
+    expect(r.context.currentNodeId).toBe('B');
+  });
+
+  it('condition tag equals: empty user tags -> no branch', () => {
+    const graph: ScenarioGraph = {
+      nodes: [
+        node('c', 'condition', {
+          conditionSourceType: 'user_tag',
+          variable: 'Прошел игру',
+          operator: 'equals',
+          value: 'любое',
+        }),
+        node('A', 'message', { text: 'A' }),
+        node('B', 'message', { text: 'B' }),
+      ],
+      edges: [edge('e1', 'c', 'A'), edge('e2', 'c', 'B')],
+    };
+    const r = stepFromCurrentNode(
+      S(graph, { currentNodeId: 'c', variables: { [PREVIEW_USER_TAGS_VARIABLE]: [] } })
+    );
+    expect(r.context.currentNodeId).toBe('B');
   });
 
   it('F: Start → wait → Message', () => {
@@ -544,6 +683,29 @@ describe('preview scenarios (runUntilUserPauseOrEnd)', () => {
     expect(r.context.currentNodeId).toBeNull();
     expect(r.context.history.some(h => h.meta?.kind === 'wait')).toBe(true);
     expect(r.context.history.some(h => h.text === 'после')).toBe(true);
+  });
+
+  it('completeWaitStep находит wait в graphsByScenarioId при пустом state.graph', () => {
+    const g: ScenarioGraph = {
+      nodes: [
+        node('w', 'wait', { duration: { amount: 1, unit: 'seconds' } }),
+        node('m', 'message', { text: 'после' }),
+      ],
+      edges: [edge('e', 'w', 'm')],
+    };
+    const broken: SimulatorState = {
+      graph: { nodes: [], edges: [] },
+      graphsByScenarioId: { 42: g },
+      scenarioTitlesById: {},
+      activeScenarioId: 42,
+      currentNodeId: 'w',
+      history: [],
+      variables: {},
+      lastUserInput: null,
+    };
+    const w = completeWaitStep(broken);
+    expect(w.context.currentNodeId).toBe('m');
+    expect(w.context.graph.nodes.some(n => n.id === 'w')).toBe(true);
   });
 
   it('runUntil сохраняет deadEndFromStart', () => {

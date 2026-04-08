@@ -28,6 +28,26 @@ describe('scenarioVariableSuggestions', () => {
     expect(local[0].label).toBe('Город');
   });
 
+  it('collects variable key from legacy variableName after migration', () => {
+    const nodes = [
+      {
+        id: 'n1',
+        data: {
+          blockId: 'input',
+          settings: {
+            variableName: 'chislo',
+            variable_label: 'Число',
+            validation: { type: 'number' },
+          },
+        },
+      },
+    ] as unknown as Node[];
+    const local = collectLocalInputVariables(nodes);
+    expect(local).toHaveLength(1);
+    expect(local[0].key).toBe('chislo');
+    expect(local[0].label).toBe('Число');
+  });
+
   it('keeps local variables when backend unavailable', () => {
     const merged = mergeVariableSuggestions(
       [

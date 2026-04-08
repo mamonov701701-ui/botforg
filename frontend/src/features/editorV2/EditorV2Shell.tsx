@@ -54,6 +54,8 @@ import ValidationModal from './ValidationModal';
 import ExportConfirmModal from './ExportConfirmModal';
 import BlockLibraryModal from './BlockLibraryModal';
 import { normalizeScenarioEdges } from '../../utils/flowHandleCompatibility';
+import { ensureConditionEdgeBranches } from '../../utils/conditionBlock';
+import { actionSummaryText, normalizeActionSettings } from '../../utils/actionBlock';
 
 // Connection line component - временная линия при создании соединения
 const ConnectionLine = ({
@@ -98,10 +100,13 @@ function getInputNodeOutputCountLabel(separateErrorBranch: boolean): string {
 // КРИТИЧНО: CustomNode должен быть определен ВНЕ компонента InnerEditor,
 // чтобы не пересоздаваться при каждом рендере
 const CustomNode = React.memo(({ data, id, selected }: any) => {
-  const title = data?.title ?? 'Блок';
+  const title = data?.blockId === 'action' ? 'Данные пользователя' : (data?.title ?? 'Блок');
   const isStartNode = data?.blockId === 'start';
   const isMessageNode = data?.blockId === 'message';
   const isInputNode = data?.blockId === 'input';
+  const isConditionNode = data?.blockId === 'condition';
+  const isActionNode = data?.blockId === 'action';
+
   const showInputErrorBranch = data?.settings?.separate_error_branch !== false;
   const borderColor = data?.color || '#2f6dff';
 
@@ -273,86 +278,25 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             }}
             className="react-flow__handle-visible"
           />
-          <div
+        </>
+      ) : isConditionNode ? (
+        <>
+          <Handle
+            id="top"
+            type="target"
+            position={Position.Top}
+            isConnectable={true}
             style={{
-              marginTop: 12,
-              paddingTop: 12,
-              borderTop: '2px solid rgba(0, 0, 0, 0.08)',
-              marginLeft: -18,
-              marginRight: -18,
-              width: 'calc(100% + 36px)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
+              background: '#00ff00',
+              width: 19.4,
+              height: 19.4,
+              border: '3px solid #fff',
+              top: -9.7,
+              zIndex: 10000,
+              transition: 'all 0.2s ease',
             }}
-          >
-            <div
-              style={{
-                position: 'relative',
-                padding: '10px 16px',
-                borderRadius: 10,
-                background: 'linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%)',
-                color: '#fff',
-                fontWeight: 600,
-                fontSize: 13,
-                textAlign: 'center',
-              }}
-            >
-              ✓ Успех (после валидного ввода)
-              <Handle
-                id="success"
-                type="source"
-                position={Position.Right}
-                isConnectable={true}
-                style={{
-                  background: '#FFB300',
-                  width: 19.4,
-                  height: 19.4,
-                  border: '3px solid #fff',
-                  right: -11.7,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  zIndex: 10001,
-                  position: 'absolute',
-                }}
-                className="react-flow__handle-visible"
-              />
-            </div>
-            {showInputErrorBranch && (
-              <div
-                style={{
-                  position: 'relative',
-                  padding: '10px 16px',
-                  borderRadius: 10,
-                  background: 'linear-gradient(180deg, #64748b 0%, #475569 100%)',
-                  color: '#f1f5f9',
-                  fontWeight: 600,
-                  fontSize: 13,
-                  textAlign: 'center',
-                }}
-              >
-                ✗ Ошибка валидации (опционально)
-                <Handle
-                  id="error"
-                  type="source"
-                  position={Position.Right}
-                  isConnectable={true}
-                  style={{
-                    background: '#FFB300',
-                    width: 19.4,
-                    height: 19.4,
-                    border: '3px solid #fff',
-                    right: -11.7,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    zIndex: 10001,
-                    position: 'absolute',
-                  }}
-                  className="react-flow__handle-visible"
-                />
-              </div>
-            )}
-          </div>
+            className="react-flow__handle-visible"
+          />
         </>
       ) : (
         /* Для остальных блоков - 4 Handle (со всех сторон)
@@ -499,38 +443,267 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
         </div>
       )}
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: data?.icon ? 12 : 0,
-          width: '100%',
-          padding: '0 8px',
-          boxSizing: 'border-box',
-        }}
-      >
-        {/* Иконка блока */}
-        {data?.icon && (
-          <span style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{data.icon}</span>
-        )}
+      {isConditionNode ? (
+        <>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: data?.icon ? 12 : 0,
+              width: '100%',
+              padding: '0 8px',
+              boxSizing: 'border-box',
+            }}
+          >
+            {data?.icon && (
+              <span style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{data.icon}</span>
+            )}
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: '18px',
+                textAlign: 'center',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                flex: 1,
+                minWidth: 0,
+                lineHeight: 1.3,
+              }}
+              title={title}
+            >
+              {title}
+            </div>
+          </div>
+          <div
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: '2px solid rgba(0, 0, 0, 0.08)',
+              marginLeft: -18,
+              marginRight: -18,
+              width: 'calc(100% + 36px)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                padding: '10px 16px',
+                borderRadius: 10,
+                background: 'linear-gradient(180deg, #22c55e 0%, #16a34a 100%)',
+                color: '#fff',
+                fontWeight: 600,
+                fontSize: 13,
+                textAlign: 'center',
+              }}
+            >
+              ✓ Да
+              <Handle
+                id="condition_yes"
+                type="source"
+                position={Position.Right}
+                isConnectable={true}
+                title="Условие выполняется"
+                style={{
+                  background: '#FFB300',
+                  width: 19.4,
+                  height: 19.4,
+                  border: '3px solid #fff',
+                  right: -11.7,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 10001,
+                  position: 'absolute',
+                }}
+                className="react-flow__handle-visible"
+              />
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                padding: '10px 16px',
+                borderRadius: 10,
+                background: 'linear-gradient(180deg, #64748b 0%, #475569 100%)',
+                color: '#f1f5f9',
+                fontWeight: 600,
+                fontSize: 13,
+                textAlign: 'center',
+              }}
+            >
+              ✗ Нет
+              <Handle
+                id="condition_no"
+                type="source"
+                position={Position.Right}
+                isConnectable={true}
+                title="Условие не выполняется"
+                style={{
+                  background: '#FFB300',
+                  width: 19.4,
+                  height: 19.4,
+                  border: '3px solid #fff',
+                  right: -11.7,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 10001,
+                  position: 'absolute',
+                }}
+                className="react-flow__handle-visible"
+              />
+            </div>
+          </div>
+        </>
+      ) : isInputNode ? (
+        <>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: data?.icon ? 12 : 0,
+              width: '100%',
+              padding: '0 8px',
+              boxSizing: 'border-box',
+            }}
+          >
+            {data?.icon && (
+              <span style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{data.icon}</span>
+            )}
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: '18px',
+                textAlign: 'center',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                flex: 1,
+                minWidth: 0,
+                lineHeight: 1.3,
+              }}
+              title={title}
+            >
+              {title}
+            </div>
+          </div>
+          <div
+            style={{
+              marginTop: 12,
+              paddingTop: 12,
+              borderTop: '2px solid rgba(0, 0, 0, 0.08)',
+              marginLeft: -18,
+              marginRight: -18,
+              width: 'calc(100% + 36px)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                padding: '10px 16px',
+                borderRadius: 10,
+                background: 'linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%)',
+                color: '#fff',
+                fontWeight: 600,
+                fontSize: 13,
+                textAlign: 'center',
+              }}
+            >
+              ✓ Успех (после валидного ввода)
+              <Handle
+                id="success"
+                type="source"
+                position={Position.Right}
+                isConnectable={true}
+                style={{
+                  background: '#FFB300',
+                  width: 19.4,
+                  height: 19.4,
+                  border: '3px solid #fff',
+                  right: -11.7,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  zIndex: 10001,
+                  position: 'absolute',
+                }}
+                className="react-flow__handle-visible"
+              />
+            </div>
+            {showInputErrorBranch && (
+              <div
+                style={{
+                  position: 'relative',
+                  padding: '10px 16px',
+                  borderRadius: 10,
+                  background: 'linear-gradient(180deg, #64748b 0%, #475569 100%)',
+                  color: '#f1f5f9',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  textAlign: 'center',
+                }}
+              >
+                ✗ Ошибка валидации (опционально)
+                <Handle
+                  id="error"
+                  type="source"
+                  position={Position.Right}
+                  isConnectable={true}
+                  style={{
+                    background: '#FFB300',
+                    width: 19.4,
+                    height: 19.4,
+                    border: '3px solid #fff',
+                    right: -11.7,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    zIndex: 10001,
+                    position: 'absolute',
+                  }}
+                  className="react-flow__handle-visible"
+                />
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
         <div
           style={{
-            fontWeight: 800,
-            fontSize: '18px',
-            textAlign: 'center',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flex: 1,
-            minWidth: 0,
-            lineHeight: 1.3,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: data?.icon ? 12 : 0,
+            width: '100%',
+            padding: '0 8px',
+            boxSizing: 'border-box',
           }}
-          title={title}
         >
-          {title}
+          {data?.icon && (
+            <span style={{ fontSize: 24, lineHeight: 1, flexShrink: 0 }}>{data.icon}</span>
+          )}
+          <div
+            style={{
+              fontWeight: 800,
+              fontSize: '18px',
+              textAlign: 'center',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flex: 1,
+              minWidth: 0,
+              lineHeight: 1.3,
+            }}
+            title={title}
+          >
+            {title}
+          </div>
         </div>
-      </div>
+      )}
 
       {isInputNode && (
         <div
@@ -793,6 +966,38 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
           )}
         </div>
       )}
+
+      {isActionNode && (
+        <div
+          style={{
+            marginTop: 10,
+            width: '100%',
+            maxWidth: 320,
+            padding: '8px 10px',
+            borderRadius: 10,
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            background: 'rgba(245, 158, 11, 0.08)',
+            color: '#0f172a',
+            lineHeight: 1.35,
+            fontSize: 12,
+            textAlign: 'center',
+          }}
+        >
+          {actionSummaryText(
+            normalizeActionSettings((data?.settings || {}) as Record<string, unknown>)
+          )}
+          {(() => {
+            const s = normalizeActionSettings((data?.settings || {}) as Record<string, unknown>);
+            const msg = s.message.trim();
+            if (!msg) return null;
+            return (
+              <div style={{ marginTop: 4, fontSize: 11, color: '#334155' }} title={msg}>
+                Сообщение: {msg}
+              </div>
+            );
+          })()}
+        </div>
+      )}
       {/* Visual shows icon + title, no settings content */}
     </div>
   );
@@ -808,6 +1013,8 @@ function InnerEditor() {
   // Важно: используем отдельные селекторы, а не один объект,
   // чтобы избежать предупреждения useSyncExternalStore про getSnapshot
   const currentState = useScenarioStore(state => state.currentState);
+  const currentScenarioId = useScenarioStore(state => state.currentScenarioId);
+  const currentBotId = useScenarioStore(state => state.currentBotId);
   const updateCurrentScenario = useScenarioStore(state => state.updateCurrentScenario);
   const setEditorScenarioValidationVars = useEditorStore(s => s.setEditorScenarioValidationVars);
   const { id: routeBotId } = useParams<{ id: string }>();
@@ -996,7 +1203,8 @@ function InnerEditor() {
         onDelete: handleDeleteEdgeRef.current,
       },
     }));
-    setEdges(edgesWithDelete);
+    const withConditionBranches = ensureConditionEdgeBranches(edgesWithDelete, scenarioNodes);
+    setEdges(withConditionBranches);
   }, [storeGraphSignature, currentState, setNodes, setEdges]);
 
   // Обработчики изменений для ReactFlow с синхронизацией обратно в Zustand
@@ -1045,6 +1253,21 @@ function InnerEditor() {
   const [isExportConfirmOpen, setIsExportConfirmOpen] = useState(false);
   const [isBlockLibraryOpen, setIsBlockLibraryOpen] = useState(false);
   const { setViewport, screenToFlowPosition, getViewport, fitView } = useReactFlow();
+  const viewportStorageKey = useMemo(() => {
+    if (!currentBotId || !currentScenarioId) return null;
+    return `editor_v2_viewport_${currentBotId}_${currentScenarioId}`;
+  }, [currentBotId, currentScenarioId]);
+
+  const saveViewportToStorage = useCallback(() => {
+    if (!viewportStorageKey) return;
+    try {
+      const vp = getViewport();
+      localStorage.setItem(viewportStorageKey, JSON.stringify(vp));
+    } catch {
+      // ignore localStorage issues
+    }
+  }, [getViewport, viewportStorageKey]);
+
   const reactFlowWrapper = React.useRef<HTMLDivElement>(null);
 
   // Ref для debounce валидации
@@ -1542,10 +1765,49 @@ function InnerEditor() {
     // Если не авторизован - каталог не загружается, редактор показывается пустым
   }, [loadCatalog, user]);
 
-  // Установка начального viewport ОДИН раз при монтировании
+  // Восстановление viewport: сохранённая позиция -> fallback к start (левый верх) -> дефолт.
   useEffect(() => {
+    if (!currentState) return;
+
+    if (viewportStorageKey) {
+      try {
+        const raw = localStorage.getItem(viewportStorageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { x?: number; y?: number; zoom?: number };
+          if (
+            typeof parsed?.x === 'number' &&
+            typeof parsed?.y === 'number' &&
+            typeof parsed?.zoom === 'number'
+          ) {
+            setViewport({ x: parsed.x, y: parsed.y, zoom: parsed.zoom }, { duration: 0 });
+            return;
+          }
+        }
+      } catch {
+        // fallback below
+      }
+    }
+
+    const startNode = (currentState.nodes || []).find(
+      n => (n.data?.blockId || n.data?.type) === 'start'
+    );
+    if (startNode) {
+      const zoom = 0.8;
+      const marginX = 80;
+      const marginY = 80;
+      setViewport(
+        {
+          x: marginX - startNode.position.x * zoom,
+          y: marginY - startNode.position.y * zoom,
+          zoom,
+        },
+        { duration: 0 }
+      );
+      return;
+    }
+
     setViewport({ x: 0, y: 0, zoom: 0.6 }, { duration: 0 });
-  }, [setViewport]);
+  }, [currentState?.id, viewportStorageKey, setViewport]);
 
   // Постоянное исправление видимости всех nodes - следим за всеми nodes и исправляем видимость
   useEffect(() => {
@@ -1640,16 +1902,52 @@ function InnerEditor() {
         return;
       }
 
+      const sourceNode = nodes.find(n => n.id === params.source);
+      const isConditionSource = sourceNode?.data?.blockId === 'condition';
+      const existingFromSource = edges.filter(e => e.source === params.source);
+      let conditionBranch: 'true' | 'false' | undefined;
+      if (isConditionSource) {
+        if (params.sourceHandle === 'condition_yes') conditionBranch = 'true';
+        else if (params.sourceHandle === 'condition_no') conditionBranch = 'false';
+        else if (existingFromSource.length === 0) conditionBranch = 'true';
+        else if (existingFromSource.length === 1) conditionBranch = 'false';
+      }
+
+      const normalizedConditionSourceHandle =
+        isConditionSource && (params.sourceHandle == null || params.sourceHandle === '')
+          ? conditionBranch === 'true'
+            ? 'condition_yes'
+            : conditionBranch === 'false'
+              ? 'condition_no'
+              : undefined
+          : params.sourceHandle;
+
+      if (isConditionSource && normalizedConditionSourceHandle) {
+        const alreadyUsedThisHandle = edges.some(
+          e => e.source === params.source && e.sourceHandle === normalizedConditionSourceHandle
+        );
+        if (alreadyUsedThisHandle) {
+          showToast(
+            normalizedConditionSourceHandle === 'condition_yes'
+              ? 'Выход «Да» уже подключён'
+              : 'Выход «Нет» уже подключён',
+            'warning'
+          );
+          return;
+        }
+      }
+
       const newEdge: Edge = {
         id: edgeId,
         source: params.source,
         target: params.target,
-        sourceHandle: params.sourceHandle,
+        sourceHandle: normalizedConditionSourceHandle,
         targetHandle: params.targetHandle,
         type: 'default',
         animated: false,
         data: {
           onDelete: handleDeleteEdge,
+          ...(conditionBranch ? { conditionBranch } : {}),
         },
         markerEnd: {
           type: MarkerType.ArrowClosed,
@@ -1668,7 +1966,7 @@ function InnerEditor() {
 
       showToast('Соединение создано', 'success');
     },
-    [edges, setEdges, showToast, handleDeleteEdge]
+    [edges, nodes, setEdges, showToast, handleDeleteEdge]
   );
 
   // Handle drag over canvas - улучшаем визуальную обратную связь
@@ -1751,7 +2049,14 @@ function InnerEditor() {
                     separate_error_branch: false,
                     validation: { type: 'string' },
                   }
-                : {},
+                : block.id === 'action'
+                  ? {
+                      mode: 'tag',
+                      tagAction: 'add',
+                      tag: '',
+                      message: '',
+                    }
+                  : {},
           },
           style: {
             borderColor: block.color,
@@ -2124,6 +2429,7 @@ function InnerEditor() {
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
+            onMoveEnd={saveViewportToStorage}
             onNodeDragStart={onNodeDragStart}
             onNodeDragStop={onNodeDragStop}
             onDragOver={onDragOver}

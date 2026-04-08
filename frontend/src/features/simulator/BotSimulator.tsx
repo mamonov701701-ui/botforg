@@ -13,6 +13,7 @@ import {
   type ScenarioGraph,
 } from './scenarioRunner';
 import { normalizeScenarioEdges, listInvalidFlowEdges } from '../../utils/flowHandleCompatibility';
+import { getVisiblePreviewHistory } from './historyVisibility';
 
 interface BotSimulatorProps {
   isOpen: boolean;
@@ -44,6 +45,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
   const [fatalPreviewError, setFatalPreviewError] = useState<string | null>(null);
   const [handleCompatNotice, setHandleCompatNotice] = useState<string | null>(null);
   const [transitionNotice, setTransitionNotice] = useState<string | null>(null);
+  const [stopReason, setStopReason] = useState<string | null>(null);
   /** Активная визуальная пауза блока wait (мс); по окончании — completeWaitStep + автопродолжение */
   const [waitDelayMs, setWaitDelayMs] = useState<number | null>(null);
   const simRef = useRef<SimulatorState | null>(null);
@@ -72,6 +74,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
       setWaitingForUser(false);
       setShowManualContinue(false);
       setWaitDelayMs(null);
+      setStopReason(null);
       return;
     }
     if (!currentState) return;
@@ -87,6 +90,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
       setWaitingForUser(false);
       setShowManualContinue(false);
       setWaitDelayMs(null);
+      setStopReason(null);
       return;
     }
 
@@ -99,6 +103,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
       setWaitingForUser(false);
       setShowManualContinue(false);
       setWaitDelayMs(null);
+      setStopReason(null);
       return;
     }
 
@@ -126,6 +131,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
       setWaitingForUser(false);
       setShowManualContinue(false);
       setWaitDelayMs(null);
+      setStopReason(null);
       return;
     }
 
@@ -162,6 +168,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     setSimState(nextState);
     setWaitingForUser(w);
     setWaitDelayMs(stepResult.pendingWaitMs ?? null);
+    setStopReason(stepResult.stopReason ?? null);
   }, [isOpen, currentState, previewBundle, currentScenarioId]);
 
   useEffect(() => {
@@ -174,21 +181,30 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
       const done = completeWaitStep(prev);
       const cont = runUntilUserPauseOrEnd(contextToSimulatorState(done.context));
       if (!cont.context) return;
-      setSimState(contextToSimulatorState(cont.context));
+      const nextSim = contextToSimulatorState(cont.context);
+      const nextPending = cont.pendingWaitMs ?? null;
+      setSimState(nextSim);
       setWaitingForUser(Boolean(cont.waitingForUser));
       setShowManualContinue(Boolean(cont.stalledMaxSteps));
-      setWaitDelayMs(cont.pendingWaitMs ?? null);
+      // Сначала сбросить задержку: если снова тот же pendingWaitMs (ещё один wait),
+      // React не перезапустит эффект с таймером — «Бот печатает…» зависает навсегда.
+      setWaitDelayMs(null);
+      if (nextPending != null) {
+        window.setTimeout(() => {
+          if (!isOpenRef.current) return;
+          setWaitDelayMs(nextPending);
+        }, 0);
+      }
       if (cont.stalledMaxSteps) {
-        setTransitionNotice(
-          'Слишком много шагов подряд — проверьте сценарий на зацикливание (цепочка без ввода пользователя).'
-        );
+        setTransitionNotice('Выполнение остановлено: возможно зацикливание сценария.');
       } else if (cont.deadEndFromStart) {
         setTransitionNotice(
           'Сценарий не содержит перехода из стартового блока. Подключите ребро от блока «Начало» к следующему блоку.'
         );
-      } else if (cont.pendingWaitMs == null) {
+      } else if (nextPending == null) {
         setTransitionNotice(null);
       }
+      setStopReason(cont.stopReason ?? null);
     }, ms);
     return () => window.clearTimeout(id);
   }, [isOpen, waitDelayMs]);
@@ -224,6 +240,11 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
       lastInteractiveBot?.meta?.kind === 'input'
   );
 
+  const visibleHistory = useMemo(
+    () => getVisiblePreviewHistory(simState?.history || []),
+    [simState?.history]
+  );
+
   if (!isOpen || !currentState) return null;
 
   /** Нет активного узла, но история уже есть — дальше шагать некуда (тупик или нет перехода со старта). */
@@ -245,10 +266,9 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     setWaitingForUser(Boolean(stepResult.waitingForUser));
     setShowManualContinue(Boolean(stepResult.stalledMaxSteps));
     setWaitDelayMs(stepResult.pendingWaitMs ?? null);
+    setStopReason(stepResult.stopReason ?? null);
     if (stepResult.stalledMaxSteps) {
-      setTransitionNotice(
-        'Слишком много шагов подряд — проверьте сценарий на зацикливание (цепочка без ввода пользователя).'
-      );
+      setTransitionNotice('Выполнение остановлено: возможно зацикливание сценария.');
     } else if (stepResult.deadEndFromStart) {
       setTransitionNotice(
         'Сценарий не содержит перехода из стартового блока. Подключите ребро от блока «Начало» к следующему блоку.'
@@ -282,10 +302,9 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     setWaitingForUser(Boolean(after.waitingForUser));
     setShowManualContinue(Boolean(after.stalledMaxSteps));
     setWaitDelayMs(after.pendingWaitMs ?? null);
+    setStopReason(after.stopReason ?? null);
     if (after.stalledMaxSteps) {
-      setTransitionNotice(
-        'Слишком много шагов подряд — проверьте сценарий на зацикливание (цепочка без ввода пользователя).'
-      );
+      setTransitionNotice('Выполнение остановлено: возможно зацикливание сценария.');
     } else {
       setTransitionNotice(null);
     }
@@ -431,9 +450,8 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
             {transitionNotice}
           </div>
         )}
-
         <ChatPreview
-          messages={simState?.history || []}
+          messages={visibleHistory}
           onButtonClick={handleUserChoice}
           showTextInput={showTextInput}
           onSubmitText={handleFreeText}
@@ -460,14 +478,16 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
               : waitDelayMs != null
                 ? 'Пауза сценария — подождите, диалог продолжится сам.'
                 : atGraphDeadEnd
-                  ? 'Сценарий остановлен — дальше нет связанных шагов (см. сообщения выше).'
+                  ? stopReason ||
+                    'Сценарий остановлен — дальше нет связанных шагов (см. сообщения выше).'
                   : showTextInput
                     ? 'Введите ответ и нажмите «Отправить» или Enter.'
                     : waitingForUser
-                      ? 'Выберите вариант под последним сообщением бота.'
+                      ? stopReason || 'Выберите вариант под последним сообщением бота.'
                       : showManualContinue
-                        ? 'Длинная цепочка без ввода — нажмите «Дальше», чтобы продолжить.'
-                        : 'Шаги без ввода выполняются автоматически.'}
+                        ? stopReason ||
+                          'Длинная цепочка без ввода — нажмите «Дальше», чтобы продолжить.'
+                        : stopReason || 'Шаги без ввода выполняются автоматически.'}
           </div>
           {showManualContinue && (
             <button

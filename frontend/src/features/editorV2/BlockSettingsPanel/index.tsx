@@ -24,8 +24,11 @@ import {
 import { FieldRenderer } from './FieldRenderer';
 import { MessageBlockSettingsForm } from './MessageBlockSettingsForm';
 import { InputBlockSettingsForm } from './InputBlockSettingsForm';
+import { ConditionBlockSettingsForm } from './ConditionBlockSettingsForm';
+import { ActionBlockSettingsForm } from './ActionBlockSettingsForm';
 import { BlockConfigField } from '../../../types/blocks';
 import { useScenarioStore } from '../../../stores/scenarioStore';
+import { canonicalizeActionSettings } from '../../../utils/actionBlock';
 import {
   useScenarioDiagnosticsStore,
   SCENARIO_DIAGNOSTICS_EMPTY_NODE,
@@ -386,6 +389,10 @@ export default function BlockSettingsPanel({
     if (block.id === 'input' && liveInputSchema) {
       return liveInputSchema.isValid ? 0 : liveInputSchema.missingFields.length;
     }
+    if (block.id === 'action') {
+      const r = validateNodeSettings(selectedNode, block);
+      return r.isValid ? 0 : r.missingFields.length;
+    }
     if (!block.configSchema) return 0;
     if (block.id === 'message' && liveMessageSchema) {
       return liveMessageSchema.isValid ? 0 : liveMessageSchema.missingFields.length;
@@ -408,6 +415,8 @@ export default function BlockSettingsPanel({
       case 'MissingOutgoingEdge':
         return 'Исходящая связь';
       case 'ConditionUnknownVariable':
+      case 'ConditionTooManyBranches':
+      case 'ConditionSecondBranchMissing':
         return 'Условие';
       default:
         return null;
@@ -537,7 +546,9 @@ export default function BlockSettingsPanel({
                 {selectedNode.data.title || block.title}
               </div>
               {/* Validation status badge */}
-              {((block.configSchema && block.configSchema.length > 0) || block.id === 'input') && (
+              {((block.configSchema && block.configSchema.length > 0) ||
+                block.id === 'input' ||
+                block.id === 'action') && (
                 <Tooltip
                   text={validationErrors > 0 ? `${validationErrors} ошибок` : 'Всё заполнено'}
                 >
@@ -841,6 +852,46 @@ export default function BlockSettingsPanel({
               isReadOnly={isReadOnly}
             />
           </>
+        ) : block.id === 'condition' ? (
+          <ConditionBlockSettingsForm
+            settings={(selectedNode.data.settings || {}) as Record<string, unknown>}
+            onFieldChange={handleFieldChange}
+            onSettingsPatch={patch => {
+              if (isReadOnly || !onUpdateNode) return;
+              setHasChanges(true);
+              onUpdateNode(selectedNode.id, {
+                data: {
+                  ...selectedNode.data,
+                  settings: patch,
+                },
+              });
+            }}
+            isReadOnly={isReadOnly}
+            configSchema={block.configSchema || []}
+            nodeId={selectedNode.id}
+            platformBotId={currentBotId}
+            validateField={validateField}
+          />
+        ) : block.id === 'action' ? (
+          <ActionBlockSettingsForm
+            settings={(selectedNode.data.settings || {}) as Record<string, unknown>}
+            onSettingsPatch={patch => {
+              if (isReadOnly || !onUpdateNode) return;
+              setHasChanges(true);
+              const merged = {
+                ...(selectedNode.data.settings || {}),
+                ...patch,
+              } as Record<string, unknown>;
+              onUpdateNode(selectedNode.id, {
+                data: {
+                  ...selectedNode.data,
+                  settings: canonicalizeActionSettings(merged),
+                },
+              });
+            }}
+            isReadOnly={isReadOnly}
+            platformBotId={currentBotId}
+          />
         ) : block.configSchema && block.configSchema.length > 0 ? (
           block.id === 'message' &&
           block.configSchema.some(f => f.name === 'text') &&

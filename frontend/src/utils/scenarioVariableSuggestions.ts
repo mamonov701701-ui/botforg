@@ -1,5 +1,6 @@
 import type { Node } from 'reactflow';
 import type { VariableDefinitionItem } from '../api/botMessageTemplate';
+import { getNormalizedInputSettings, migrateInputNodeSettings } from './inputBlock';
 
 export interface VariableSuggestionItem {
   key: string;
@@ -33,11 +34,13 @@ export function collectLocalInputVariables(nodes: Node[]): VariableSuggestionIte
   for (const n of nodes) {
     const blockId = String((n.data as any)?.blockId || '').toLowerCase();
     if (blockId !== 'input') continue;
-    const settings = ((n.data as any)?.settings || {}) as Record<string, unknown>;
-    const key = String(settings.variable_key || '').trim();
+    const raw = ((n.data as any)?.settings || {}) as Record<string, unknown>;
+    const migrated = migrateInputNodeSettings({ ...raw });
+    const norm = getNormalizedInputSettings(migrated);
+    const key = String(norm.variable_key || '').trim();
     if (!key) continue;
-    const labelRaw = String(settings.variable_label || '').trim();
-    const dataType = String((settings.validation as any)?.type || 'string');
+    const labelRaw = String(norm.variable_label || '').trim();
+    const dataType = String((norm.validation as { type?: string })?.type || 'string');
     out.push({
       key,
       label: labelRaw || null,

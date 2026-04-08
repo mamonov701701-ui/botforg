@@ -10,7 +10,7 @@ import type { ScenarioDiagnostic } from '../utils/scenarioConsistency';
 import { computeEditorScenarioValidation } from '../utils/scenarioSaveCompute';
 import { SAVE_VALIDATION_BLOCKED_MESSAGE } from '../utils/scenarioValidationMessages';
 import { buildRuntimeGraph, RuntimeGraph } from '../utils/runtimeNormalization';
-import { migrateScenarioNodes } from '../utils/scenarioContentMigration';
+import { migrateScenarioGraph, migrateScenarioNodes } from '../utils/scenarioContentMigration';
 import { useEditorStore } from './editorStore';
 import { useValidationStore } from './validationStore';
 import { useScenarioDiagnosticsStore } from './scenarioDiagnosticsStore';
@@ -230,13 +230,17 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
     selectScenario: (scenarioId: number) => {
       const scenario = get().scenarios.find(s => s.id === scenarioId);
       if (!scenario) return;
+      const migratedGraph = migrateScenarioGraph(
+        scenario.content?.nodes || [],
+        scenario.content?.edges || []
+      );
 
       const newState = {
         id: scenario.id,
         name: scenario.name,
         icon: scenario.icon || 'FileText',
-        nodes: migrateScenarioNodes(scenario.content?.nodes || []),
-        edges: scenario.content?.edges || [],
+        nodes: migratedGraph.nodes,
+        edges: migratedGraph.edges,
         isDirty: false,
         hasValidationErrors: false,
       };
@@ -299,7 +303,8 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
     // - помечает сценарий как isDirty;
     // - запускает debounce автосохранения и сохранение draft в localStorage.
     importFromJson: (nodes: Node[], edges: Edge[]) => {
-      get().updateCurrentScenario(migrateScenarioNodes(nodes), edges);
+      const migratedGraph = migrateScenarioGraph(nodes, edges);
+      get().updateCurrentScenario(migratedGraph.nodes, migratedGraph.edges);
     },
 
     // Устарело: граф в currentState; синхронизация из EditorV2Shell (RF → updateCurrentScenario).
@@ -363,10 +368,11 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
       }));
 
       try {
+        const migratedGraph = migrateScenarioGraph(currentState.nodes, currentState.edges);
         const updated = await scenarioAPI.updateScenario(currentScenarioId, {
           content: {
-            nodes: migrateScenarioNodes(currentState.nodes),
-            edges: currentState.edges,
+            nodes: migratedGraph.nodes,
+            edges: migratedGraph.edges,
           },
         });
 

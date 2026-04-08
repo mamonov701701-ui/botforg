@@ -13,6 +13,7 @@ import {
   validateInputBlockConfigFields,
 } from './inputBlock';
 import { validateNodeSettings } from './schemaValidation';
+import { collectLocalInputVariables } from './scenarioVariableSuggestions';
 
 /** Поля профиля user.* — зеркало backend message_template/diagnostics USER_PROFILE_PLACEHOLDER_FIELDS */
 const USER_PROFILE_PLACEHOLDER_FIELDS = new Set([
@@ -35,6 +36,8 @@ export type ScenarioDiagnosticCode =
   | 'InputVariableKeyMissing'
   | 'MessageUnknownPlaceholder'
   | 'ConditionUnknownVariable'
+  | 'ConditionTooManyBranches'
+  | 'ConditionSecondBranchMissing'
   | 'MissingOutgoingEdge'
   | 'RequiredFieldMissing';
 
@@ -121,7 +124,13 @@ export function validateScenarioConsistency(
   options: ScenarioConsistencyOptions = {}
 ): ScenarioDiagnostic[] {
   const diags: ScenarioDiagnostic[] = [];
-  const flatVarKeys = new Set(options.definedVariableKeys ?? []);
+  /** Ключи из блоков «Ввод» в текущем графе + каталог ctor (definedVariableKeys) + служебный last_input (как в симуляторе). */
+  const fromGraphInputs = collectLocalInputVariables(nodes).map(v => v.key);
+  const flatVarKeys = new Set<string>([
+    ...(options.definedVariableKeys ?? []),
+    ...fromGraphInputs,
+    'last_input',
+  ]);
   const systemSubset = new Set(options.systemVariableKeys ?? []);
   const phSeverity = placeholderSeverity(options);
 
@@ -203,13 +212,47 @@ export function validateScenarioConsistency(
     if (blockId === 'condition') {
       const rawVar = settings.variable;
       const varStr = typeof rawVar === 'string' ? rawVar.trim() : '';
-      if (varStr && !tokenIsKnown(varStr, flatVarKeys, systemSubset)) {
+      const sourceTypeRaw = String(settings.conditionSourceType || '').trim();
+      const sourceType =
+        sourceTypeRaw === 'last_input' ||
+        sourceTypeRaw === 'saved_answer' ||
+        sourceTypeRaw === 'user_tag' ||
+        sourceTypeRaw === 'profile_field'
+          ? sourceTypeRaw
+          : '';
+
+      // Для режима "Тег" это не переменная — предупреждение ConditionUnknownVariable не показываем.
+      const shouldCheckUnknownVariable = sourceType !== 'user_tag';
+
+      if (
+        shouldCheckUnknownVariable &&
+        varStr &&
+        !tokenIsKnown(varStr, flatVarKeys, systemSubset)
+      ) {
         diags.push({
           severity: phSeverity,
           blockId: node.id,
           code: 'ConditionUnknownVariable',
           message: `Условие «${title}»: переменная «${varStr}» не найдена в определениях и не является допустимой user.* / system.*`,
           meta: { variable: varStr },
+        });
+      }
+      const condOut = getOutgoingEdges(edges, node.id);
+      if (condOut.length > 2) {
+        diags.push({
+          severity: 'error',
+          blockId: node.id,
+          code: 'ConditionTooManyBranches',
+          message: `У блока «Условие» может быть только 2 ветки: Да и Нет`,
+          meta: { count: condOut.length },
+        });
+      } else if (condOut.length === 1) {
+        diags.push({
+          severity: 'warning',
+          blockId: node.id,
+          code: 'ConditionSecondBranchMissing',
+          message: `Условие «${title}»: добавьте вторую ветку (Да/Нет)`,
+          meta: {},
         });
       }
     }
