@@ -38,13 +38,80 @@ function formatConfigureLines(
 ): { main: string[]; advanced: string[] } {
   const main: string[] = [];
   const advanced: string[] = [];
-  for (const f of block.configSchema) {
+  const actionAllowedFields = new Set([
+    'mode',
+    'tagAction',
+    'statusAction',
+    'fieldAction',
+    'tag',
+    'status',
+    'fieldKey',
+    'fieldValue',
+  ]);
+  const schemaForGuide =
+    block.id === 'action'
+      ? block.configSchema.filter(f => actionAllowedFields.has(f.name))
+      : block.configSchema;
+
+  for (const f of schemaForGuide) {
     const label = hints?.[f.name] ?? f.label;
     const line = `${label}${f.required ? ' — обязательное поле' : ' — необязательное поле'}`;
     if (f.isAdvanced) advanced.push(line);
     else main.push(line);
   }
   return { main, advanced };
+}
+
+function renderGuideText(text: string): React.ReactNode {
+  const lines = text.split('\n');
+  const blocks: React.ReactNode[] = [];
+  let listItems: string[] = [];
+  let key = 0;
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    blocks.push(
+      <ul
+        key={`list-${key++}`}
+        className="text-sm text-[var(--text-muted)] list-disc pl-5 space-y-1"
+      >
+        {listItems.map((item, idx) => (
+          <li key={idx}>{item}</li>
+        ))}
+      </ul>
+    );
+    listItems = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList();
+      blocks.push(<div key={`sp-${key++}`} className="h-2" />);
+      continue;
+    }
+    if (line.startsWith('- ')) {
+      listItems.push(line.slice(2));
+      continue;
+    }
+    flushList();
+    const isSubsectionTitle =
+      line.endsWith(':') ||
+      line === 'Основные поля' ||
+      line === 'Как работают переменные' ||
+      line === 'Чем отличается от блока «Переменная»' ||
+      line === 'Важно';
+    blocks.push(
+      <p
+        key={`p-${key++}`}
+        className={`text-sm leading-relaxed ${isSubsectionTitle ? 'font-medium text-[var(--text)]' : 'text-[var(--text-muted)]'}`}
+      >
+        {line}
+      </p>
+    );
+  }
+  flushList();
+  return <div className="space-y-1">{blocks}</div>;
 }
 
 function BlockCardInnerContent({ block }: { block: BlockCatalogItem }) {
@@ -66,14 +133,12 @@ function BlockCardInnerContent({ block }: { block: BlockCatalogItem }) {
       {GUIDE_SECTIONS_BEFORE_CONFIGURE.map(({ title, key }) => (
         <section key={key}>
           <h4 className="text-sm font-medium text-[var(--accent)] mb-1">{title}</h4>
-          <p className="text-sm text-[var(--text-muted)] leading-relaxed">{guide[key]}</p>
+          <div className="mt-2">{renderGuideText(guide[key])}</div>
         </section>
       ))}
       <section>
         <h4 className="text-sm font-medium text-[var(--accent)] mb-1">Что нужно настроить</h4>
-        <p className="text-sm text-[var(--text-muted)] leading-relaxed mb-2">
-          {guide.whatToConfigure}
-        </p>
+        <div className="mt-2 mb-3">{renderGuideText(guide.whatToConfigure)}</div>
         {main.length === 0 && advanced.length === 0 ? null : (
           <>
             <ul className="text-sm text-[var(--text-muted)] list-disc pl-5 space-y-1">
@@ -92,7 +157,7 @@ function BlockCardInnerContent({ block }: { block: BlockCatalogItem }) {
       {GUIDE_SECTIONS_AFTER_CONFIGURE.map(({ title, key }) => (
         <section key={key}>
           <h4 className="text-sm font-medium text-[var(--accent)] mb-1">{title}</h4>
-          <p className="text-sm text-[var(--text-muted)] leading-relaxed">{guide[key]}</p>
+          <div className="mt-2">{renderGuideText(guide[key])}</div>
         </section>
       ))}
       <section>
@@ -119,6 +184,9 @@ function BlockCard({
   onCollapse: () => void;
 }) {
   const displayTitle = LEARNING_BLOCK_TITLE[block.id] || block.title;
+  const editorTitle = block.id === 'action' ? displayTitle : block.title;
+  const editorCategory = block.id === 'action' ? 'Системные' : CATEGORY_LABELS[block.category];
+  const cardIcon = block.id === 'action' ? '👤' : block.icon;
   const teaser =
     LEARNING_BLOCK_TEASER[block.id] ?? block.description ?? 'Краткое описание появится позже.';
 
@@ -137,7 +205,7 @@ function BlockCard({
       <div className="p-5 pb-4">
         <div className="flex flex-wrap items-start gap-3 gap-y-2">
           <span className="text-2xl shrink-0" aria-hidden>
-            {block.icon}
+            {cardIcon}
           </span>
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex items-start justify-between gap-2">
@@ -151,7 +219,7 @@ function BlockCard({
               />
             </div>
             <p className="text-xs text-[var(--text-muted)]">
-              В редакторе: «{block.title}» · {CATEGORY_LABELS[block.category]}
+              В редакторе: «{editorTitle}» · {editorCategory}
             </p>
             {!expanded && (
               <p className="text-sm text-[var(--text-muted)] leading-relaxed line-clamp-2">

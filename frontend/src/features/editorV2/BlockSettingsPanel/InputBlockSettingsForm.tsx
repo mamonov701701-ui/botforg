@@ -173,6 +173,9 @@ export const InputBlockSettingsForm: React.FC<InputBlockSettingsFormProps> = ({
           <span style={{ fontSize: 13, color: '#e5e7eb' }}>Обязательный ответ</span>
         </label>
       </div>
+      <div style={{ ...hintStyle, marginBottom: 14 }}>
+        Ответ пользователя будет доступен как {'{{input}}'}
+      </div>
 
       <div style={fieldBox}>
         <div style={labelStyle}>Тип ответа</div>

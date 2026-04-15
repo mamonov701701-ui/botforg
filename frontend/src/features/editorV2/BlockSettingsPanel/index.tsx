@@ -403,6 +403,7 @@ export default function BlockSettingsPanel({
   }, [block, selectedNode.data.settings, liveMessageSchema, liveInputSchema]);
 
   const totalScenarioDiagIssues = scenarioDiagErrors.length + scenarioDiagWarnings.length;
+  const isSaveDisabled = block.id === 'action' && validationErrors > 0;
 
   const getDiagnosticTargetLabel = (d: ScenarioDiagnostic): string | null => {
     switch (d.code) {
@@ -1204,27 +1205,29 @@ export default function BlockSettingsPanel({
         {!isReadOnly && (
           <button
             onClick={handleSave}
+            disabled={isSaveDisabled}
             style={{
               flex: 1,
               padding: '10px 12px',
               borderRadius: 8,
-              background: hasChanges ? '#22c55e' : '#374151',
+              background: isSaveDisabled ? '#1f2937' : hasChanges ? '#22c55e' : '#374151',
               color: '#fff',
               border: 'none',
               fontWeight: 600,
               fontSize: 13,
-              cursor: 'pointer',
+              cursor: isSaveDisabled ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 6,
               transition: 'all 0.2s ease',
+              opacity: isSaveDisabled ? 0.75 : 1,
             }}
             onMouseEnter={e => {
-              if (hasChanges) e.currentTarget.style.background = '#16a34a';
+              if (!isSaveDisabled && hasChanges) e.currentTarget.style.background = '#16a34a';
             }}
             onMouseLeave={e => {
-              if (hasChanges) e.currentTarget.style.background = '#22c55e';
+              if (!isSaveDisabled && hasChanges) e.currentTarget.style.background = '#22c55e';
             }}
           >
             <Save size={16} />

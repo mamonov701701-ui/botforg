@@ -86,24 +86,29 @@ export function normalizeActionSettings(
 
 export function actionSummaryText(s: NormalizedActionSettings): string {
   if (s.mode === 'tag') {
-    if (!s.tag) return 'Действие не настроено';
-    if (s.tagAction === 'remove') return `Удалить тег: ${s.tag}`;
-    if (s.tagAction === 'add') return `Добавить тег: ${s.tag}`;
-    return 'Действие не настроено';
+    if (!s.tagAction) return 'не настроено';
+    if (!s.tag) return 'укажите тег';
+    if (s.tagAction === 'remove') return `удалить тег ${s.tag}`;
+    if (s.tagAction === 'add') return `добавить тег ${s.tag}`;
+    return 'не настроено';
   }
   if (s.mode === 'status') {
-    if (s.statusAction === 'clear') return 'Очистить статус';
-    if (s.statusAction === 'set' && s.status) return `Установить статус: ${s.status}`;
-    return 'Действие не настроено';
+    if (!s.statusAction) return 'не настроено';
+    if (s.statusAction === 'clear') return 'сбросить статус';
+    if (s.statusAction === 'set')
+      return s.status ? `установить статус ${s.status}` : 'укажите статус';
+    return 'не настроено';
   }
   if (s.mode === 'field') {
-    if (!s.fieldKey) return 'Действие не настроено';
-    if (s.fieldAction === 'clear') return `Очистить поле "${s.fieldKey}"`;
+    if (!s.fieldAction) return 'не настроено';
+    if (!s.fieldKey) return 'укажите поле';
+    if (s.fieldAction === 'clear') return `${s.fieldKey} очищается`;
     if (s.fieldAction === 'set' && s.fieldValue.trim())
-      return `Поле "${s.fieldKey}": ${s.fieldValue.trim()}`;
-    return 'Действие не настроено';
+      return `${s.fieldKey} ← ${s.fieldValue.trim()}`;
+    if (s.fieldAction === 'set') return 'укажите значение';
+    return 'не настроено';
   }
-  return 'Действие не настроено';
+  return 'не настроено';
 }
 
 export function canonicalizeActionSettings(
@@ -111,6 +116,9 @@ export function canonicalizeActionSettings(
 ): Record<string, unknown> {
   const s = normalizeActionSettings(settings);
   const out: Record<string, unknown> = {};
+  const hasMessageKey =
+    Object.prototype.hasOwnProperty.call(settings, 'message') ||
+    Object.prototype.hasOwnProperty.call(settings, 'text');
   if (s.mode) out.mode = s.mode;
   if (s.mode === 'tag') {
     if (s.tagAction) out.tagAction = s.tagAction;
@@ -128,8 +136,15 @@ export function canonicalizeActionSettings(
     if (s.fieldKey) out.fieldKey = s.fieldKey;
     if (s.fieldAction === 'set' && s.fieldValue.trim()) out.fieldValue = s.fieldValue;
   }
-  if (s.message.trim()) out.message = s.message.trim();
-  // legacy совместимость: старый runtime мог читать текст из text.
-  if (s.message.trim()) out.text = s.message.trim();
+  const trimmedMessage = s.message.trim();
+  if (trimmedMessage) {
+    out.message = trimmedMessage;
+    // legacy совместимость: старый runtime мог читать текст из text.
+    out.text = trimmedMessage;
+  } else if (hasMessageKey) {
+    // Явно фиксируем очистку, иначе merge в onUpdateNode оставляет старое значение.
+    out.message = '';
+    out.text = '';
+  }
   return out;
 }

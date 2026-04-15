@@ -49,13 +49,13 @@ import { formatScenarioDiagnosticsTooltip } from '../../utils/scenarioDiagnostic
 import { runEditorValidationPipeline } from '../../utils/editorScenarioValidation';
 import { fetchVariableDefinitionsSafe } from '../../api/botMessageTemplate';
 import { getNormalizedInputSettings, migrateInputNodeSettings } from '../../utils/inputBlock';
-import { getVariableDataTypeLabel } from '../../utils/uiLabels';
 import ValidationModal from './ValidationModal';
 import ExportConfirmModal from './ExportConfirmModal';
 import BlockLibraryModal from './BlockLibraryModal';
 import { normalizeScenarioEdges } from '../../utils/flowHandleCompatibility';
 import { ensureConditionEdgeBranches } from '../../utils/conditionBlock';
 import { actionSummaryText, normalizeActionSettings } from '../../utils/actionBlock';
+import { resolveNewNodePosition } from './utils/nodePlacement';
 
 // Connection line component - временная линия при создании соединения
 const ConnectionLine = ({
@@ -119,9 +119,15 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
       )
     : null;
   const inputAnswerName = inputSettings?.variable_label?.trim() || 'Ответ пользователя';
-  const inputAnswerTypeLabel = inputSettings
-    ? getVariableDataTypeLabel(inputSettings.validation.type)
-    : 'Текст';
+  const inputSummaryText = inputSettings
+    ? inputSettings.validation.type === 'email'
+      ? 'получить email'
+      : inputSettings.validation.type === 'phone'
+        ? 'получить телефон'
+        : inputSettings.validation.type === 'number'
+          ? 'получить число'
+          : 'получить текст'
+    : 'получить текст';
 
   // Get validation status - мемоизированный селектор
   // Используем useMemo чтобы селектор не пересоздавался
@@ -732,7 +738,7 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
           >
             Сохраняет: {inputAnswerName}
           </div>
-          <div style={{ opacity: 0.85, marginBottom: 6 }}>Тип: {inputAnswerTypeLabel}</div>
+          <div style={{ opacity: 0.9, marginBottom: 6, fontWeight: 600 }}>{inputSummaryText}</div>
           <div
             style={{
               display: 'inline-flex',
@@ -1087,7 +1093,11 @@ function InnerEditor() {
 
   const makeEdgesKey = useCallback((list: Edge[]) => {
     return list
-      .map(e => `${e.id}:${e.source}:${e.target}:${e.sourceHandle || ''}:${e.targetHandle || ''}`)
+      .map(e => {
+        const conditionBranch =
+          (e.data as { conditionBranch?: unknown } | undefined)?.conditionBranch ?? '';
+        return `${e.id}:${e.source}:${e.target}:${e.sourceHandle || ''}:${e.targetHandle || ''}:${conditionBranch}`;
+      })
       .sort()
       .join('|');
   }, []);
@@ -1151,7 +1161,13 @@ function InnerEditor() {
     rfToStoreTimeoutRef.current = setTimeout(() => {
       rfToStoreTimeoutRef.current = null;
       const n = nodesRef.current.map(({ selected, dragging, ...rest }) => rest);
-      const e = edgesRef.current.map(({ data, ...rest }) => rest);
+      const e = edgesRef.current.map(edge => {
+        const data = { ...((edge.data as Record<string, unknown> | undefined) || {}) };
+        delete data.onDelete;
+        return Object.keys(data).length > 0
+          ? { ...edge, data }
+          : ({ ...edge, data: undefined } as Edge);
+      });
       updateCurrentScenario(n, e);
       prevNodesKeyRef.current = makeNodesKey(nodesRef.current);
       prevEdgesKeyRef.current = makeEdgesKey(edgesRef.current);
@@ -1257,11 +1273,15 @@ function InnerEditor() {
     if (!currentBotId || !currentScenarioId) return null;
     return `editor_v2_viewport_${currentBotId}_${currentScenarioId}`;
   }, [currentBotId, currentScenarioId]);
+  const viewportMemoryRef = useRef<Map<string, { x: number; y: number; zoom: number }>>(new Map());
+  const viewportRestoreLockRef = useRef(false);
+  const activeViewportKeyRef = useRef<string | null>(null);
 
   const saveViewportToStorage = useCallback(() => {
-    if (!viewportStorageKey) return;
+    if (!viewportStorageKey || viewportRestoreLockRef.current) return;
     try {
       const vp = getViewport();
+      viewportMemoryRef.current.set(viewportStorageKey, vp);
       localStorage.setItem(viewportStorageKey, JSON.stringify(vp));
     } catch {
       // ignore localStorage issues
@@ -1765,9 +1785,40 @@ function InnerEditor() {
     // Если не авторизован - каталог не загружается, редактор показывается пустым
   }, [loadCatalog, user]);
 
-  // Восстановление viewport: сохранённая позиция -> fallback к start (левый верх) -> дефолт.
+  // При переключении сценария фиксируем viewport предыдущего и меняем активный ключ.
+  useEffect(() => {
+    const prevKey = activeViewportKeyRef.current;
+    if (prevKey && prevKey !== viewportStorageKey) {
+      const vp = getViewport();
+      viewportMemoryRef.current.set(prevKey, vp);
+      try {
+        localStorage.setItem(prevKey, JSON.stringify(vp));
+      } catch {
+        // ignore localStorage issues
+      }
+    }
+    activeViewportKeyRef.current = viewportStorageKey;
+  }, [viewportStorageKey, getViewport]);
+
+  // Восстановление viewport: in-memory -> localStorage -> fallback к start -> дефолт.
   useEffect(() => {
     if (!currentState) return;
+
+    const applyViewport = (vp: { x: number; y: number; zoom: number }) => {
+      viewportRestoreLockRef.current = true;
+      setViewport(vp, { duration: 0 });
+      requestAnimationFrame(() => {
+        viewportRestoreLockRef.current = false;
+      });
+    };
+
+    if (viewportStorageKey) {
+      const memory = viewportMemoryRef.current.get(viewportStorageKey);
+      if (memory) {
+        applyViewport(memory);
+        return;
+      }
+    }
 
     if (viewportStorageKey) {
       try {
@@ -1779,7 +1830,9 @@ function InnerEditor() {
             typeof parsed?.y === 'number' &&
             typeof parsed?.zoom === 'number'
           ) {
-            setViewport({ x: parsed.x, y: parsed.y, zoom: parsed.zoom }, { duration: 0 });
+            const vp = { x: parsed.x, y: parsed.y, zoom: parsed.zoom };
+            viewportMemoryRef.current.set(viewportStorageKey, vp);
+            applyViewport(vp);
             return;
           }
         }
@@ -1795,18 +1848,33 @@ function InnerEditor() {
       const zoom = 0.8;
       const marginX = 80;
       const marginY = 80;
-      setViewport(
-        {
-          x: marginX - startNode.position.x * zoom,
-          y: marginY - startNode.position.y * zoom,
-          zoom,
-        },
-        { duration: 0 }
-      );
+      const vp = {
+        x: marginX - startNode.position.x * zoom,
+        y: marginY - startNode.position.y * zoom,
+        zoom,
+      };
+      if (viewportStorageKey) {
+        viewportMemoryRef.current.set(viewportStorageKey, vp);
+        try {
+          localStorage.setItem(viewportStorageKey, JSON.stringify(vp));
+        } catch {
+          // ignore localStorage issues
+        }
+      }
+      applyViewport(vp);
       return;
     }
 
-    setViewport({ x: 0, y: 0, zoom: 0.6 }, { duration: 0 });
+    const vp = { x: 0, y: 0, zoom: 0.6 };
+    if (viewportStorageKey) {
+      viewportMemoryRef.current.set(viewportStorageKey, vp);
+      try {
+        localStorage.setItem(viewportStorageKey, JSON.stringify(vp));
+      } catch {
+        // ignore localStorage issues
+      }
+    }
+    applyViewport(vp);
   }, [currentState?.id, viewportStorageKey, setViewport]);
 
   // Постоянное исправление видимости всех nodes - следим за всеми nodes и исправляем видимость
@@ -1885,17 +1953,6 @@ function InnerEditor() {
         return;
       }
 
-      // ID включает source, sourceHandle, target, targetHandle для поддержки множественных соединений
-      // между разными Handle одних и тех же блоков
-      const edgeId = `${params.source}_${params.sourceHandle || 'default'}-${params.target}_${params.targetHandle || 'default'}`;
-
-      // Проверяем, не существует ли уже такое соединение
-      const existingEdge = edges.find(e => e.id === edgeId);
-      if (existingEdge) {
-        showToast('Такое соединение уже существует', 'warning');
-        return;
-      }
-
       // Запрещаем самосоединение (соединение блока с самим собой)
       if (params.source === params.target) {
         showToast('Нельзя соединить блок с самим собой', 'warning');
@@ -1904,7 +1961,9 @@ function InnerEditor() {
 
       const sourceNode = nodes.find(n => n.id === params.source);
       const isConditionSource = sourceNode?.data?.blockId === 'condition';
-      const existingFromSource = edges.filter(e => e.source === params.source);
+      // Берём актуальные рёбра из ref, чтобы не назначать ветки по устаревшему snapshot.
+      const currentEdges = edgesRef.current;
+      const existingFromSource = currentEdges.filter(e => e.source === params.source);
       let conditionBranch: 'true' | 'false' | undefined;
       if (isConditionSource) {
         if (params.sourceHandle === 'condition_yes') conditionBranch = 'true';
@@ -1922,8 +1981,19 @@ function InnerEditor() {
               : undefined
           : params.sourceHandle;
 
+      // ID включает source, sourceHandle, target, targetHandle для поддержки множественных соединений
+      // между разными Handle одних и тех же блоков
+      const edgeId = `${params.source}_${normalizedConditionSourceHandle || 'default'}-${params.target}_${params.targetHandle || 'default'}`;
+
+      // Проверяем, не существует ли уже такое соединение
+      const existingEdge = currentEdges.find(e => e.id === edgeId);
+      if (existingEdge) {
+        showToast('Такое соединение уже существует', 'warning');
+        return;
+      }
+
       if (isConditionSource && normalizedConditionSourceHandle) {
-        const alreadyUsedThisHandle = edges.some(
+        const alreadyUsedThisHandle = currentEdges.some(
           e => e.source === params.source && e.sourceHandle === normalizedConditionSourceHandle
         );
         if (alreadyUsedThisHandle) {
@@ -1966,7 +2036,7 @@ function InnerEditor() {
 
       showToast('Соединение создано', 'success');
     },
-    [edges, nodes, setEdges, showToast, handleDeleteEdge]
+    [nodes, setEdges, showToast, handleDeleteEdge]
   );
 
   // Handle drag over canvas - улучшаем визуальную обратную связь
@@ -1991,9 +2061,28 @@ function InnerEditor() {
     }
   }, []);
 
+  const getViewportCenterFlowPosition = useCallback(() => {
+    const paneElement = reactFlowWrapper.current?.querySelector('.react-flow__pane');
+    if (paneElement) {
+      const rect = paneElement.getBoundingClientRect();
+      return screenToFlowPosition({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      });
+    }
+    return screenToFlowPosition({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+  }, [screenToFlowPosition]);
+
   // Helper function to add block at position
   const addBlockAtPosition = useCallback(
-    (block: BlockCatalogItem, position: { x: number; y: number }) => {
+    (
+      block: BlockCatalogItem,
+      position: { x: number; y: number },
+      options?: { selectedNode?: Node }
+    ) => {
       // Проверка авторизации перед добавлением блока
       if (!user) {
         showToast('Для добавления блоков необходимо войти в систему', 'error');
@@ -2023,15 +2112,17 @@ function InnerEditor() {
         return;
       }
 
-      // Access granted — создаём узел со смещением, чтобы несколько добавлений подряд не лежали в одной точке
+      // Access granted — создаём узел с детерминированным размещением (auto-chain + антиколлизия)
       setNodes(nds => {
-        const idx = nds.length;
-        const staggerX = (idx % 6) * 56;
-        const staggerY = Math.floor(idx / 6) * 56;
+        const resolvedPosition = resolveNewNodePosition({
+          selectedNode: options?.selectedNode,
+          nodes: nds,
+          fallbackCenter: position,
+        });
         const newNode: Node = {
           id: nanoid(),
           type: 'default',
-          position: { x: position.x + staggerX, y: position.y + staggerY },
+          position: resolvedPosition,
           data: {
             blockId: block.id,
             title: block.title,
@@ -2066,13 +2157,8 @@ function InnerEditor() {
         return [...nds, newNode];
       });
       showToast(`Блок "${block.title}" добавлен`, 'success');
-
-      // Подстраховка: новый узел попадает в видимую область (без агрессивного зума)
-      requestAnimationFrame(() => {
-        fitView({ padding: 0.2, duration: 220, maxZoom: 1.15, minZoom: 0.35 });
-      });
     },
-    [setNodes, showToast, fitView, user]
+    [setNodes, showToast, user]
   );
 
   // Handle drop block from library (legacy drag-n-drop support)
@@ -2111,49 +2197,12 @@ function InnerEditor() {
   // Handle add block from modal
   const handleAddBlockFromModal = useCallback(
     (block: BlockCatalogItem, position?: { x: number; y: number }) => {
-      // Use provided position or calculate from viewport center
-      let finalPosition: { x: number; y: number };
-
-      if (position) {
-        finalPosition = position;
-      } else if (selectedNode) {
-        // If node is selected, add near it
-        finalPosition = {
-          x: selectedNode.position.x + 300,
-          y: selectedNode.position.y + 150,
-        };
-      } else if (nodes.length > 0) {
-        // If there are existing nodes, add to the right of the last one
-        const lastNode = nodes[nodes.length - 1];
-        finalPosition = {
-          x: lastNode.position.x + 300,
-          y: lastNode.position.y,
-        };
-      } else {
-        // No nodes exist - use center of the flow (considering viewport)
-        const viewport = getViewport();
-        // Calculate center in flow coordinates
-        const paneElement = reactFlowWrapper.current?.querySelector('.react-flow__pane');
-        if (paneElement) {
-          const rect = paneElement.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          const centerY = rect.top + rect.height / 2;
-          finalPosition = screenToFlowPosition({
-            x: centerX,
-            y: centerY,
-          });
-        } else {
-          // Fallback: use center accounting for viewport pan and zoom
-          finalPosition = screenToFlowPosition({
-            x: window.innerWidth / 2,
-            y: window.innerHeight / 2,
-          });
-        }
-      }
-
-      addBlockAtPosition(block, finalPosition);
+      const fallbackCenter = position ?? getViewportCenterFlowPosition();
+      addBlockAtPosition(block, fallbackCenter, {
+        selectedNode: position ? undefined : selectedNode,
+      });
     },
-    [selectedNode, nodes, screenToFlowPosition, getViewport, addBlockAtPosition, reactFlowWrapper]
+    [selectedNode, getViewportCenterFlowPosition, addBlockAtPosition]
   );
 
   // Обработчики кликов

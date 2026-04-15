@@ -750,6 +750,28 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
       }
       const nextId = resolveNextNodeId({ ...context, variables: vars }, node, {});
       let hist = context.history;
+      let previewLog = '';
+      if (normalized.mode === 'tag' && normalized.tagAction && normalized.tag) {
+        previewLog =
+          normalized.tagAction === 'add'
+            ? `Добавлен тег: ${normalized.tag}`
+            : `Удалён тег: ${normalized.tag}`;
+      } else if (normalized.mode === 'status' && normalized.statusAction) {
+        previewLog =
+          normalized.statusAction === 'set' && normalized.status
+            ? `Статус обновлён: ${normalized.status}`
+            : normalized.statusAction === 'clear'
+              ? 'Статус сброшен'
+              : '';
+      } else if (normalized.mode === 'field' && normalized.fieldAction && normalized.fieldKey) {
+        previewLog =
+          normalized.fieldAction === 'set'
+            ? `Поле пользователя ${normalized.fieldKey} обновлено: ${normalized.fieldValue}`
+            : `Поле пользователя ${normalized.fieldKey} очищено`;
+      }
+      if (previewLog) {
+        hist = [...hist, systemLine(previewLog)];
+      }
       const message = normalized.message.trim();
       if (message) {
         hist = [
@@ -1189,6 +1211,7 @@ export function applyUserChoice(
     const succ = pickInputSuccessEdge(outgoing);
     let nextNodeId = succ?.target ?? null;
     let historyAfter = historyAfterChoice;
+    historyAfter = [...historyAfter, systemLine(`Получен ввод: ${ans.lastInputText}`)];
     if (nextNodeId === null) {
       historyAfter = [
         ...historyAfter,
