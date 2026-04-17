@@ -3,6 +3,7 @@
  * Пути: /bots/{botId}/crm/...
  */
 import api from './client';
+export type CrmEnvironmentFilter = 'prod' | 'dev' | 'all';
 
 export const SNAKE_KEY_RE = /^[a-z][a-z0-9_]*$/;
 
@@ -32,6 +33,7 @@ export interface CrmUserListItem {
   current_block_id?: number | null;
   current_block_label?: string | null;
   session_status?: string | null;
+  environment: string;
   created_at: string;
 }
 
@@ -65,6 +67,7 @@ export interface CrmUserDetail {
   email?: string | null;
   language_code?: string | null;
   status: string;
+  environment: string;
   last_message_at?: string | null;
   created_at: string;
   updated_at: string;
@@ -129,6 +132,7 @@ export async function crmListUsers(
     tag_keys?: string;
     active_since?: string;
     active_until?: string;
+    environment?: CrmEnvironmentFilter;
   }
 ): Promise<CrmUserListResponse> {
   const q = new URLSearchParams();
@@ -139,56 +143,92 @@ export async function crmListUsers(
   if (params?.tag_keys) q.set('tag_keys', params.tag_keys);
   if (params?.active_since) q.set('active_since', params.active_since);
   if (params?.active_until) q.set('active_until', params.active_until);
+  if (params?.environment) q.set('environment', params.environment);
   const suffix = q.toString() ? `?${q}` : '';
   return api.get(`/bots/${botId}/crm/users${suffix}`);
 }
 
-export async function crmUserDetail(botId: number, botUserId: number): Promise<CrmUserDetail> {
-  return api.get(`/bots/${botId}/crm/users/${botUserId}`);
+function withEnvironment(path: string, environment?: CrmEnvironmentFilter): string {
+  if (!environment) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}environment=${environment}`;
+}
+
+export async function crmUserDetail(
+  botId: number,
+  botUserId: number,
+  environment?: CrmEnvironmentFilter
+): Promise<CrmUserDetail> {
+  return api.get(withEnvironment(`/bots/${botId}/crm/users/${botUserId}`, environment));
 }
 
 export async function crmUserVariables(
   botId: number,
-  botUserId: number
+  botUserId: number,
+  environment?: CrmEnvironmentFilter
 ): Promise<CrmUserVariable[]> {
-  return api.get(`/bots/${botId}/crm/users/${botUserId}/variables`);
+  return api.get(withEnvironment(`/bots/${botId}/crm/users/${botUserId}/variables`, environment));
 }
 
 export async function crmSetUserVariable(
   botId: number,
   botUserId: number,
   key: string,
-  value: unknown
+  value: unknown,
+  environment?: CrmEnvironmentFilter
 ): Promise<CrmUserVariable> {
-  return api.put(`/bots/${botId}/crm/users/${botUserId}/variables`, { key, value });
+  return api.put(withEnvironment(`/bots/${botId}/crm/users/${botUserId}/variables`, environment), {
+    key,
+    value,
+  });
 }
 
 export async function crmUserTags(
   botId: number,
-  botUserId: number
+  botUserId: number,
+  environment?: CrmEnvironmentFilter
 ): Promise<{ id: number; key: string; label?: string | null; color?: string | null }[]> {
-  return api.get(`/bots/${botId}/crm/users/${botUserId}/tags`);
+  return api.get(withEnvironment(`/bots/${botId}/crm/users/${botUserId}/tags`, environment));
 }
 
-export async function crmAddUserTag(botId: number, botUserId: number, key: string): Promise<void> {
-  await api.post(`/bots/${botId}/crm/users/${botUserId}/tags`, { key });
+export async function crmAddUserTag(
+  botId: number,
+  botUserId: number,
+  key: string,
+  environment?: CrmEnvironmentFilter
+): Promise<void> {
+  await api.post(withEnvironment(`/bots/${botId}/crm/users/${botUserId}/tags`, environment), {
+    key,
+  });
 }
 
 export async function crmRemoveUserTag(
   botId: number,
   botUserId: number,
-  tagKey: string
+  tagKey: string,
+  environment?: CrmEnvironmentFilter
 ): Promise<void> {
-  await api.delete(`/bots/${botId}/crm/users/${botUserId}/tags/${encodeURIComponent(tagKey)}`);
+  await api.delete(
+    withEnvironment(
+      `/bots/${botId}/crm/users/${botUserId}/tags/${encodeURIComponent(tagKey)}`,
+      environment
+    )
+  );
 }
 
 export async function crmUserEvents(
   botId: number,
   botUserId: number,
   limit = 50,
-  offset = 0
+  offset = 0,
+  environment?: CrmEnvironmentFilter
 ): Promise<CrmEvent[]> {
-  return api.get(`/bots/${botId}/crm/users/${botUserId}/events?limit=${limit}&offset=${offset}`);
+  return api.get(
+    withEnvironment(
+      `/bots/${botId}/crm/users/${botUserId}/events?limit=${limit}&offset=${offset}`,
+      environment
+    )
+  );
 }
 
 export async function crmListVariableDefs(
@@ -260,9 +300,29 @@ export async function crmUsersByTag(
   botId: number,
   tagKey: string,
   page = 1,
-  pageSize = 25
+  pageSize = 25,
+  environment?: CrmEnvironmentFilter
 ): Promise<CrmUserListResponse> {
   return api.get(
-    `/bots/${botId}/crm/tags/${encodeURIComponent(tagKey)}/users?page=${page}&page_size=${pageSize}`
+    withEnvironment(
+      `/bots/${botId}/crm/tags/${encodeURIComponent(tagKey)}/users?page=${page}&page_size=${pageSize}`,
+      environment
+    )
   );
+}
+
+export async function crmPreviewSync(
+  botId: number,
+  body: {
+    external_user_id: string;
+    channel?: string;
+    first_name?: string;
+    username?: string;
+    last_input?: string;
+    variables?: Record<string, unknown>;
+    tags?: string[];
+    status_value?: string;
+  }
+): Promise<void> {
+  await api.post(`/bots/${botId}/crm/preview-sync`, body);
 }

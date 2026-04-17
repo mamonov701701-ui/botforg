@@ -23,7 +23,9 @@ from backend.models.constructor_core import (
 from backend.models.user import User
 from backend.services.bot_crm.crm_service import (
     BotUserListRowOut,
+    CrmEnvironmentFilter,
     build_variable_usage_maps,
+    get_or_create_bot_user,
     get_bot_user_for_ctor,
     list_bot_users,
     list_variable_definitions_rows,
@@ -36,7 +38,7 @@ from backend.services.constructor.tag_service import TagService
 from backend.services.constructor.validation import validate_snake_case_key
 from backend.services.constructor.variable_service import VariableService
 from backend.utils.bot_access import check_bot_access, check_bot_edit_permission
-from backend.utils.ctor_bot_resolve import resolve_ctor_bot_id
+from backend.utils.ctor_bot_resolve import ensure_ctor_bot_id, resolve_ctor_bot_id
 
 router = APIRouter(prefix="/{bot_id}/crm", tags=["bot-crm"])
 
@@ -45,7 +47,7 @@ SNAKE_MSG = "ключ только snake_case: латиница, цифры, п�
 
 def _ctor_dep(bot_id: int, db: Session, user: User) -> int:
     check_bot_access(bot_id, user.id, db)
-    cid = resolve_ctor_bot_id(db, bot_id)
+    cid = ensure_ctor_bot_id(db, bot_id) or resolve_ctor_bot_id(db, bot_id)
     if not cid:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -56,7 +58,7 @@ def _ctor_dep(bot_id: int, db: Session, user: User) -> int:
 
 def _ctor_dep_optional(bot_id: int, db: Session, user: User) -> Optional[int]:
     check_bot_access(bot_id, user.id, db)
-    return resolve_ctor_bot_id(db, bot_id)
+    return ensure_ctor_bot_id(db, bot_id) or resolve_ctor_bot_id(db, bot_id)
 
 
 def _require_write(bot_id: int, db: Session, user: User) -> None:
@@ -98,6 +100,7 @@ class BotUserListItemOut(BaseModel):
     current_block_id: Optional[int] = None
     current_block_label: Optional[str] = None
     session_status: Optional[str] = None
+    environment: str
     created_at: str
 
 
@@ -131,6 +134,7 @@ class BotUserDetailOut(BaseModel):
     email: Optional[str] = None
     language_code: Optional[str] = None
     status: str
+    environment: str
     last_message_at: Optional[str] = None
     created_at: str
     updated_at: str
@@ -245,6 +249,17 @@ class UserTagBody(SnakeKeyMixin):
     pass
 
 
+class PreviewSyncBody(BaseModel):
+    external_user_id: str
+    channel: str = "preview"
+    first_name: Optional[str] = None
+    username: Optional[str] = None
+    last_input: Optional[str] = None
+    variables: dict[str, Any] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
+    status_value: Optional[str] = None
+
+
 def _user_rows_to_list_out(
     total: int, page: int, page_size: int, rows: List[BotUserListRowOut]
 ) -> BotUserListOut:
@@ -266,6 +281,7 @@ def _user_rows_to_list_out(
                 current_block_id=r.current_block_id,
                 current_block_label=r.current_block_label,
                 session_status=r.session_status,
+                environment=r.environment,
                 created_at=r.created_at,
             )
             for r in rows
@@ -285,6 +301,7 @@ def crm_list_users(
     ),
     active_since: Optional[datetime] = None,
     active_until: Optional[datetime] = None,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -300,6 +317,7 @@ def crm_list_users(
         tag_keys=tk,
         active_since=active_since,
         active_until=active_until,
+        environment=environment,
         page=page,
         page_size=page_size,
     )
@@ -330,11 +348,12 @@ def _pick_session(db: Session, bot_user_id: int) -> Optional[CtorBotUserSession]
 def crm_user_detail(
     bot_id: int,
     bot_user_id: int,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     ctor_id = _ctor_dep(bot_id, db, user)
-    u = get_bot_user_for_ctor(db, ctor_id, bot_user_id)
+    u = get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment)
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
     from backend.services.bot_crm.crm_service import _display_name
@@ -370,6 +389,7 @@ def crm_user_detail(
         email=u.email,
         language_code=u.language_code,
         status=u.status,
+        environment=u.environment,
         last_message_at=u.last_message_at.isoformat() if u.last_message_at else None,
         created_at=u.created_at.isoformat(),
         updated_at=u.updated_at.isoformat(),
@@ -382,11 +402,12 @@ def crm_user_detail(
 def crm_user_variables(
     bot_id: int,
     bot_user_id: int,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     ctor_id = _ctor_dep(bot_id, db, user)
-    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id):
+    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment):
         raise HTTPException(status_code=404, detail="User not found")
     vs = VariableService(db)
     res = vs.get_user_variables(bot_user_id)
@@ -412,12 +433,13 @@ def crm_set_user_variable(
     bot_id: int,
     bot_user_id: int,
     body: UserVariableSetBody,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     _require_write(bot_id, db, user)
     ctor_id = _ctor_dep(bot_id, db, user)
-    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id):
+    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment):
         raise HTTPException(status_code=404, detail="User not found")
     vs = VariableService(db)
     res = vs.set_user_variable(bot_user_id, body.key, body.value, commit=True)
@@ -438,11 +460,12 @@ def crm_set_user_variable(
 def crm_user_tags(
     bot_id: int,
     bot_user_id: int,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     ctor_id = _ctor_dep(bot_id, db, user)
-    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id):
+    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment):
         raise HTTPException(status_code=404, detail="User not found")
     ts = TagService(db)
     res = ts.get_user_tags(bot_user_id)
@@ -459,12 +482,13 @@ def crm_add_user_tag(
     bot_id: int,
     bot_user_id: int,
     body: UserTagBody,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     _require_write(bot_id, db, user)
     ctor_id = _ctor_dep(bot_id, db, user)
-    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id):
+    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment):
         raise HTTPException(status_code=404, detail="User not found")
     ts = TagService(db)
     res = ts.add_tag_to_user(
@@ -480,12 +504,13 @@ def crm_remove_user_tag(
     bot_id: int,
     bot_user_id: int,
     tag_key: str,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     _require_write(bot_id, db, user)
     ctor_id = _ctor_dep(bot_id, db, user)
-    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id):
+    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment):
         raise HTTPException(status_code=404, detail="User not found")
     msg = validate_snake_case_key(tag_key.strip())
     if msg:
@@ -504,11 +529,12 @@ def crm_user_events(
     bot_user_id: int,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     ctor_id = _ctor_dep(bot_id, db, user)
-    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id):
+    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment):
         raise HTTPException(status_code=404, detail="User not found")
     ev = EventLogService(db)
     from backend.services.constructor.dto import EventFilters
@@ -537,11 +563,12 @@ def crm_user_events(
 def crm_user_messages(
     bot_id: int,
     bot_user_id: int,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     ctor_id = _ctor_dep(bot_id, db, user)
-    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id):
+    if not get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment):
         raise HTTPException(status_code=404, detail="User not found")
     return MessagesStubOut(available=False, items=[])
 
@@ -814,6 +841,7 @@ def crm_users_by_tag(
     tag_key: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -824,7 +852,59 @@ def crm_users_by_tag(
         db,
         ctor_id,
         tag_keys=[tag_key.strip()],
+        environment=environment,
         page=page,
         page_size=page_size,
     )
     return _user_rows_to_list_out(total, page, page_size, rows)
+
+
+@router.post("/preview-sync", status_code=status.HTTP_204_NO_CONTENT)
+def crm_preview_sync(
+    bot_id: int,
+    body: PreviewSyncBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _require_write(bot_id, db, user)
+    ctor_id = _ctor_dep(bot_id, db, user)
+    external = body.external_user_id.strip()
+    if not external:
+        raise HTTPException(status_code=400, detail="external_user_id is required")
+    channel = (body.channel or "preview").strip() or "preview"
+    bu = get_or_create_bot_user(
+        db,
+        ctor_bot_id=ctor_id,
+        channel=channel,
+        external_user_id=external,
+        environment="dev",
+        username=body.username,
+        first_name=body.first_name,
+        commit=True,
+    )
+    vs = VariableService(db)
+    if body.last_input is not None:
+        vs.set_user_variable(bu.id, "last_input", body.last_input, commit=True)
+        bu.last_message_at = datetime.utcnow()
+        db.commit()
+    for key, value in (body.variables or {}).items():
+        if not isinstance(key, str):
+            continue
+        k = key.strip()
+        if not k:
+            continue
+        if validate_snake_case_key(k):
+            continue
+        vs.set_user_variable(bu.id, k, value, commit=True)
+    if body.status_value is not None and str(body.status_value).strip():
+        bu.status = str(body.status_value).strip()
+        db.commit()
+    ts = TagService(db)
+    for tag in body.tags or []:
+        t = (tag or "").strip()
+        if not t:
+            continue
+        if validate_snake_case_key(t):
+            continue
+        ts.add_tag_to_user(bu.id, t, assigned_by=f"user:{user.id}", commit=True)
+    return None

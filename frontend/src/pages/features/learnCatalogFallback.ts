@@ -62,9 +62,9 @@ export const LEARN_CATALOG_FALLBACK: BlockCatalogItem[] = [
   },
   {
     id: 'condition',
-    title: 'Условие',
+    title: 'Выбор',
     category: 'basic',
-    description: 'Ветвление логики чат-бота по ответу или переменной.',
+    description: 'Направляет пользователя по разным веткам в зависимости от значения.',
     icon: '🔀',
     color: '#9C27B0',
     planAccess: PLANS,

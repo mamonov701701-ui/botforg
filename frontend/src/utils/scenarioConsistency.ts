@@ -217,12 +217,13 @@ export function validateScenarioConsistency(
         sourceTypeRaw === 'last_input' ||
         sourceTypeRaw === 'saved_answer' ||
         sourceTypeRaw === 'user_tag' ||
-        sourceTypeRaw === 'profile_field'
+        sourceTypeRaw === 'profile_field' ||
+        sourceTypeRaw === 'user_status'
           ? sourceTypeRaw
           : '';
 
-      // Для режима "Тег" это не переменная — предупреждение ConditionUnknownVariable не показываем.
-      const shouldCheckUnknownVariable = sourceType !== 'user_tag';
+      // Для режимов "Тег" и "Статус пользователя" это не ключ переменной.
+      const shouldCheckUnknownVariable = sourceType !== 'user_tag' && sourceType !== 'user_status';
 
       if (
         shouldCheckUnknownVariable &&
@@ -233,7 +234,7 @@ export function validateScenarioConsistency(
           severity: phSeverity,
           blockId: node.id,
           code: 'ConditionUnknownVariable',
-          message: `Условие «${title}»: переменная «${varStr}» не найдена в определениях и не является допустимой user.* / system.*`,
+          message: `Выбор «${title}»: значение «${varStr}» не найдено в определениях и не является допустимым user.* / system.*`,
           meta: { variable: varStr },
         });
       }
@@ -243,7 +244,7 @@ export function validateScenarioConsistency(
           severity: 'error',
           blockId: node.id,
           code: 'ConditionTooManyBranches',
-          message: `У блока «Условие» может быть только 2 ветки: Да и Нет`,
+          message: `У блока «Выбор» может быть только 2 ветки`,
           meta: { count: condOut.length },
         });
       } else if (condOut.length === 1) {
@@ -251,7 +252,7 @@ export function validateScenarioConsistency(
           severity: 'warning',
           blockId: node.id,
           code: 'ConditionSecondBranchMissing',
-          message: `Условие «${title}»: добавьте вторую ветку (Да/Нет)`,
+          message: `Выбор «${title}»: добавьте вторую ветку`,
           meta: {},
         });
       }

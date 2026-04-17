@@ -2,7 +2,7 @@ import type { BlockCatalogItem } from '../types/blocks';
 
 /**
  * Клиентская нормализация каталога:
- * - убираем legacy-блок «Выбор»
+ * - убираем legacy-блок id=choice
  * - все блоки показываем как «Базовые»
  */
 export function mergeClientCatalogBlocks(apiCatalog: BlockCatalogItem[]): BlockCatalogItem[] {
@@ -17,6 +17,18 @@ export function mergeClientCatalogBlocks(apiCatalog: BlockCatalogItem[]): BlockC
       return id !== 'choice' && title !== 'выбор';
     })
     .map(b => {
+      if (
+        String(b.id || '')
+          .trim()
+          .toLowerCase() === 'condition'
+      ) {
+        return {
+          ...b,
+          title: 'Выбор',
+          description: 'Направляет пользователя по разным веткам в зависимости от значения',
+          category: 'basic',
+        };
+      }
       if (
         String(b.id || '')
           .trim()

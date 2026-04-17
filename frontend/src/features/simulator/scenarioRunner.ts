@@ -653,10 +653,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
 
       if (outgoingAll.length === 0) {
         extra.push(
-          systemLine(
-            'У блока «Условие» нет исходящих связей — добавьте ветки в редакторе.',
-            'error'
-          )
+          systemLine('У блока «Выбор» нет исходящих связей — добавьте ветки в редакторе.', 'error')
         );
       } else {
         if (outgoingAll.length > 2) {
@@ -669,7 +666,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
         if (outgoingAll.length === 1) {
           extra.push(
             systemLine(
-              'Добавьте вторую ветку (Нет). Сейчас при невыполнении условия используется та же связь, что и при «Да».'
+              'Добавьте вторую ветку. Сейчас используется одна и та же связь для двух вариантов выбора.'
             )
           );
         }
@@ -680,7 +677,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
       if (nextId === null && outgoingAll.length > 0) {
         extra.push(
           systemLine(
-            'Не удалось выбрать ветку после «Условие». Проверьте оператор, значение и связи.',
+            'Не удалось выбрать ветку после «Выбор». Проверьте источник значения и связи.',
             'error'
           )
         );

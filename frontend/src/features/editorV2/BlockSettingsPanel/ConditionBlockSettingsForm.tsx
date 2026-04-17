@@ -2,11 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { Edge } from 'reactflow';
 import type { BlockConfigField } from '../../../types/blocks';
 import { useScenarioStore } from '../../../stores/scenarioStore';
-import {
-  collectLocalInputVariables,
-  mergeVariableSuggestions,
-  toUserVariableName,
-} from '../../../utils/scenarioVariableSuggestions';
+import { toUserVariableName } from '../../../utils/scenarioVariableSuggestions';
 import {
   getEdgeConditionBranch,
   orderConditionOutgoingEdges,
@@ -16,9 +12,22 @@ import {
   fetchVariableDefinitions,
   type VariableDefinitionItem,
 } from '../../../api/botMessageTemplate';
+import {
+  crmListTags,
+  crmListVariableDefs,
+  type CrmTagDef,
+  type CrmVariableDef,
+} from '../../../api/botCrm';
+import { normalizeActionSettings } from '../../../utils/actionBlock';
 import { FieldRenderer } from './FieldRenderer';
 
-type ConditionSourceType = '' | 'last_input' | 'saved_answer' | 'user_tag' | 'profile_field';
+type ConditionSourceType =
+  | ''
+  | 'last_input'
+  | 'saved_answer'
+  | 'user_tag'
+  | 'profile_field'
+  | 'user_status';
 
 interface Props {
   settings: Record<string, unknown>;
@@ -29,7 +38,6 @@ interface Props {
   nodeId: string;
   /** Как в блоке «Сообщение»: тот же источник определений переменных (GET /bots/:id/variable-definitions). */
   platformBotId?: number | null;
-  validateField?: (field: BlockConfigField, value: unknown) => string | undefined;
 }
 
 const sectionTitle: React.CSSProperties = {
@@ -67,6 +75,7 @@ const inputStyle: React.CSSProperties = {
 };
 
 function inferSourceType(variable: string): Exclude<ConditionSourceType, ''> {
+  if (variable === '__preview_user_status') return 'user_status';
   if (variable === 'last_input') return 'last_input';
   return 'saved_answer';
 }
@@ -79,21 +88,55 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
   configSchema,
   nodeId,
   platformBotId = null,
-  validateField,
 }) => {
   const currentNodes = useScenarioStore(state => state.currentState?.nodes ?? []);
   const currentEdges = useScenarioStore(state => state.currentState?.edges ?? []);
   const updateCurrentScenario = useScenarioStore(state => state.updateCurrentScenario);
-  const localVars = useMemo(() => collectLocalInputVariables(currentNodes), [currentNodes]);
   const [backendVarDefs, setBackendVarDefs] = useState<VariableDefinitionItem[]>([]);
-  const mergedVarDefs = useMemo(
-    () => mergeVariableSuggestions(localVars, backendVarDefs),
-    [localVars, backendVarDefs]
-  );
+  const [crmFields, setCrmFields] = useState<CrmVariableDef[]>([]);
+  const [crmTags, setCrmTags] = useState<CrmTagDef[]>([]);
+  const localActionTags = useMemo(() => {
+    const set = new Set<string>();
+    for (const node of currentNodes) {
+      const blockId = String((node.data as { blockId?: unknown })?.blockId || '').toLowerCase();
+      if (blockId !== 'action') continue;
+      const settings = ((node.data as { settings?: Record<string, unknown> })?.settings ||
+        {}) as Record<string, unknown>;
+      const normalized = normalizeActionSettings(settings);
+      if (normalized.mode === 'tag' && normalized.tag.trim()) {
+        set.add(normalized.tag.trim());
+      }
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [currentNodes]);
+  const tagOptions = useMemo(() => {
+    const byKey = new Map<string, { key: string; label: string }>();
+    for (const t of crmTags) {
+      const key = String(t.key || '').trim();
+      if (!key) continue;
+      byKey.set(key, {
+        key,
+        label: t.label && t.label.trim() ? `${t.label.trim()} (${key})` : key,
+      });
+    }
+    for (const tag of localActionTags) {
+      if (!byKey.has(tag)) {
+        byKey.set(tag, { key: tag, label: tag });
+      }
+    }
+    return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+  }, [crmTags, localActionTags]);
+
+  useEffect(() => {
+    console.log('[ChoiceBlock] local action tags:', localActionTags);
+    console.log('[ChoiceBlock] merged tag options:', tagOptions);
+  }, [localActionTags, tagOptions]);
+  const mergedVarDefs = useMemo(() => backendVarDefs, [backendVarDefs]);
   const allowedVariableKeys = useMemo(
     () => new Set(mergedVarDefs.map(v => v.key)),
     [mergedVarDefs]
   );
+  const allowedCrmFieldKeys = useMemo(() => new Set(crmFields.map(f => f.key)), [crmFields]);
   const outgoingEdges = useMemo(
     () => currentEdges.filter(e => e.source === nodeId),
     [currentEdges, nodeId]
@@ -110,7 +153,8 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
     sourceTypeRaw === 'last_input' ||
     sourceTypeRaw === 'saved_answer' ||
     sourceTypeRaw === 'user_tag' ||
-    sourceTypeRaw === 'profile_field'
+    sourceTypeRaw === 'profile_field' ||
+    sourceTypeRaw === 'user_status'
       ? sourceTypeRaw
       : inferSourceType(variableRaw);
   const [sourceType, setSourceType] = useState<ConditionSourceType>(initialSourceType);
@@ -126,6 +170,7 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
       .then(res => {
         if (cancelled) return;
         setBackendVarDefs(res.items || []);
+        console.log('[ChoiceBlock] variable-definitions items:', res.items || []);
       })
       .catch(() => {
         if (!cancelled) setBackendVarDefs([]);
@@ -135,17 +180,64 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
     };
   }, [platformBotId]);
 
-  const operatorField = configSchema.find(f => f.name === 'operator');
-  const valueField = configSchema.find(f => f.name === 'value');
+  useEffect(() => {
+    if (!platformBotId) {
+      setCrmTags([]);
+      setCrmFields([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.allSettled([crmListTags(platformBotId), crmListVariableDefs(platformBotId)])
+      .then(results => {
+        if (cancelled) return;
+        const tagsRes = results[0];
+        const fieldsRes = results[1];
+        const nextTags =
+          tagsRes.status === 'fulfilled' && Array.isArray(tagsRes.value) ? tagsRes.value : [];
+        setCrmTags(nextTags);
+        const nextFields =
+          fieldsRes.status === 'fulfilled' && Array.isArray(fieldsRes.value) ? fieldsRes.value : [];
+        setCrmFields(nextFields);
+        console.log('[ChoiceBlock] crm tags:', nextTags);
+        console.log('[ChoiceBlock] crm variable defs:', nextFields);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCrmTags([]);
+        setCrmFields([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [platformBotId]);
+
   const conditionKeyField = configSchema.find(f => f.name === 'conditionKey');
 
-  const requiresSecondField = sourceType !== 'last_input';
+  const requiresSecondField =
+    sourceType === 'saved_answer' ||
+    sourceType === 'user_tag' ||
+    sourceType === 'profile_field' ||
+    sourceType === 'user_status';
+  const sourceHasAvailableList =
+    sourceType === 'saved_answer'
+      ? mergedVarDefs.length > 0
+      : sourceType === 'user_tag'
+        ? tagOptions.length > 0
+        : sourceType === 'profile_field'
+          ? crmFields.length > 0
+          : sourceType === 'user_status'
+            ? false
+            : true;
   const hasSourceError = !sourceType;
-  const hasVariableError = requiresSecondField && !variableRaw;
+  const hasVariableError = requiresSecondField && sourceHasAvailableList && !variableRaw;
   const savedAnswerKeyUnknown =
     sourceType === 'saved_answer' && Boolean(variableRaw) && !allowedVariableKeys.has(variableRaw);
   const profileFieldUnknown =
-    sourceType === 'profile_field' && Boolean(variableRaw) && !allowedVariableKeys.has(variableRaw);
+    sourceType === 'profile_field' && Boolean(variableRaw) && !allowedCrmFieldKeys.has(variableRaw);
+  const tagUnknown =
+    sourceType === 'user_tag' &&
+    Boolean(variableRaw) &&
+    !tagOptions.some(t => t.key === variableRaw);
 
   /** В основном режиме не трогаем «дополнительный ключ» в данных (оставляем пустым). */
   const mergePatch = (patch: Record<string, unknown>): Record<string, unknown> =>
@@ -166,7 +258,7 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
     onSettingsPatch(
       mergePatch({
         conditionSourceType: next,
-        variable: '',
+        variable: next === 'user_status' ? '__preview_user_status' : '',
       })
     );
   };
@@ -226,47 +318,48 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
 
   return (
     <div>
-      <div style={sectionTitle}>Что сравниваем</div>
+      <div style={sectionTitle}>Что проверяем</div>
       <div style={cardStyle}>
-        <div style={labelStyle}>Тип данных</div>
+        <div style={labelStyle}>Источник значения</div>
         <select
           value={sourceType}
           disabled={isReadOnly}
           onChange={e => handleSourceTypeChange(e.target.value as ConditionSourceType)}
           style={inputStyle}
         >
-          <option value="">Выберите тип данных</option>
+          <option value="">Выберите источник</option>
           <option value="last_input">Последний ответ пользователя</option>
           <option value="saved_answer">Сохранённый ответ</option>
           <option value="user_tag">Тег</option>
           <option value="profile_field">Поле профиля</option>
+          <option value="user_status">Статус пользователя</option>
         </select>
         {hasSourceError && (
           <div style={{ marginTop: 6, fontSize: 12, color: '#fca5a5' }}>
-            Выберите тип данных для сравнения.
+            Выберите источник значения.
           </div>
         )}
 
         {sourceType === 'saved_answer' && (
           <div style={{ marginTop: 12 }}>
             <div style={labelStyle}>Какой ответ</div>
-            <select
-              value={allowedVariableKeys.has(variableRaw) ? variableRaw : ''}
-              disabled={isReadOnly}
-              onChange={e => handleVariableChange(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">Выберите сохранённый ответ</option>
-              {mergedVarDefs.map(v => (
-                <option key={v.key} value={v.key}>
-                  {toUserVariableName({ key: v.key, label: v.label })}
-                </option>
-              ))}
-            </select>
-            {mergedVarDefs.length === 0 && (
+            {mergedVarDefs.length > 0 ? (
+              <select
+                value={allowedVariableKeys.has(variableRaw) ? variableRaw : ''}
+                disabled={isReadOnly}
+                onChange={e => handleVariableChange(e.target.value)}
+                style={inputStyle}
+              >
+                <option value="">Выберите сохранённый ответ</option>
+                {mergedVarDefs.map(v => (
+                  <option key={v.key} value={v.key}>
+                    {toUserVariableName({ key: v.key, label: v.label })}
+                  </option>
+                ))}
+              </select>
+            ) : (
               <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
-                Нет объявленных ответов. Добавьте блок «Ввод» или подключите каталог переменных
-                бота.
+                Для этого источника сейчас нет доступного списка значений.
               </div>
             )}
             {savedAnswerKeyUnknown && (
@@ -280,38 +373,75 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
         {sourceType === 'user_tag' && (
           <div style={{ marginTop: 12 }}>
             <div style={labelStyle}>Какой тег</div>
-            <input
-              type="text"
-              value={variableRaw}
-              onChange={e => handleVariableChange(e.target.value)}
-              placeholder="Например: vip"
-              readOnly={isReadOnly}
-              style={inputStyle}
-            />
+            {tagOptions.length > 0 ? (
+              <select
+                value={tagOptions.some(t => t.key === variableRaw) ? variableRaw : ''}
+                onChange={e => handleVariableChange(e.target.value)}
+                disabled={isReadOnly}
+                style={inputStyle}
+              >
+                <option value="">Выберите тег</option>
+                {tagOptions.map(t => (
+                  <option key={t.key} value={t.key}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+                Для этого источника сейчас нет доступного списка значений.
+              </div>
+            )}
+            {tagUnknown && (
+              <div style={{ marginTop: 6, fontSize: 12, color: '#fca5a5' }}>
+                Тег не найден среди доступных — выберите значение из списка.
+              </div>
+            )}
           </div>
         )}
 
         {sourceType === 'profile_field' && (
           <div style={{ marginTop: 12 }}>
             <div style={labelStyle}>Какое поле</div>
-            <select
-              value={allowedVariableKeys.has(variableRaw) ? variableRaw : ''}
-              onChange={e => handleVariableChange(e.target.value)}
-              disabled={isReadOnly}
-              style={inputStyle}
-            >
-              <option value="">Выберите поле профиля</option>
-              {mergedVarDefs.map(v => (
-                <option key={v.key} value={v.key}>
-                  {toUserVariableName({ key: v.key, label: v.label })}
-                </option>
-              ))}
-            </select>
+            {crmFields.length > 0 ? (
+              <select
+                value={allowedCrmFieldKeys.has(variableRaw) ? variableRaw : ''}
+                onChange={e => handleVariableChange(e.target.value)}
+                disabled={isReadOnly}
+                style={inputStyle}
+              >
+                <option value="">Выберите поле профиля</option>
+                {crmFields.map(f => (
+                  <option key={f.id} value={f.key}>
+                    {toUserVariableName({ key: f.key, label: f.label ?? null })}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+                Для этого источника сейчас нет доступного списка значений.
+              </div>
+            )}
             {profileFieldUnknown && (
               <div style={{ marginTop: 6, fontSize: 12, color: '#fca5a5' }}>
                 Поле не найдено среди объявленных — выберите значение из списка.
               </div>
             )}
+          </div>
+        )}
+
+        {sourceType === 'user_status' && (
+          <div style={{ marginTop: 12 }}>
+            <div style={labelStyle}>Какой статус</div>
+            <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+              Для этого источника сейчас нет доступного списка значений.
+            </div>
+          </div>
+        )}
+
+        {sourceType === 'last_input' && (
+          <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
+            Для этого источника сейчас нет доступного списка значений.
           </div>
         )}
 
@@ -322,64 +452,24 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
         )}
       </div>
 
-      {operatorField && valueField && (
-        <>
-          <div style={sectionTitle}>Сравнение</div>
-          <div style={cardStyle}>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 10 }}>
-              Если условие выполняется — переход по связи с меткой «Да» (в разделе «Ветки»), иначе —
-              «Нет».
-            </div>
-            <div style={{ marginBottom: 12 }}>
-              <div style={labelStyle}>{operatorField.label || 'Оператор'}</div>
-              <FieldRenderer
-                field={operatorField}
-                value={settings.operator ?? operatorField.default}
-                onChange={v => onFieldChange('operator', v)}
-                error={validateField?.(operatorField, settings.operator)}
-                allSettings={settings}
-                isReadOnly={isReadOnly}
-                blockId="condition"
-              />
-            </div>
-            <div>
-              <div style={labelStyle}>{valueField.label || 'Значение'}</div>
-              <FieldRenderer
-                field={valueField}
-                value={settings.value ?? valueField.default ?? ''}
-                onChange={v => onFieldChange('value', v)}
-                error={validateField?.(valueField, settings.value)}
-                allSettings={settings}
-                isReadOnly={isReadOnly}
-                blockId="condition"
-              />
-              <div style={{ marginTop: 6, fontSize: 11, color: '#64748b' }}>
-                Для «Пусто» и «Не пусто» значение в поле не используется.
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
       <div style={sectionTitle}>Ветки на схеме</div>
       <div style={cardStyle}>
         <div style={{ fontSize: 13, lineHeight: 1.45, color: '#cbd5e1', marginBottom: 10 }}>
-          У каждой из <strong>двух</strong> исходящих связей явно выбрана роль: <strong>Да</strong>{' '}
-          (условие выполняется) или <strong>Нет</strong> (не выполняется).
+          Подключите две ветки и назначьте им роли: основная и запасная.
         </div>
         {sortedOutgoing.length > 2 && (
           <>
             <div style={{ fontSize: 12, color: '#fca5a5', marginBottom: 6 }}>
-              У блока «Условие» может быть только 2 ветки: Да и Нет
+              У блока «Выбор» может быть только 2 ветки
             </div>
             <div style={{ fontSize: 12, color: '#fcd34d', marginBottom: 10 }}>
-              Используются только связи с явными метками Да/Нет; лишние связи удалите.
+              Используются только две выбранные ветки; лишние связи удалите.
             </div>
           </>
         )}
         {sortedOutgoing.length === 1 && (
           <div style={{ fontSize: 12, color: '#fcd34d', marginBottom: 10 }}>
-            Добавьте вторую ветку (Да/Нет)
+            Добавьте вторую ветку
           </div>
         )}
         {outgoingEdges.length === 0 ? (
@@ -389,7 +479,9 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
         ) : (
           <>
             <div style={{ marginBottom: 10 }}>
-              <div style={{ ...labelStyle, marginBottom: 4 }}>[Да] — условие выполняется</div>
+              <div style={{ ...labelStyle, marginBottom: 4 }}>
+                [Совпало] — если найдено совпадение
+              </div>
               <select
                 value={yesEdge?.id ?? ''}
                 disabled={isReadOnly || sortedOutgoing.length < 2}
@@ -414,7 +506,9 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
               </select>
             </div>
             <div style={{ marginBottom: 10 }}>
-              <div style={{ ...labelStyle, marginBottom: 4 }}>[Нет] — условие не выполняется</div>
+              <div style={{ ...labelStyle, marginBottom: 4 }}>
+                [Не совпало] — если совпадение не найдено
+              </div>
               <select
                 value={noEdge?.id ?? ''}
                 disabled={isReadOnly || sortedOutgoing.length < 2}
@@ -454,11 +548,11 @@ export const ConditionBlockSettingsForm: React.FC<Props> = ({
                 opacity: !yesEdge || !noEdge ? 0.5 : 1,
               }}
             >
-              Поменять Да и Нет местами
+              Поменять ветки местами
             </button>
             {sortedOutgoing.some(e => !getEdgeConditionBranch(e)) && (
               <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
-                У части связей ещё нет метки — выберите Да/Нет в списках выше (или пересохраните
+                У части связей ещё нет роли — выберите ветки в списках выше (или пересохраните
                 сценарий: метки проставятся автоматически для первых двух рёбер).
               </div>
             )}

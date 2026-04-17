@@ -22,10 +22,7 @@ function isBlockedLegacyBlock(block: BlockCatalogItem): boolean {
   const id = String(block.id || '')
     .trim()
     .toLowerCase();
-  const title = String(block.title || '')
-    .trim()
-    .toLowerCase();
-  return id === 'choice' || title === 'выбор';
+  return id === 'choice';
 }
 
 function arraysShallowEqual(a: string[], b: string[]): boolean {

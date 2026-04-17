@@ -12,7 +12,7 @@ export const NODE_SPECS: NodeSpec[] = [
   { type: 'input', title: 'Ввод', category: 'Основные', icon: '⌨️', borderColor: '#06B6D4' },
 
   // Логика
-  { type: 'condition', title: 'Условие', category: 'Логика', icon: '❓', borderColor: '#F59E0B' },
+  { type: 'condition', title: 'Выбор', category: 'Логика', icon: '❓', borderColor: '#F59E0B' },
   {
     type: 'random',
     title: 'Случайный выбор',

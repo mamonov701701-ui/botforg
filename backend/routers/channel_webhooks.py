@@ -21,6 +21,7 @@ from backend.models.bot import Bot
 from backend.models.bot_channel import BotChannelConnection
 from backend.models.processed_update import ProcessedUpdate
 from backend.services.analytics_service import get_analytics_service
+from backend.services.channel_runtime import process_channel_update
 from backend.settings import settings
 from backend.utils.chat_hash import make_chat_hash
 
@@ -196,6 +197,13 @@ async def channel_webhook(
             bot_id,
             normalized.chat_hash is not None,
         )
+        process_channel_update(
+            db,
+            bot=bot,
+            conn=conn,
+            adapter=adapter,
+            normalized=normalized,
+        )
         analytics = get_analytics_service(db)
         analytics.track_event(
             event_type="whatsapp_update_received",
@@ -233,9 +241,15 @@ async def channel_webhook(
         bot_id,
         normalized.chat_hash is not None,
     )
+    process_channel_update(
+        db,
+        bot=bot,
+        conn=conn,
+        adapter=adapter,
+        normalized=normalized,
+    )
 
-    # TODO: если есть engine обработки сценариев по каналу — вызвать его с normalized
-    # Для MAX пока — запись в аналитику в агрегированном виде (без PII/текста)
+    # Для MAX сохраняем агрегированную аналитику без PII/текста.
     if channel_key == "max":
         analytics = get_analytics_service(db)
         analytics.track_event(

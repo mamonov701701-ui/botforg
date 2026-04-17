@@ -7,6 +7,7 @@ import { toast } from '../../../utils/toast';
 import {
   crmListUsers,
   crmListTags,
+  type CrmEnvironmentFilter,
   type CrmUserListItem,
   type CrmTagDef,
 } from '../../../api/botCrm';
@@ -27,6 +28,7 @@ export default function BotCrmUsersPage() {
   const [tagFilter, setTagFilter] = useState('');
   const [activeSince, setActiveSince] = useState('');
   const [activeUntil, setActiveUntil] = useState('');
+  const [environment, setEnvironment] = useState<CrmEnvironmentFilter>('prod');
   const [tagOptions, setTagOptions] = useState<CrmTagDef[]>([]);
 
   const load = useCallback(async () => {
@@ -41,6 +43,7 @@ export default function BotCrmUsersPage() {
         tag_keys: tagFilter.trim() || undefined,
         active_since: activeSince ? new Date(activeSince).toISOString() : undefined,
         active_until: activeUntil ? new Date(activeUntil).toISOString() : undefined,
+        environment,
       });
       setItems(res.items);
       setTotal(res.total);
@@ -51,7 +54,7 @@ export default function BotCrmUsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, page, pageSize, q, channel, tagFilter, activeSince, activeUntil]);
+  }, [id, page, pageSize, q, channel, tagFilter, activeSince, activeUntil, environment]);
 
   useEffect(() => {
     if (!Number.isFinite(id)) return;
@@ -113,6 +116,37 @@ export default function BotCrmUsersPage() {
                 color: 'var(--text)',
               }}
             />
+          </div>
+          <div>
+            <label
+              style={{
+                fontSize: 12,
+                color: 'var(--text-muted)',
+                display: 'block',
+                marginBottom: 4,
+              }}
+            >
+              Среда
+            </label>
+            <select
+              value={environment}
+              onChange={e => {
+                setEnvironment(e.target.value as CrmEnvironmentFilter);
+                setPage(1);
+              }}
+              style={{
+                padding: '10px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--border)',
+                background: 'var(--card)',
+                color: 'var(--text)',
+                minWidth: 170,
+              }}
+            >
+              <option value="prod">Реальные</option>
+              <option value="dev">Тестовые</option>
+              <option value="all">Все</option>
+            </select>
           </div>
           <div>
             <label
@@ -266,8 +300,11 @@ export default function BotCrmUsersPage() {
               lineHeight: 1.45,
             }}
           >
-            Здесь отображаются данные пользователей из реальных каналов. Ответы из предпросмотра
-            сюда не сохраняются.
+            {environment === 'prod'
+              ? 'Здесь отображаются реальные пользователи.'
+              : environment === 'dev'
+                ? 'Здесь отображаются тестовые пользователи.'
+                : 'Здесь отображаются реальные и тестовые пользователи.'}
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -307,7 +344,11 @@ export default function BotCrmUsersPage() {
                 {items.map(row => (
                   <tr
                     key={row.id}
-                    onClick={() => navigate(`/dashboard/bots/${id}/crm/users/${row.id}`)}
+                    onClick={() =>
+                      navigate(
+                        `/dashboard/bots/${id}/crm/users/${row.id}?environment=${environment}`
+                      )
+                    }
                     style={{
                       cursor: 'pointer',
                       borderBottom: '1px solid var(--border)',

@@ -7,7 +7,7 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Literal, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -26,6 +26,8 @@ from backend.services.constructor.repositories.ctor_variables_repository import 
 )
 
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}")
+CrmEnvironment = Literal["dev", "prod"]
+CrmEnvironmentFilter = Literal["dev", "prod", "all"]
 
 
 def _display_name(u: CtorBotUser) -> str:
@@ -90,6 +92,7 @@ class BotUserListRowOut:
     current_block_id: Optional[int]
     current_block_label: Optional[str]
     session_status: Optional[str]
+    environment: str
     created_at: str
 
 
@@ -102,12 +105,15 @@ def list_bot_users(
     tag_keys: Optional[List[str]] = None,
     active_since: Optional[datetime] = None,
     active_until: Optional[datetime] = None,
+    environment: CrmEnvironmentFilter = "prod",
     page: int = 1,
     page_size: int = 25,
 ) -> Tuple[int, List[BotUserListRowOut]]:
     page = max(1, page)
     page_size = min(max(1, page_size), 100)
     query = db.query(CtorBotUser).filter(CtorBotUser.bot_id == ctor_bot_id)
+    if environment in ("dev", "prod"):
+        query = query.filter(CtorBotUser.environment == environment)
 
     if channel:
         query = query.filter(CtorBotUser.channel == channel.strip())
@@ -239,6 +245,7 @@ def list_bot_users(
                 current_block_id=cur_bid,
                 current_block_label=block_label,
                 session_status=s_st,
+                environment=u.environment,
                 created_at=u.created_at.isoformat(),
             )
         )
@@ -246,16 +253,71 @@ def list_bot_users(
 
 
 def get_bot_user_for_ctor(
-    db: Session, ctor_bot_id: int, bot_user_id: int
+    db: Session, ctor_bot_id: int, bot_user_id: int, *, environment: CrmEnvironmentFilter = "prod"
 ) -> Optional[CtorBotUser]:
-    return (
+    query = db.query(CtorBotUser).filter(
+        CtorBotUser.id == bot_user_id,
+        CtorBotUser.bot_id == ctor_bot_id,
+    )
+    if environment in ("dev", "prod"):
+        query = query.filter(CtorBotUser.environment == environment)
+    return query.first()
+
+
+def get_or_create_bot_user(
+    db: Session,
+    *,
+    ctor_bot_id: int,
+    channel: str,
+    external_user_id: str,
+    environment: CrmEnvironment,
+    username: Optional[str] = None,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    language_code: Optional[str] = None,
+    commit: bool = True,
+) -> CtorBotUser:
+    user = (
         db.query(CtorBotUser)
         .filter(
-            CtorBotUser.id == bot_user_id,
             CtorBotUser.bot_id == ctor_bot_id,
+            CtorBotUser.environment == environment,
+            CtorBotUser.channel == channel,
+            CtorBotUser.external_user_id == external_user_id,
         )
         .first()
     )
+    if user:
+        if username:
+            user.username = username
+        if first_name:
+            user.first_name = first_name
+        if last_name:
+            user.last_name = last_name
+        if language_code:
+            user.language_code = language_code
+        if commit:
+            db.commit()
+            db.refresh(user)
+        return user
+    user = CtorBotUser(
+        bot_id=ctor_bot_id,
+        environment=environment,
+        channel=channel,
+        external_user_id=external_user_id,
+        username=username,
+        first_name=first_name,
+        last_name=last_name,
+        language_code=language_code,
+        status="active",
+    )
+    db.add(user)
+    if commit:
+        db.commit()
+        db.refresh(user)
+    else:
+        db.flush()
+    return user
 
 
 def list_variable_definitions_rows(

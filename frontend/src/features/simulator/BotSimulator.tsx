@@ -8,12 +8,17 @@ import {
   applyUserChoice,
   completeWaitStep,
   findStartNode,
+  PREVIEW_USER_FIELDS_VARIABLE,
+  PREVIEW_USER_STATUS_VARIABLE,
+  PREVIEW_USER_TAGS_VARIABLE,
   type SimulatorState,
   type RuntimeContext,
   type ScenarioGraph,
 } from './scenarioRunner';
 import { normalizeScenarioEdges, listInvalidFlowEdges } from '../../utils/flowHandleCompatibility';
 import { getVisiblePreviewHistory } from './historyVisibility';
+import { crmPreviewSync } from '../../api/botCrm';
+import { toast } from '../../utils/toast';
 
 interface BotSimulatorProps {
   isOpen: boolean;
@@ -38,6 +43,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
   const currentState = useScenarioStore(s => s.currentState);
   const scenarios = useScenarioStore(s => s.scenarios);
   const currentScenarioId = useScenarioStore(s => s.currentScenarioId);
+  const currentBotId = useScenarioStore(s => s.currentBotId);
   const [simState, setSimState] = useState<SimulatorState | null>(null);
   const [waitingForUser, setWaitingForUser] = useState(false);
   /** Лимит шагов: показать «Дальше», иначе автопрокрутка без лишних кликов */
@@ -50,6 +56,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
   const [waitDelayMs, setWaitDelayMs] = useState<number | null>(null);
   const simRef = useRef<SimulatorState | null>(null);
   const isOpenRef = useRef(isOpen);
+  const lastPreviewSyncSignatureRef = useRef<string>('');
   simRef.current = simState;
   isOpenRef.current = isOpen;
 
@@ -170,6 +177,52 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     setWaitDelayMs(stepResult.pendingWaitMs ?? null);
     setStopReason(stepResult.stopReason ?? null);
   }, [isOpen, currentState, previewBundle, currentScenarioId]);
+
+  useEffect(() => {
+    if (!isOpen || !simState || !currentBotId) return;
+    const toStr = (v: unknown): string => (v == null ? '' : String(v));
+    const rawVars = (simState.variables || {}) as Record<string, unknown>;
+    const cleanVars: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rawVars)) {
+      if (!/^[a-z][a-z0-9_]*$/.test(k)) continue;
+      if (k.startsWith('__preview_')) continue;
+      cleanVars[k] = v;
+    }
+    const tagRaw = rawVars[PREVIEW_USER_TAGS_VARIABLE];
+    const tags = Array.isArray(tagRaw)
+      ? tagRaw.map(t => toStr(t).trim()).filter(t => /^[a-z][a-z0-9_]*$/.test(t))
+      : [];
+    const statusValue = toStr(rawVars[PREVIEW_USER_STATUS_VARIABLE]).trim() || undefined;
+    const fieldsRaw = rawVars[PREVIEW_USER_FIELDS_VARIABLE];
+    const fields =
+      fieldsRaw && typeof fieldsRaw === 'object' && !Array.isArray(fieldsRaw)
+        ? (fieldsRaw as Record<string, unknown>)
+        : {};
+    for (const [k, v] of Object.entries(fields)) {
+      if (!/^[a-z][a-z0-9_]*$/.test(k)) continue;
+      cleanVars[k] = v;
+    }
+    const lastInput = toStr(rawVars.last_input || simState.lastUserInput || '').trim() || undefined;
+    const body = {
+      external_user_id: `preview-bot-${currentBotId}`,
+      channel: 'preview',
+      first_name: 'Preview User',
+      username: 'preview_user',
+      last_input: lastInput,
+      variables: cleanVars,
+      tags,
+      status_value: statusValue,
+    };
+    const signature = JSON.stringify(body);
+    if (signature === lastPreviewSyncSignatureRef.current) return;
+    lastPreviewSyncSignatureRef.current = signature;
+    const timer = window.setTimeout(() => {
+      crmPreviewSync(currentBotId, body).catch(() => {
+        toast.error('Не удалось сохранить тестовые данные CRM из предпросмотра');
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, simState, currentBotId]);
 
   useEffect(() => {
     if (!isOpen || waitDelayMs == null) return;
@@ -398,8 +451,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
             lineHeight: 1.45,
           }}
         >
-          Данные из предпросмотра не сохраняются в CRM. Для проверки сохранения используйте
-          подключённый канал.
+          Данные предпросмотра сохраняются в CRM как тестовые (dev).
         </div>
 
         {fatalPreviewError && (

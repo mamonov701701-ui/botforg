@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
@@ -23,9 +23,11 @@ import { getVariableDataTypeLabel } from '../../../utils/uiLabels';
 
 export default function BotCrmUserDetailPage() {
   const { botId, ctorUserId } = useParams<{ botId: string; ctorUserId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const bid = Number(botId);
   const uid = Number(ctorUserId);
+  const environment = (searchParams.get('environment') || 'prod') as 'prod' | 'dev' | 'all';
   const [detail, setDetail] = useState<CrmUserDetail | null>(null);
   const [variables, setVariables] = useState<CrmUserVariable[]>([]);
   const [tags, setTags] = useState<
@@ -43,10 +45,10 @@ export default function BotCrmUserDetailPage() {
     if (!Number.isFinite(bid) || !Number.isFinite(uid)) return;
     try {
       const [d, v, t, ev] = await Promise.all([
-        crmUserDetail(bid, uid),
-        crmUserVariables(bid, uid),
-        crmUserTags(bid, uid),
-        crmUserEvents(bid, uid, 80, 0),
+        crmUserDetail(bid, uid, environment),
+        crmUserVariables(bid, uid, environment),
+        crmUserTags(bid, uid, environment),
+        crmUserEvents(bid, uid, 80, 0, environment),
       ]);
       setDetail(d);
       setVariables(v);
@@ -55,7 +57,7 @@ export default function BotCrmUserDetailPage() {
     } catch (e: any) {
       toast.error(e.message || 'Ошибка загрузки');
     }
-  }, [bid, uid]);
+  }, [bid, uid, environment]);
 
   useEffect(() => {
     reload();
@@ -76,7 +78,7 @@ export default function BotCrmUserDetailPage() {
   const saveEdit = async () => {
     if (!editingKey) return;
     try {
-      await crmSetUserVariable(bid, uid, editingKey, editValue);
+      await crmSetUserVariable(bid, uid, editingKey, editValue, environment);
       toast.success('Сохранено');
       setEditingKey(null);
       reload();
@@ -92,7 +94,7 @@ export default function BotCrmUserDetailPage() {
       return;
     }
     try {
-      await crmSetUserVariable(bid, uid, newVarKey.trim(), newVarVal);
+      await crmSetUserVariable(bid, uid, newVarKey.trim(), newVarVal, environment);
       toast.success('Переменная добавлена');
       setNewVarKey('');
       setNewVarVal('');
@@ -104,7 +106,7 @@ export default function BotCrmUserDetailPage() {
 
   const removeTag = async (key: string) => {
     try {
-      await crmRemoveUserTag(bid, uid, key);
+      await crmRemoveUserTag(bid, uid, key, environment);
       reload();
     } catch (e: any) {
       toast.error(e.message || 'Не удалось снять тег');
@@ -123,7 +125,7 @@ export default function BotCrmUserDetailPage() {
     <DashboardPage title="">
       <button
         type="button"
-        onClick={() => navigate(`/dashboard/bots/${bid}/crm/users`)}
+        onClick={() => navigate(`/dashboard/bots/${bid}/crm/users?environment=${environment}`)}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -144,6 +146,7 @@ export default function BotCrmUserDetailPage() {
       <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
         {detail.channel} · {detail.external_user_id}
         {detail.username ? ` · @${detail.username}` : ''}
+        {` · ${detail.environment === 'dev' ? 'Тестовая среда' : 'Реальная среда'}`}
       </p>
 
       <Card>
@@ -415,7 +418,7 @@ export default function BotCrmUserDetailPage() {
                 return;
               }
               try {
-                await crmAddUserTag(bid, uid, newTagKey.trim());
+                await crmAddUserTag(bid, uid, newTagKey.trim(), environment);
                 toast.success('Тег назначен');
                 setNewTagKey('');
                 reload();

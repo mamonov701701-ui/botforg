@@ -372,7 +372,7 @@ const BlockSettingsPanel = ({
             <option value="start">Старт</option>
             <option value="message">Сообщение</option>
             <option value="action">Действие</option>
-            <option value="condition">Условие</option>
+            <option value="condition">Выбор</option>
             <option value="api">Запрос к API</option>
             <option value="end">Завершение</option>
           </select>

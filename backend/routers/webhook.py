@@ -17,8 +17,10 @@ from backend.services.scenario_flow.input_block import (
 from backend.services.constructor.repositories.ctor_sessions_repository import (
     CtorSessionsRepository,
 )
+from backend.services.constructor.tag_service import TagService
+from backend.services.constructor.variable_service import VariableService
 from backend.services.message_template.runtime_outbound import render_outbound_message_text
-from backend.utils.ctor_bot_resolve import resolve_ctor_bot_id
+from backend.utils.ctor_bot_resolve import ensure_ctor_bot_id, resolve_ctor_bot_id
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
@@ -58,12 +60,13 @@ def _resolve_ctor_telegram_user(
     first_name: Optional[str] = None,
     last_name: Optional[str] = None,
     create_if_missing: bool = False,
+    environment: str = "prod",
 ) -> Tuple[Optional[int], Optional[int]]:
     """
     ctor_bot_users для Telegram: связка ctor-бота с platform Bot.id и chat_id.
     Возвращает (bot_user_id, session_id) или (None, None).
     """
-    ctor_bid = resolve_ctor_bot_id(db, platform_bot_id)
+    ctor_bid = ensure_ctor_bot_id(db, platform_bot_id) or resolve_ctor_bot_id(db, platform_bot_id)
     if not ctor_bid:
         return None, None
     external = str(chat_id)
@@ -71,6 +74,7 @@ def _resolve_ctor_telegram_user(
         db.query(CtorBotUser)
         .filter(
             CtorBotUser.bot_id == ctor_bid,
+            CtorBotUser.environment == environment,
             CtorBotUser.channel == "telegram",
             CtorBotUser.external_user_id == external,
         )
@@ -79,6 +83,7 @@ def _resolve_ctor_telegram_user(
     if not bu and create_if_missing:
         bu = CtorBotUser(
             bot_id=ctor_bid,
+            environment=environment,
             channel="telegram",
             external_user_id=external,
             username=username,
@@ -93,6 +98,97 @@ def _resolve_ctor_telegram_user(
         return None, None
     sess = CtorSessionsRepository(db).find_active_for_bot_user(bu.id)
     return bu.id, (sess.id if sess else None)
+
+
+def _resolved_action_value(
+    db: Session,
+    *,
+    bot_user_id: Optional[int],
+    session_id: Optional[int],
+    raw_value: str,
+) -> str:
+    text = raw_value or ""
+    if bot_user_id is None or "{{" not in text:
+        return text
+    return render_outbound_message_text(
+        db,
+        bot_user_id=bot_user_id,
+        template_text=text,
+        session_id=session_id,
+    )
+
+
+def _apply_action_block(
+    db: Session,
+    *,
+    node: dict,
+    platform_bot_id: int,
+    chat_id,
+    tg_username: Optional[str],
+    tg_first_name: Optional[str],
+    tg_last_name: Optional[str],
+    environment: str,
+) -> None:
+    settings = ((node.get("data") or {}).get("settings") or {}) if node else {}
+    mode = str(settings.get("mode") or "").strip()
+    if not mode:
+        return
+
+    ctor_uid, sess_id = _resolve_ctor_telegram_user(
+        db,
+        platform_bot_id=platform_bot_id,
+        chat_id=chat_id,
+        username=tg_username,
+        first_name=tg_first_name,
+        last_name=tg_last_name,
+        create_if_missing=True,
+        environment=environment,
+    )
+    if ctor_uid is None:
+        return
+
+    if mode == "field":
+        field_action = str(settings.get("fieldAction") or "").strip()
+        field_key = str(settings.get("fieldKey") or settings.get("setVariable") or "").strip()
+        raw_value = settings.get("fieldValue")
+        if raw_value is None and field_action == "set":
+            raw_value = settings.get("value")
+        value_text = raw_value if isinstance(raw_value, str) else str(raw_value or "")
+        value_text = _resolved_action_value(
+            db, bot_user_id=ctor_uid, session_id=sess_id, raw_value=value_text
+        )
+        if field_key and field_action == "set":
+            VariableService(db).set_user_variable(ctor_uid, field_key, value_text, commit=True)
+        elif field_key and field_action == "clear":
+            VariableService(db).set_user_variable(ctor_uid, field_key, "", commit=True)
+        return
+
+    if mode == "tag":
+        tag_action = str(settings.get("tagAction") or "").strip()
+        tag_key = str(settings.get("tag") or "").strip()
+        if tag_key and tag_action == "add":
+            TagService(db).add_tag_to_user(ctor_uid, tag_key, assigned_by="webhook", commit=True)
+        elif tag_key and tag_action == "remove":
+            TagService(db).remove_tag_from_user(ctor_uid, tag_key, commit=True)
+        return
+
+    if mode == "status":
+        status_action = str(settings.get("statusAction") or "").strip()
+        bu = db.query(CtorBotUser).filter(CtorBotUser.id == ctor_uid).first()
+        if not bu:
+            return
+        if status_action == "set":
+            raw_status = settings.get("status")
+            status_text = raw_status if isinstance(raw_status, str) else str(raw_status or "")
+            status_text = _resolved_action_value(
+                db, bot_user_id=ctor_uid, session_id=sess_id, raw_value=status_text
+            ).strip()
+            if status_text:
+                bu.status = status_text
+                db.commit()
+        elif status_action == "clear":
+            bu.status = "active"
+            db.commit()
 
 
 @router.post("/webhook/{bot_id}")
@@ -406,6 +502,7 @@ async def telegram_webhook(
             first_name=tg_first_name,
             last_name=tg_last_name,
             create_if_missing=True,
+            environment="prod",
         )
         if ctor_uid is not None and ctor_bid is not None:
             save_res = apply_input_success_to_ctor_user(
@@ -471,6 +568,34 @@ async def telegram_webhook(
         state.last_interaction_at = datetime.now(timezone.utc)
         db.commit()
         return {"ok": True}
+    # Автоприменение service-блоков без ожидания ввода пользователя (например, "Данные пользователя").
+    while next_node and next_node.get("type") == "action":
+        _apply_action_block(
+            db,
+            node=next_node,
+            platform_bot_id=bot_id,
+            chat_id=chat_id,
+            tg_username=tg_username,
+            tg_first_name=tg_first_name,
+            tg_last_name=tg_last_name,
+            environment="prod",
+        )
+        next_edges = find_edges_from(next_node["id"])
+        if not next_edges:
+            next_node = None
+            break
+        next_node = find_node(next_edges[0]["target"])
+
+    if not next_node:
+        requests.post(
+            f"{TELEGRAM_API}{token}/sendMessage",
+            json={"chat_id": chat_id, "text": "Сценарий завершён."},
+        )
+        state.current_node_id = None
+        state.last_interaction_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"ok": True}
+
     # Обновляем состояние
     now = datetime.now(timezone.utc)
     state.current_node_id = next_node["id"]
@@ -502,7 +627,7 @@ def send_node_message(
     platform_bot_id: int,
 ):
     ctor_uid, sess_id = _resolve_ctor_telegram_user(
-        db, platform_bot_id=platform_bot_id, chat_id=chat_id
+        db, platform_bot_id=platform_bot_id, chat_id=chat_id, environment="prod"
     )
     text = _telegram_template_text_from_node(node)
     if ctor_uid is not None and text:

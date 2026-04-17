@@ -198,14 +198,8 @@ if ($failed.Count -gt 0) {
     exit 1
 }
 
-if (-not (Test-BackendUp)) {
-    Write-Host 'ERROR: /healthz check failed.' -ForegroundColor Red
-    exit 1
-}
-if (-not (Test-FrontendUp)) {
-    Write-Host 'ERROR: frontend check failed.' -ForegroundColor Red
-    exit 1
-}
+# NOTE: backend/frontend readiness is already validated in the wait loop above.
+# Avoid single-shot rechecks here to prevent flaky startup failures.
 if (-not (Test-AuthEmailLoginProbe)) {
     Write-Host 'ERROR: POST /auth/email/login must return 401 or 422 (middleware/auth regression). See backend log.' -ForegroundColor Red
     Get-Content -Path $logBackend -Tail 40 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "[BE] $_" }

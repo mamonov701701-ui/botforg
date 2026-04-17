@@ -188,6 +188,14 @@ export default function BlockSettingsPanel({
   );
 
   const initialSettings = selectedNode.data.settings || {};
+  const isConditionBlock = block.id === 'condition';
+  const shownBlockTitle =
+    isConditionBlock &&
+    (typeof selectedNode.data.title !== 'string' ||
+      selectedNode.data.title.trim() === '' ||
+      selectedNode.data.title === 'Условие')
+      ? 'Выбор'
+      : selectedNode.data.title || block.title;
 
   const liveMessageSchema = useMemo(() => {
     if (block?.id !== 'message' || !block) return null;
@@ -418,7 +426,7 @@ export default function BlockSettingsPanel({
       case 'ConditionUnknownVariable':
       case 'ConditionTooManyBranches':
       case 'ConditionSecondBranchMissing':
-        return 'Условие';
+        return 'Выбор';
       default:
         return null;
     }
@@ -543,9 +551,7 @@ export default function BlockSettingsPanel({
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 20 }}>{selectedNode.data.icon || block.icon || '📦'}</span>
-              <div style={{ fontWeight: 800, fontSize: 18 }}>
-                {selectedNode.data.title || block.title}
-              </div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>{shownBlockTitle}</div>
               {/* Validation status badge */}
               {((block.configSchema && block.configSchema.length > 0) ||
                 block.id === 'input' ||
@@ -797,9 +803,9 @@ export default function BlockSettingsPanel({
           </div>
           <input
             type="text"
-            value={selectedNode.data.title || block.title || ''}
+            value={shownBlockTitle || ''}
             onChange={e => handleTitleChange(e.target.value)}
-            placeholder={block.title || 'Введите название'}
+            placeholder={isConditionBlock ? 'Выбор' : block.title || 'Введите название'}
             readOnly={isReadOnly}
             style={{
               width: '100%',
@@ -871,7 +877,6 @@ export default function BlockSettingsPanel({
             configSchema={block.configSchema || []}
             nodeId={selectedNode.id}
             platformBotId={currentBotId}
-            validateField={validateField}
           />
         ) : block.id === 'action' ? (
           <ActionBlockSettingsForm

@@ -2,6 +2,24 @@
 
 Все значимые изменения в проекте BotForg будут документироваться в этом файле.
 
+## [2026-04-16] - CRM dev/prod разделение и единый runtime поток
+
+### Добавлено
+- Миграция `ctor_user_environment_017`: поле `environment` (`dev|prod`) в `ctor_bot_users`, новый уникальный ключ `(bot_id, environment, channel, external_user_id)`.
+- Единый runtime для real channels: `backend/services/channel_runtime.py` (resolve user -> run scenario -> persist CRM changes).
+- API синхронизации предпросмотра: `POST /bots/{bot_id}/crm/preview-sync` (всегда пишет в `dev`).
+- UI фильтр среды в CRM: `Реальные / Тестовые / Все`.
+
+### Изменено
+- `channel_webhooks` теперь прогоняет сценарий и сохраняет `last_input`, теги, переменные, статус через общий runtime.
+- Telegram webhook и CRM роуты используют авто-поднятие ctor-связки (`ensure_ctor_bot_id`) для ботов без `ctor_bots` записи.
+- Preview (`BotSimulator`) синхронизирует тестовые данные в CRM и показывает ошибку при неуспешной записи.
+
+### Текущее состояние (точка остановки)
+- Разделение данных dev/prod и фильтрация в CRM внедрены.
+- Для проверки данных из Preview использовать среду `Тестовые (dev)`, для каналов — `Реальные (prod)`.
+- Следующий шаг: расширить e2e-тесты на `channel_webhooks` runtime по каждому реальному каналу.
+
 ## [2026-03-31] - Редактор: валидация, диагностика, устойчивость store
 
 ### Добавлено

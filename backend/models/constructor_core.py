@@ -120,11 +120,13 @@ class CtorBotUser(Base):
     __table_args__ = (
         UniqueConstraint(
             "bot_id",
+            "environment",
             "channel",
             "external_user_id",
-            name="uq_ctor_bot_users_bot_channel_external",
+            name="uq_ctor_bot_users_bot_env_channel_external",
         ),
         Index("ix_ctor_bot_users_bot_id", "bot_id"),
+        Index("ix_ctor_bot_users_bot_env", "bot_id", "environment"),
         Index("ix_ctor_bot_users_last_message_at", "last_message_at"),
         {"extend_existing": True},
     )
@@ -135,6 +137,7 @@ class CtorBotUser(Base):
         ForeignKey("ctor_bots.id", ondelete="CASCADE"),
         nullable=False,
     )
+    environment = Column(String(16), nullable=False, default="prod", server_default="prod")
     channel = Column(String(32), nullable=False)
     external_user_id = Column(String(191), nullable=False)
     username = Column(String(255), nullable=True)

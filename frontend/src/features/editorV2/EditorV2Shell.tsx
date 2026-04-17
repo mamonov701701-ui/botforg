@@ -97,15 +97,40 @@ function getInputNodeOutputCountLabel(separateErrorBranch: boolean): string {
   return separateErrorBranch ? '2 выхода' : '1 выход';
 }
 
+function conditionSummaryText(settings: Record<string, unknown>): string {
+  const sourceType = String(settings.conditionSourceType || '').trim();
+  const variable = String(settings.variable || '').trim();
+  const sourceLabel =
+    sourceType === 'last_input'
+      ? 'По ответу пользователя'
+      : sourceType === 'saved_answer' && variable
+        ? `По значению «${variable}»`
+        : sourceType === 'profile_field' && variable
+          ? `По значению «${variable}»`
+          : sourceType === 'user_tag' && variable
+            ? `По значению «${variable}»`
+            : '';
+  return sourceLabel || 'Выбор по значению';
+}
+
 // КРИТИЧНО: CustomNode должен быть определен ВНЕ компонента InnerEditor,
 // чтобы не пересоздаваться при каждом рендере
 const CustomNode = React.memo(({ data, id, selected }: any) => {
-  const title = data?.blockId === 'action' ? 'Данные пользователя' : (data?.title ?? 'Блок');
+  const title =
+    data?.blockId === 'action'
+      ? 'Данные пользователя'
+      : data?.blockId === 'condition' &&
+          (typeof data?.title !== 'string' || data.title.trim() === '' || data.title === 'Условие')
+        ? 'Выбор'
+        : (data?.title ?? 'Блок');
   const isStartNode = data?.blockId === 'start';
   const isMessageNode = data?.blockId === 'message';
   const isInputNode = data?.blockId === 'input';
   const isConditionNode = data?.blockId === 'condition';
   const isActionNode = data?.blockId === 'action';
+  const conditionSummary = isConditionNode
+    ? conditionSummaryText((data?.settings as Record<string, unknown>) || {})
+    : '';
 
   const showInputErrorBranch = data?.settings?.separate_error_branch !== false;
   const borderColor = data?.color || '#2f6dff';
@@ -507,13 +532,13 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
                 textAlign: 'center',
               }}
             >
-              ✓ Да
+              Основная
               <Handle
                 id="condition_yes"
                 type="source"
                 position={Position.Right}
                 isConnectable={true}
-                title="Условие выполняется"
+                title="Основная ветка"
                 style={{
                   background: '#FFB300',
                   width: 19.4,
@@ -540,13 +565,13 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
                 textAlign: 'center',
               }}
             >
-              ✗ Нет
+              Запасная
               <Handle
                 id="condition_no"
                 type="source"
                 position={Position.Right}
                 isConnectable={true}
-                title="Условие не выполняется"
+                title="Запасная ветка"
                 style={{
                   background: '#FFB300',
                   width: 19.4,
@@ -561,6 +586,25 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
                 className="react-flow__handle-visible"
               />
             </div>
+          </div>
+          <div
+            style={{
+              marginTop: 10,
+              width: '100%',
+              maxWidth: 320,
+              padding: '8px 10px',
+              borderRadius: 10,
+              border: '1px solid rgba(139, 92, 246, 0.3)',
+              background: 'rgba(139, 92, 246, 0.08)',
+              color: '#1f2937',
+              lineHeight: 1.35,
+              fontSize: 12,
+              fontWeight: 600,
+              textAlign: 'center',
+            }}
+            title={conditionSummary}
+          >
+            {conditionSummary}
           </div>
         </>
       ) : isInputNode ? (
@@ -1999,8 +2043,8 @@ function InnerEditor() {
         if (alreadyUsedThisHandle) {
           showToast(
             normalizedConditionSourceHandle === 'condition_yes'
-              ? 'Выход «Да» уже подключён'
-              : 'Выход «Нет» уже подключён',
+              ? 'Основная ветка уже подключена'
+              : 'Запасная ветка уже подключена',
             'warning'
           );
           return;
@@ -2125,7 +2169,7 @@ function InnerEditor() {
           position: resolvedPosition,
           data: {
             blockId: block.id,
-            title: block.title,
+            title: block.id === 'condition' ? 'Выбор' : block.title,
             icon: block.icon,
             color: block.color,
             settings:
