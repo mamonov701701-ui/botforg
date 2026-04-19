@@ -120,7 +120,7 @@
 - Начало (start)
 - Сообщение (message)
 - Ожидание (wait)
-- Условие (condition)
+- Выбор (condition)
 
 ### business
 

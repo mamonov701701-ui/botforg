@@ -62,6 +62,7 @@
 - [Быстрый старт](./user/QUICK_START.md) - запуск системы сценариев за 3 шага
 - [Тестирование сценариев](./user/TESTING_SCENARIOS.md) - инструкция по тестированию
 - [Указатель на справку по блоку «Сообщение»](./user/editor_block_message.md) — актуальный текст в коде: `blockGuideRu.ts`; техническая справка агента: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md)
+- [Указатель на справку по блоку «Выбор»](./user/editor_block_choice.md) — тот же источник: `blockGuideRu.ts`, ключ `condition`; техническая справка: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md)
 
 ### **Техническая документация** (`technical/`)
 - [Реляционное ядро конструктора (ctor_* таблицы)](./technical/CONSTRUCTOR_CORE_DB.md) — `platform_users`, граф блоков, переменные и события
