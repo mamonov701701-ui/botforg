@@ -25,6 +25,7 @@ from backend.services.constructor.validation import (
     validate_snake_case_key,
 )
 from backend.services.constructor.value_codec import normalize_for_definition
+from backend.services.bot_crm.overview_aggregate_service import mark_crm_overview_dirty
 
 
 class VariableService:
@@ -190,6 +191,32 @@ class VariableService:
             return packed  # type: ignore[return-value]
 
         vt, vn, vb, vd, vj = packed.data
+        existing = self._repo.get_user_value_by_definition(bot_user_id, defin.id)
+        changed = (
+            existing is None
+            or existing.value_text != vt
+            or existing.value_number != vn
+            or existing.value_boolean != vb
+            or existing.value_date != vd
+            or existing.value_json != vj
+        )
+
+        if not changed and existing is not None:
+            return ok_result(
+                UserVariableView(
+                    key=defin.key,
+                    definition_id=defin.id,
+                    data_type=defin.data_type,
+                    scope=defin.scope,
+                    is_system=defin.is_system,
+                    value_text=existing.value_text,
+                    value_number=existing.value_number,
+                    value_boolean=existing.value_boolean,
+                    value_date=existing.value_date,
+                    value_json=existing.value_json,
+                )
+            )
+
         row = self._repo.upsert_user_variable(
             bot_user_id,
             defin.id,
@@ -219,6 +246,7 @@ class VariableService:
         if commit:
             self.db.commit()
             self.db.refresh(row)
+            mark_crm_overview_dirty(bu.bot_id, bu.environment)
 
         return ok_result(
             UserVariableView(

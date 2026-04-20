@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, List, Optional
+import logging
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
@@ -21,10 +22,19 @@ from backend.models.constructor_core import (
     CtorScenario,
 )
 from backend.models.user import User
+from backend.services.bot_crm.contact_profile_sync import apply_contact_profile_from_variables
+from backend.services.bot_crm.overview_aggregate_service import (
+    get_overview_aggregate_payload,
+    mark_crm_overview_dirty,
+    refresh_overview_aggregate,
+)
+from backend.services.cache.redis_cache import get_or_build_json
 from backend.services.bot_crm.crm_service import (
     BotUserListRowOut,
     CrmEnvironmentFilter,
+    CrmUserListSort,
     build_variable_usage_maps,
+    count_users_with_nonempty_variable_by_key,
     get_or_create_bot_user,
     get_bot_user_for_ctor,
     list_bot_users,
@@ -35,14 +45,32 @@ from backend.services.constructor.event_log_service import EventLogService
 from backend.services.constructor.repositories.ctor_tags_repository import CtorTagsRepository
 from backend.services.constructor.repositories.ctor_variables_repository import CtorVariablesRepository
 from backend.services.constructor.tag_service import TagService
-from backend.services.constructor.validation import validate_snake_case_key
+from backend.services.constructor.validation import validate_snake_case_key, validate_tag_key
 from backend.services.constructor.variable_service import VariableService
 from backend.utils.bot_access import check_bot_access, check_bot_edit_permission
 from backend.utils.ctor_bot_resolve import ensure_ctor_bot_id, resolve_ctor_bot_id
 
 router = APIRouter(prefix="/{bot_id}/crm", tags=["bot-crm"])
+logger = logging.getLogger(__name__)
+
+
+def _scenario_counts_from_usage(
+    usage_map: Dict[str, Set[int]], meta: List[Tuple[int, int, str, str, Optional[str]]]
+) -> Dict[str, int]:
+    meta_by_block = {m[0]: m for m in meta}
+    counts: Dict[str, int] = {}
+    for key, bids in usage_map.items():
+        sids: Set[int] = set()
+        for bid in bids:
+            m = meta_by_block.get(bid)
+            if m:
+                sids.add(m[1])
+        counts[key] = len(sids)
+    return counts
 
 SNAKE_MSG = "ключ только snake_case: латиница, цифры, подчёркивание, с буквы"
+TAG_KEY_MSG = "некорректный ключ тега: буква в начале, далее буквы, цифры и _"
+SESSION_STATUS_FILTER_NONE = "__none__"
 
 
 def _ctor_dep(bot_id: int, db: Session, user: User) -> int:
@@ -100,6 +128,7 @@ class BotUserListItemOut(BaseModel):
     current_block_id: Optional[int] = None
     current_block_label: Optional[str] = None
     session_status: Optional[str] = None
+    contact_status: str = "active"
     environment: str
     created_at: str
 
@@ -174,6 +203,8 @@ class VariableDefRowOut(BaseModel):
     is_system: bool
     is_archived: bool
     used_in_blocks_count: int = 0
+    used_in_scenarios_count: int = 0
+    contacts_with_value_count: int = 0
     updated_at: str
 
 
@@ -194,6 +225,69 @@ class TagDefRowOut(BaseModel):
     updated_at: str
 
 
+class CrmOverviewTagRow(BaseModel):
+    key: str
+    label: Optional[str] = None
+    contacts_count: int
+
+
+class CrmOverviewStatusRow(BaseModel):
+    status: str
+    contacts_count: int
+
+
+class CrmOverviewProfileCompleteness(BaseModel):
+    total_contacts: int
+    with_name: int
+    with_phone: int
+    with_email: int
+    fully_filled: int
+
+
+class CrmOverviewScenarioProgress(BaseModel):
+    in_progress: int
+    completed: int
+
+
+class CrmOverviewTrendValue(BaseModel):
+    current: int
+    previous: int
+    delta: int
+
+
+class CrmOverviewTrends(BaseModel):
+    total_contacts: CrmOverviewTrendValue
+    new_contacts_7d: CrmOverviewTrendValue
+    active_contacts_7d: CrmOverviewTrendValue
+    sleeping_contacts_7d: CrmOverviewTrendValue
+    sleeping_contacts_30d: CrmOverviewTrendValue
+
+
+class CrmOverviewOut(BaseModel):
+    total_contacts: int
+    new_contacts_7d: int
+    active_contacts_7d: int
+    sleeping_contacts_7d: int
+    sleeping_contacts_30d: int
+    profile_completeness: CrmOverviewProfileCompleteness
+    top_tags: List[CrmOverviewTagRow] = Field(default_factory=list)
+    statuses: List[CrmOverviewStatusRow] = Field(default_factory=list)
+    session_statuses: List["CrmStatusSummaryRow"] = Field(default_factory=list)
+    scenario_progress: CrmOverviewScenarioProgress
+    trends: CrmOverviewTrends
+
+
+class CrmStatusSummaryRow(BaseModel):
+    name: str
+    count: int
+    dialog_param: Optional[str] = None
+
+
+class CrmStatusesSummaryOut(BaseModel):
+    contact_statuses: List[CrmStatusSummaryRow] = Field(default_factory=list)
+    session_statuses: List[CrmStatusSummaryRow] = Field(default_factory=list)
+
+
 class SnakeKeyMixin(BaseModel):
     key: str
 
@@ -203,6 +297,18 @@ class SnakeKeyMixin(BaseModel):
         msg = validate_snake_case_key(v.strip())
         if msg:
             raise ValueError(SNAKE_MSG)
+        return v.strip()
+
+
+class TagKeyMixin(BaseModel):
+    key: str
+
+    @field_validator("key")
+    @classmethod
+    def key_tag(cls, v: str) -> str:
+        msg = validate_tag_key(v.strip())
+        if msg:
+            raise ValueError(TAG_KEY_MSG)
         return v.strip()
 
 
@@ -220,7 +326,7 @@ class VariablePatchBody(BaseModel):
     is_archived: Optional[bool] = None
 
 
-class TagCreateBody(SnakeKeyMixin):
+class TagCreateBody(TagKeyMixin):
     label: Optional[str] = None
     color: Optional[str] = None
     description: Optional[str] = None
@@ -245,7 +351,7 @@ class UserVariableSetBody(BaseModel):
         return v.strip()
 
 
-class UserTagBody(SnakeKeyMixin):
+class UserTagBody(TagKeyMixin):
     pass
 
 
@@ -258,6 +364,8 @@ class PreviewSyncBody(BaseModel):
     variables: dict[str, Any] = Field(default_factory=dict)
     tags: List[str] = Field(default_factory=list)
     status_value: Optional[str] = None
+    """Если True — применить status_value к полю контакта (в т.ч. пустая строка → active)."""
+    status_patch: bool = False
 
 
 def _user_rows_to_list_out(
@@ -281,12 +389,19 @@ def _user_rows_to_list_out(
                 current_block_id=r.current_block_id,
                 current_block_label=r.current_block_label,
                 session_status=r.session_status,
+                contact_status=r.contact_status,
                 environment=r.environment,
                 created_at=r.created_at,
             )
             for r in rows
         ],
     )
+
+
+def _apply_environment_filter(query, environment: CrmEnvironmentFilter):
+    if environment in ("dev", "prod"):
+        query = query.filter(CtorBotUser.environment == environment)
+    return query
 
 
 @router.get("/users", response_model=BotUserListOut)
@@ -301,6 +416,19 @@ def crm_list_users(
     ),
     active_since: Optional[datetime] = None,
     active_until: Optional[datetime] = None,
+    contact_status: Optional[str] = Query(
+        None, description="Точное значение статуса контакта (CtorBotUser.status)"
+    ),
+    session_status: Optional[str] = Query(
+        None,
+        description="Статус последней сессии; для «без статуса» передайте __none__",
+    ),
+    has_phone: Optional[bool] = Query(None, description="true — только с телефоном"),
+    has_email: Optional[bool] = Query(None, description="true — только с email"),
+    sort: str = Query(
+        "activity",
+        description="activity | name | created",
+    ),
     environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -309,6 +437,9 @@ def crm_list_users(
     if not ctor_id:
         return BotUserListOut(total=0, page=page, page_size=page_size, items=[])
     tk = [t.strip() for t in tag_keys.split(",")] if tag_keys else None
+    sort_norm = cast(
+        CrmUserListSort, sort if sort in ("activity", "name", "created") else "activity"
+    )
     total, rows = list_bot_users(
         db,
         ctor_id,
@@ -320,8 +451,89 @@ def crm_list_users(
         environment=environment,
         page=page,
         page_size=page_size,
+        contact_status=contact_status.strip() if contact_status and contact_status.strip() else None,
+        session_status=session_status.strip() if session_status and session_status.strip() else None,
+        has_phone=has_phone,
+        has_email=has_email,
+        sort=sort_norm,
     )
     return _user_rows_to_list_out(total, page, page_size, rows)
+
+
+@router.get("/overview", response_model=CrmOverviewOut)
+def crm_overview(
+    bot_id: int,
+    environment: CrmEnvironmentFilter = Query("prod"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    ctor_id = _ctor_dep_optional(bot_id, db, user)
+    if not ctor_id:
+        return CrmOverviewOut(
+            total_contacts=0,
+            new_contacts_7d=0,
+            active_contacts_7d=0,
+            sleeping_contacts_7d=0,
+            sleeping_contacts_30d=0,
+            profile_completeness=CrmOverviewProfileCompleteness(
+                total_contacts=0,
+                with_name=0,
+                with_phone=0,
+                with_email=0,
+                fully_filled=0,
+            ),
+            top_tags=[],
+            statuses=[],
+            scenario_progress=CrmOverviewScenarioProgress(in_progress=0, completed=0),
+            trends=CrmOverviewTrends(
+                total_contacts=CrmOverviewTrendValue(current=0, previous=0, delta=0),
+                new_contacts_7d=CrmOverviewTrendValue(current=0, previous=0, delta=0),
+                active_contacts_7d=CrmOverviewTrendValue(current=0, previous=0, delta=0),
+                sleeping_contacts_7d=CrmOverviewTrendValue(current=0, previous=0, delta=0),
+                sleeping_contacts_30d=CrmOverviewTrendValue(current=0, previous=0, delta=0),
+            ),
+        )
+    env = environment if environment in ("dev", "prod", "all") else "prod"
+    cache_key = f"crm:overview:v2:{ctor_id}:{env}"
+
+    def _load_payload() -> dict:
+        payload = get_overview_aggregate_payload(db, bot_id=ctor_id, environment=env)  # type: ignore[arg-type]
+        if payload is None:
+            logger.info(
+                "crm_overview_build_path event=on_demand_build bot_id=%s environment=%s cache_key=%s",
+                ctor_id,
+                env,
+                cache_key,
+            )
+            mark_crm_overview_dirty(ctor_id, "dev")
+            mark_crm_overview_dirty(ctor_id, "prod")
+            payload = refresh_overview_aggregate(db, bot_id=ctor_id, environment=env)  # type: ignore[arg-type]
+        else:
+            logger.info(
+                "crm_overview_build_path event=snapshot_hit bot_id=%s environment=%s cache_key=%s",
+                ctor_id,
+                env,
+                cache_key,
+            )
+        return payload
+
+    try:
+        payload = get_or_build_json(
+            cache_key,
+            ttl_seconds=45,
+            lock_ttl_seconds=8,
+            builder=_load_payload,
+        )
+    except Exception:
+        # Runtime fail-safe: never mask overview by a temporary cache/build issue.
+        logger.exception(
+            "crm_overview_build_path event=builder_failure bot_id=%s environment=%s cache_key=%s",
+            ctor_id,
+            env,
+            cache_key,
+        )
+        payload = refresh_overview_aggregate(db, bot_id=ctor_id, environment=env)  # type: ignore[arg-type]
+    return CrmOverviewOut.model_validate(payload)
 
 
 def _pick_session(db: Session, bot_user_id: int) -> Optional[CtorBotUserSession]:
@@ -512,9 +724,9 @@ def crm_remove_user_tag(
     ctor_id = _ctor_dep(bot_id, db, user)
     if not get_bot_user_for_ctor(db, ctor_id, bot_user_id, environment=environment):
         raise HTTPException(status_code=404, detail="User not found")
-    msg = validate_snake_case_key(tag_key.strip())
+    msg = validate_tag_key(tag_key.strip())
     if msg:
-        raise HTTPException(status_code=400, detail=SNAKE_MSG)
+        raise HTTPException(status_code=400, detail=TAG_KEY_MSG)
     ts = TagService(db)
     res = ts.remove_tag_from_user(bot_user_id, tag_key.strip(), commit=True)
     if not res.ok:
@@ -573,17 +785,65 @@ def crm_user_messages(
     return MessagesStubOut(available=False, items=[])
 
 
+@router.get("/statuses/summary", response_model=CrmStatusesSummaryOut)
+def crm_statuses_summary(
+    bot_id: int,
+    environment: CrmEnvironmentFilter = Query("prod"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    ctor_id = _ctor_dep_optional(bot_id, db, user)
+    if not ctor_id:
+        return CrmStatusesSummaryOut(contact_statuses=[], session_statuses=[])
+    env = environment if environment in ("dev", "prod", "all") else "prod"
+    payload = get_overview_aggregate_payload(db, bot_id=ctor_id, environment=env)  # type: ignore[arg-type]
+    if payload is None:
+        mark_crm_overview_dirty(ctor_id, "dev")
+        mark_crm_overview_dirty(ctor_id, "prod")
+        payload = refresh_overview_aggregate(db, bot_id=ctor_id, environment=env)  # type: ignore[arg-type]
+    elif not isinstance(payload, dict):
+        payload = refresh_overview_aggregate(db, bot_id=ctor_id, environment=env)  # type: ignore[arg-type]
+
+    contact_rows = payload.get("statuses") or []
+    contact_statuses = [
+        CrmStatusSummaryRow(
+            name=(str(row.get("status") or "active")),
+            count=int(row.get("contacts_count") or 0),
+        )
+        for row in contact_rows
+    ]
+    session_rows = payload.get("session_statuses") or []
+    session_statuses = [
+        CrmStatusSummaryRow(
+            name=str(row.get("name") or "—"),
+            count=int(row.get("count") or 0),
+            dialog_param=(
+                str(row.get("dialog_param"))
+                if row.get("dialog_param") is not None
+                else (SESSION_STATUS_FILTER_NONE if str(row.get("name") or "—") == "—" else str(row.get("name") or "—"))
+            ),
+        )
+        for row in session_rows
+    ]
+    return CrmStatusesSummaryOut(contact_statuses=contact_statuses, session_statuses=session_statuses)
+
+
 @router.get("/variables", response_model=List[VariableDefRowOut])
 def crm_list_variable_defs(
     bot_id: int,
     include_archived: bool = Query(False),
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     ctor_id = _ctor_dep_optional(bot_id, db, user)
     if not ctor_id:
         return []
-    usage_map, _ = build_variable_usage_maps(db, ctor_id)
+    usage_map, meta = build_variable_usage_maps(db, ctor_id)
+    scen_counts = _scenario_counts_from_usage(usage_map, meta)
+    value_counts = count_users_with_nonempty_variable_by_key(
+        db, ctor_id, environment=environment
+    )
     rows = list_variable_definitions_rows(db, ctor_id, include_archived=include_archived)
     return [
         VariableDefRowOut(
@@ -594,6 +854,8 @@ def crm_list_variable_defs(
             is_system=r.is_system,
             is_archived=r.is_archived,
             used_in_blocks_count=len(usage_map.get(r.key, set())),
+            used_in_scenarios_count=int(scen_counts.get(r.key, 0)),
+            contacts_with_value_count=int(value_counts.get(r.key, 0)),
             updated_at=r.updated_at.isoformat(),
         )
         for r in rows
@@ -628,6 +890,7 @@ def crm_variable_usage(
                     block_name=m[4],
                 )
             )
+    out.sort(key=lambda r: (r.scenario_name.lower(), str(r.block_type), r.block_name or ""))
     return out
 
 
@@ -635,6 +898,7 @@ def crm_variable_usage(
 def crm_create_variable(
     bot_id: int,
     body: VariableCreateBody,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -655,7 +919,9 @@ def crm_create_variable(
     if not res.ok or res.data is None:
         raise HTTPException(status_code=400, detail=getattr(res, "error", None) or "create")
     r = res.data
-    usage_map, _ = build_variable_usage_maps(db, ctor_id)
+    usage_map, meta = build_variable_usage_maps(db, ctor_id)
+    scen_counts = _scenario_counts_from_usage(usage_map, meta)
+    vc = count_users_with_nonempty_variable_by_key(db, ctor_id, environment=environment)
     return VariableDefRowOut(
         id=r.id,
         key=r.key,
@@ -664,6 +930,8 @@ def crm_create_variable(
         is_system=r.is_system,
         is_archived=r.is_archived,
         used_in_blocks_count=len(usage_map.get(r.key, set())),
+        used_in_scenarios_count=int(scen_counts.get(r.key, 0)),
+        contacts_with_value_count=int(vc.get(r.key, 0)),
         updated_at=r.updated_at.isoformat(),
     )
 
@@ -673,6 +941,7 @@ def crm_patch_variable(
     bot_id: int,
     var_key: str,
     body: VariablePatchBody,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -698,7 +967,9 @@ def crm_patch_variable(
         row.is_archived = body.is_archived
     db.commit()
     db.refresh(row)
-    usage_map, _ = build_variable_usage_maps(db, ctor_id)
+    usage_map, meta = build_variable_usage_maps(db, ctor_id)
+    scen_counts = _scenario_counts_from_usage(usage_map, meta)
+    vc = count_users_with_nonempty_variable_by_key(db, ctor_id, environment=environment)
     return VariableDefRowOut(
         id=row.id,
         key=row.key,
@@ -707,6 +978,8 @@ def crm_patch_variable(
         is_system=row.is_system,
         is_archived=row.is_archived,
         used_in_blocks_count=len(usage_map.get(row.key, set())),
+        used_in_scenarios_count=int(scen_counts.get(row.key, 0)),
+        contacts_with_value_count=int(vc.get(row.key, 0)),
         updated_at=row.updated_at.isoformat(),
     )
 
@@ -714,6 +987,7 @@ def crm_patch_variable(
 @router.get("/tags", response_model=List[TagDefRowOut])
 def crm_list_tags(
     bot_id: int,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -724,12 +998,15 @@ def crm_list_tags(
     rows = repo.list_tags_for_bot(ctor_id)
     if not rows:
         return []
-    counts = (
+    counts_query = (
         db.query(CtorBotUserTag.tag_id, func.count(CtorBotUserTag.id))
+        .join(CtorBotUser, CtorBotUser.id == CtorBotUserTag.bot_user_id)
+        .filter(CtorBotUser.bot_id == ctor_id)
         .filter(CtorBotUserTag.tag_id.in_([r.id for r in rows]))
-        .group_by(CtorBotUserTag.tag_id)
-        .all()
     )
+    if environment in ("dev", "prod"):
+        counts_query = counts_query.filter(CtorBotUser.environment == environment)
+    counts = counts_query.group_by(CtorBotUserTag.tag_id).all()
     cnt_map = {tid: c for tid, c in counts}
     return [
         TagDefRowOut(
@@ -765,6 +1042,8 @@ def crm_create_tag(
     if not res.ok or res.data is None:
         raise HTTPException(status_code=400, detail=getattr(res, "error", None) or "create tag")
     r = res.data
+    mark_crm_overview_dirty(ctor_id, "dev")
+    mark_crm_overview_dirty(ctor_id, "prod")
     return TagDefRowOut(
         id=r.id,
         key=r.key,
@@ -780,13 +1059,14 @@ def crm_patch_tag(
     bot_id: int,
     tag_key: str,
     body: TagPatchBody,
+    environment: CrmEnvironmentFilter = Query("prod"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     _require_write(bot_id, db, user)
     ctor_id = _ctor_dep(bot_id, db, user)
-    if validate_snake_case_key(tag_key.strip()):
-        raise HTTPException(status_code=400, detail=SNAKE_MSG)
+    if validate_tag_key(tag_key.strip()):
+        raise HTTPException(status_code=400, detail=TAG_KEY_MSG)
     repo = CtorTagsRepository(db)
     row = repo.get_tag_by_bot_and_key(ctor_id, tag_key.strip())
     if not row:
@@ -799,7 +1079,9 @@ def crm_patch_tag(
         row.description = body.description
     db.commit()
     db.refresh(row)
-    uc = repo.count_users_for_tag(row.id)
+    mark_crm_overview_dirty(ctor_id, "dev")
+    mark_crm_overview_dirty(ctor_id, "prod")
+    uc = repo.count_users_for_tag(row.id, environment=environment)
     return TagDefRowOut(
         id=row.id,
         key=row.key,
@@ -819,8 +1101,8 @@ def crm_delete_tag(
 ):
     _require_write(bot_id, db, user)
     ctor_id = _ctor_dep(bot_id, db, user)
-    if validate_snake_case_key(tag_key.strip()):
-        raise HTTPException(status_code=400, detail=SNAKE_MSG)
+    if validate_tag_key(tag_key.strip()):
+        raise HTTPException(status_code=400, detail=TAG_KEY_MSG)
     repo = CtorTagsRepository(db)
     row = repo.get_tag_by_bot_and_key(ctor_id, tag_key.strip())
     if not row:
@@ -832,6 +1114,8 @@ def crm_delete_tag(
         )
     repo.delete_tag_row(row)
     db.commit()
+    mark_crm_overview_dirty(ctor_id, "dev")
+    mark_crm_overview_dirty(ctor_id, "prod")
     return None
 
 
@@ -845,9 +1129,9 @@ def crm_users_by_tag(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    if validate_snake_case_key(tag_key.strip()):
-        raise HTTPException(status_code=400, detail=SNAKE_MSG)
     ctor_id = _ctor_dep(bot_id, db, user)
+    if validate_tag_key(tag_key.strip()):
+        raise HTTPException(status_code=400, detail=TAG_KEY_MSG)
     total, rows = list_bot_users(
         db,
         ctor_id,
@@ -885,8 +1169,8 @@ def crm_preview_sync(
     vs = VariableService(db)
     if body.last_input is not None:
         vs.set_user_variable(bu.id, "last_input", body.last_input, commit=True)
-        bu.last_message_at = datetime.utcnow()
         db.commit()
+    merged_vars: dict[str, Any] = dict(body.variables or {})
     for key, value in (body.variables or {}).items():
         if not isinstance(key, str):
             continue
@@ -896,15 +1180,23 @@ def crm_preview_sync(
         if validate_snake_case_key(k):
             continue
         vs.set_user_variable(bu.id, k, value, commit=True)
-    if body.status_value is not None and str(body.status_value).strip():
-        bu.status = str(body.status_value).strip()
-        db.commit()
+    if apply_contact_profile_from_variables(
+        bu, merged_vars, explicit_first_name=body.first_name
+    ):
+        db.add(bu)
+    if body.status_patch:
+        s = (body.status_value or "").strip()
+        bu.status = s if s else "active"
+        db.add(bu)
+    db.commit()
+    db.refresh(bu)
+    mark_crm_overview_dirty(ctor_id, "dev")
     ts = TagService(db)
     for tag in body.tags or []:
         t = (tag or "").strip()
         if not t:
             continue
-        if validate_snake_case_key(t):
+        if validate_tag_key(t):
             continue
         ts.add_tag_to_user(bu.id, t, assigned_by=f"user:{user.id}", commit=True)
     return None

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, List, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func, desc, asc
 
 from backend.dependencies.auth import get_current_user
@@ -167,7 +167,6 @@ async def list_market_items(
     page: int = Query(1, ge=1, description="Номер страницы"),
     page_size: int = Query(20, ge=1, le=100, description="Размер страницы"),
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """Получить список товаров на маркетплейсе"""
     query = db.query(MarketItem)
@@ -229,12 +228,39 @@ async def list_market_items(
     
     # Подсчет и пагинация
     total = query.count()
-    items = query.offset((page - 1) * page_size).limit(page_size).all()
-    
+    items = (
+        query.options(joinedload(MarketItem.seller))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    # Агрегация рейтингов одним запросом (без N+1)
+    item_ids = [item.id for item in items]
+    ratings_by_item: dict[int, tuple[float, int]] = {}
+    if item_ids:
+        rating_rows = (
+            db.query(
+                MarketReview.item_id.label("item_id"),
+                func.avg(MarketReview.rating).label("avg_rating"),
+                func.count(MarketReview.id).label("rating_count"),
+            )
+            .filter(
+                MarketReview.item_type == "market_item",
+                MarketReview.item_id.in_(item_ids),
+            )
+            .group_by(MarketReview.item_id)
+            .all()
+        )
+        ratings_by_item = {
+            int(row.item_id): (round(float(row.avg_rating), 2), int(row.rating_count))
+            for row in rating_rows
+        }
+
     # Преобразование в схемы
     result_items = []
     for item in items:
-        avg_rating, rating_count = calculate_item_rating(db, item.id)
+        avg_rating, rating_count = ratings_by_item.get(item.id, (None, 0))
         item_dict = {
             **item.__dict__,
             "seller": get_seller_info(item.seller),

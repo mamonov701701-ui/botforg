@@ -544,3 +544,27 @@ class CtorBotUserEvent(Base):
         back_populates="events",
         foreign_keys=[session_id],
     )
+
+
+class CtorCrmOverviewAggregate(Base):
+    __tablename__ = "ctor_crm_overview_aggregates"
+    __table_args__ = (
+        UniqueConstraint(
+            "bot_id",
+            "environment",
+            name="uq_ctor_crm_overview_aggregates_bot_env",
+        ),
+        Index("ix_ctor_crm_overview_aggregates_bot_env", "bot_id", "environment"),
+        Index("ix_ctor_crm_overview_aggregates_computed_at", "computed_at"),
+        {"extend_existing": True},
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    bot_id = Column(
+        Integer,
+        ForeignKey("ctor_bots.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    environment = Column(String(16), nullable=False, default="prod", server_default="prod")
+    payload_json = Column(JSON, nullable=False)
+    computed_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)

@@ -17,7 +17,8 @@ from backend.services.constructor.types import (
     err_result,
     ok_result,
 )
-from backend.services.constructor.validation import validate_snake_case_key
+from backend.services.constructor.validation import validate_tag_key
+from backend.services.bot_crm.overview_aggregate_service import mark_crm_overview_dirty
 
 
 class TagService:
@@ -34,7 +35,7 @@ class TagService:
         *,
         commit: bool = False,
     ) -> ServiceResult[CtorBotTag]:
-        msg = validate_snake_case_key(tag_key)
+        msg = validate_tag_key(tag_key)
         if msg:
             return err_result(ERR_VALIDATION, msg)
         k = tag_key.strip()
@@ -74,7 +75,7 @@ class TagService:
         assigned_by: Optional[str] = None,
         commit: bool = True,
     ) -> ServiceResult[TagView]:
-        msg = validate_snake_case_key(tag_key)
+        msg = validate_tag_key(tag_key)
         if msg:
             return err_result(ERR_VALIDATION, msg)
 
@@ -108,6 +109,7 @@ class TagService:
         )
         if commit:
             self.db.commit()
+            mark_crm_overview_dirty(bu.bot_id, bu.environment)
         return ok_result(TagView(id=tag.id, key=tag.key, label=tag.label, color=tag.color))
 
     def remove_tag_from_user(
@@ -117,7 +119,7 @@ class TagService:
         *,
         commit: bool = True,
     ) -> ServiceResult[None]:
-        msg = validate_snake_case_key(tag_key)
+        msg = validate_tag_key(tag_key)
         if msg:
             return err_result(ERR_VALIDATION, msg)
 
@@ -145,4 +147,5 @@ class TagService:
         )
         if commit:
             self.db.commit()
+            mark_crm_overview_dirty(bu.bot_id, bu.environment)
         return ok_result(None)

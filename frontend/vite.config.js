@@ -4,6 +4,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const backendPort = Number(process.env.BOTFORG_BACKEND_PORT || '8002');
+const backendTarget = `http://localhost:${backendPort}`;
 
 export default defineConfig({
   resolve: {
@@ -42,7 +44,7 @@ export default defineConfig({
   server: {
     // ВАЖНО: dev-порты синхронизированы с docs/DEV_PORTS.md
     // Frontend: http://localhost:5173
-    // Backend API (см. proxy ниже): http://localhost:8001
+    // Backend API (см. proxy ниже): http://localhost:${BOTFORG_BACKEND_PORT|8002}
     host: '0.0.0.0',
     port: 5173,
     // Иначе при занятом 5173 Vite уходит на 5174, а start-dev.ps1 и документация ждут только 5173
@@ -53,62 +55,62 @@ export default defineConfig({
     },
     proxy: {
       '/blocks': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/auth': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/me': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/api': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/bots': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/scenarios': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/analytics': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/chat': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/legal': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/privacy': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/plans': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
       '/media': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },

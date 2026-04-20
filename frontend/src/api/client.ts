@@ -2,7 +2,52 @@
  * Unified HTTP client with timeout, error handling, and credentials
  */
 
-const API_TIMEOUT = 30000; // 30 seconds - увеличен для отладки
+const API_TIMEOUT = 45000;
+const MAX_CONCURRENT_REQUESTS = 3;
+const GET_RETRY_DELAY_MS = 250;
+const GET_RESPONSE_CACHE_TTL_MS = 60_000;
+let activeRequests = 0;
+const requestQueue: Array<() => void> = [];
+const getResponseCache = new Map<string, { value: any; expireAt: number }>();
+
+function hashString(input: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16);
+}
+
+function currentUserScope(): string {
+  const token = localStorage.getItem('auth_token');
+  if (!token) return 'guest';
+  return `t:${hashString(token)}`;
+}
+
+function normalizePath(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function isAuthOrIdentityGet(path: string): boolean {
+  const normalized = normalizePath(path);
+  return (
+    normalized === '/me' ||
+    normalized.startsWith('/me?') ||
+    normalized.startsWith('/me/') ||
+    normalized.startsWith('/auth/') ||
+    normalized === '/auth' ||
+    normalized.startsWith('/legal/consent/status')
+  );
+}
+
+function getScopedCacheKey(path: string): string {
+  return `${currentUserScope()}:${normalizePath(path)}`;
+}
+
+export function clearGetResponseCache(): void {
+  getResponseCache.clear();
+}
 
 export class ApiError extends Error {
   constructor(
@@ -14,9 +59,34 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path: string, options: RequestInit = {}): Promise<any> {
+type RequestOptions = RequestInit & { timeoutMs?: number };
+
+function runWithLimiter<T>(task: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      activeRequests += 1;
+      task()
+        .then(resolve)
+        .catch(reject)
+        .finally(() => {
+          activeRequests = Math.max(0, activeRequests - 1);
+          const next = requestQueue.shift();
+          if (next) next();
+        });
+    };
+    if (activeRequests < MAX_CONCURRENT_REQUESTS) {
+      run();
+      return;
+    }
+    requestQueue.push(run);
+  });
+}
+
+async function request(path: string, options: RequestOptions = {}): Promise<any> {
+  const { timeoutMs, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT);
+  const requestTimeoutMs = timeoutMs ?? API_TIMEOUT;
+  const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 
   try {
     // Всегда используем прокси (не baseURL)
@@ -49,12 +119,14 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
       }
     }
 
-    const response = await fetch(url, {
-      ...options,
-      credentials: 'include',
-      signal: controller.signal,
-      headers,
-    });
+    const response = await runWithLimiter(() =>
+      fetch(url, {
+        ...fetchOptions,
+        credentials: 'include',
+        signal: controller.signal,
+        headers,
+      })
+    );
 
     // Логируем ответ для отладки
     if (import.meta.env.DEV && !response.ok) {
@@ -128,7 +200,49 @@ async function request(path: string, options: RequestInit = {}): Promise<any> {
 }
 
 export const get = (path: string, options?: RequestInit) => {
-  return request(path, { ...options, method: 'GET' });
+  const cacheDisabled = isAuthOrIdentityGet(path);
+  const cacheKey = getScopedCacheKey(path);
+  return request(path, { ...options, method: 'GET' })
+    .then(data => {
+      if (!cacheDisabled) {
+        getResponseCache.set(cacheKey, {
+          value: data,
+          expireAt: Date.now() + GET_RESPONSE_CACHE_TTL_MS,
+        });
+      }
+      return data;
+    })
+    .catch(async error => {
+      // Retry only idempotent GET and only for transport-level unavailability.
+      if (error instanceof ApiError && error.status === 0) {
+        await new Promise(resolve => setTimeout(resolve, GET_RETRY_DELAY_MS));
+        try {
+          const retried = await request(path, { ...options, method: 'GET' });
+          if (!cacheDisabled) {
+            getResponseCache.set(cacheKey, {
+              value: retried,
+              expireAt: Date.now() + GET_RESPONSE_CACHE_TTL_MS,
+            });
+          }
+          return retried;
+        } catch (retryError) {
+          if (!cacheDisabled) {
+            const cached = getResponseCache.get(cacheKey);
+            if (cached && cached.expireAt > Date.now()) {
+              return cached.value;
+            }
+          }
+          throw retryError;
+        }
+      }
+      if (!cacheDisabled) {
+        const cached = getResponseCache.get(cacheKey);
+        if (cached && cached.expireAt > Date.now()) {
+          return cached.value;
+        }
+      }
+      throw error;
+    });
 };
 
 export const post = (path: string, body?: any, options?: RequestInit) => {

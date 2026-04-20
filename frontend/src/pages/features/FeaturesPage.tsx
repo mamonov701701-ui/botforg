@@ -12,12 +12,14 @@ import {
   LEARNING_BLOCK_TITLE,
 } from './blockGuideRu';
 import { LEARN_CATALOG_FALLBACK } from './learnCatalogFallback';
+import CrmPublicTab from './CrmPublicTab';
 
-type TabId = 'overview' | 'learning' | 'blocks' | 'videos' | 'policy';
+type TabId = 'overview' | 'learning' | 'crm' | 'blocks' | 'videos' | 'policy';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'overview', label: 'Обзор' },
   { id: 'learning', label: 'Обучение' },
+  { id: 'crm', label: 'CRM' },
   { id: 'blocks', label: 'Блоки редактора' },
   { id: 'videos', label: 'Видеоуроки' },
   { id: 'policy', label: 'Политика' },
@@ -272,7 +274,7 @@ const BLOCK_SORT_ORDER = [...SIMULATOR_SUPPORTED_BLOCK_IDS];
 export default function FeaturesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = (searchParams.get('tab') || '') as TabId;
-  const initialTab: TabId = ['overview', 'learning', 'blocks', 'videos', 'policy'].includes(
+  const initialTab: TabId = ['overview', 'learning', 'crm', 'blocks', 'videos', 'policy'].includes(
     tabFromUrl
   )
     ? tabFromUrl
@@ -289,7 +291,7 @@ export default function FeaturesPage() {
 
   useEffect(() => {
     const t = (searchParams.get('tab') || '') as TabId;
-    if (['overview', 'learning', 'blocks', 'videos', 'policy'].includes(t)) {
+    if (['overview', 'learning', 'crm', 'blocks', 'videos', 'policy'].includes(t)) {
       setTab(t);
     }
   }, [searchParams]);
@@ -399,8 +401,9 @@ export default function FeaturesPage() {
         <p className="text-sm uppercase tracking-wide text-[var(--accent)] mb-2">БотФорг</p>
         <h1 className="text-3xl md:text-4xl font-bold font-heading mb-3">Возможности платформы</h1>
         <p className="text-[var(--text-muted)] text-lg max-w-2xl mb-10">
-          Один разобранный раздел: как устроен редактор, из чего состоят сценарии и как пользоваться
-          блоками — без отдельного сайта документации.
+          Как устроен редактор и блоки сценария, отдельный продуктовый обзор{' '}
+          <strong className="text-[var(--text)]">CRM</strong> по аудитории бота — на одной странице,
+          без отдельного сайта документации.
         </p>
 
         <div
@@ -450,6 +453,13 @@ export default function FeaturesPage() {
               </Link>
               <button
                 type="button"
+                onClick={() => setTabAndUrl('crm')}
+                className="text-sm text-[var(--accent)] hover:underline font-medium"
+              >
+                CRM по аудитории бота →
+              </button>
+              <button
+                type="button"
                 onClick={() => setTabAndUrl('blocks')}
                 className="text-sm text-[var(--accent)] hover:underline font-medium"
               >
@@ -458,6 +468,8 @@ export default function FeaturesPage() {
             </div>
           </div>
         )}
+
+        {tab === 'crm' && <CrmPublicTab />}
 
         {tab === 'learning' && (
           <div className="space-y-8 text-[var(--text-muted)] max-w-3xl">

@@ -8,7 +8,7 @@ export type VariableDataTypeValue =
   | 'phone'
   | 'email'
   | 'date';
-export type ChannelValue = 'telegram' | 'whatsapp' | 'webchat' | 'max';
+export type ChannelValue = 'telegram' | 'whatsapp' | 'webchat' | 'max' | 'preview';
 
 export function getMessageFormatLabel(value: MessageFormatValue): string {
   switch (value) {
@@ -58,6 +58,8 @@ export function getChannelLabel(value: string): string {
       return 'Веб-чат';
     case 'max':
       return 'MAX';
+    case 'preview':
+      return 'Предпросмотр';
     default:
       return value || '—';
   }

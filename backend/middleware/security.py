@@ -9,10 +9,12 @@
 
 import json
 import logging
+import re
 import time
 from collections import defaultdict
 from http.cookies import SimpleCookie
 from typing import Dict
+from urllib.parse import parse_qs
 
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -25,6 +27,7 @@ logger = logging.getLogger(__name__)
 pd_logger = logging.getLogger("pd_access")
 
 _PD_ACCESS_PREFIXES = ("/me", "/legal/consent", "/privacy")
+_CRM_BOT_PATH_RE = re.compile(r"^/bots/(?P<bot_id>\d+)/crm(?:/|$)")
 
 _SECURITY_RESPONSE_HEADERS: list[tuple[bytes, bytes]] = [
     (b"x-frame-options", b"DENY"),
@@ -103,8 +106,10 @@ class SecurityASGIMiddleware:
 
         req_headers = Headers(scope=scope)
         path = scope["path"] or ""
+        raw_query = (scope.get("query_string") or b"").decode("utf-8", errors="ignore")
         method = scope["method"]
         client_ip = self._client_ip(scope, req_headers)
+        started_at = time.perf_counter()
 
         if settings.TESTING:
             async def send_testing(message: dict) -> None:
@@ -112,7 +117,8 @@ class SecurityASGIMiddleware:
                     mh = MutableHeaders(raw=message["headers"])
                     for k, v in _SECURITY_RESPONSE_HEADERS:
                         mh.append(k.decode(), v.decode())
-                    self._log_after_start(method, path, message["status"], client_ip)
+                    duration_ms = int((time.perf_counter() - started_at) * 1000)
+                    self._log_after_start(method, path, raw_query, message["status"], client_ip, duration_ms)
                     self._maybe_pd(method, path, req_headers, message["status"])
                 await send(message)
 
@@ -134,7 +140,8 @@ class SecurityASGIMiddleware:
                 for k, v in _SECURITY_RESPONSE_HEADERS:
                     mh.append(k.decode(), v.decode())
                 status = message["status"]
-                self._log_after_start(method, path, status, client_ip)
+                duration_ms = int((time.perf_counter() - started_at) * 1000)
+                self._log_after_start(method, path, raw_query, status, client_ip, duration_ms)
                 self._maybe_pd(method, path, req_headers, status)
             await send(message)
 
@@ -143,11 +150,49 @@ class SecurityASGIMiddleware:
     def _log_request(self, method: str, path: str, client_ip: str) -> None:
         logger.info("Request: %s %s from %s", method, path, client_ip)
 
-    def _log_after_start(self, method: str, path: str, status: int, client_ip: str) -> None:
+    def _extract_crm_context(self, path: str, raw_query: str) -> tuple[str, str]:
+        bot_id = "-"
+        m = _CRM_BOT_PATH_RE.match(path or "")
+        if m and m.group("bot_id"):
+            bot_id = m.group("bot_id")
+        env = "-"
+        try:
+            query = parse_qs(raw_query or "", keep_blank_values=False)
+            raw_env = (query.get("environment") or [None])[0]
+            if raw_env:
+                env = str(raw_env)
+        except Exception:
+            env = "-"
+        return bot_id, env
+
+    def _log_after_start(
+        self,
+        method: str,
+        path: str,
+        raw_query: str,
+        status: int,
+        client_ip: str,
+        duration_ms: int,
+    ) -> None:
+        bot_id, env = self._extract_crm_context(path, raw_query)
+        structured = (
+            "http_response path=%s method=%s status=%s bot_id=%s environment=%s duration_ms=%s client_ip=%s"
+        )
         if status >= 400:
-            logger.warning("Response: %s to %s (%s %s)", status, client_ip, method, path)
+            logger.warning(structured, path, method, status, bot_id, env, duration_ms, client_ip)
         else:
-            logger.info("Response: %s to %s (%s %s)", status, client_ip, method, path)
+            logger.info(structured, path, method, status, bot_id, env, duration_ms, client_ip)
+        if status >= 500:
+            logger.error(
+                "http_5xx path=%s method=%s status=%s bot_id=%s environment=%s duration_ms=%s client_ip=%s",
+                path,
+                method,
+                status,
+                bot_id,
+                env,
+                duration_ms,
+                client_ip,
+            )
 
     def _maybe_pd(self, method: str, path: str, headers: Headers, status: int) -> None:
         if not any(path == p or path.startswith(p + "/") for p in _PD_ACCESS_PREFIXES):

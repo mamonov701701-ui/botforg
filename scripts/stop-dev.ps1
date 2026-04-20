@@ -1,5 +1,5 @@
 ﻿#requires -Version 5.1
-# Stop dev servers: free ports 8001, 5173, 5174 (BotForg)
+# Stop dev servers: free ports 8002, 5173, 5174 (BotForg)
 
 $ErrorActionPreference = 'Continue'
 
@@ -21,8 +21,13 @@ function Stop-ProcessOnPort {
     }
 }
 
-Write-Host 'Stopping ports 8001, 5173, 5174...'
-foreach ($p in 8001, 5173, 5174) {
+$LegacyBackendPort = 8001
+$BackendPort = 8002
+$FrontendPort = 5173
+$FrontendAltPort = 5174
+
+Write-Host ("Stopping ports $LegacyBackendPort, $BackendPort, $FrontendPort, $FrontendAltPort...")
+foreach ($p in $LegacyBackendPort, $BackendPort, $FrontendPort, $FrontendAltPort) {
     Stop-ProcessOnPort -Port $p
 }
 Write-Host 'Done.'

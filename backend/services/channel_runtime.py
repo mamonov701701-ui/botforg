@@ -13,9 +13,10 @@ from backend.models.bot_channel import BotChannelConnection
 from backend.models.scenario import SCENARIO_STATUS_PUBLISHED, Scenario
 from backend.services.bot_crm.crm_service import get_or_create_bot_user
 from backend.services.constructor.tag_service import TagService
-from backend.services.constructor.validation import validate_snake_case_key
+from backend.services.constructor.validation import validate_snake_case_key, validate_tag_key
 from backend.services.constructor.variable_service import VariableService
 from backend.services.message_template.runtime_outbound import render_outbound_message_text
+from backend.services.bot_crm.overview_aggregate_service import mark_crm_overview_dirty
 from backend.services.scenario_flow.input_block import (
     apply_input_success_to_ctor_user,
     pick_error_target_id,
@@ -74,6 +75,22 @@ def _next_edges(edges: list[dict[str, Any]], node_id: str) -> list[dict[str, Any
 
 def _find_node(nodes: list[dict[str, Any]], node_id: str) -> Optional[dict[str, Any]]:
     return next((n for n in nodes if str(n.get("id")) == node_id), None)
+
+
+def _has_real_user_input(normalized: NormalizedUpdate) -> bool:
+    text = str(normalized.text or "").strip()
+    if text:
+        return True
+    raw = normalized.raw if isinstance(normalized.raw, dict) else {}
+    # Единый критерий user input: callback/button press из входящего апдейта.
+    callback_data = (
+        raw.get("callback_data")
+        or raw.get("data")
+        or ((raw.get("callback_query") or {}).get("data") if isinstance(raw.get("callback_query"), dict) else None)
+    )
+    if isinstance(callback_data, str) and callback_data.strip():
+        return True
+    return False
 
 
 def _send_node(
@@ -140,7 +157,7 @@ def _apply_action(
     if mode == "tag":
         action = str(settings.get("tagAction") or "").strip()
         tag = str(settings.get("tag") or "").strip()
-        if not tag or validate_snake_case_key(tag):
+        if not tag or validate_tag_key(tag):
             return
         if action == "add":
             ts.add_tag_to_user(ctor_user_id, tag, assigned_by="channel_runtime", commit=True)
@@ -157,11 +174,13 @@ def _apply_action(
                 if user:
                     user.status = status_value
                     db.commit()
+                    mark_crm_overview_dirty(user.bot_id, user.environment)
         elif action == "clear":
             user = vs._repo.get_bot_user(ctor_user_id)
             if user:
                 user.status = "active"
                 db.commit()
+                mark_crm_overview_dirty(user.bot_id, user.environment)
 
 
 def process_channel_update(
@@ -188,8 +207,10 @@ def process_channel_update(
         username=str(normalized.user_id) if normalized.user_id else None,
         commit=True,
     )
-    user.last_message_at = datetime.now(timezone.utc)
-    db.commit()
+    if _has_real_user_input(normalized):
+        user.last_message_at = datetime.now(timezone.utc)
+        db.commit()
+        mark_crm_overview_dirty(ctor_bot_id, "prod")
 
     scenario = _find_scenario_for_bot(db, bot.id)
     if not scenario:

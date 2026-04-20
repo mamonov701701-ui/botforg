@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -9,51 +9,74 @@ interface Props {
 }
 
 export default function AuthGate({ children }: Props) {
-  const { user, loading, setUser, setLoading } = useAuthStore();
+  const { user, loading, authStatus, setUser, setLoading, setAuthStatus } = useAuthStore();
   const { openAuth } = useUiStore();
   const location = useLocation();
+  const bootstrappedRef = useRef(false);
+  const retryTimerRef = useRef<number | null>(null);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadUser() {
-      // Если пользователь уже установлен, не перезагружаем
-      if (user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const userData = await getMe();
-        if (userData) {
-          setUser(userData);
-        } else {
-          // Если getMe вернул null (401), это нормально - пользователь не авторизован
-          setUser(null);
-        }
-      } catch (error: any) {
-        // Игнорируем ошибки сети/таймаута при первой загрузке
-        // Пользователь может быть не авторизован или сервер недоступен
-        if (error.status === 401 || error.status === 0) {
-          setUser(null);
-        } else {
-          console.error('Failed to load user:', error);
-          setUser(null);
-        }
-      } finally {
-        setLoading(false);
-      }
+  const loadUser = useCallback(async () => {
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
     }
-
-    loadUser();
-  }, [setUser, setLoading, user]);
+    setLoading(true);
+    setBootstrapError(null);
+    try {
+      const userData = await getMe();
+      if (userData) {
+        setUser(userData);
+        setAuthStatus('authenticated');
+      } else {
+        setUser(null);
+        setAuthStatus('guest');
+      }
+    } catch (error: any) {
+      // Временные сетевые/timeout ошибки НЕ переводят в guest и НЕ открывают login.
+      if (error?.status === 0) {
+        setAuthStatus('unknown');
+        setBootstrapError('Сервер временно недоступен. Повторяем проверку сессии...');
+        retryTimerRef.current = window.setTimeout(() => {
+          loadUser();
+        }, 3000);
+      } else {
+        setUser(null);
+        setAuthStatus('guest');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [setAuthStatus, setLoading, setUser]);
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (bootstrappedRef.current) return;
+    if (user) {
+      setLoading(false);
+      setAuthStatus('authenticated');
+      bootstrappedRef.current = true;
+      return;
+    }
+    bootstrappedRef.current = true;
+    loadUser();
+  }, [loadUser, setAuthStatus, setLoading, user]);
+
+  useEffect(() => {
+    return () => {
+      if (retryTimerRef.current !== null) {
+        window.clearTimeout(retryTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loading && !user && authStatus === 'guest') {
       // Open modal instead of showing SignIn page
       openAuth(location.pathname + location.search);
     }
-  }, [loading, user, openAuth, location]);
+  }, [loading, user, authStatus, openAuth, location]);
 
-  if (loading) {
+  if (loading || authStatus === 'unknown') {
     return (
       <div
         style={{
@@ -64,7 +87,7 @@ export default function AuthGate({ children }: Props) {
           background: 'var(--bg)',
         }}
       >
-        <div style={{ color: 'var(--text)' }}>Загрузка...</div>
+        <div style={{ color: 'var(--text)' }}>{bootstrapError || 'Загрузка...'}</div>
       </div>
     );
   }

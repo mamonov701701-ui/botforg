@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import './styles/theme.css';
 import './output.css';
 import SiteLayout from './layouts/SiteLayout';
@@ -35,10 +35,31 @@ import PlatformAnalyticsPage from './features/dashboard/pages/PlatformAnalyticsP
 import UserDetailPage from './features/dashboard/pages/UserDetailPage';
 import MessagesPage from './features/dashboard/pages/MessagesPage';
 import BotCrmLayout from './features/dashboard/crm/BotCrmLayout';
-import BotCrmUsersPage from './features/dashboard/crm/BotCrmUsersPage';
-import BotCrmUserDetailPage from './features/dashboard/crm/BotCrmUserDetailPage';
-import BotCrmVariablesPage from './features/dashboard/crm/BotCrmVariablesPage';
+import BotCrmOverviewPage from './features/dashboard/crm/BotCrmOverviewPage';
+import BotCrmContactsPage from './features/dashboard/crm/BotCrmContactsPage';
+import BotCrmContactDetailPage from './features/dashboard/crm/BotCrmContactDetailPage';
+import BotCrmFieldsPage from './features/dashboard/crm/BotCrmFieldsPage';
 import BotCrmTagsPage from './features/dashboard/crm/BotCrmTagsPage';
+import BotCrmStatusesPage from './features/dashboard/crm/BotCrmStatusesPage';
+import BotWorkspaceLayout from './features/dashboard/botWorkspace/BotWorkspaceLayout';
+import BotWorkspaceOverviewPage from './features/dashboard/botWorkspace/BotWorkspaceOverviewPage';
+import BotWorkspaceScenariosPage from './features/dashboard/botWorkspace/BotWorkspaceScenariosPage';
+import BotWorkspaceAnalyticsPage from './features/dashboard/botWorkspace/BotWorkspaceAnalyticsPage';
+import BotWorkspaceSettingsPage from './features/dashboard/botWorkspace/BotWorkspaceSettingsPage';
+import CrmKnowledgeGuidePage from './pages/help/CrmKnowledgeGuidePage';
+function CrmLegacyUsersList() {
+  const { botId } = useParams();
+  const loc = useLocation();
+  return <Navigate to={`/dashboard/bots/${botId}/crm/contacts${loc.search}`} replace />;
+}
+
+function CrmLegacyUserDetail() {
+  const { botId, ctorUserId } = useParams();
+  const loc = useLocation();
+  return (
+    <Navigate to={`/dashboard/bots/${botId}/crm/contacts/${ctorUserId}${loc.search}`} replace />
+  );
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -105,13 +126,26 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="messages" element={<MessagesPage />} />
             <Route path="bf-team" element={<BFTeamPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="help/crm" element={<CrmKnowledgeGuidePage />} />
 
-            <Route path="bots/:botId/crm" element={<BotCrmLayout />}>
-              <Route index element={<Navigate to="users" replace />} />
-              <Route path="users" element={<BotCrmUsersPage />} />
-              <Route path="users/:ctorUserId" element={<BotCrmUserDetailPage />} />
-              <Route path="variables" element={<BotCrmVariablesPage />} />
-              <Route path="tags" element={<BotCrmTagsPage />} />
+            <Route path="bots/:botId" element={<BotWorkspaceLayout />}>
+              <Route index element={<Navigate to="overview" replace />} />
+              <Route path="overview" element={<BotWorkspaceOverviewPage />} />
+              <Route path="scenarios" element={<BotWorkspaceScenariosPage />} />
+              <Route path="analytics" element={<BotWorkspaceAnalyticsPage />} />
+              <Route path="settings" element={<BotWorkspaceSettingsPage />} />
+              <Route path="crm" element={<BotCrmLayout />}>
+                <Route index element={<Navigate to="overview" replace />} />
+                <Route path="overview" element={<BotCrmOverviewPage />} />
+                <Route path="contacts" element={<BotCrmContactsPage />} />
+                <Route path="contacts/:ctorUserId" element={<BotCrmContactDetailPage />} />
+                <Route path="fields" element={<BotCrmFieldsPage />} />
+                <Route path="tags" element={<BotCrmTagsPage />} />
+                <Route path="statuses" element={<BotCrmStatusesPage />} />
+                <Route path="users" element={<CrmLegacyUsersList />} />
+                <Route path="users/:ctorUserId" element={<CrmLegacyUserDetail />} />
+                <Route path="variables" element={<Navigate to="fields" replace />} />
+              </Route>
             </Route>
 
             {/* Platform admin routes */}

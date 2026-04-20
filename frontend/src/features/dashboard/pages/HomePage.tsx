@@ -213,11 +213,10 @@ export default function HomePage() {
     async function loadData() {
       try {
         setLoading(true);
-        const [dashboard, bots, recentEvents] = await Promise.all([
-          getDashboardData(7),
-          getBots(),
-          getRecentEvents(10),
-        ]);
+        // Снижаем пиковую нагрузку: запросы выполняются последовательно.
+        const dashboard = await getDashboardData(7);
+        const bots = await getBots();
+        const recentEvents = await getRecentEvents(10);
         setDashboardData(dashboard);
         setBotsData(bots);
 

@@ -4,6 +4,7 @@
  */
 import api from './client';
 export type CrmEnvironmentFilter = 'prod' | 'dev' | 'all';
+export const SESSION_FILTER_NONE = '__none__';
 
 export const SNAKE_KEY_RE = /^[a-z][a-z0-9_]*$/;
 
@@ -11,6 +12,18 @@ export function validateSnakeKey(key: string): string | undefined {
   const t = key.trim();
   if (!t) return 'Введите ключ';
   if (!SNAKE_KEY_RE.test(t)) return 'Только snake_case: a-z, цифры, _, с буквы';
+  return undefined;
+}
+
+/** Ключ тега CRM: буква в начале (в т.ч. кириллица), далее буквы, цифры, _. */
+export function validateTagKey(key: string): string | undefined {
+  const t = key.trim();
+  if (!t) return 'Введите ключ';
+  if (t.length > 128) return 'Слишком длинный ключ';
+  if (!/^[\p{L}]/u.test(t)) return 'Ключ должен начинаться с буквы';
+  if (!/^[\p{L}][\p{L}\p{N}_]*$/u.test(t)) {
+    return 'Только буквы, цифры и подчёркивание';
+  }
   return undefined;
 }
 
@@ -33,6 +46,8 @@ export interface CrmUserListItem {
   current_block_id?: number | null;
   current_block_label?: string | null;
   session_status?: string | null;
+  /** Статус контакта (CtorBotUser.status), задаётся сценарием «Данные пользователя» и CRM. */
+  contact_status?: string;
   environment: string;
   created_at: string;
 }
@@ -102,6 +117,9 @@ export interface CrmVariableDef {
   is_system: boolean;
   is_archived: boolean;
   used_in_blocks_count: number;
+  used_in_scenarios_count: number;
+  /** Сколько контактов имеют непустое значение этого поля. */
+  contacts_with_value_count: number;
   updated_at: string;
 }
 
@@ -122,6 +140,70 @@ export interface CrmTagDef {
   updated_at: string;
 }
 
+export interface CrmOverviewTagRow {
+  key: string;
+  label?: string | null;
+  contacts_count: number;
+}
+
+export interface CrmOverviewStatusRow {
+  status: string;
+  contacts_count: number;
+}
+
+export interface CrmOverviewProfileCompleteness {
+  total_contacts: number;
+  with_name: number;
+  with_phone: number;
+  with_email: number;
+  fully_filled: number;
+}
+
+export interface CrmOverviewScenarioProgress {
+  in_progress: number;
+  completed: number;
+}
+
+export interface CrmOverviewTrendValue {
+  current: number;
+  previous: number;
+  delta: number;
+}
+
+export interface CrmOverviewTrends {
+  total_contacts: CrmOverviewTrendValue;
+  new_contacts_7d: CrmOverviewTrendValue;
+  active_contacts_7d: CrmOverviewTrendValue;
+  sleeping_contacts_7d: CrmOverviewTrendValue;
+  sleeping_contacts_30d: CrmOverviewTrendValue;
+}
+
+export interface CrmOverview {
+  total_contacts: number;
+  new_contacts_7d: number;
+  active_contacts_7d: number;
+  sleeping_contacts_7d: number;
+  sleeping_contacts_30d: number;
+  profile_completeness: CrmOverviewProfileCompleteness;
+  top_tags: CrmOverviewTagRow[];
+  statuses: CrmOverviewStatusRow[];
+  scenario_progress: CrmOverviewScenarioProgress;
+  trends: CrmOverviewTrends;
+}
+
+export interface CrmStatusSummaryRow {
+  name: string;
+  count: number;
+  dialog_param?: string | null;
+}
+
+export interface CrmStatusesSummary {
+  contact_statuses: CrmStatusSummaryRow[];
+  session_statuses: CrmStatusSummaryRow[];
+}
+
+export type CrmUserListSort = 'activity' | 'name' | 'created';
+
 export async function crmListUsers(
   botId: number,
   params?: {
@@ -132,6 +214,11 @@ export async function crmListUsers(
     tag_keys?: string;
     active_since?: string;
     active_until?: string;
+    contact_status?: string;
+    session_status?: string;
+    has_phone?: boolean;
+    has_email?: boolean;
+    sort?: CrmUserListSort;
     environment?: CrmEnvironmentFilter;
   }
 ): Promise<CrmUserListResponse> {
@@ -143,9 +230,30 @@ export async function crmListUsers(
   if (params?.tag_keys) q.set('tag_keys', params.tag_keys);
   if (params?.active_since) q.set('active_since', params.active_since);
   if (params?.active_until) q.set('active_until', params.active_until);
+  if (params?.contact_status) q.set('contact_status', params.contact_status);
+  if (params?.session_status) q.set('session_status', params.session_status);
+  if (params?.has_phone === true) q.set('has_phone', 'true');
+  if (params?.has_phone === false) q.set('has_phone', 'false');
+  if (params?.has_email === true) q.set('has_email', 'true');
+  if (params?.has_email === false) q.set('has_email', 'false');
+  if (params?.sort) q.set('sort', params.sort);
   if (params?.environment) q.set('environment', params.environment);
   const suffix = q.toString() ? `?${q}` : '';
   return api.get(`/bots/${botId}/crm/users${suffix}`);
+}
+
+export async function crmOverview(
+  botId: number,
+  environment?: CrmEnvironmentFilter
+): Promise<CrmOverview> {
+  return api.get(withEnvironment(`/bots/${botId}/crm/overview`, environment));
+}
+
+export async function crmStatusesSummary(
+  botId: number,
+  environment?: CrmEnvironmentFilter
+): Promise<CrmStatusesSummary> {
+  return api.get(withEnvironment(`/bots/${botId}/crm/statuses/summary`, environment));
 }
 
 function withEnvironment(path: string, environment?: CrmEnvironmentFilter): string {
@@ -233,11 +341,15 @@ export async function crmUserEvents(
 
 export async function crmListVariableDefs(
   botId: number,
-  includeArchived = false
+  includeArchived = false,
+  environment?: CrmEnvironmentFilter
 ): Promise<CrmVariableDef[]> {
-  return api.get(
-    `/bots/${botId}/crm/variables?include_archived=${includeArchived ? 'true' : 'false'}`
-  );
+  const q = new URLSearchParams();
+  q.set('include_archived', includeArchived ? 'true' : 'false');
+  if (environment) {
+    q.set('environment', environment);
+  }
+  return api.get(`/bots/${botId}/crm/variables?${q.toString()}`);
 }
 
 export async function crmVariableUsage(
@@ -255,9 +367,10 @@ export async function crmCreateVariable(
     data_type?: string;
     scope?: string;
     description?: string;
-  }
+  },
+  environment?: CrmEnvironmentFilter
 ): Promise<CrmVariableDef> {
-  return api.post(`/bots/${botId}/crm/variables`, body);
+  return api.post(withEnvironment(`/bots/${botId}/crm/variables`, environment), body);
 }
 
 export async function crmPatchVariable(
@@ -268,13 +381,20 @@ export async function crmPatchVariable(
     description?: string;
     data_type?: string;
     is_archived?: boolean;
-  }
+  },
+  environment?: CrmEnvironmentFilter
 ): Promise<CrmVariableDef> {
-  return api.patch(`/bots/${botId}/crm/variables/${encodeURIComponent(varKey)}`, body);
+  return api.patch(
+    withEnvironment(`/bots/${botId}/crm/variables/${encodeURIComponent(varKey)}`, environment),
+    body
+  );
 }
 
-export async function crmListTags(botId: number): Promise<CrmTagDef[]> {
-  return api.get(`/bots/${botId}/crm/tags`);
+export async function crmListTags(
+  botId: number,
+  environment?: CrmEnvironmentFilter
+): Promise<CrmTagDef[]> {
+  return api.get(withEnvironment(`/bots/${botId}/crm/tags`, environment));
 }
 
 export async function crmCreateTag(
@@ -287,9 +407,13 @@ export async function crmCreateTag(
 export async function crmPatchTag(
   botId: number,
   tagKey: string,
-  body: { label?: string; color?: string; description?: string }
+  body: { label?: string; color?: string; description?: string },
+  environment?: CrmEnvironmentFilter
 ): Promise<CrmTagDef> {
-  return api.patch(`/bots/${botId}/crm/tags/${encodeURIComponent(tagKey)}`, body);
+  return api.patch(
+    withEnvironment(`/bots/${botId}/crm/tags/${encodeURIComponent(tagKey)}`, environment),
+    body
+  );
 }
 
 export async function crmDeleteTag(botId: number, tagKey: string): Promise<void> {
@@ -322,6 +446,8 @@ export async function crmPreviewSync(
     variables?: Record<string, unknown>;
     tags?: string[];
     status_value?: string;
+    /** Если true — обновить CtorBotUser.status (пустая строка → active). */
+    status_patch?: boolean;
   }
 ): Promise<void> {
   await api.post(`/bots/${botId}/crm/preview-sync`, body);

@@ -19,6 +19,7 @@ from backend.services.constructor.repositories.ctor_sessions_repository import (
 )
 from backend.services.constructor.tag_service import TagService
 from backend.services.constructor.variable_service import VariableService
+from backend.services.bot_crm.overview_aggregate_service import mark_crm_overview_dirty
 from backend.services.message_template.runtime_outbound import render_outbound_message_text
 from backend.utils.ctor_bot_resolve import ensure_ctor_bot_id, resolve_ctor_bot_id
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -186,9 +187,41 @@ def _apply_action_block(
             if status_text:
                 bu.status = status_text
                 db.commit()
+                mark_crm_overview_dirty(bu.bot_id, bu.environment)
         elif status_action == "clear":
             bu.status = "active"
             db.commit()
+            mark_crm_overview_dirty(bu.bot_id, bu.environment)
+
+
+def _mark_ctor_last_user_message_at(
+    db: Session,
+    *,
+    platform_bot_id: int,
+    chat_id,
+    username: Optional[str],
+    first_name: Optional[str],
+    last_name: Optional[str],
+    environment: str = "prod",
+) -> None:
+    ctor_uid, _ = _resolve_ctor_telegram_user(
+        db,
+        platform_bot_id=platform_bot_id,
+        chat_id=chat_id,
+        username=username,
+        first_name=first_name,
+        last_name=last_name,
+        create_if_missing=True,
+        environment=environment,
+    )
+    if ctor_uid is None:
+        return
+    bu = db.query(CtorBotUser).filter(CtorBotUser.id == ctor_uid).first()
+    if not bu:
+        return
+    bu.last_message_at = datetime.now(timezone.utc)
+    db.commit()
+    mark_crm_overview_dirty(bu.bot_id, bu.environment)
 
 
 @router.post("/webhook/{bot_id}")
@@ -295,6 +328,17 @@ async def telegram_webhook(
     tg_username = tg_from.get("username")
     tg_first_name = tg_from.get("first_name")
     tg_last_name = tg_from.get("last_name")
+    user_input_present = bool(text or update.get("callback_query", {}).get("data"))
+    if chat_id and user_input_present:
+        _mark_ctor_last_user_message_at(
+            db,
+            platform_bot_id=bot_id,
+            chat_id=chat_id,
+            username=tg_username,
+            first_name=tg_first_name,
+            last_name=tg_last_name,
+            environment="prod",
+        )
     is_start = text == "/start" or (text and text.startswith("/start")) or not state
     
     # Извлекаем UTM-параметры и entry_point из команды /start

@@ -28,21 +28,23 @@ async def get_current_user(
 
     # Логируем все заголовки для отладки
     auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
-    logger.info(f"Request path: {request.url.path}")
-    logger.info(f"Authorization header: {auth_header[:50] + '...' if auth_header and len(auth_header) > 50 else auth_header}")
-    logger.info(f"OAuth2PasswordBearer token: {token[:20] + '...' if token and len(token) > 20 else token}")
+    logger.debug(f"Request path: {request.url.path}")
+    logger.debug(
+        f"Authorization header: {auth_header[:50] + '...' if auth_header and len(auth_header) > 50 else auth_header}"
+    )
+    logger.debug(f"OAuth2PasswordBearer token: {token[:20] + '...' if token and len(token) > 20 else token}")
 
     # Пытаемся получить токен из Authorization header или из cookie
     auth_token = None
     if token:
         # Токен из Authorization header
         auth_token = token
-        logger.info(f"Token from Authorization header: {token[:20]}...")
+        logger.debug(f"Token from Authorization header: {token[:20]}...")
     else:
         # Пытаемся получить токен из cookie
         auth_token = get_token_from_cookie(request)
         if auth_token:
-            logger.info("Token from cookie")
+            logger.debug("Token from cookie")
             user_id, token_tv = verify_jwt_token(auth_token)
             if user_id is not None:
                 user = db.query(User).filter(User.id == user_id).first()

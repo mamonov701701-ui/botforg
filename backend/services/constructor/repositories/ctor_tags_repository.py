@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Sequence
+from typing import List, Literal, Optional, Sequence
 
 from sqlalchemy.orm import Session
 
 from backend.models.constructor_core import CtorBotTag, CtorBotUser, CtorBotUserTag
+
+TagCountEnvironment = Optional[Literal["dev", "prod", "all"]]
 
 
 class CtorTagsRepository:
@@ -34,12 +36,22 @@ class CtorTagsRepository:
             .all()
         )
 
-    def count_users_for_tag(self, tag_id: int) -> int:
-        return (
-            self.db.query(CtorBotUserTag)
-            .filter(CtorBotUserTag.tag_id == tag_id)
-            .count()
-        )
+    def count_users_for_tag(
+        self,
+        tag_id: int,
+        *,
+        environment: TagCountEnvironment = None,
+    ) -> int:
+        """
+        Число назначений тега. По умолчанию — по всем средам (для удаления и т.п.).
+        При environment dev|prod — только контакты этой среды.
+        """
+        q = self.db.query(CtorBotUserTag).filter(CtorBotUserTag.tag_id == tag_id)
+        if environment in ("dev", "prod"):
+            q = q.join(CtorBotUser, CtorBotUser.id == CtorBotUserTag.bot_user_id).filter(
+                CtorBotUser.environment == environment
+            )
+        return q.count()
 
     def delete_tag_row(self, row: CtorBotTag) -> None:
         self.db.delete(row)

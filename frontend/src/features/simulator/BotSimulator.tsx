@@ -17,7 +17,7 @@ import {
 } from './scenarioRunner';
 import { normalizeScenarioEdges, listInvalidFlowEdges } from '../../utils/flowHandleCompatibility';
 import { getVisiblePreviewHistory } from './historyVisibility';
-import { crmPreviewSync } from '../../api/botCrm';
+import { crmPreviewSync, validateTagKey } from '../../api/botCrm';
 import { toast } from '../../utils/toast';
 
 interface BotSimulatorProps {
@@ -190,9 +190,32 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     }
     const tagRaw = rawVars[PREVIEW_USER_TAGS_VARIABLE];
     const tags = Array.isArray(tagRaw)
-      ? tagRaw.map(t => toStr(t).trim()).filter(t => /^[a-z][a-z0-9_]*$/.test(t))
+      ? tagRaw.map(t => toStr(t).trim()).filter(t => validateTagKey(t) === undefined)
       : [];
-    const statusValue = toStr(rawVars[PREVIEW_USER_STATUS_VARIABLE]).trim() || undefined;
+    const statusKeyPresent = Object.prototype.hasOwnProperty.call(
+      rawVars,
+      PREVIEW_USER_STATUS_VARIABLE
+    );
+    const statusPatch = statusKeyPresent;
+    const statusValue = statusKeyPresent
+      ? toStr(rawVars[PREVIEW_USER_STATUS_VARIABLE] ?? '').trim()
+      : undefined;
+    const PROFILE_NAME_KEYS = [
+      'imya',
+      'name',
+      'user_name',
+      'first_name',
+      'fio',
+      'full_name',
+    ] as const;
+    let derivedFirstName: string | undefined;
+    for (const k of PROFILE_NAME_KEYS) {
+      const v = toStr(cleanVars[k]).trim();
+      if (v) {
+        derivedFirstName = v;
+        break;
+      }
+    }
     const fieldsRaw = rawVars[PREVIEW_USER_FIELDS_VARIABLE];
     const fields =
       fieldsRaw && typeof fieldsRaw === 'object' && !Array.isArray(fieldsRaw)
@@ -206,12 +229,12 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     const body = {
       external_user_id: `preview-bot-${currentBotId}`,
       channel: 'preview',
-      first_name: 'Preview User',
+      ...(derivedFirstName ? { first_name: derivedFirstName } : {}),
       username: 'preview_user',
       last_input: lastInput,
       variables: cleanVars,
       tags,
-      status_value: statusValue,
+      ...(statusPatch ? { status_patch: true as const, status_value: statusValue ?? '' } : {}),
     };
     const signature = JSON.stringify(body);
     if (signature === lastPreviewSyncSignatureRef.current) return;

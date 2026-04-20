@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import re
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, Sequence, Set, Tuple
 
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, asc, desc, func, literal, or_
+from sqlalchemy.orm import Session, aliased
 
 from backend.models.constructor_core import (
     CtorBlock,
@@ -18,16 +19,59 @@ from backend.models.constructor_core import (
     CtorBotUser,
     CtorBotUserSession,
     CtorBotUserTag,
+    CtorBotUserVariable,
     CtorBotVariableDefinition,
     CtorScenario,
 )
+from backend.models.scenario import Scenario
 from backend.services.constructor.repositories.ctor_variables_repository import (
     CtorVariablesRepository,
 )
+from backend.services.bot_crm.overview_aggregate_service import mark_crm_overview_dirty
 
 _PLACEHOLDER_RE = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*\}\}")
+
+
+def _extract_explicit_variable_keys_from_block(
+    block_type: str, raw: Any
+) -> Set[str]:
+    """Ключи переменных из структурированных полей блока (не только {{...}} в JSON)."""
+    out: Set[str] = set()
+    if not isinstance(raw, dict):
+        return out
+    bt = (block_type or "").strip().lower()
+
+    if bt == "input":
+        for key in ("variable_key", "variableName", "name"):
+            v = raw.get(key)
+            if isinstance(v, str) and v.strip():
+                out.add(v.strip())
+
+    elif bt == "variable":
+        v = raw.get("name")
+        if isinstance(v, str) and v.strip():
+            out.add(v.strip())
+
+    elif bt == "action":
+        mode = str(raw.get("mode") or "").strip()
+        if mode == "field":
+            fk = raw.get("fieldKey")
+            if isinstance(fk, str) and fk.strip():
+                out.add(fk.strip())
+        sv = raw.get("setVariable")
+        if isinstance(sv, str) and sv.strip():
+            out.add(sv.strip())
+
+    elif bt == "condition":
+        v = raw.get("variable")
+        if isinstance(v, str) and v.strip():
+            out.add(v.strip())
+
+    return out
 CrmEnvironment = Literal["dev", "prod"]
 CrmEnvironmentFilter = Literal["dev", "prod", "all"]
+CrmUserListSort = Literal["activity", "name", "created"]
+SESSION_STATUS_FILTER_NONE = "__none__"
 
 
 def _display_name(u: CtorBotUser) -> str:
@@ -50,32 +94,145 @@ def _extract_placeholder_keys_from_value(val: Any) -> Set[str]:
     return set(_PLACEHOLDER_RE.findall(s))
 
 
+def _synthetic_block_id(platform_scenario_id: int, editor_node_id: str) -> int:
+    """Стабильный псевдо-id блока из редактора (не ctor_blocks). Диапазон > типичных автоинкрементов."""
+    h = zlib.crc32(f"{platform_scenario_id}:{editor_node_id}".encode("utf-8")) & 0x7FFFFFFF
+    return 1_000_000_000 + h
+
+
+def _nodes_from_scenario_payload(content: Any) -> List[dict]:
+    if not isinstance(content, dict):
+        return []
+    nodes = content.get("nodes")
+    if not isinstance(nodes, list):
+        return []
+    return [n for n in nodes if isinstance(n, dict)]
+
+
+def _merge_platform_scenario_graph_usage(
+    db: Session,
+    platform_bot_id: int,
+    key_to_blocks: Dict[str, Set[int]],
+    meta: List[Tuple[int, int, str, str, Optional[str]]],
+) -> None:
+    """
+    Сценарии редактора лежат в scenarios.content / published_content.
+    ctor_blocks часто пусты — без этого «На схеме» и usage дают 0.
+    scenario_id здесь — id строки scenarios (платформа), имя — для UI.
+    """
+    scen_rows = db.query(Scenario).filter(Scenario.bot_id == platform_bot_id).all()
+    for sc in scen_rows:
+        payloads: List[dict] = []
+        if isinstance(sc.content, dict) and sc.content.get("nodes"):
+            payloads.append(sc.content)
+        pub = sc.published_content
+        if isinstance(pub, dict) and pub.get("nodes"):
+            payloads.append(pub)
+        nodes_by_id: Dict[str, List[dict]] = defaultdict(list)
+        for content in payloads:
+            for node in _nodes_from_scenario_payload(content):
+                nid = str(node.get("id") or "").strip()
+                if nid:
+                    nodes_by_id[nid].append(node)
+        for nid, variants in nodes_by_id.items():
+            bid = _synthetic_block_id(sc.id, nid)
+            block_type = "node"
+            block_name: Optional[str] = None
+            all_keys: Set[str] = set()
+            for node in variants:
+                data = node.get("data")
+                if not isinstance(data, dict):
+                    data = {}
+                block_type = str(data.get("blockId") or node.get("type") or "").strip() or block_type
+                for k in ("title", "label", "name"):
+                    v = data.get(k)
+                    if isinstance(v, str) and v.strip():
+                        block_name = v.strip()
+                        break
+                settings = data.get("settings")
+                all_keys |= _extract_placeholder_keys_from_value(settings)
+                all_keys |= _extract_explicit_variable_keys_from_block(block_type, settings)
+                # Текст сообщения часто лежит в data.text / title, не только в settings
+                for fld in ("text", "title", "subtitle", "caption"):
+                    v = data.get(fld)
+                    all_keys |= _extract_placeholder_keys_from_value(v)
+                all_keys |= _extract_placeholder_keys_from_value(data)
+            if not all_keys:
+                continue
+            meta.append((bid, sc.id, sc.name or "", block_type, block_name))
+            for k in all_keys:
+                key_to_blocks[k].add(bid)
+
+
 def build_variable_usage_maps(
     db: Session, ctor_bot_id: int
 ) -> Tuple[Dict[str, Set[int]], List[Tuple[int, int, str, str, Optional[str]]]]:
     """
     key -> set(block_id). Второй элемент: (block_id, scenario_id, scenario_name, block_type, block_name).
+    block_id — либо ctor_blocks.id, либо синтетический id узла из scenarios.content.
     """
+    key_to_blocks: Dict[str, Set[int]] = defaultdict(set)
+    meta: List[Tuple[int, int, str, str, Optional[str]]] = []
+
     scenario_rows = (
         db.query(CtorScenario).filter(CtorScenario.bot_id == ctor_bot_id).all()
     )
-    if not scenario_rows:
-        return {}, []
-    scenario_by_id = {s.id: s for s in scenario_rows}
-    sid_list = list(scenario_by_id.keys())
-    blocks = (
-        db.query(CtorBlock).filter(CtorBlock.scenario_id.in_(sid_list)).all()
-    )
-    key_to_blocks: Dict[str, Set[int]] = defaultdict(set)
-    meta: List[Tuple[int, int, str, str, Optional[str]]] = []
-    for b in blocks:
-        scen = scenario_by_id.get(b.scenario_id)
-        scen_name = scen.name if scen else ""
-        meta.append((b.id, b.scenario_id, scen_name, b.type, b.name))
-        keys = _extract_placeholder_keys_from_value(b.settings_json)
-        for k in keys:
-            key_to_blocks[k].add(b.id)
+    if scenario_rows:
+        scenario_by_id = {s.id: s for s in scenario_rows}
+        sid_list = list(scenario_by_id.keys())
+        blocks = (
+            db.query(CtorBlock).filter(CtorBlock.scenario_id.in_(sid_list)).all()
+        )
+        for b in blocks:
+            scen = scenario_by_id.get(b.scenario_id)
+            scen_name = scen.name if scen else ""
+            meta.append((b.id, b.scenario_id, scen_name, b.type, b.name))
+            keys = _extract_placeholder_keys_from_value(b.settings_json)
+            keys |= _extract_explicit_variable_keys_from_block(b.type, b.settings_json)
+            for k in keys:
+                key_to_blocks[k].add(b.id)
+
+    _merge_platform_scenario_graph_usage(db, ctor_bot_id, key_to_blocks, meta)
+
     return dict(key_to_blocks), meta
+
+
+def count_users_with_nonempty_variable_by_key(
+    db: Session,
+    ctor_bot_id: int,
+    *,
+    environment: CrmEnvironmentFilter = "prod",
+) -> Dict[str, int]:
+    """Ключ переменной -> число контактов (distinct bot_user) с непустым значением."""
+    text_nonempty = and_(
+        CtorBotUserVariable.value_text.isnot(None),
+        CtorBotUserVariable.value_text != "",
+    )
+    has_value = or_(
+        text_nonempty,
+        CtorBotUserVariable.value_number.isnot(None),
+        CtorBotUserVariable.value_boolean.isnot(None),
+        CtorBotUserVariable.value_date.isnot(None),
+        CtorBotUserVariable.value_json.isnot(None),
+    )
+    q = (
+        db.query(
+            CtorBotVariableDefinition.key,
+            func.count(func.distinct(CtorBotUserVariable.bot_user_id)),
+        )
+        .join(
+            CtorBotUserVariable,
+            CtorBotUserVariable.variable_definition_id == CtorBotVariableDefinition.id,
+        )
+        .join(CtorBotUser, CtorBotUser.id == CtorBotUserVariable.bot_user_id)
+        .filter(CtorBotVariableDefinition.bot_id == ctor_bot_id)
+        .filter(CtorBotUser.bot_id == ctor_bot_id)
+        .filter(has_value)
+    )
+    if environment in ("dev", "prod"):
+        q = q.filter(CtorBotUser.environment == environment)
+    rows = q.group_by(CtorBotVariableDefinition.key).all()
+    return {str(k): int(c or 0) for k, c in rows}
 
 
 @dataclass
@@ -92,6 +249,7 @@ class BotUserListRowOut:
     current_block_id: Optional[int]
     current_block_label: Optional[str]
     session_status: Optional[str]
+    contact_status: str
     environment: str
     created_at: str
 
@@ -108,6 +266,11 @@ def list_bot_users(
     environment: CrmEnvironmentFilter = "prod",
     page: int = 1,
     page_size: int = 25,
+    contact_status: Optional[str] = None,
+    session_status: Optional[str] = None,
+    has_phone: Optional[bool] = None,
+    has_email: Optional[bool] = None,
+    sort: CrmUserListSort = "activity",
 ) -> Tuple[int, List[BotUserListRowOut]]:
     page = max(1, page)
     page_size = min(max(1, page_size), 100)
@@ -128,18 +291,44 @@ def list_bot_users(
             CtorBotUser.last_message_at <= active_until,
         )
 
-    if q and q.strip():
-        term = f"%{q.strip()}%"
+    if contact_status and contact_status.strip():
+        query = query.filter(CtorBotUser.status == contact_status.strip())
+
+    if has_phone is True:
         query = query.filter(
-            or_(
-                CtorBotUser.first_name.ilike(term),
-                CtorBotUser.last_name.ilike(term),
-                CtorBotUser.username.ilike(term),
-                CtorBotUser.phone.ilike(term),
-                CtorBotUser.email.ilike(term),
-                CtorBotUser.external_user_id.ilike(term),
-            )
+            CtorBotUser.phone.isnot(None),
+            CtorBotUser.phone != "",
         )
+    elif has_phone is False:
+        query = query.filter(or_(CtorBotUser.phone.is_(None), CtorBotUser.phone == ""))
+
+    if has_email is True:
+        query = query.filter(
+            CtorBotUser.email.isnot(None),
+            CtorBotUser.email != "",
+        )
+    elif has_email is False:
+        query = query.filter(or_(CtorBotUser.email.is_(None), CtorBotUser.email == ""))
+
+    if q and q.strip():
+        term = q.strip().lower()
+        concat_expr = func.lower(
+            func.coalesce(CtorBotUser.first_name, "")
+            + literal(" ")
+            + func.coalesce(CtorBotUser.last_name, "")
+            + literal(" ")
+            + func.coalesce(CtorBotUser.username, "")
+            + literal(" ")
+            + func.coalesce(CtorBotUser.phone, "")
+            + literal(" ")
+            + func.coalesce(CtorBotUser.email, "")
+            + literal(" ")
+            + func.coalesce(CtorBotUser.external_user_id, "")
+        )
+        if db.bind is not None and db.bind.dialect.name == "postgresql":
+            query = query.filter(concat_expr.op("%")(term))
+        else:
+            query = query.filter(concat_expr.like(f"%{term}%"))
 
     if tag_keys:
         clean_keys = [k.strip() for k in tag_keys if k and k.strip()]
@@ -156,12 +345,52 @@ def list_bot_users(
             )
             query = query.filter(CtorBotUser.id.in_(sub))
 
+    sess_join_alias = None
+    mx_sub = None
+    if session_status is not None and session_status.strip() != "":
+        mx_sub = (
+            db.query(
+                CtorBotUserSession.bot_user_id.label("uid"),
+                func.max(CtorBotUserSession.updated_at).label("mx"),
+            )
+            .group_by(CtorBotUserSession.bot_user_id)
+            .subquery()
+        )
+        sess_join_alias = aliased(CtorBotUserSession)
+        query = query.outerjoin(mx_sub, mx_sub.c.uid == CtorBotUser.id).outerjoin(
+            sess_join_alias,
+            and_(
+                sess_join_alias.bot_user_id == mx_sub.c.uid,
+                sess_join_alias.updated_at == mx_sub.c.mx,
+            ),
+        )
+        ss = session_status.strip()
+        if ss == SESSION_STATUS_FILTER_NONE:
+            query = query.filter(
+                or_(
+                    mx_sub.c.uid.is_(None),
+                    sess_join_alias.id.is_(None),
+                    sess_join_alias.status.is_(None),
+                    sess_join_alias.status == "",
+                )
+            )
+        else:
+            query = query.filter(sess_join_alias.status == ss)
+
+    if sort == "name":
+        query = query.order_by(
+            asc(CtorBotUser.first_name).nullslast(),
+            asc(CtorBotUser.username).nullslast(),
+            asc(CtorBotUser.id),
+        )
+    elif sort == "created":
+        query = query.order_by(desc(CtorBotUser.created_at))
+    else:
+        query = query.order_by(desc(CtorBotUser.last_message_at).nullslast(), desc(CtorBotUser.id))
+
     total = query.count()
     rows: Sequence[CtorBotUser] = (
-        query.order_by(CtorBotUser.last_message_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+        query.offset((page - 1) * page_size).limit(page_size).all()
     )
     ids = [r.id for r in rows]
     if not ids:
@@ -245,6 +474,7 @@ def list_bot_users(
                 current_block_id=cur_bid,
                 current_block_label=block_label,
                 session_status=s_st,
+                contact_status=u.status or "active",
                 environment=u.environment,
                 created_at=u.created_at.isoformat(),
             )
@@ -288,17 +518,18 @@ def get_or_create_bot_user(
         .first()
     )
     if user:
-        if username:
+        if username is not None:
             user.username = username
-        if first_name:
+        if first_name is not None:
             user.first_name = first_name
-        if last_name:
+        if last_name is not None:
             user.last_name = last_name
-        if language_code:
+        if language_code is not None:
             user.language_code = language_code
         if commit:
             db.commit()
             db.refresh(user)
+            mark_crm_overview_dirty(ctor_bot_id, environment)
         return user
     user = CtorBotUser(
         bot_id=ctor_bot_id,
@@ -315,6 +546,7 @@ def get_or_create_bot_user(
     if commit:
         db.commit()
         db.refresh(user)
+        mark_crm_overview_dirty(ctor_bot_id, environment)
     else:
         db.flush()
     return user

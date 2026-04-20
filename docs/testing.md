@@ -83,13 +83,60 @@ cd frontend && npm run dev
 npm run test:e2e
 ```
 
-**Важно:** Тесты авторизации и онбординга требуют запущенного backend (API). Запустите backend отдельно, например: `cd backend && uvicorn main:app --reload`.
+**Важно:** Тесты авторизации и онбординга требуют запущенного backend (API). Запустите backend отдельно, например: `cd backend && uvicorn main:app --reload --port 8002`.
 
 Или укажите URL:
 
 ```bash
 QA_FRONTEND_URL=http://localhost:5173 npm run test:e2e
 ```
+
+### CRM regression smoke (browser)
+
+Закреплённый регрессионный тест CRM: `frontend/tests/e2e/crm-8002-smoke.spec.ts`.
+
+Что проверяет:
+- `/dashboard/bots/29/crm` в браузерном потоке
+- переключение режимов `Реальные` / `Тестовые` / `Все`
+- вкладки `Обзор` / `Контакты` / `Поля` / `Теги` / `Статусы`
+- network-proof по endpoint'ам:
+  - `GET /bots/29/crm/overview?environment=prod` -> 200
+  - `GET /bots/29/crm/overview?environment=dev` -> 200
+  - `GET /bots/29/crm/overview?environment=all` -> 200
+  - `GET /bots/29/crm/statuses/summary?environment=prod` -> 200
+
+Запуск:
+
+```bash
+cd frontend
+QA_FRONTEND_URL=http://127.0.0.1:5173 QA_SESSION_TOKEN=<jwt> npx playwright test tests/e2e/crm-8002-smoke.spec.ts --config=./playwright.config.ts
+```
+
+### Auth / bootstrap stability (API)
+
+Регрессионный тест `frontend/tests/e2e/auth-runtime-stability.spec.ts` проверяет устойчивость сессии без хрупких UI-селекторов:
+
+- регистрация и логин через **HTTP API** (`/auth/...`), токен кладётся в `localStorage` как у клиента;
+- загрузка ЛК, перезагрузка страницы, симуляция timeout на `/me`, logout и повторный login.
+
+Требуется запущенный backend (тот же порт, что и у Vite proxy, по умолчанию **8002**).
+
+### Workspace / auth stability (browser)
+
+- `frontend/tests/e2e/workspace-stability.spec.ts` — список ботов и вкладки workspace без 5xx (нужен `QA_SESSION_TOKEN`).
+- `frontend/tests/e2e/auth-runtime-stability.spec.ts` — сессия через API + `localStorage`, reload, timeout `/me`, logout/relogin.
+
+### Документация и справка по CRM (не тесты)
+
+Где искать материалы:
+
+| Место | Описание |
+|-------|----------|
+| Публично | `/features?tab=crm` — вкладка **CRM** на странице «Возможности» |
+| В ЛК | `/dashboard/help/crm` — полная инструкция (после входа) |
+| Репозиторий | [CRM_GUIDE_RU.md](./CRM_GUIDE_RU.md) — тот же смысл, что и встроенная справка |
+| Код для агента | `frontend/src/knowledge/crm/` (`CRM_AGENT_RULES_RU`, сущности по разделам CRM) |
+| Исходник секций справки | `frontend/src/content/crmGuideData.ts` |
 
 ### Структура E2E
 
@@ -101,6 +148,9 @@ frontend/tests/e2e/
   versions.spec.ts       # История версий
   demo_mode.spec.ts      # Демо-режим
   critical-scenarios.spec.ts  # Обязательные сценарии (1–7)
+  crm-8002-smoke.spec.ts # CRM: режимы и вкладки, proxy → backend :8002
+  workspace-stability.spec.ts  # Workspace без 5xx
+  auth-runtime-stability.spec.ts # Сессия: API, /me timeout, logout
   global-api-collector.ts
   global-teardown.ts
 ```

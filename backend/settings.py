@@ -43,6 +43,12 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = "sqlite:///./botforg.db"
+    REDIS_URL: str = "redis://localhost:6379/0"
+    STRICT_REDIS: bool = os.getenv("STRICT_REDIS", "false").lower() == "true"
+    DB_STATEMENT_TIMEOUT_MS: int = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "5000"))
+    DB_LOCK_TIMEOUT_MS: int = int(os.getenv("DB_LOCK_TIMEOUT_MS", "2000"))
+    CRM_AGGREGATE_BATCH_SIZE: int = int(os.getenv("CRM_AGGREGATE_BATCH_SIZE", "200"))
+    SHADOW_MAX_STALE_SECONDS: int = int(os.getenv("SHADOW_MAX_STALE_SECONDS", "120"))
 
     # Payment providers (optional)
     TELEGRAM_PAYMENT_PROVIDER_TOKEN: Optional[str] = None

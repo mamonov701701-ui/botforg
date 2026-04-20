@@ -14,15 +14,19 @@ interface User {
 interface AuthState {
   user: User | null;
   loading: boolean;
+  authStatus: 'unknown' | 'authenticated' | 'guest';
   setUser: (user: User | null) => void;
   clearUser: () => void;
   setLoading: (loading: boolean) => void;
+  setAuthStatus: (status: 'unknown' | 'authenticated' | 'guest') => void;
 }
 
 export const useAuthStore = create<AuthState>(set => ({
   user: null,
   loading: true,
-  setUser: user => set({ user, loading: false }),
-  clearUser: () => set({ user: null }),
+  authStatus: 'unknown',
+  setUser: user => set({ user, loading: false, authStatus: user ? 'authenticated' : 'guest' }),
+  clearUser: () => set({ user: null, authStatus: 'guest', loading: false }),
   setLoading: loading => set({ loading }),
+  setAuthStatus: authStatus => set({ authStatus }),
 }));

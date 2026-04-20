@@ -1,7 +1,7 @@
 {
   "name": "botforg",
   "private": true,
-  "description": "Одна команда для локального dev (Windows): backend 8001 + frontend 5173",
+  "description": "Одна команда для локального dev (Windows): backend 8002 + frontend 5173",
   "scripts": {
     "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/start-dev.ps1",
     "stop": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/stop-dev.ps1"

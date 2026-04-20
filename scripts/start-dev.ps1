@@ -10,6 +10,11 @@ $root = if ($PSScriptRoot) {
 }
 Set-Location -LiteralPath $root
 
+$BackendPort = 8002
+$LegacyBackendPort = 8001
+$FrontendPort = 5173
+$FrontendAltPort = 5174
+
 $logStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $logBackend = Join-Path $PSScriptRoot ".dev-backend-$logStamp.log"
 $logFrontend = Join-Path $PSScriptRoot ".dev-frontend-$logStamp.log"
@@ -30,6 +35,25 @@ function Stop-ProcessOnPort {
     } catch {
         Write-Host "Port ${Port}: could not inspect ($($_.Exception.Message))" -ForegroundColor Gray
     }
+}
+
+function Get-ListenerPids {
+    param([int]$Port)
+    try {
+        return @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+            Select-Object -ExpandProperty OwningProcess -Unique)
+    } catch {
+        return @()
+    }
+}
+
+function Get-ProcessCommandLine {
+    param([int]$ProcessId)
+    try {
+        $wmi = Get-WmiObject Win32_Process -Filter ("ProcessId=" + $ProcessId) -ErrorAction SilentlyContinue
+        if ($wmi) { return $wmi.CommandLine }
+    } catch {}
+    return $null
 }
 
 function Test-HttpGetOk {
@@ -69,7 +93,7 @@ function Test-HttpGetOk {
 }
 
 function Test-BackendUp {
-    return (Test-HttpGetOk -Uri 'http://127.0.0.1:8001/healthz' -ExpectSubstring 'ok')
+    return (Test-HttpGetOk -Uri ("http://127.0.0.1:$BackendPort/healthz") -ExpectSubstring 'ok')
 }
 
 function Test-AuthEmailLoginProbe {
@@ -80,7 +104,7 @@ function Test-AuthEmailLoginProbe {
     try {
         Set-Content -LiteralPath $payloadFile -Value '{"email":"dev-probe-not-exists@example.com","password":"x"}' -Encoding ascii -NoNewline
         $raw = & curl.exe -s -S --connect-timeout 3 --max-time 10 -o $respFile -w '%{http_code}' `
-            -X POST 'http://127.0.0.1:8001/auth/email/login' `
+            -X POST ("http://127.0.0.1:$BackendPort/auth/email/login") `
             -H 'Content-Type: application/json' `
             --data-binary "@$payloadFile" 2>$null
         if ($LASTEXITCODE -ne 0) { return $false }
@@ -93,13 +117,13 @@ function Test-AuthEmailLoginProbe {
 }
 
 function Test-FrontendUp {
-    return (Test-HttpGetOk -Uri 'http://127.0.0.1:5173/')
+    return (Test-HttpGetOk -Uri ("http://127.0.0.1:$FrontendPort/"))
 }
 
 Write-Host '=== BotForg: starting dev ===' -ForegroundColor Cyan
 Write-Host ''
 
-foreach ($p in 8001, 5173, 5174) {
+foreach ($p in $LegacyBackendPort, $BackendPort, $FrontendPort, $FrontendAltPort) {
     Stop-ProcessOnPort -Port $p
 }
 Start-Sleep -Seconds 2
@@ -135,8 +159,8 @@ if (-not $npm) {
 }
 $npmExe = $npm.Source
 
-$beCmd = 'cd /d "' + $root + '" && "' + $pyExe + '" -m uvicorn backend.main:app --host 0.0.0.0 --port 8001 --reload'
-Write-Host 'Starting backend (8001)...' -ForegroundColor Cyan
+$beCmd = 'cd /d "' + $root + '" && "' + $pyExe + '" -m uvicorn backend.main:app --host 0.0.0.0 --port ' + $BackendPort + ' --reload'
+Write-Host ("Starting backend ($BackendPort)...") -ForegroundColor Cyan
 $beWrapper = $beCmd + ' > "' + $logBackend + '" 2>&1'
 $beProc = Start-Process -FilePath 'cmd.exe' `
     -ArgumentList @('/c', $beWrapper) `
@@ -150,8 +174,8 @@ if (-not $beProc) {
 }
 
 $feDir = Join-Path $root 'frontend'
-$feCmd = 'cd /d "' + $feDir + '" && "' + $npmExe + '" run dev'
-Write-Host 'Starting frontend (5173)...' -ForegroundColor Cyan
+$feCmd = 'cd /d "' + $feDir + '" && set BOTFORG_BACKEND_PORT=' + $BackendPort + ' && "' + $npmExe + '" run dev'
+Write-Host ("Starting frontend ($FrontendPort)...") -ForegroundColor Cyan
 $feWrapper = $feCmd + ' > "' + $logFrontend + '" 2>&1'
 $feProc = Start-Process -FilePath 'cmd.exe' `
     -ArgumentList @('/c', $feWrapper) `
@@ -178,8 +202,8 @@ while ((Get-Date) -lt $deadline) {
 }
 
 $failed = @()
-if (-not $okBe) { $failed += 'backend (http://127.0.0.1:8001/healthz)' }
-if (-not $okFe) { $failed += 'frontend (http://127.0.0.1:5173/)' }
+if (-not $okBe) { $failed += ("backend (http://127.0.0.1:$BackendPort/healthz)") }
+if (-not $okFe) { $failed += ("frontend (http://127.0.0.1:$FrontendPort/)") }
 
 if ($failed.Count -gt 0) {
     Write-Host ''
@@ -193,7 +217,7 @@ if ($failed.Count -gt 0) {
 
     try { Stop-Process -Id $beProc.Id -Force -ErrorAction SilentlyContinue } catch {}
     try { Stop-Process -Id $feProc.Id -Force -ErrorAction SilentlyContinue } catch {}
-    foreach ($p in 8001, 5173, 5174) { Stop-ProcessOnPort -Port $p }
+    foreach ($p in $LegacyBackendPort, $BackendPort, $FrontendPort, $FrontendAltPort) { Stop-ProcessOnPort -Port $p }
 
     exit 1
 }
@@ -205,14 +229,35 @@ if (-not (Test-AuthEmailLoginProbe)) {
     Get-Content -Path $logBackend -Tail 40 -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "[BE] $_" }
     try { Stop-Process -Id $beProc.Id -Force -ErrorAction SilentlyContinue } catch {}
     try { Stop-Process -Id $feProc.Id -Force -ErrorAction SilentlyContinue } catch {}
-    foreach ($p in 8001, 5173, 5174) { Stop-ProcessOnPort -Port $p }
+    foreach ($p in $LegacyBackendPort, $BackendPort, $FrontendPort, $FrontendAltPort) { Stop-ProcessOnPort -Port $p }
     exit 1
+}
+
+$listenerPids = Get-ListenerPids -Port $BackendPort
+if ($listenerPids.Count -ne 1) {
+    Write-Host ("ERROR: expected exactly one backend listener on port $BackendPort, found $($listenerPids.Count).") -ForegroundColor Red
+    foreach ($listenerProcId in $listenerPids) {
+        $cmd = Get-ProcessCommandLine -ProcessId $listenerProcId
+        Write-Host ("  PID=$listenerProcId CMD=$cmd") -ForegroundColor Yellow
+    }
+    exit 1
+}
+$listenerPid = [int]$listenerPids[0]
+$listenerCmd = Get-ProcessCommandLine -ProcessId $listenerPid
+Write-Host ("Backend listener: port=$BackendPort pid=$listenerPid") -ForegroundColor White
+if ($listenerCmd) {
+    Write-Host ("Backend command: $listenerCmd") -ForegroundColor Gray
+} else {
+    $listenerProc = Get-Process -Id $listenerPid -ErrorAction SilentlyContinue
+    if ($listenerProc) {
+        Write-Host ("Backend process: name=$($listenerProc.ProcessName)") -ForegroundColor Gray
+    }
 }
 
 Write-Host ''
 Write-Host '=== Startup OK ===' -ForegroundColor Green
-Write-Host 'Backend:   http://localhost:8001  (healthz: /healthz)' -ForegroundColor White
-Write-Host 'Frontend:  http://localhost:5173' -ForegroundColor White
+Write-Host ("Backend:   http://localhost:$BackendPort  (healthz: /healthz)") -ForegroundColor White
+Write-Host ("Frontend:  http://localhost:$FrontendPort") -ForegroundColor White
 Write-Host "Backend log:  $logBackend" -ForegroundColor Gray
 Write-Host "Frontend log: $logFrontend" -ForegroundColor Gray
 Write-Host 'Stop:    .\scripts\stop-dev.ps1' -ForegroundColor Gray

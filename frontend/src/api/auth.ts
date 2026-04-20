@@ -3,7 +3,7 @@
  * All endpoints use the unified HTTP client with proper error handling
  */
 
-import { get, post, put, patch, ApiError } from './client';
+import { get, post, put, patch, ApiError, clearGetResponseCache } from './client';
 
 // --- Типы для настроек личного кабинета (ответ API: snake_case) ---
 export interface ProfileSettingsOut {
@@ -47,9 +47,47 @@ export interface SettingsOut {
 
 // Token management
 const TOKEN_KEY = 'auth_token';
+const AUTH_FETCH_TIMEOUT_MS = 15000;
+let meInFlight: Promise<any> | null = null;
+
+async function authJsonRequest(path: string, payload: Record<string, unknown>) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AUTH_FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(path, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      let msg = errorData.message || 'Ошибка запроса';
+      const d = errorData.detail;
+      if (typeof d === 'string') msg = d;
+      else if (Array.isArray(d) && d[0]?.msg) msg = d[0].msg;
+      throw new Error(msg);
+    }
+
+    return await response.json();
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error('Сервер не отвечает. Проверьте соединение и попробуйте снова.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export function saveToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token);
+  clearGetResponseCache();
 }
 
 export function getToken(): string | null {
@@ -58,18 +96,29 @@ export function getToken(): string | null {
 
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+  clearGetResponseCache();
 }
 
 export async function getMe() {
-  try {
-    return await get('/me');
-  } catch (error: any) {
-    if (error.status === 401) {
-      // Очищаем токен только при 401 на /me - это означает что токен невалидный
-      clearToken();
-      return null;
+  if (meInFlight) return meInFlight;
+
+  meInFlight = (async () => {
+    try {
+      return await get('/me');
+    } catch (error: any) {
+      // Только строгая auth-ошибка превращает пользователя в guest.
+      if (error.status === 401 || error.status === 403) {
+        clearToken();
+        return null;
+      }
+      throw error;
     }
-    throw error;
+  })();
+
+  try {
+    return await meInFlight;
+  } finally {
+    meInFlight = null;
   }
 }
 
@@ -88,26 +137,7 @@ export function getLoginUrl(provider: 'google' | 'yandex' | 'mailru') {
 
 export async function registerEmail(email: string, password: string, name?: string) {
   try {
-    // Используем прямой fetch для регистрации (JSON формат)
-    const response = await fetch('/auth/email/register', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password, name }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      let msg = errorData.message || 'Ошибка регистрации';
-      const d = errorData.detail;
-      if (typeof d === 'string') msg = d;
-      else if (Array.isArray(d) && d[0]?.msg) msg = d[0].msg;
-      throw new Error(msg);
-    }
-
-    const data = await response.json();
+    const data = await authJsonRequest('/auth/email/register', { email, password, name });
     if (data.access_token) {
       saveToken(data.access_token);
     }
@@ -118,36 +148,10 @@ export async function registerEmail(email: string, password: string, name?: stri
 }
 
 export async function loginEmail(email: string, password: string) {
-  // Используем новый email endpoint
-  const url = '/auth/email/login';
-
-  const response = await fetch(url, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      email: email,
-      password: password,
-    }),
+  const data = await authJsonRequest('/auth/email/login', {
+    email,
+    password,
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    const detail = errorData.detail;
-    let message = 'Ошибка входа';
-    if (typeof detail === 'string') {
-      message = detail;
-    } else if (Array.isArray(detail) && detail[0]?.msg) {
-      message = String(detail[0].msg);
-    } else if (errorData.message) {
-      message = String(errorData.message);
-    }
-    throw new Error(message);
-  }
-
-  const data = await response.json();
   if (data.access_token) {
     saveToken(data.access_token);
   }

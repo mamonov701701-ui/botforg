@@ -6,6 +6,7 @@ interface CardProps {
   hoverable?: boolean;
   onClick?: () => void;
   style?: React.CSSProperties;
+  className?: string;
 }
 
 /**
@@ -17,6 +18,7 @@ export default function Card({
   hoverable = false,
   onClick,
   style = {},
+  className = '',
 }: CardProps) {
   const [isHovered, setIsHovered] = React.useState(false);
 
@@ -39,6 +41,7 @@ export default function Card({
 
   return (
     <div
+      className={className || undefined}
       style={baseStyle}
       onClick={onClick}
       onMouseEnter={() => setIsHovered(true)}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import './crm/crmUi.css';
 import {
   Home,
   Bot,
@@ -17,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ROLE_NAMES, type SectionKey } from '../../constants/roles';
-import { getMe, logout } from '../../api/auth';
+import { logout } from '../../api/auth';
 
 type DashboardMode = 'projects' | 'platform';
 
@@ -122,9 +123,10 @@ function hasPlatformAccess(user: { role: string } | null | undefined): boolean {
 }
 
 export default function DashboardLayout() {
-  const { user, setUser, loading, setLoading, clearUser } = useAuthStore();
+  const { user, loading, clearUser } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const isCrmSurface = /\/dashboard\/bots\/\d+\/crm/.test(location.pathname);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Режим работы: 'projects' (Мои проекты) или 'platform' (Управление платформой)
@@ -155,24 +157,6 @@ export default function DashboardLayout() {
       navigate('/');
     }
   };
-
-  // Загружаем данные пользователя при первом рендере
-  useEffect(() => {
-    async function loadUser() {
-      if (!user) {
-        try {
-          const userData = await getMe();
-          if (userData) {
-            setUser(userData);
-          }
-        } catch (error) {
-          console.error('Failed to load user:', error);
-          setLoading(false);
-        }
-      }
-    }
-    loadUser();
-  }, [user, setUser, setLoading]);
 
   // Определяем текущие пункты меню в зависимости от режима
   const currentNavItems = useMemo(
@@ -655,7 +639,10 @@ export default function DashboardLayout() {
         </aside>
 
         {/* Основной контент */}
-        <main style={{ flex: 1, minWidth: 0 }}>
+        <main
+          style={{ flex: 1, minWidth: 0 }}
+          className={isCrmSurface ? 'dashboard-crm-main' : undefined}
+        >
           <Outlet />
         </main>
       </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Users, Trash2 } from 'lucide-react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import { Trash2 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { toast } from '../../../utils/toast';
@@ -9,14 +9,16 @@ import {
   crmCreateTag,
   crmPatchTag,
   crmDeleteTag,
-  validateSnakeKey,
+  validateTagKey,
   type CrmTagDef,
 } from '../../../api/botCrm';
+import { useCrmDataScope } from './CrmDataScopeContext';
 
 export default function BotCrmTagsPage() {
   const { botId } = useParams<{ botId: string }>();
   const navigate = useNavigate();
   const id = Number(botId);
+  const { showMode } = useCrmDataScope();
   const [rows, setRows] = useState<CrmTagDef[]>([]);
   const [modal, setModal] = useState(false);
   const [key, setKey] = useState('');
@@ -27,18 +29,25 @@ export default function BotCrmTagsPage() {
   const load = useCallback(async () => {
     if (!Number.isFinite(id)) return;
     try {
-      setRows(await crmListTags(id));
-    } catch (e: any) {
-      toast.error(e.message || 'Ошибка');
+      setRows(await crmListTags(id, showMode));
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Ошибка';
+      toast.error(msg);
     }
-  }, [id]);
+  }, [id, showMode]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  const goContactsWithTag = (tagKey: string) => {
+    navigate(
+      `/dashboard/bots/${id}/crm/contacts?tag=${encodeURIComponent(tagKey)}&show=${showMode}`
+    );
+  };
+
   const create = async () => {
-    const err = validateSnakeKey(key);
+    const err = validateTagKey(key);
     if (err) {
       toast.error(err);
       return;
@@ -55,29 +64,36 @@ export default function BotCrmTagsPage() {
       setLabel('');
       setColor('#6b7280');
       load();
-    } catch (e: any) {
-      toast.error(e.message || 'Ошибка');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Ошибка';
+      toast.error(msg);
     }
   };
 
   const saveEdit = async () => {
     if (!editRow) return;
     try {
-      await crmPatchTag(id, editRow.key, {
-        label: label.trim() || undefined,
-        color: color || undefined,
-      });
+      await crmPatchTag(
+        id,
+        editRow.key,
+        {
+          label: label.trim() || undefined,
+          color: color || undefined,
+        },
+        showMode
+      );
       toast.success('Сохранено');
       setEditRow(null);
       load();
-    } catch (e: any) {
-      toast.error(e.message || 'Ошибка');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Ошибка';
+      toast.error(msg);
     }
   };
 
   const remove = async (row: CrmTagDef) => {
     if (row.users_count > 0) {
-      toast.error('Сначала снимите тег с пользователей');
+      toast.error('Сначала снимите тег с контактов');
       return;
     }
     if (!window.confirm(`Удалить тег «${row.key}»?`)) return;
@@ -85,232 +101,136 @@ export default function BotCrmTagsPage() {
       await crmDeleteTag(id, row.key);
       toast.success('Удалено');
       load();
-    } catch (e: any) {
-      toast.error(e.message || 'Нельзя удалить');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Нельзя удалить';
+      toast.error(msg);
     }
   };
 
   return (
     <DashboardPage title="">
-      <Card>
-        <div style={{ marginBottom: 16 }}>
+      <Card className="crm-panel" padding="22px 24px">
+        <div className="crm-page-toolbar">
+          <p className="crm-hint" style={{ margin: 0, flex: '1 1 200px' }}>
+            Справочник тегов. Нажмите строку — откроется список{' '}
+            <Link to={`/dashboard/bots/${id}/crm/contacts`} className="crm-inline-link">
+              контактов
+            </Link>{' '}
+            с этим тегом; назначение на человека — в карточке контакта.
+          </p>
           <button
             type="button"
+            className="crm-btn crm-btn--primary"
             onClick={() => {
               setKey('');
               setLabel('');
               setColor('#6b7280');
               setModal(true);
             }}
-            style={{
-              padding: '10px 16px',
-              borderRadius: 8,
-              border: '1px solid var(--primary)',
-              background: 'rgba(255,210,76,0.15)',
-              color: 'var(--primary)',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
           >
             Новый тег
           </button>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-            <thead>
-              <tr style={{ textAlign: 'left', color: 'var(--text-muted)' }}>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>
-                  Системное имя
-                </th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Название</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Цвет</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>
-                  Пользователей
-                </th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>Обновлено</th>
-                <th style={{ padding: 8, borderBottom: '1px solid var(--border)' }} />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                  <td style={{ padding: 8 }}>
-                    <code>{r.key}</code>
-                  </td>
-                  <td style={{ padding: 8 }}>{r.label || '—'}</td>
-                  <td style={{ padding: 8 }}>
-                    {r.color ? (
-                      <span
-                        style={{
-                          display: 'inline-block',
-                          width: 18,
-                          height: 18,
-                          borderRadius: 4,
-                          background: r.color,
-                          verticalAlign: 'middle',
-                          border: '1px solid var(--border)',
-                        }}
-                      />
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                  <td style={{ padding: 8 }}>{r.users_count}</td>
-                  <td style={{ padding: 8, whiteSpace: 'nowrap' }}>
-                    {new Date(r.updated_at).toLocaleString('ru-RU')}
-                  </td>
-                  <td style={{ padding: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate(`/dashboard/bots/${id}/crm/users?tag=${encodeURIComponent(r.key)}`)
-                      }
-                      title="Пользователи с тегом"
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                        background: 'var(--card)',
-                        cursor: 'pointer',
-                        marginRight: 8,
-                      }}
-                    >
-                      <Users size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditRow(r);
-                        setLabel(r.label || '');
-                        setColor(r.color || '#6b7280');
-                      }}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                        background: 'transparent',
-                        cursor: 'pointer',
-                        marginRight: 8,
-                      }}
-                    >
-                      Правка
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => remove(r)}
-                      disabled={r.users_count > 0}
-                      style={{
-                        padding: '6px 10px',
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                        background: 'transparent',
-                        cursor: r.users_count > 0 ? 'not-allowed' : 'pointer',
-                        opacity: r.users_count > 0 ? 0.45 : 1,
-                      }}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
+
+        {rows.length === 0 ? (
+          <div className="crm-empty">
+            <p className="crm-empty__title">Тегов пока нет</p>
+            <p className="crm-empty__text">
+              Создайте первый тег — он появится в сценариях и карточках контактов.
+            </p>
+          </div>
+        ) : (
+          <div className="crm-table-wrap">
+            <table className="crm-table">
+              <thead>
+                <tr>
+                  <th>Код</th>
+                  <th>Название</th>
+                  <th>Контактов</th>
+                  <th>Обновлено в справочнике</th>
+                  <th aria-label="Действия" />
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map(r => (
+                  <tr key={r.id} className="crm-row-click" onClick={() => goContactsWithTag(r.key)}>
+                    <td>
+                      <code>{r.key}</code>
+                    </td>
+                    <td>{r.label?.trim() ? r.label : null}</td>
+                    <td>{r.users_count}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {new Date(r.updated_at).toLocaleString('ru-RU')}
+                    </td>
+                    <td onClick={e => e.stopPropagation()}>
+                      <div className="crm-inline-actions">
+                        <button
+                          type="button"
+                          className="crm-btn crm-btn--ghost crm-btn--sm"
+                          onClick={() => {
+                            setEditRow(r);
+                            setLabel(r.label || '');
+                            setColor(r.color || '#6b7280');
+                          }}
+                        >
+                          Правка
+                        </button>
+                        <button
+                          type="button"
+                          className="crm-icon-btn"
+                          onClick={() => remove(r)}
+                          disabled={r.users_count > 0}
+                          title={r.users_count > 0 ? 'Сначала снимите тег с контактов' : 'Удалить'}
+                        >
+                          <Trash2 size={16} strokeWidth={2} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {modal && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.45)',
-            zIndex: 200,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--surface)',
-              borderRadius: 12,
-              padding: 24,
-              width: '100%',
-              maxWidth: 400,
-              border: '1px solid var(--border)',
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Новый тег</h3>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 8 }}>
-              Системное имя (для конструктора)
-              <input
-                value={key}
-                onChange={e => setKey(e.target.value)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  marginTop: 4,
-                  padding: 8,
-                  borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: 'var(--card)',
-                  color: 'var(--text)',
-                }}
-              />
-            </label>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 8 }}>
-              Название
-              <input
-                value={label}
-                onChange={e => setLabel(e.target.value)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  marginTop: 4,
-                  padding: 8,
-                  borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: 'var(--card)',
-                  color: 'var(--text)',
-                }}
-              />
-            </label>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 16 }}>
-              Цвет
+        <div className="crm-modal-root" role="presentation">
+          <div className="crm-modal" role="dialog">
+            <h3 className="crm-modal__title">Новый тег</h3>
+            <div className="crm-form-field">
+              <span className="crm-label">Код (латиница, для сценария)</span>
+              <input className="crm-input" value={key} onChange={e => setKey(e.target.value)} />
+            </div>
+            <div className="crm-form-field">
+              <span className="crm-label">Название</span>
+              <input className="crm-input" value={label} onChange={e => setLabel(e.target.value)} />
+            </div>
+            <div className="crm-form-field">
+              <span className="crm-label">Цвет</span>
               <input
                 type="color"
                 value={color}
                 onChange={e => setColor(e.target.value)}
-                style={{ display: 'block', marginTop: 8 }}
-              />
-            </label>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => setModal(false)}
                 style={{
-                  padding: '8px 14px',
+                  width: 48,
+                  height: 36,
+                  padding: 0,
+                  border: 'none',
                   borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: 'transparent',
                   cursor: 'pointer',
                 }}
+              />
+            </div>
+            <div className="crm-modal-actions">
+              <button
+                type="button"
+                className="crm-btn crm-btn--ghost"
+                onClick={() => setModal(false)}
               >
                 Отмена
               </button>
-              <button
-                type="button"
-                onClick={create}
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: 8,
-                  border: '1px solid var(--primary)',
-                  background: 'rgba(255,210,76,0.15)',
-                  color: 'var(--primary)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
+              <button type="button" className="crm-btn crm-btn--primary" onClick={create}>
                 Создать
               </button>
             </div>
@@ -319,81 +239,38 @@ export default function BotCrmTagsPage() {
       )}
 
       {editRow && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.45)',
-            zIndex: 200,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--surface)',
-              borderRadius: 12,
-              padding: 24,
-              width: '100%',
-              maxWidth: 400,
-              border: '1px solid var(--border)',
-            }}
-          >
-            <h3 style={{ marginTop: 0 }}>Тег «{editRow.key}»</h3>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 8 }}>
-              Название
-              <input
-                value={label}
-                onChange={e => setLabel(e.target.value)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  marginTop: 4,
-                  padding: 8,
-                  borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: 'var(--card)',
-                  color: 'var(--text)',
-                }}
-              />
-            </label>
-            <label style={{ display: 'block', fontSize: 13, marginBottom: 16 }}>
-              Цвет
+        <div className="crm-modal-root" role="presentation">
+          <div className="crm-modal" role="dialog">
+            <h3 className="crm-modal__title">Тег «{editRow.key}»</h3>
+            <div className="crm-form-field">
+              <span className="crm-label">Название</span>
+              <input className="crm-input" value={label} onChange={e => setLabel(e.target.value)} />
+            </div>
+            <div className="crm-form-field">
+              <span className="crm-label">Цвет</span>
               <input
                 type="color"
                 value={color}
                 onChange={e => setColor(e.target.value)}
-                style={{ display: 'block', marginTop: 8 }}
-              />
-            </label>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                onClick={() => setEditRow(null)}
                 style={{
-                  padding: '8px 14px',
+                  width: 48,
+                  height: 36,
+                  padding: 0,
+                  border: 'none',
                   borderRadius: 8,
-                  border: '1px solid var(--border)',
-                  background: 'transparent',
                   cursor: 'pointer',
                 }}
+              />
+            </div>
+            <div className="crm-modal-actions">
+              <button
+                type="button"
+                className="crm-btn crm-btn--ghost"
+                onClick={() => setEditRow(null)}
               >
                 Отмена
               </button>
-              <button
-                type="button"
-                onClick={saveEdit}
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: 8,
-                  border: '1px solid var(--primary)',
-                  background: 'rgba(255,210,76,0.15)',
-                  color: 'var(--primary)',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
+              <button type="button" className="crm-btn crm-btn--primary" onClick={saveEdit}>
                 Сохранить
               </button>
             </div>

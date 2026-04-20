@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import threading
+import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI, Request
@@ -51,6 +52,14 @@ from backend.routers import whatsapp as whatsapp_router
 from backend.routers import webhook as webhook_router
 import backend.channels  # noqa: F401 — регистрация адаптеров каналов
 from backend.settings import settings
+from backend.database import SessionLocal, check_db_connection
+from backend.models.constructor_core import CtorBotUser
+from backend.services.cache.redis_cache import (
+    add_dirty_aggregate,
+    pop_dirty_aggregates,
+    check_redis_connection,
+)
+from backend.services.bot_crm.overview_aggregate_service import refresh_overview_aggregate
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +94,8 @@ if settings.ENVIRONMENT == "development":
         "http://127.0.0.1:5173",
         "http://localhost:8001",
         "http://127.0.0.1:8001",
+        "http://localhost:8002",
+        "http://127.0.0.1:8002",
     ])
     # Убираем дубликаты
     allowed_origins = list(set(allowed_origins))
@@ -175,27 +186,103 @@ def _check_production_env():
 def startup_retention_job():
     """Проверка prod-переменных (152-ФЗ), затем запуск ежедневной очистки по retention."""
     _check_production_env()
+    db_ok, db_msg = check_db_connection()
+    if not db_ok:
+        raise RuntimeError(f"Database is not ready at startup: {db_msg}")
+
+    if settings.ENVIRONMENT == "production" and settings.STRICT_REDIS:
+        redis_ok, redis_msg = check_redis_connection()
+        if not redis_ok:
+            raise RuntimeError(f"Redis is required in production, but unavailable: {redis_msg}")
+
     if settings.ENVIRONMENT == "production":
         logger.info("Production mode enabled")
         logger.info("Security keys loaded from environment")
     if getattr(settings, "TESTING", False):
         return
     from backend.services.retention_cleanup import run_retention_cleanup_once
+
+    is_sqlite = str(getattr(settings, "DATABASE_URL", "")).startswith("sqlite")
+
+    def _seed_crm_aggregate_dirty() -> None:
+        db = SessionLocal()
+        try:
+            rows = db.query(CtorBotUser.bot_id, CtorBotUser.environment).distinct().all()
+            for bot_id, env in rows:
+                if not bot_id:
+                    continue
+                e = str(env or "prod")
+                if e not in ("dev", "prod"):
+                    e = "prod"
+                add_dirty_aggregate(int(bot_id), e)
+        finally:
+            db.close()
+
+    def _crm_aggregate_loop() -> None:
+        time.sleep(8)
+        seeded = False
+        sleep_seconds = 30
+        while True:
+            try:
+                if not seeded:
+                    _seed_crm_aggregate_dirty()
+                    seeded = True
+                dirty = pop_dirty_aggregates(limit=max(1, int(settings.CRM_AGGREGATE_BATCH_SIZE)))
+                for bot_id, env in dirty:
+                    db = SessionLocal()
+                    try:
+                        refresh_overview_aggregate(db, bot_id=bot_id, environment=env)  # type: ignore[arg-type]
+                    finally:
+                        db.close()
+                sleep_seconds = 30
+            except Exception as e:
+                logger.exception("crm_aggregate_refresh: %s", e)
+                sleep_seconds = min(300, max(30, sleep_seconds * 2))
+            time.sleep(sleep_seconds)
+
     def _loop():
-        import time
         time.sleep(60)
+        sleep_seconds = 86400
+        error_sleep_seconds = 300
         while True:
             try:
                 run_retention_cleanup_once()
+                sleep_seconds = 86400
+                error_sleep_seconds = 300
             except Exception as e:
                 logger.exception("retention_cleanup: %s", e)
-            time.sleep(86400)
+                sleep_seconds = error_sleep_seconds
+                error_sleep_seconds = min(86400, error_sleep_seconds * 2)
+            time.sleep(sleep_seconds)
+
+    # Для SQLite (локальный dev) фоновая полная CRM-агрегация может блокировать всю БД.
+    # В проде используется PostgreSQL, поэтому там поток остаётся включённым.
+    if is_sqlite:
+        logger.info("Skipping CRM aggregate background loop for SQLite database")
+    else:
+        threading.Thread(target=_crm_aggregate_loop, daemon=True).start()
     threading.Thread(target=_loop, daemon=True).start()
 
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+@app.get("/ready", tags=["system"])
+def readiness_check():
+    db_ok, db_msg = check_db_connection()
+    redis_ok, redis_msg = check_redis_connection()
+    checks = {
+        "db": {"ok": db_ok, "message": db_msg},
+        "redis": {"ok": redis_ok, "message": redis_msg},
+        "crm_aggregate_service": {"ok": True, "message": "loaded"},
+    }
+    if not db_ok:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "checks": checks})
+    if settings.ENVIRONMENT == "production" and settings.STRICT_REDIS and not redis_ok:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "checks": checks})
+    return {"status": "ready", "checks": checks}
 
 
 # Главная: редирект на Swagger

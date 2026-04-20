@@ -16,6 +16,9 @@ import {
   MoreVertical,
   X,
   ExternalLink,
+  Workflow,
+  BarChart3,
+  FolderOpen,
 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
@@ -529,10 +532,10 @@ export default function BotsPage() {
               hoverable
               style={{ position: 'relative', zIndex: menuOpenId === bot.id ? 100 : 1 }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                   <div
-                    onClick={() => navigate(`/editor/${bot.id}`)}
+                    onClick={() => navigate(`/dashboard/bots/${bot.id}`)}
                     style={{
                       width: '48px',
                       height: '48px',
@@ -553,7 +556,7 @@ export default function BotsPage() {
                     />
                   </div>
                   <div
-                    onClick={() => navigate(`/editor/${bot.id}`)}
+                    onClick={() => navigate(`/dashboard/bots/${bot.id}`)}
                     style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
                   >
                     <h3
@@ -572,6 +575,9 @@ export default function BotsPage() {
                       style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 4px 0' }}
                     >
                       @{bot.username}
+                    </p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
+                      {bot.channel || 'Telegram'} • CRM • Сценарии • Аналитика
                     </p>
                     {bot.description && (
                       <p
@@ -592,40 +598,42 @@ export default function BotsPage() {
                   </div>
                 </div>
 
-                {/* Статистика */}
+                {/* CRM и основная информация */}
                 <div
                   style={{
                     display: 'flex',
                     gap: '16px',
                     paddingTop: '8px',
                     borderTop: '1px solid var(--border)',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
                   }}
                 >
-                  <span
+                  <div
                     style={{
                       fontSize: '13px',
                       color: 'var(--text-muted)',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      gap: '6px',
                     }}
                   >
-                    <Users size={14} /> {bot.usersCount || 0} пользователей
-                  </span>
-                  <span
+                    <Users size={14} /> CRM: {bot.usersCount || 0} контактов
+                  </div>
+                  <div
                     style={{
-                      fontSize: '13px',
+                      fontSize: '12px',
                       color: 'var(--text-muted)',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '4px',
+                      gap: '6px',
                     }}
                   >
                     <MessageCircle size={14} /> {bot.messagesCount || 0} сообщений
-                  </span>
+                  </div>
                 </div>
 
-                {/* Теги */}
+                {/* Статус и канал */}
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <span
                     style={{
@@ -651,8 +659,95 @@ export default function BotsPage() {
                       fontWeight: 600,
                     }}
                   >
-                    Telegram
+                    {bot.channel || 'Telegram'}
                   </span>
+                </div>
+
+                {/* Главный вход + быстрые действия */}
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/dashboard/bots/${bot.id}`)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '10px 12px',
+                      background: 'var(--primary)',
+                      color: '#000',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <FolderOpen size={16} />
+                    Открыть
+                  </button>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/dashboard/bots/${bot.id}/crm`)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--card)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                      }}
+                    >
+                      CRM
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/dashboard/bots/${bot.id}/scenarios`)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--card)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <Workflow size={14} /> Сценарии
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/dashboard/bots/${bot.id}/analytics`)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 10px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border)',
+                        background: 'var(--card)',
+                        color: 'var(--text)',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <BarChart3 size={14} /> Аналитика
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -755,31 +850,6 @@ export default function BotsPage() {
                         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                       >
                         <ExternalLink size={16} /> Открыть редактор
-                      </button>
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          navigate(`/dashboard/bots/${bot.id}/crm/users`);
-                          setMenuOpenId(null);
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '8px 12px',
-                          background: 'transparent',
-                          border: 'none',
-                          borderRadius: '4px',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          color: 'var(--text)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <Users size={16} /> CRM: пользователи
                       </button>
                       <button
                         onClick={e => {
