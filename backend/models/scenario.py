@@ -11,8 +11,10 @@ SCENARIO_STATUS_PUBLISHED = "published"
 
 class Scenario(Base):
     """
-    Сценарий - отдельная часть бота для конкретной задачи
-    Может быть частью бота (bot_id) или в библиотеке (library=True)
+    Сценарий — самостоятельный шаблонный asset пользователя.
+    Может быть:
+    - сохранён как отдельный шаблон в "Моих сценариях" (bot_id = NULL),
+    - использован внутри бота как копия (bot_id != NULL).
     """
     __tablename__ = "scenarios"
     __table_args__ = {"extend_existing": True}
@@ -22,7 +24,7 @@ class Scenario(Base):
     # Владелец сценария
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     
-    # К какому боту принадлежит (NULL если в библиотеке)
+    # К какому боту привязан экземпляр сценария (NULL для шаблона из "Моих сценариев")
     bot_id = Column(Integer, ForeignKey("bots.id", ondelete="CASCADE"), nullable=True, index=True)
     
     # Основные данные
@@ -33,7 +35,7 @@ class Scenario(Base):
     
     # Флаги
     is_main = Column(Boolean, default=False)  # Главный сценарий бота
-    is_library = Column(Boolean, default=False)  # В библиотеке для переиспользования
+    is_library = Column(Boolean, default=False)  # legacy-флаг (в пользовательском UX не используется)
     is_standard = Column(Boolean, default=False)  # Стандартный шаблон от платформы
     is_public = Column(Boolean, default=False)  # Для маркетплейса (будущее)
     

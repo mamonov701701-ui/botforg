@@ -7,18 +7,180 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, and_, case
 
 logger = logging.getLogger(__name__)
 
 from backend.dependencies.auth import get_current_user
 from backend.database import get_db
 from backend.models.user import User
+from backend.models.event import Event, ScenarioExecution
+from backend.models.scenario import Scenario
+from backend.models.bot import Bot, BotInstance
+from backend.models.bot_user_state import BotUserState
 from backend.services.analytics_service import get_analytics_service
 from sqlalchemy.orm import Session
 
 
 router = APIRouter(prefix="/analytics", tags=["Analytics"])
+
+
+def _resolve_range(date_from: Optional[str], date_to: Optional[str]) -> tuple[datetime, datetime]:
+    now = datetime.utcnow()
+    start = datetime.fromisoformat(date_from) if date_from else now - timedelta(days=30)
+    end = datetime.fromisoformat(date_to) if date_to else now
+    return start, end
+
+
+@router.get("/global")
+async def get_global_stats(
+    date_from: Optional[str] = Query(default=None),
+    date_to: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    start, end = _resolve_range(date_from, date_to)
+    owner_bot_ids = [row[0] for row in db.query(Bot.id).filter(Bot.owner_id == current_user.id).all()]
+    if not owner_bot_ids:
+        return {
+            "newUsers": 0,
+            "activeUsers": 0,
+            "completedScenarios": 0,
+            "topScenarios": [],
+        }
+
+    instance_ids = [
+        row[0] for row in db.query(BotInstance.id).filter(BotInstance.user_id == current_user.id).all()
+    ]
+
+    new_users = 0
+    active_users = 0
+    if instance_ids:
+        new_users = db.query(func.count(BotUserState.id)).filter(
+            and_(BotUserState.bot_id.in_(instance_ids), BotUserState.created_at >= start, BotUserState.created_at <= end)
+        ).scalar() or 0
+        active_users = db.query(func.count(func.distinct(BotUserState.telegram_user_id))).filter(
+            and_(
+                BotUserState.bot_id.in_(instance_ids),
+                BotUserState.last_interaction_at >= start,
+                BotUserState.last_interaction_at <= end,
+            )
+        ).scalar() or 0
+
+    owner_scenario_ids = [
+        row[0] for row in db.query(Scenario.id).filter(Scenario.user_id == current_user.id).all()
+    ]
+    completed = 0
+    top = []
+    if owner_scenario_ids:
+        completed = db.query(func.count(ScenarioExecution.id)).filter(
+            and_(
+                ScenarioExecution.scenario_id.in_(owner_scenario_ids),
+                ScenarioExecution.status == "completed",
+                ScenarioExecution.started_at >= start,
+                ScenarioExecution.started_at <= end,
+            )
+        ).scalar() or 0
+        top_rows = (
+            db.query(
+                ScenarioExecution.scenario_id,
+                func.count(ScenarioExecution.id).label("entries"),
+                func.sum(case((ScenarioExecution.status == "completed", 1), else_=0)).label("completed"),
+            )
+            .filter(
+                and_(
+                    ScenarioExecution.scenario_id.in_(owner_scenario_ids),
+                    ScenarioExecution.started_at >= start,
+                    ScenarioExecution.started_at <= end,
+                )
+            )
+            .group_by(ScenarioExecution.scenario_id)
+            .order_by(func.count(ScenarioExecution.id).desc())
+            .limit(5)
+            .all()
+        )
+        for row in top_rows:
+            scenario = db.query(Scenario).filter(Scenario.id == row.scenario_id).first()
+            entries = int(row.entries or 0)
+            done = int(row.completed or 0)
+            top.append(
+                {
+                    "scenarioId": row.scenario_id,
+                    "name": scenario.name if scenario else f"Сценарий #{row.scenario_id}",
+                    "entries": entries,
+                    "conversionRate": round((done / entries * 100) if entries else 0, 2),
+                }
+            )
+
+    return {
+        "newUsers": int(new_users),
+        "activeUsers": int(active_users),
+        "completedScenarios": int(completed),
+        "topScenarios": top,
+    }
+
+
+@router.get("/scenario/{scenario_id}")
+async def get_scenario_stats(
+    scenario_id: int,
+    date_from: Optional[str] = Query(default=None),
+    date_to: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    if scenario.user_id != current_user.id:
+        if scenario.bot_id:
+            from backend.utils.bot_access import check_bot_access
+
+            check_bot_access(scenario.bot_id, current_user.id, db)
+        else:
+            raise HTTPException(status_code=403, detail="Доступ запрещён")
+
+    start, end = _resolve_range(date_from, date_to)
+    executions = (
+        db.query(ScenarioExecution)
+        .filter(
+            and_(
+                ScenarioExecution.scenario_id == scenario_id,
+                ScenarioExecution.started_at >= start,
+                ScenarioExecution.started_at <= end,
+            )
+        )
+        .all()
+    )
+    total_entries = len(executions)
+    completed = sum(1 for ex in executions if ex.status == "completed")
+    dropped = sum(1 for ex in executions if ex.status in ("failed", "cancelled", "dropped"))
+
+    drop_rows = (
+        db.query(Event.node_id, func.count(Event.id).label("value"))
+        .filter(
+            and_(
+                Event.scenario_id == scenario_id,
+                Event.event_type == "drop",
+                Event.created_at >= start,
+                Event.created_at <= end,
+            )
+        )
+        .group_by(Event.node_id)
+        .order_by(func.count(Event.id).desc())
+        .all()
+    )
+    drop_off_by_step = [
+        {"step": row.node_id or "Неизвестный шаг", "count": int(row.value or 0)} for row in drop_rows
+    ]
+
+    return {
+        "scenarioId": scenario_id,
+        "totalEntries": total_entries,
+        "completed": completed,
+        "dropped": dropped,
+        "conversionRate": round((completed / total_entries * 100) if total_entries else 0, 2),
+        "dropOffByStep": drop_off_by_step,
+    }
 
 
 @router.get("/dashboard")

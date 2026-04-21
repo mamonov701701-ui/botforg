@@ -121,6 +121,27 @@ export interface MarketingAnalytics {
   online_now: number;
 }
 
+export interface GlobalStats {
+  newUsers: number;
+  activeUsers: number;
+  completedScenarios: number;
+  topScenarios: Array<{
+    scenarioId: number;
+    name: string;
+    entries: number;
+    conversionRate: number;
+  }>;
+}
+
+export interface ScenarioStats {
+  scenarioId: number;
+  totalEntries: number;
+  completed: number;
+  dropped: number;
+  conversionRate: number;
+  dropOffByStep: Array<{ step: string; count: number }>;
+}
+
 /**
  * Получить маркетинговую аналитику
  */
@@ -156,6 +177,26 @@ export async function getMarketingAnalytics(
       online_now: 0,
     };
   }
+}
+
+export async function getGlobalStats(dateFrom?: string, dateTo?: string): Promise<GlobalStats> {
+  const query = new URLSearchParams();
+  if (dateFrom) query.append('date_from', dateFrom);
+  if (dateTo) query.append('date_to', dateTo);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return api.get(`/analytics/global${suffix}`);
+}
+
+export async function getScenarioStats(
+  scenarioId: number,
+  dateFrom?: string,
+  dateTo?: string
+): Promise<ScenarioStats> {
+  const query = new URLSearchParams();
+  if (dateFrom) query.append('date_from', dateFrom);
+  if (dateTo) query.append('date_to', dateTo);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return api.get(`/analytics/scenario/${scenarioId}${suffix}`);
 }
 
 // ============== Bot Users ==============

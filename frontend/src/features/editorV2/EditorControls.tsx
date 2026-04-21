@@ -5,9 +5,9 @@ import ScenarioHubDropdown from './ScenarioHubDropdown';
 import NewScenarioNameModal from './NewScenarioNameModal';
 import AddScenarioFromMineModal from './AddScenarioFromMineModal';
 import type { Scenario } from '../../api/scenarios';
+import { saveAsScenario } from '../../api/scenarios';
 import BotsDropdown from './BotsDropdown';
 import SaveDropdown from './SaveDropdown';
-import SaveToLibraryModal from './SaveToLibraryModal';
 import SaveBotModal from './SaveBotModal';
 import NewBotModal from './NewBotModal';
 import BotSimulator from '../simulator/BotSimulator';
@@ -88,7 +88,6 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     saveCurrentScenario,
     deleteScenario: deleteScenarioAPI,
     renameScenario,
-    saveToLibrary: saveToLibraryAPI,
     enableAutoSave,
     disableAutoSave,
     hasUnsavedChanges: storeHasUnsaved,
@@ -117,7 +116,6 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   );
 
   // Модальные окна
-  const [isSaveToLibraryOpen, setIsSaveToLibraryOpen] = useState(false);
   const [isSaveBotOpen, setIsSaveBotOpen] = useState(false);
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
   /** UI: кнопки хаба неактивны во время async */
@@ -476,39 +474,30 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     setIsSaveBotOpen(true);
   };
 
-  const handleSaveToLibrary = () => {
+  const handleSaveScenario = async () => {
     if (!user) {
-      showToast('Для сохранения в библиотеку необходимо войти в систему', 'error');
+      showToast('Для сохранения сценария необходимо войти в систему', 'error');
       openAuth(window.location.pathname);
       return;
     }
-    setIsSaveToLibraryOpen(true);
+    if (!currentScenarioId) {
+      showToast('Сначала выберите сценарий', 'warning');
+      return;
+    }
+    try {
+      const saved = await saveAsScenario(currentScenarioId);
+      showToast(`Сценарий сохранён в "Мои сценарии": ${saved.name}`, 'success');
+    } catch (error: any) {
+      if (error?.status === 401) {
+        showToast('Для сохранения сценария необходимо войти в систему', 'error');
+      } else {
+        showToast(error?.message || 'Не удалось сохранить как сценарий', 'error');
+      }
+    }
   };
 
   const handleExportToFile = () => {
     if (onExport) onExport();
-  };
-
-  // Обработчики для SaveToLibraryModal
-  const handleSaveScenarioToLibrary = async (data: {
-    name: string;
-    description: string;
-    category: string;
-    icon: string;
-    overwrite: boolean;
-  }) => {
-    try {
-      await saveToLibraryAPI(data);
-      showToast(`Сценарий "${data.name}" сохранён в библиотеку`, 'success');
-      setIsSaveToLibraryOpen(false);
-    } catch (error: any) {
-      // Обработка ошибок авторизации
-      if (error.status === 401) {
-        showToast('Для сохранения в библиотеку необходимо войти в систему', 'error');
-      } else {
-        showToast(error.message || 'Ошибка при сохранении', 'error');
-      }
-    }
   };
 
   // Обработчики для SaveBotModal
@@ -700,7 +689,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
           <SaveDropdown
             onQuickSave={isReadOnly ? undefined : handleQuickSave}
             onSaveBot={isReadOnly ? undefined : handleSaveBot}
-            onSaveToLibrary={isReadOnly ? undefined : handleSaveToLibrary}
+            onSaveScenario={isReadOnly ? undefined : handleSaveScenario}
             onExportToFile={handleExportToFile}
             hasUnsavedChanges={storeHasUnsaved()}
           />
@@ -720,13 +709,6 @@ const EditorControls: React.FC<EditorControlsProps> = ({
         onClose={() => !addFromMineBusy && setIsAddFromMineOpen(false)}
         onAddCopy={handleCreateCopyFromMine}
         busy={addFromMineBusy}
-      />
-
-      <SaveToLibraryModal
-        isOpen={isSaveToLibraryOpen}
-        onClose={() => setIsSaveToLibraryOpen(false)}
-        onSave={handleSaveScenarioToLibrary}
-        currentScenarioName={scenarios.find(s => s.id === currentScenarioId)?.name || 'Сценарий'}
       />
 
       <SaveBotModal

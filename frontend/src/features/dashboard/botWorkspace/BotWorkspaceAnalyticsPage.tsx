@@ -15,40 +15,30 @@ export default function BotWorkspaceAnalyticsPage() {
   }, [id]);
 
   return (
-    <section className="crm-card" style={{ padding: 16 }}>
-      <h2 style={{ margin: 0, fontSize: 18 }}>Аналитика бота</h2>
-      <p className="crm-muted" style={{ marginTop: 8 }}>
-        Ключевые показатели по реальным данным CRM без смешивания с preview.
-      </p>
-      <div
-        style={{
-          marginTop: 14,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: 12,
-        }}
-      >
-        <div className="crm-card" style={{ padding: 12 }}>
-          <div className="crm-muted" style={{ fontSize: 12 }}>
-            Новые за 7 дней
-          </div>
-          <div style={{ marginTop: 4, fontWeight: 700 }}>{overview?.new_contacts_7d ?? 0}</div>
+    <section className="bot-card" style={{ display: 'grid', gap: 14 }}>
+      <div>
+        <h2 className="bot-section-title">Аналитика бота</h2>
+        <p className="bot-section-lead">
+          Ключевые показатели по реальным данным CRM без смешивания с preview.
+        </p>
+      </div>
+      <div className="bot-card-grid">
+        <div className="bot-card bot-card--compact">
+          <div className="bot-card-label">Новые</div>
+          <div className="bot-card-value">{overview?.new_contacts_7d ?? 0}</div>
         </div>
-        <div className="crm-card" style={{ padding: 12 }}>
-          <div className="crm-muted" style={{ fontSize: 12 }}>
-            Активные за 7 дней
-          </div>
-          <div style={{ marginTop: 4, fontWeight: 700 }}>{overview?.active_contacts_7d ?? 0}</div>
+        <div className="bot-card bot-card--compact">
+          <div className="bot-card-label">Активные</div>
+          <div className="bot-card-value">{overview?.active_contacts_7d ?? 0}</div>
         </div>
-        <div className="crm-card" style={{ padding: 12 }}>
-          <div className="crm-muted" style={{ fontSize: 12 }}>
-            Спящие 30 дней
-          </div>
-          <div style={{ marginTop: 4, fontWeight: 700 }}>
-            {overview?.sleeping_contacts_30d ?? 0}
-          </div>
+        <div className="bot-card bot-card--compact">
+          <div className="bot-card-label">Спящие</div>
+          <div className="bot-card-value">{overview?.sleeping_contacts_30d ?? 0}</div>
         </div>
       </div>
+      <p className="bot-section-lead" style={{ marginTop: 0 }}>
+        Ключевые показатели по реальным данным CRM без смешивания с preview.
+      </p>
     </section>
   );
 }

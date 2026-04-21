@@ -3,11 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
-  FolderOpen,
   FileText,
   Bot as BotIcon,
-  Library,
-  Layers,
   Edit,
   MoreVertical,
   Trash2,
@@ -18,9 +15,9 @@ import Card from '../components/Card';
 import EmptyState from '../components/EmptyState';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction } from '../../../constants/roles';
-import { getBots, type Bot } from '../../../api/bot';
 import {
   getMyScenarios,
+  createScenario,
   updateScenario,
   deleteScenario,
   type Scenario,
@@ -279,16 +276,109 @@ function EditScenarioModal({ scenario, onClose, onSave }: EditScenarioModalProps
   );
 }
 
+interface CreateScenarioModalProps {
+  onClose: () => void;
+  onCreate: (payload: {
+    name: string;
+    description?: string;
+    type: 'main' | 'other';
+  }) => Promise<void>;
+}
+
+function CreateScenarioModal({ onClose, onCreate }: CreateScenarioModalProps) {
+  const [name, setName] = React.useState('');
+  const [description, setDescription] = React.useState('');
+  const [type, setType] = React.useState<'main' | 'other'>('other');
+  const [saving, setSaving] = React.useState(false);
+
+  const handleCreate = async () => {
+    if (!name.trim()) {
+      toast.error('Название сценария обязательно');
+      return;
+    }
+    try {
+      setSaving(true);
+      await onCreate({ name: name.trim(), description: description.trim() || undefined, type });
+      onClose();
+    } catch (error: any) {
+      toast.error(error?.message || 'Не удалось создать сценарий');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1200,
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 520,
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderRadius: 14,
+          padding: 20,
+          pointerEvents: 'auto',
+        }}
+      >
+        <h3 style={{ marginTop: 0 }}>Создать сценарий</h3>
+        <div style={{ display: 'grid', gap: 10 }}>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Название</span>
+            <input className="crm-input" value={name} onChange={e => setName(e.target.value)} />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Тип сценария</span>
+            <select
+              className="crm-input"
+              value={type}
+              onChange={e => setType(e.target.value as 'main' | 'other')}
+            >
+              <option value="other">Дополнительный</option>
+              <option value="main">Основной</option>
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Описание (необязательно)</span>
+            <textarea
+              className="crm-input"
+              rows={4}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+            />
+          </label>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 14 }}>
+          <button type="button" className="crm-button crm-button--secondary" onClick={onClose}>
+            Отмена
+          </button>
+          <button type="button" className="crm-button" onClick={handleCreate} disabled={saving}>
+            {saving ? 'Создание...' : 'Создать'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ScenariosPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
   const [loading, setLoading] = useState(true);
-  const [bots, setBots] = useState<Bot[]>([]);
   const [allScenarios, setAllScenarios] = useState<Scenario[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'bot' | 'library'>('all');
   const [editingScenario, setEditingScenario] = useState<Scenario | null>(null);
+  const [creatingScenario, setCreatingScenario] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
 
   // Загружаем все сценарии пользователя
@@ -296,9 +386,8 @@ export default function ScenariosPage() {
     async function loadData() {
       try {
         setLoading(true);
-        const [scenariosData, botsData] = await Promise.all([getMyScenarios(), getBots()]);
+        const scenariosData = await getMyScenarios();
         setAllScenarios(scenariosData);
-        setBots(botsData.items);
       } catch (error) {
         console.error('Failed to load scenarios:', error);
       } finally {
@@ -311,6 +400,19 @@ export default function ScenariosPage() {
 
   const canCreate = hasAccessToAction(user?.role, 'bot_create');
 
+  const formatDate = (iso?: string) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      });
+    } catch {
+      return '—';
+    }
+  };
+
   // Фильтрация сценариев
   const filteredScenarios = allScenarios.filter(scenario => {
     // Поиск
@@ -322,20 +424,10 @@ export default function ScenariosPage() {
       if (!matchesSearch) return false;
     }
 
-    // Фильтр по типу
-    if (filter === 'bot') return scenario.bot_id !== null;
-    if (filter === 'library') return scenario.is_library;
-
     return true;
   });
 
   // Получить название бота по ID
-  const getBotName = (botId: number | null) => {
-    if (!botId) return null;
-    const bot = bots.find(b => b.id === botId);
-    return bot?.title || `Бот #${botId}`;
-  };
-
   const handleSaveScenario = async (scenarioId: number, data: ScenarioUpdate) => {
     const updated = await updateScenario(scenarioId, data);
     setAllScenarios(prev => prev.map(s => (s.id === scenarioId ? { ...s, ...updated } : s)));
@@ -359,6 +451,28 @@ export default function ScenariosPage() {
 
   const canEdit = hasAccessToAction(user?.role, 'bot_edit');
 
+  const handleCreateScenario = async (payload: {
+    name: string;
+    description?: string;
+    type: 'main' | 'other';
+  }) => {
+    const created = await createScenario({
+      name: payload.name,
+      description: payload.description,
+      is_library: false,
+      is_main: payload.type === 'main',
+    });
+    setAllScenarios(prev => [created, ...prev]);
+    toast.success('Сценарий создан');
+  };
+
+  const getUsageLabel = (scenario: Scenario) => {
+    const usageCount = scenario.usage_bots_count || 0;
+    if (usageCount > 0) return `Используется в ${usageCount} ботах`;
+    if (scenario.bot_id) return 'Используется в 1 боте';
+    return 'Не используется';
+  };
+
   if (loading) {
     return (
       <DashboardPage title="Сценарии" subtitle="Загрузка...">
@@ -379,7 +493,10 @@ export default function ScenariosPage() {
   }
 
   return (
-    <DashboardPage title="Мои сценарии" subtitle={`Всего сценариев: ${allScenarios.length}`}>
+    <DashboardPage
+      title="Мои сценарии"
+      subtitle="Отдельные сценарии для повторного использования в разных ботах"
+    >
       {/* Фильтры и поиск */}
       <div
         style={{
@@ -419,57 +536,28 @@ export default function ScenariosPage() {
           />
         </div>
 
-        {/* Фильтр по типу */}
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {[
-            { key: 'all', label: 'Все', icon: Layers, count: allScenarios.length },
-            {
-              key: 'bot',
-              label: 'В ботах',
-              icon: BotIcon,
-              count: allScenarios.filter(s => s.bot_id !== null).length,
-            },
-            {
-              key: 'library',
-              label: 'Библиотека',
-              icon: Library,
-              count: allScenarios.filter(s => s.is_library).length,
-            },
-          ].map(({ key, label, icon: Icon, count }) => (
-            <button
-              key={key}
-              onClick={() => setFilter(key as 'all' | 'bot' | 'library')}
-              style={{
-                padding: '8px 16px',
-                background: filter === key ? 'rgba(255, 210, 76, 0.2)' : 'var(--card)',
-                color: filter === key ? 'var(--primary)' : 'var(--text-muted)',
-                border: filter === key ? '1px solid var(--primary)' : '1px solid var(--border)',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.2s',
-              }}
-            >
-              <Icon size={16} />
-              {label}
-              <span
-                style={{
-                  background: filter === key ? 'var(--primary)' : 'var(--border)',
-                  color: filter === key ? '#000' : 'var(--text-muted)',
-                  padding: '2px 6px',
-                  borderRadius: '10px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                }}
-              >
-                {count}
-              </span>
-            </button>
-          ))}
+        <div style={{ marginLeft: 'auto' }}>
+          <button
+            type="button"
+            onClick={() => setCreatingScenario(true)}
+            disabled={!canCreate}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 14px',
+              borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: 'linear-gradient(180deg, #f0d060 0%, #d4af37 100%)',
+              color: '#101218',
+              fontWeight: 700,
+              cursor: !canCreate ? 'not-allowed' : 'pointer',
+              opacity: !canCreate ? 0.6 : 1,
+            }}
+          >
+            <Plus size={16} />
+            Создать сценарий
+          </button>
         </div>
       </div>
 
@@ -477,13 +565,11 @@ export default function ScenariosPage() {
       {filteredScenarios.length === 0 ? (
         <EmptyState
           icon={FileText}
-          title={filter === 'library' ? 'Библиотека пуста' : 'Сценариев не найдено'}
+          title="Сценариев не найдено"
           description={
-            filter === 'library'
-              ? "Сохраните сценарий в библиотеку из редактора через меню 'Сохранить' → 'В библиотеку'"
-              : searchQuery
-                ? 'Попробуйте изменить поисковый запрос'
-                : 'Создайте бота и добавьте в него сценарий'
+            searchQuery
+              ? 'Попробуйте изменить поисковый запрос'
+              : 'Создайте сценарий и начните работу'
           }
         />
       ) : (
@@ -503,39 +589,20 @@ export default function ScenariosPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
                   <div
-                    onClick={() =>
-                      scenario.bot_id ? navigate(`/editor/${scenario.bot_id}`) : null
-                    }
                     style={{
                       width: '48px',
                       height: '48px',
                       borderRadius: '8px',
-                      background: scenario.is_library
-                        ? 'rgba(59, 130, 246, 0.1)'
-                        : 'rgba(255, 210, 76, 0.1)',
+                      background: 'rgba(255, 210, 76, 0.1)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       flexShrink: 0,
-                      cursor: scenario.bot_id ? 'pointer' : 'default',
                     }}
                   >
-                    {scenario.is_library ? (
-                      <Library size={24} style={{ color: '#3b82f6' }} />
-                    ) : (
-                      <FileText size={24} style={{ color: 'var(--primary)' }} />
-                    )}
+                    <FileText size={24} style={{ color: 'var(--primary)' }} />
                   </div>
-                  <div
-                    onClick={() =>
-                      scenario.bot_id ? navigate(`/editor/${scenario.bot_id}`) : null
-                    }
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      cursor: scenario.bot_id ? 'pointer' : 'default',
-                    }}
-                  >
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <h3
                       style={{
                         fontSize: '16px',
@@ -548,21 +615,21 @@ export default function ScenariosPage() {
                     >
                       {scenario.name}
                     </h3>
-                    {scenario.bot_id && (
-                      <p
-                        style={{
-                          fontSize: '12px',
-                          color: 'var(--text-muted)',
-                          margin: '0 0 4px 0',
-                        }}
-                      >
-                        <BotIcon
-                          size={12}
-                          style={{ display: 'inline', marginRight: '4px', verticalAlign: 'middle' }}
-                        />
-                        {getBotName(scenario.bot_id)}
-                      </p>
-                    )}
+                    <p
+                      style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 4px 0' }}
+                    >
+                      {scenario.is_main ? 'Тип: Основной' : 'Тип: Дополнительный'}
+                    </p>
+                    <p
+                      style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 4px 0' }}
+                    >
+                      Изменён: {formatDate(scenario.updated_at)}
+                    </p>
+                    <p
+                      style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 4px 0' }}
+                    >
+                      {getUsageLabel(scenario)}
+                    </p>
                     {scenario.description && (
                       <p
                         style={{
@@ -597,20 +664,6 @@ export default function ScenariosPage() {
                       Главный
                     </span>
                   )}
-                  {scenario.is_library && (
-                    <span
-                      style={{
-                        padding: '4px 8px',
-                        background: 'rgba(59, 130, 246, 0.2)',
-                        color: '#3b82f6',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: 600,
-                      }}
-                    >
-                      Библиотека
-                    </span>
-                  )}
                   {scenario.is_standard && (
                     <span
                       style={{
@@ -638,6 +691,23 @@ export default function ScenariosPage() {
                       {scenario.category}
                     </span>
                   )}
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/dashboard/scenarios/${scenario.id}`)}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                      background: 'linear-gradient(180deg, #f0d060 0%, #d4af37 100%)',
+                      color: '#101218',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Открыть
+                  </button>
                 </div>
               </div>
 
@@ -712,33 +782,6 @@ export default function ScenariosPage() {
                         >
                           <Edit size={16} /> Редактировать
                         </button>
-                        {scenario.bot_id && (
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              navigate(`/editor/${scenario.bot_id}`);
-                              setMenuOpenId(null);
-                            }}
-                            style={{
-                              width: '100%',
-                              padding: '8px 12px',
-                              background: 'transparent',
-                              border: 'none',
-                              borderRadius: '4px',
-                              textAlign: 'left',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              color: 'var(--text)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--card)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                          >
-                            <FileText size={16} /> Открыть в редакторе
-                          </button>
-                        )}
                         <div
                           style={{ height: '1px', background: 'var(--border)', margin: '8px 0' }}
                         />
@@ -783,6 +826,12 @@ export default function ScenariosPage() {
           scenario={editingScenario}
           onClose={() => setEditingScenario(null)}
           onSave={handleSaveScenario}
+        />
+      )}
+      {creatingScenario && (
+        <CreateScenarioModal
+          onClose={() => setCreatingScenario(false)}
+          onCreate={handleCreateScenario}
         />
       )}
     </DashboardPage>

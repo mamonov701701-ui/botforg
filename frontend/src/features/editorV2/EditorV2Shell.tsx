@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useMemo, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -1057,17 +1057,39 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
 CustomNode.displayName = 'CustomNode';
 
 function InnerEditor() {
+  const navigate = useNavigate();
+  const { scenarioId: routeScenarioId } = useParams<{ scenarioId?: string }>();
   const { catalog, plan, role, showToast, loadCatalog } = useEditorStore();
 
   // Scenario store: единый источник правды для сценария
   // Важно: используем отдельные селекторы, а не один объект,
   // чтобы избежать предупреждения useSyncExternalStore про getSnapshot
   const currentState = useScenarioStore(state => state.currentState);
+  const loadStandaloneScenario = useScenarioStore(state => state.loadStandaloneScenario);
   const currentScenarioId = useScenarioStore(state => state.currentScenarioId);
   const currentBotId = useScenarioStore(state => state.currentBotId);
   const updateCurrentScenario = useScenarioStore(state => state.updateCurrentScenario);
   const setEditorScenarioValidationVars = useEditorStore(s => s.setEditorScenarioValidationVars);
   const { id: routeBotId } = useParams<{ id: string }>();
+  useEffect(() => {
+    if (!routeScenarioId) return;
+    const sid = Number(routeScenarioId);
+    if (!Number.isFinite(sid)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadStandaloneScenario(sid);
+      } catch {
+        if (!cancelled) {
+          navigate('/dashboard/scenarios');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeScenarioId, loadStandaloneScenario, navigate]);
+
   const [ctorVarKeys, setCtorVarKeys] = useState<string[]>([]);
   const [ctorSysKeys, setCtorSysKeys] = useState<string[]>([]);
 

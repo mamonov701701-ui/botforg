@@ -17,7 +17,12 @@ import Card from '../components/Card';
 import { useAuthStore } from '../../../stores/authStore';
 import { hasAccessToAction, hasAccessToSection } from '../../../constants/roles';
 import { AccessLocked } from '../../../components/AccessLocked';
-import { getDashboardData, getRecentEvents } from '../../../api/analytics';
+import {
+  getDashboardData,
+  getRecentEvents,
+  getGlobalStats,
+  getScenarioStats,
+} from '../../../api/analytics';
 import { getBots } from '../../../api/bot';
 
 interface KPICardProps {
@@ -207,6 +212,8 @@ export default function HomePage() {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [botsData, setBotsData] = useState<any>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [globalStats, setGlobalStats] = useState<any>(null);
+  const [topScenarioProblem, setTopScenarioProblem] = useState<string>('Нет данных');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -217,8 +224,18 @@ export default function HomePage() {
         const dashboard = await getDashboardData(7);
         const bots = await getBots();
         const recentEvents = await getRecentEvents(10);
+        const global = await getGlobalStats();
         setDashboardData(dashboard);
         setBotsData(bots);
+        setGlobalStats(global);
+        if (global?.topScenarios?.length) {
+          const top = global.topScenarios[0];
+          const scenarioStats = await getScenarioStats(top.scenarioId);
+          const firstDrop = scenarioStats.dropOffByStep?.[0];
+          setTopScenarioProblem(
+            firstDrop ? `${firstDrop.step} (${firstDrop.count})` : 'Отвалов не зафиксировано'
+          );
+        }
 
         // Map API events to ActivityEvent format
         if (recentEvents?.items) {
@@ -264,30 +281,6 @@ export default function HomePage() {
     };
     return titles[type] || name || 'Событие';
   }
-
-  const quickActions = [
-    {
-      icon: Plus,
-      label: 'Создать бота',
-      action: () => navigate('/dashboard/bots/new'),
-      permission: hasAccessToAction(user?.role, 'bot_create'),
-      actionKey: 'bot_create' as const,
-    },
-    {
-      icon: FileText,
-      label: 'Шаблоны',
-      action: () => navigate('/dashboard/templates'),
-      permission: true,
-      actionKey: null,
-    },
-    {
-      icon: CreditCard,
-      label: 'Пополнить баланс',
-      action: () => navigate('/dashboard/balance'),
-      permission: hasAccessToAction(user?.role, 'balance_topup'),
-      actionKey: 'balance_topup' as const,
-    },
-  ];
 
   return (
     <DashboardPage title="Главная" subtitle="Обзор вашего проекта">
@@ -342,57 +335,41 @@ export default function HomePage() {
         />
       </div>
 
-      {/* Быстрые действия */}
-      <div style={{ marginBottom: '32px' }}>
-        <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '16px' }}>
-          Быстрые действия
-        </h2>
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-          {quickActions.map((action, index) => {
-            const ActionIcon = action.icon;
-            const btn = (
-              <button
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '12px 20px',
-                  background: 'var(--primary)',
-                  color: '#000',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '15px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'var(--primary-hover)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'var(--primary)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <ActionIcon size={18} />
-                {action.label}
-              </button>
-            );
-            return action.actionKey ? (
-              <AccessLocked
-                key={index}
-                hasAccess={action.permission}
-                actionKey={action.actionKey}
-                onClick={action.action}
-              >
-                {btn}
-              </AccessLocked>
-            ) : (
-              React.cloneElement(btn, { key: index, onClick: action.action })
-            );
-          })}
-        </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: 16,
+          marginBottom: 24,
+        }}
+      >
+        <Card>
+          <h3 style={{ marginTop: 0 }}>Сегодня</h3>
+          <p>
+            Новые пользователи: <strong>{globalStats?.newUsers ?? 0}</strong>
+          </p>
+          <p>
+            Активные сессии: <strong>{globalStats?.activeUsers ?? 0}</strong>
+          </p>
+        </Card>
+        <Card>
+          <h3 style={{ marginTop: 0 }}>Топ сценарий</h3>
+          <p>
+            Название: <strong>{globalStats?.topScenarios?.[0]?.name || 'Нет данных'}</strong>
+          </p>
+          <p>
+            Входы: <strong>{globalStats?.topScenarios?.[0]?.entries ?? 0}</strong>
+          </p>
+          <p>
+            Конверсия: <strong>{globalStats?.topScenarios?.[0]?.conversionRate ?? 0}%</strong>
+          </p>
+        </Card>
+        <Card>
+          <h3 style={{ marginTop: 0 }}>Проблемы</h3>
+          <p>
+            Шаг с наибольшим отвалом: <strong>{topScenarioProblem}</strong>
+          </p>
+        </Card>
       </div>
 
       {/* Лента событий */}

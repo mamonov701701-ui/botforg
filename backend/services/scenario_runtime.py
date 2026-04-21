@@ -9,7 +9,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from backend.models.scenario import Scenario, SCENARIO_STATUS_PUBLISHED
-from backend.models.event import ScenarioExecution
+from backend.models.event import Event, ScenarioExecution, ScenarioEvent, UserSession
 from backend.models.bot_user_state import BotUserState
 
 
@@ -76,6 +76,36 @@ class ScenarioRuntime:
     
     def __init__(self, db: Session):
         self.db = db
+
+    def _track_scenario_event(
+        self,
+        *,
+        scenario_id: int,
+        user_id: Optional[int],
+        step: Optional[str],
+        event_type: str,
+        bot_id: Optional[int] = None,
+    ) -> None:
+        self.db.add(
+            ScenarioEvent(
+                scenario_id=scenario_id,
+                user_id=user_id,
+                step=step,
+                event_type=event_type,
+            )
+        )
+        # Совместимый поток событий для общей аналитики.
+        self.db.add(
+            Event(
+                event_type=event_type,
+                event_name=f"scenario_{event_type}",
+                user_id=user_id,
+                bot_id=bot_id,
+                scenario_id=scenario_id,
+                node_id=step,
+                payload={},
+            )
+        )
     
     def get_scenario(self, scenario_id: int) -> Optional[Scenario]:
         """Получить сценарий по ID"""
@@ -208,6 +238,20 @@ class ScenarioRuntime:
             current_node=context.current_node_id,
         )
         self.db.add(execution)
+        self.db.add(
+            UserSession(
+                user_id=context.user_id,
+                scenario_id=context.scenario_id,
+                status="active",
+            )
+        )
+        self._track_scenario_event(
+            scenario_id=context.scenario_id,
+            user_id=context.user_id,
+            step=context.current_node_id,
+            event_type="enter_step",
+            bot_id=context.bot_id,
+        )
         self.db.commit()
         self.db.refresh(execution)
         return execution
@@ -235,6 +279,29 @@ class ScenarioRuntime:
         if error_message:
             execution.error_message = error_message
             execution.error_node = context.current_node_id
+
+        session = (
+            self.db.query(UserSession)
+            .filter(
+                UserSession.user_id == context.user_id,
+                UserSession.scenario_id == context.scenario_id,
+                UserSession.status == "active",
+            )
+            .order_by(UserSession.started_at.desc())
+            .first()
+        )
+        if session:
+            session.finished_at = datetime.utcnow()
+            session.status = "completed" if status == "completed" else "dropped"
+
+        event_type = "complete" if status == "completed" else "drop"
+        self._track_scenario_event(
+            scenario_id=context.scenario_id,
+            user_id=context.user_id,
+            step=context.current_node_id,
+            event_type=event_type,
+            bot_id=context.bot_id,
+        )
         
         # Вычисляем длительность
         if execution.started_at:
@@ -260,6 +327,7 @@ class ScenarioRuntime:
         
         now = datetime.now(timezone.utc)
         
+        previous_node_id = state.current_node_id if state else None
         if state:
             # Обновляем
             state.current_scenario_id = context.scenario_id
@@ -286,6 +354,15 @@ class ScenarioRuntime:
                 last_interaction_at=now,
             )
             self.db.add(state)
+
+        if context.current_node_id and previous_node_id != context.current_node_id:
+            self._track_scenario_event(
+                scenario_id=context.scenario_id,
+                user_id=context.user_id,
+                step=context.current_node_id,
+                event_type="enter_step",
+                bot_id=context.bot_id,
+            )
         
         self.db.commit()
     

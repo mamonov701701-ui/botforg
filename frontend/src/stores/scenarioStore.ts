@@ -58,9 +58,6 @@ interface ScenarioStore {
   // Состояние текущего сценария
   currentState: ScenarioState | null;
 
-  // Библиотека сценариев
-  libraryScenarios: scenarioAPI.Scenario[];
-
   // Загрузка
   isLoading: boolean;
   isSaving: boolean;
@@ -74,7 +71,7 @@ interface ScenarioStore {
 
   // Actions
   loadBotScenarios: (botId: number) => Promise<void>;
-  loadLibraryScenarios: () => Promise<void>;
+  loadStandaloneScenario: (scenarioId: number) => Promise<void>;
 
   selectScenario: (scenarioId: number) => void;
   createScenario: (data: scenarioAPI.ScenarioCreate) => Promise<scenarioAPI.Scenario>;
@@ -89,15 +86,6 @@ interface ScenarioStore {
   deleteScenario: (scenarioId: number) => Promise<void>;
   /** Только имя; граф и currentState.nodes/edges не трогаем */
   renameScenario: (scenarioId: number, name: string) => Promise<void>;
-
-  saveToLibrary: (data: {
-    name?: string;
-    description?: string;
-    category?: string;
-    icon?: string;
-  }) => Promise<void>;
-
-  addFromLibrary: (libraryScenarioId: number) => Promise<void>;
 
   // Автосохранение
   enableAutoSave: () => void;
@@ -170,7 +158,6 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
     scenarios: [],
     currentScenarioId: null,
     currentState: null,
-    libraryScenarios: [],
     isLoading: false,
     isSaving: false,
     saveStatus: 'idle',
@@ -217,12 +204,51 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
       }
     },
 
-    loadLibraryScenarios: async () => {
+    loadStandaloneScenario: async (scenarioId: number) => {
+      set({
+        isLoading: true,
+        currentBotId: null,
+        currentScenarioId: null,
+        scenarios: [],
+        currentState: {
+          id: null,
+          name: '',
+          icon: 'FileText',
+          nodes: [],
+          edges: [],
+          isDirty: false,
+          hasValidationErrors: false,
+        },
+      });
       try {
-        const libraryScenarios = await scenarioAPI.getLibraryScenarios();
-        set({ libraryScenarios });
+        const all = await scenarioAPI.getMyScenarios();
+        const scenario = all.find(s => s.id === scenarioId);
+        if (!scenario) {
+          throw new Error('Сценарий не найден');
+        }
+        const migratedGraph = migrateScenarioGraph(
+          scenario.content?.nodes || [],
+          scenario.content?.edges || []
+        );
+        set({
+          isLoading: false,
+          currentBotId: scenario.bot_id ?? null,
+          scenarios: [scenario],
+          currentScenarioId: scenario.id,
+          currentState: {
+            id: scenario.id,
+            name: scenario.name,
+            icon: scenario.icon || 'FileText',
+            nodes: migratedGraph.nodes,
+            edges: migratedGraph.edges,
+            isDirty: false,
+            hasValidationErrors: false,
+          },
+        });
       } catch (error) {
-        console.error('Failed to load library scenarios:', error);
+        set({ isLoading: false });
+        console.error('Failed to load standalone scenario:', error);
+        throw error;
       }
     },
 
@@ -254,11 +280,10 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
     // Create scenario
     createScenario: async (data: scenarioAPI.ScenarioCreate) => {
       const botId = get().currentBotId;
-      if (!botId) throw new Error('No bot selected');
 
       const scenario = await scenarioAPI.createScenario({
         ...data,
-        bot_id: botId,
+        bot_id: data.bot_id !== undefined ? data.bot_id : (botId ?? undefined),
       });
 
       // Добавляем в список
@@ -477,33 +502,6 @@ export const useScenarioStore = create<ScenarioStore>((set, get) => {
             ? { ...state.currentState, name: updated.name }
             : state.currentState,
       }));
-    },
-
-    // Save to library
-    saveToLibrary: async data => {
-      const { currentScenarioId } = get();
-      if (!currentScenarioId) return;
-
-      await scenarioAPI.saveToLibrary(currentScenarioId, data);
-
-      // Обновляем библиотеку
-      await get().loadLibraryScenarios();
-    },
-
-    // Add from library
-    addFromLibrary: async (libraryScenarioId: number) => {
-      const botId = get().currentBotId;
-      if (!botId) throw new Error('No bot selected');
-
-      const scenario = await scenarioAPI.addFromLibrary(libraryScenarioId, botId);
-
-      // Добавляем в список
-      set(state => ({
-        scenarios: [...state.scenarios, scenario],
-      }));
-
-      // Переключаемся на новый
-      get().selectScenario(scenario.id);
     },
 
     // Автосохранение с debounce: сохраняем через 5с после последнего изменения

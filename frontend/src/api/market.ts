@@ -67,6 +67,16 @@ export interface MyTemplate {
   created_at: string;
 }
 
+export interface MarketInstallResult {
+  ok: boolean;
+  item_id: number;
+  item_type: 'template' | 'scenario';
+  created_bot_id?: number;
+  created_scenario_id?: number;
+  created_scenarios_count: number;
+  message: string;
+}
+
 export interface MarketOrder {
   id: number;
   title: string;
@@ -277,6 +287,30 @@ export async function deleteMarketItem(itemId: number): Promise<void> {
     await api.delete(`/api/market/items/${itemId}`);
   } catch (error: any) {
     console.error('Failed to delete market item:', error);
+    throw error;
+  }
+}
+
+/**
+ * Установить сценарий из маркетплейса (создаёт копию в Моих сценариях)
+ */
+export async function installMarketScenario(itemId: number): Promise<MarketInstallResult> {
+  try {
+    return await api.post(`/api/market/items/${itemId}/install-scenario`);
+  } catch (error: any) {
+    console.error('Failed to install market scenario:', error);
+    throw error;
+  }
+}
+
+/**
+ * Установить шаблон бота из маркетплейса (создаёт копию бота и его сценариев)
+ */
+export async function installMarketBot(itemId: number): Promise<MarketInstallResult> {
+  try {
+    return await api.post(`/api/market/items/${itemId}/install-bot`);
+  } catch (error: any) {
+    console.error('Failed to install market bot:', error);
     throw error;
   }
 }

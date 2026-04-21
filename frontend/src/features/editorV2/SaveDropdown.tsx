@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Save, Library, FileDown } from 'lucide-react';
+import { ChevronDown, Save, FolderOpen, FileDown } from 'lucide-react';
 
 interface SaveDropdownProps {
   onQuickSave?: () => void;
   onSaveBot?: () => void;
-  onSaveToLibrary?: () => void;
+  onSaveScenario?: () => void;
   onExportToFile?: () => void;
   hasUnsavedChanges?: boolean;
 }
@@ -12,11 +12,11 @@ interface SaveDropdownProps {
 export default function SaveDropdown({
   onQuickSave,
   onSaveBot,
-  onSaveToLibrary,
+  onSaveScenario,
   onExportToFile,
   hasUnsavedChanges = false,
 }: SaveDropdownProps) {
-  const hasSaveActions = onQuickSave || onSaveBot || onSaveToLibrary;
+  const hasSaveActions = onQuickSave || onSaveBot || onSaveScenario;
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -224,7 +224,7 @@ export default function SaveDropdown({
           )}
 
           {/* Разделитель */}
-          {onQuickSave && (onSaveBot || onSaveToLibrary) && (
+          {onQuickSave && (onSaveBot || onSaveScenario) && (
             <div style={{ height: 1, background: '#374151', margin: '4px 0' }} />
           )}
 
@@ -268,11 +268,11 @@ export default function SaveDropdown({
             </button>
           )}
 
-          {/* Сохранить сценарий в библиотеку */}
-          {onSaveToLibrary && (
+          {/* Сохранить сценарий в мои сценарии */}
+          {onSaveScenario && (
             <button
               onClick={() => {
-                onSaveToLibrary();
+                onSaveScenario();
                 setIsOpen(false);
               }}
               style={{
@@ -296,13 +296,13 @@ export default function SaveDropdown({
                 e.currentTarget.style.background = 'transparent';
               }}
             >
-              <Library size={18} color="#9ca3af" />
+              <FolderOpen size={18} color="#9ca3af" />
               <div style={{ flex: 1 }}>
                 <div style={{ color: '#fff', fontWeight: 500, fontSize: 14, marginBottom: 2 }}>
-                  Сохранить сценарий в библиотеку
+                  Сохранить в мои сценарии
                 </div>
                 <div style={{ color: '#9ca3af', fontSize: 12 }}>
-                  Для переиспользования в других ботах
+                  Создать или обновить сценарий пользователя
                 </div>
               </div>
             </button>

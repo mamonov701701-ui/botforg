@@ -71,6 +71,28 @@ export interface Scenario {
   order: number;
   created_at: string;
   updated_at: string;
+  usage_bots_count?: number;
+}
+
+export interface ScenarioListItem {
+  id: number;
+  name: string;
+  type: 'main' | 'other';
+  createdAt: string | null;
+  totalEntries: number;
+  conversionRate: number;
+}
+
+export interface ScenarioDetail {
+  id: number;
+  name: string;
+  type: 'main' | 'other';
+  createdAt: string | null;
+  description: string | null;
+  totalEntries: number;
+  completed: number;
+  dropped: number;
+  conversionRate: number;
 }
 
 export interface ScenarioCreate {
@@ -129,12 +151,12 @@ export async function getMyScenarios(): Promise<Scenario[]> {
   return api.get('/scenarios/my');
 }
 
-/**
- * Получить сценарии из библиотеки
- */
-export async function getLibraryScenarios(category?: string): Promise<Scenario[]> {
-  const url = category ? `/scenarios/library?category=${category}` : '/scenarios/library';
-  return api.get(url);
+export async function getScenarios(): Promise<ScenarioListItem[]> {
+  return api.get('/scenarios');
+}
+
+export async function getScenario(scenarioId: number): Promise<ScenarioDetail> {
+  return api.get(`/scenarios/${scenarioId}`);
 }
 
 /**
@@ -159,41 +181,34 @@ export async function deleteScenario(scenarioId: number): Promise<void> {
 }
 
 /**
- * Сохранить сценарий в библиотеку
+ * Сохранить сценарий как отдельный сценарий в "Моих сценариях" (копия)
  */
-export async function saveToLibrary(
+export async function saveAsScenario(
   scenarioId: number,
-  data: {
+  data?: {
     name?: string;
     description?: string;
-    category?: string;
-    icon?: string;
   }
 ): Promise<Scenario> {
   const params = new URLSearchParams();
-  if (data.name) params.append('name', data.name);
-  if (data.description) params.append('description', data.description);
-  if (data.category) params.append('category', data.category);
-  if (data.icon) params.append('icon', data.icon);
-
-  const url = `/scenarios/${scenarioId}/save-to-library${params.toString() ? '?' + params.toString() : ''}`;
+  if (data?.name) params.append('name', data.name);
+  if (data?.description) params.append('description', data.description);
+  const url = `/scenarios/${scenarioId}/save-as-scenario${params.toString() ? '?' + params.toString() : ''}`;
   return api.post(url);
 }
 
 /**
- * Добавить сценарий из библиотеки в бот
+ * Использовать сценарий в боте (создать копию в выбранном боте)
  */
-export async function addFromLibrary(
-  libraryScenarioId: number,
+export async function useScenarioInBot(
+  scenarioId: number,
   botId: number,
   name?: string
 ): Promise<Scenario> {
   const params = new URLSearchParams();
   params.append('bot_id', botId.toString());
   if (name) params.append('name', name);
-
-  const url = `/scenarios/library/${libraryScenarioId}/add-to-bot?${params.toString()}`;
-  return api.post(url);
+  return api.post(`/scenarios/${scenarioId}/use-in-bot?${params.toString()}`);
 }
 
 /**

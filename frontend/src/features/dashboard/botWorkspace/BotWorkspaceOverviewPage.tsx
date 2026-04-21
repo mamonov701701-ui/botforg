@@ -24,15 +24,8 @@ export default function BotWorkspaceOverviewPage() {
   const channel = (bot?.channel || 'telegram').toUpperCase();
 
   return (
-    <section
-      style={{
-        background: 'rgba(26, 34, 56, 0.9)',
-        border: '1px solid rgba(255, 210, 76, 0.2)',
-        borderRadius: 12,
-        padding: 16,
-      }}
-    >
-      <h2 style={{ margin: 0, fontSize: 18 }}>Обзор рабочего пространства</h2>
+    <section className="bot-card">
+      <h2 className="bot-section-title">Обзор рабочего пространства</h2>
       <div
         style={{
           marginTop: 14,
@@ -41,23 +34,17 @@ export default function BotWorkspaceOverviewPage() {
           gap: 12,
         }}
       >
-        <div className="crm-card" style={{ padding: 12 }}>
-          <div className="crm-muted" style={{ fontSize: 12 }}>
-            Канал
-          </div>
-          <div style={{ marginTop: 4, fontWeight: 700 }}>{channel}</div>
+        <div className="bot-card bot-card--compact">
+          <div className="bot-card-label">Канал</div>
+          <div className="bot-card-value">{channel}</div>
         </div>
-        <div className="crm-card" style={{ padding: 12 }}>
-          <div className="crm-muted" style={{ fontSize: 12 }}>
-            CRM
-          </div>
-          <div style={{ marginTop: 4, fontWeight: 700 }}>{contacts} контактов</div>
+        <div className="bot-card bot-card--compact">
+          <div className="bot-card-label">CRM</div>
+          <div className="bot-card-value">{contacts} контактов</div>
         </div>
-        <div className="crm-card" style={{ padding: 12 }}>
-          <div className="crm-muted" style={{ fontSize: 12 }}>
-            Доступные разделы
-          </div>
-          <div style={{ marginTop: 4, fontWeight: 700 }}>CRM • Сценарии • Аналитика</div>
+        <div className="bot-card bot-card--compact">
+          <div className="bot-card-label">Доступные разделы</div>
+          <div className="bot-card-value">CRM • Сценарии • Аналитика</div>
         </div>
       </div>
       <div style={{ marginTop: 10, fontSize: 13 }}>
@@ -71,24 +58,24 @@ export default function BotWorkspaceOverviewPage() {
           — полная инструкция по разделам и режимам данных
         </span>
       </div>
-      <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className="bot-actions" style={{ marginTop: 14 }}>
         <button
           type="button"
-          className="crm-button"
+          className="bot-btn bot-btn--primary"
           onClick={() => navigate(`/dashboard/bots/${id}/crm`)}
         >
           Открыть CRM
         </button>
         <button
           type="button"
-          className="crm-button crm-button--secondary"
+          className="bot-btn bot-btn--secondary"
           onClick={() => navigate(`/dashboard/bots/${id}/scenarios`)}
         >
           Перейти к сценариям
         </button>
         <button
           type="button"
-          className="crm-button crm-button--secondary"
+          className="bot-btn bot-btn--secondary"
           onClick={() => navigate(`/dashboard/bots/${id}/analytics`)}
         >
           Открыть аналитику

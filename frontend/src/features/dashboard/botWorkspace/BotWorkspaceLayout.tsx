@@ -2,6 +2,51 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { getBot, type Bot } from '../../../api/bot';
 import { LayoutDashboard, Users, Workflow, BarChart3, Settings, ChevronLeft } from 'lucide-react';
+import './botWorkspace.css';
+
+type WorkspaceTab = {
+  to: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number }>;
+};
+
+function BotHeader({
+  bot,
+  fallbackId,
+  tabs,
+}: {
+  bot: Bot | null;
+  fallbackId: number;
+  tabs: WorkspaceTab[];
+}) {
+  return (
+    <header className="bot-header">
+      <h1 className="bot-header__title">{bot?.title || `Бот #${fallbackId}`}</h1>
+      <p className="bot-header__meta">
+        @{bot?.username || `bot-${fallbackId}`} • {(bot?.channel || 'telegram').toUpperCase()} •
+        Рабочее пространство
+      </p>
+      <nav className="bot-tabs" aria-label="Разделы бота">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          return (
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              end={tab.label !== 'CRM'}
+              className={({ isActive }) =>
+                isActive ? 'bot-tabs__link bot-tabs__link--active' : 'bot-tabs__link'
+              }
+            >
+              <Icon size={16} />
+              {tab.label}
+            </NavLink>
+          );
+        })}
+      </nav>
+    </header>
+  );
+}
 
 export default function BotWorkspaceLayout() {
   const { botId } = useParams<{ botId: string }>();
@@ -20,7 +65,7 @@ export default function BotWorkspaceLayout() {
     return <div style={{ color: 'var(--text-muted)', padding: '18px 0' }}>Некорректный бот</div>;
   }
 
-  const tabs = [
+  const tabs: WorkspaceTab[] = [
     { to: `/dashboard/bots/${id}/overview`, label: 'Обзор', icon: LayoutDashboard },
     { to: `/dashboard/bots/${id}/crm`, label: 'CRM', icon: Users },
     { to: `/dashboard/bots/${id}/scenarios`, label: 'Сценарии', icon: Workflow },
@@ -29,7 +74,10 @@ export default function BotWorkspaceLayout() {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div
+      className="bot-page-container"
+      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
       <button
         type="button"
         className="crm-back"
@@ -38,55 +86,7 @@ export default function BotWorkspaceLayout() {
       >
         <ChevronLeft size={17} strokeWidth={2} /> К моим ботам
       </button>
-      <header
-        style={{
-          background: 'rgba(26, 34, 56, 0.9)',
-          border: '1px solid rgba(255, 210, 76, 0.2)',
-          borderRadius: 12,
-          padding: '14px 16px',
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>{bot?.title || `Бот #${id}`}</h1>
-        <p style={{ margin: '6px 0 0 0', color: 'var(--text-muted)', fontSize: 13 }}>
-          @{bot?.username || `bot-${id}`} • {(bot?.channel || 'telegram').toUpperCase()} • Рабочее
-          пространство бота
-        </p>
-      </header>
-      <nav
-        style={{
-          display: 'flex',
-          gap: 8,
-          flexWrap: 'wrap',
-          padding: '4px 0',
-        }}
-      >
-        {tabs.map(tab => {
-          const Icon = tab.icon;
-          return (
-            <NavLink
-              key={tab.to}
-              to={tab.to}
-              end={tab.label !== 'CRM'}
-              style={({ isActive }) => ({
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: isActive ? '1px solid var(--primary)' : '1px solid var(--border)',
-                background: isActive ? 'rgba(255, 210, 76, 0.12)' : 'rgba(26, 34, 56, 0.7)',
-                color: isActive ? 'var(--primary)' : 'var(--text)',
-                fontSize: 14,
-                fontWeight: isActive ? 600 : 500,
-              })}
-            >
-              <Icon size={16} />
-              {tab.label}
-            </NavLink>
-          );
-        })}
-      </nav>
+      <BotHeader bot={bot} fallbackId={id} tabs={tabs} />
       <div>
         <Outlet />
       </div>

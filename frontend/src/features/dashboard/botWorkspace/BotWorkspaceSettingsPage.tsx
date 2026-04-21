@@ -51,28 +51,50 @@ export default function BotWorkspaceSettingsPage() {
   };
 
   return (
-    <section className="crm-card" style={{ padding: 16, display: 'grid', gap: 12 }}>
-      <h2 style={{ margin: 0, fontSize: 18 }}>Настройки бота</h2>
-      <label style={{ display: 'grid', gap: 6 }}>
-        <span>Название</span>
-        <input value={title} onChange={e => setTitle(e.target.value)} className="crm-input" />
-      </label>
-      <label style={{ display: 'grid', gap: 6 }}>
-        <span>Описание</span>
-        <textarea
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          className="crm-input"
-          rows={4}
-        />
-      </label>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button type="button" className="crm-button" onClick={handleSave} disabled={saving}>
-          {saving ? 'Сохранение...' : 'Сохранить'}
-        </button>
-        <button type="button" className="crm-button crm-button--secondary" onClick={handleToggle}>
-          {bot?.is_active ? 'Остановить бота' : 'Запустить бота'}
-        </button>
+    <section style={{ display: 'grid', gap: 12 }}>
+      <h2 className="bot-section-title">Настройки бота</h2>
+
+      <div className="bot-card">
+        <h3 style={{ margin: 0, fontSize: 17 }}>Основная информация</h3>
+        <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Название</span>
+            <input value={title} onChange={e => setTitle(e.target.value)} className="crm-input" />
+          </label>
+          <label style={{ display: 'grid', gap: 6 }}>
+            <span>Описание</span>
+            <textarea
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className="crm-input"
+              rows={4}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="bot-card">
+        <h3 style={{ margin: 0, fontSize: 17 }}>Канал</h3>
+        <p className="bot-section-lead" style={{ marginTop: 8 }}>
+          {(bot?.channel || 'telegram').toUpperCase()}
+        </p>
+      </div>
+
+      <div className="bot-card">
+        <h3 style={{ margin: 0, fontSize: 17 }}>Управление</h3>
+        <div className="bot-actions" style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            className="bot-btn bot-btn--primary"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? 'Сохранение...' : 'Сохранить'}
+          </button>
+          <button type="button" className="bot-btn bot-btn--secondary" onClick={handleToggle}>
+            {bot?.is_active ? 'Остановить бота' : 'Запустить бота'}
+          </button>
+        </div>
       </div>
     </section>
   );

@@ -23,6 +23,7 @@ import DashboardLayout from './features/dashboard/DashboardLayout';
 import HomePage from './features/dashboard/pages/HomePage';
 import BotsPage from './features/dashboard/pages/BotsPage';
 import ScenariosPage from './features/dashboard/pages/ScenariosPage';
+import ScenarioDetailPage from './features/dashboard/pages/ScenarioDetailPage';
 import TemplatesPage from './features/dashboard/pages/TemplatesPage';
 import BalancePage from './features/dashboard/pages/BalancePage';
 import AnalyticsPage from './features/dashboard/pages/AnalyticsPage';
@@ -89,7 +90,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="auth/reset" element={<ResetPassword />} />
           {/* Быстрый вход в редактор:
               /editor  → подбирает/создаёт бота и сценарий и редиректит в /editor/:botId
-              /editor/:id → непосредственно оболочка редактора для конкретного бота */}
+              /editor/:id → редактор рабочего пространства бота
+              /editor/scenario/:scenarioId → редактор самостоятельного сценария */}
           <Route
             path="editor"
             element={
@@ -100,6 +102,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           />
           <Route
             path="editor/:id"
+            element={
+              <AuthGate>
+                <EditorV2Shell />
+              </AuthGate>
+            }
+          />
+          <Route
+            path="editor/scenario/:scenarioId"
             element={
               <AuthGate>
                 <EditorV2Shell />
@@ -119,6 +129,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route index element={<HomePage />} />
             <Route path="bots" element={<BotsPage />} />
             <Route path="scenarios" element={<ScenariosPage />} />
+            <Route path="scenarios/:scenarioId" element={<ScenarioDetailPage />} />
             <Route path="templates" element={<TemplatesPage />} />
             <Route path="balance" element={<BalancePage />} />
             <Route path="analytics" element={<AnalyticsPage />} />

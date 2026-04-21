@@ -3,6 +3,7 @@ Marketplace Router for BotForg
 Provides endpoints for marketplace: items, orders, freelancers, reviews
 """
 import logging
+import copy
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, List, Tuple
@@ -20,6 +21,7 @@ from backend.models.market import (
 )
 from backend.models.bot import Bot
 from backend.models.scenario import Scenario
+from backend.utils.plan_limits import check_max_bots
 from backend.utils.plan_limits import check_can_publish_templates, require_developer_plan
 from backend.schemas.market import (
     MarketItemCreate, MarketItemUpdate, MarketItemOut, MarketItemDetailOut,
@@ -28,7 +30,7 @@ from backend.schemas.market import (
     FreelancerProfileCreate, FreelancerProfileUpdate, FreelancerProfileOut,
     MarketReviewCreate, MarketReviewOut,
     MarketItemListResponse, MarketOrderListResponse, FreelancerListResponse,
-    SellerInfo, MyTemplateOut
+    SellerInfo, MyTemplateOut, MarketInstallOut
 )
 
 logger = logging.getLogger(__name__)
@@ -446,6 +448,139 @@ async def delete_market_item(
     db.commit()
     
     return None
+
+
+@router.post("/items/{item_id}/install-scenario", response_model=MarketInstallOut)
+async def install_market_scenario(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Установить сценарий из маркетплейса: создать копию в Моих сценариях"""
+    item = (
+        db.query(MarketItem)
+        .filter(MarketItem.id == item_id, MarketItem.item_type == MarketItemType.SCENARIO)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар-сценарий не найден")
+    if not item.is_published:
+        raise HTTPException(status_code=403, detail="Товар не опубликован")
+    if not item.source_scenario_id:
+        raise HTTPException(status_code=400, detail="У товара не указан source_scenario_id")
+
+    source_scenario = db.query(Scenario).filter(Scenario.id == item.source_scenario_id).first()
+    if not source_scenario:
+        raise HTTPException(status_code=404, detail="Исходный сценарий не найден")
+
+    copied_scenario = Scenario(
+        user_id=current_user.id,
+        bot_id=None,
+        name=f"{source_scenario.name} (копия)",
+        description=source_scenario.description,
+        icon=source_scenario.icon,
+        category=source_scenario.category,
+        is_main=False,
+        is_library=False,
+        is_standard=False,
+        is_public=False,
+        content=copy.deepcopy(source_scenario.content) if source_scenario.content is not None else {"nodes": [], "edges": []},
+        published_content=copy.deepcopy(source_scenario.published_content) if source_scenario.published_content is not None else None,
+        status=source_scenario.status,
+        order=0,
+    )
+    db.add(copied_scenario)
+
+    item.sales_count = (item.sales_count or 0) + 1
+    db.commit()
+    db.refresh(copied_scenario)
+
+    return MarketInstallOut(
+        ok=True,
+        item_id=item.id,
+        item_type=item.item_type.value if hasattr(item.item_type, "value") else str(item.item_type),
+        created_scenario_id=copied_scenario.id,
+        created_scenarios_count=1,
+        message="Сценарий успешно установлен в Мои сценарии",
+    )
+
+
+@router.post("/items/{item_id}/install-bot", response_model=MarketInstallOut)
+async def install_market_bot(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Установить шаблон бота из маркетплейса: создать копию бота и его сценариев"""
+    item = (
+        db.query(MarketItem)
+        .filter(MarketItem.id == item_id, MarketItem.item_type == MarketItemType.TEMPLATE)
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар-шаблон не найден")
+    if not item.is_published:
+        raise HTTPException(status_code=403, detail="Товар не опубликован")
+    if not item.source_bot_id:
+        raise HTTPException(status_code=400, detail="У товара не указан source_bot_id")
+
+    source_bot = db.query(Bot).filter(Bot.id == item.source_bot_id).first()
+    if not source_bot:
+        raise HTTPException(status_code=404, detail="Исходный бот не найден")
+
+    check_max_bots(db, current_user)
+
+    install_suffix = f"market_{item.id}_{current_user.id}_{int(datetime.now(timezone.utc).timestamp())}"
+    copied_bot = Bot(
+        owner_id=current_user.id,
+        title=f"{source_bot.title} (копия)",
+        description=source_bot.description,
+        username=f"template_{install_suffix}",
+        token=f"placeholder_{install_suffix}",
+        webhook_url=None,
+        is_active=False,
+        content=copy.deepcopy(source_bot.content) if source_bot.content is not None else None,
+        message_retention_days=source_bot.message_retention_days,
+        allow_ai_text=source_bot.allow_ai_text,
+        store_messages=source_bot.store_messages,
+    )
+    db.add(copied_bot)
+    db.flush()
+
+    source_scenarios = db.query(Scenario).filter(Scenario.bot_id == source_bot.id).all()
+    copied_scenarios_count = 0
+    for source_scenario in source_scenarios:
+        copied_scenario = Scenario(
+            user_id=current_user.id,
+            bot_id=copied_bot.id,
+            name=source_scenario.name,
+            description=source_scenario.description,
+            icon=source_scenario.icon,
+            category=source_scenario.category,
+            is_main=source_scenario.is_main,
+            is_library=False,
+            is_standard=False,
+            is_public=False,
+            content=copy.deepcopy(source_scenario.content) if source_scenario.content is not None else {"nodes": [], "edges": []},
+            published_content=copy.deepcopy(source_scenario.published_content) if source_scenario.published_content is not None else None,
+            status=source_scenario.status,
+            order=source_scenario.order,
+        )
+        db.add(copied_scenario)
+        copied_scenarios_count += 1
+
+    item.sales_count = (item.sales_count or 0) + 1
+    db.commit()
+    db.refresh(copied_bot)
+
+    return MarketInstallOut(
+        ok=True,
+        item_id=item.id,
+        item_type=item.item_type.value if hasattr(item.item_type, "value") else str(item.item_type),
+        created_bot_id=copied_bot.id,
+        created_scenarios_count=copied_scenarios_count,
+        message="Бот и его сценарии успешно установлены",
+    )
 
 
 # ================== MarketOrder Endpoints ==================

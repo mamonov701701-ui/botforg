@@ -84,6 +84,17 @@ class MarketItemDetailOut(MarketItemOut):
     reviews: List['MarketReviewOut'] = []
 
 
+class MarketInstallOut(BaseModel):
+    """Результат установки товара из маркетплейса"""
+    ok: bool = True
+    item_id: int
+    item_type: str
+    created_bot_id: Optional[int] = None
+    created_scenario_id: Optional[int] = None
+    created_scenarios_count: int = 0
+    message: str
+
+
 class MyTemplateOut(BaseModel):
     """Шаблон разработчика для кабинета (GET /my-templates)"""
     id: int

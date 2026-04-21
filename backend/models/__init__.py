@@ -53,6 +53,7 @@ from backend.models.constructor_core import (
     CtorBotUserSession,
     CtorBotUserEvent,
 )
+from backend.models.event import Event, ScenarioExecution, DailyStats, ScenarioEvent, UserSession
 
 __all__ = [
     "User",
@@ -122,4 +123,9 @@ __all__ = [
     "CtorBotUserTag",
     "CtorBotUserSession",
     "CtorBotUserEvent",
+    "Event",
+    "ScenarioExecution",
+    "DailyStats",
+    "ScenarioEvent",
+    "UserSession",
 ]

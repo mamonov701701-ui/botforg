@@ -2,9 +2,11 @@
 API endpoints для работы со сценариями
 """
 from typing import List, Optional
+import copy
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func, case
 from pydantic import BaseModel, field_serializer
 
 from backend.database import get_db
@@ -18,6 +20,7 @@ from backend.models.scenario import (
     VERSION_TYPE_PUBLISHED,
 )
 from backend.models.bot import Bot
+from backend.models.event import ScenarioExecution
 from backend.utils.bot_access import check_bot_access, check_bot_edit_permission
 from backend.utils.plan_limits import check_can_publish
 
@@ -63,6 +66,7 @@ class ScenarioOut(BaseModel):
     order: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    usage_bots_count: int = 0
 
     @field_serializer('created_at', 'updated_at')
     def serialize_datetime(self, dt: Optional[datetime], _info):
@@ -72,6 +76,35 @@ class ScenarioOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ScenarioListItemOut(BaseModel):
+    id: int
+    name: str
+    type: str
+    createdAt: Optional[datetime] = None
+    totalEntries: int = 0
+    conversionRate: float = 0.0
+
+    @field_serializer("createdAt")
+    def serialize_created_at(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
+
+
+class ScenarioDetailOut(BaseModel):
+    id: int
+    name: str
+    type: str
+    createdAt: Optional[datetime] = None
+    description: Optional[str] = None
+    totalEntries: int = 0
+    completed: int = 0
+    dropped: int = 0
+    conversionRate: float = 0.0
+
+    @field_serializer("createdAt")
+    def serialize_created_at(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 class ScenarioNodeOut(BaseModel):
@@ -137,8 +170,105 @@ def get_my_scenarios(
         .order_by(Scenario.created_at.desc())
         .all()
     )
-    
-    return scenarios
+
+    usage_by_source: dict[int, set[int]] = {}
+    for s in scenarios:
+        if not s.bot_id or not isinstance(s.content, dict):
+            continue
+        meta = s.content.get("meta") if isinstance(s.content.get("meta"), dict) else {}
+        source_id = meta.get("source_scenario_id")
+        if isinstance(source_id, int):
+            usage_by_source.setdefault(source_id, set()).add(s.bot_id)
+
+    result = []
+    for s in scenarios:
+        setattr(s, "usage_bots_count", len(usage_by_source.get(s.id, set())))
+        result.append(s)
+    return result
+
+
+@router.get("/", response_model=List[ScenarioListItemOut])
+def get_scenarios(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    scenarios = (
+        db.query(Scenario)
+        .filter(Scenario.user_id == current_user.id)
+        .order_by(Scenario.created_at.desc())
+        .all()
+    )
+    scenario_ids = [s.id for s in scenarios]
+    stats_by_id = {}
+    if scenario_ids:
+        stats_rows = (
+            db.query(
+                ScenarioExecution.scenario_id,
+                func.count(ScenarioExecution.id).label("entries"),
+                func.sum(case((ScenarioExecution.status == "completed", 1), else_=0)).label("completed"),
+            )
+            .filter(ScenarioExecution.scenario_id.in_(scenario_ids))
+            .group_by(ScenarioExecution.scenario_id)
+            .all()
+        )
+        for row in stats_rows:
+            entries = int(row.entries or 0)
+            completed = int(row.completed or 0)
+            stats_by_id[row.scenario_id] = {
+                "entries": entries,
+                "conversion": round((completed / entries * 100) if entries else 0, 2),
+            }
+
+    return [
+        ScenarioListItemOut(
+            id=s.id,
+            name=s.name,
+            type="main" if s.is_main else "other",
+            createdAt=s.created_at,
+            totalEntries=stats_by_id.get(s.id, {}).get("entries", 0),
+            conversionRate=stats_by_id.get(s.id, {}).get("conversion", 0.0),
+        )
+        for s in scenarios
+    ]
+
+
+@router.get("/{scenario_id}", response_model=ScenarioDetailOut)
+def get_scenario_by_id(
+    scenario_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    scenario = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    _check_scenario_access(scenario, current_user.id, db)
+
+    row = (
+        db.query(
+            func.count(ScenarioExecution.id).label("entries"),
+            func.sum(case((ScenarioExecution.status == "completed", 1), else_=0)).label("completed"),
+            func.sum(
+                case((ScenarioExecution.status.in_(("failed", "cancelled", "dropped")), 1), else_=0)
+            ).label("dropped"),
+        )
+        .filter(ScenarioExecution.scenario_id == scenario.id)
+        .first()
+    )
+    entries = int((row.entries if row else 0) or 0)
+    completed = int((row.completed if row else 0) or 0)
+    dropped = int((row.dropped if row else 0) or 0)
+
+    return ScenarioDetailOut(
+        id=scenario.id,
+        name=scenario.name,
+        type="main" if scenario.is_main else "other",
+        createdAt=scenario.created_at,
+        description=scenario.description,
+        totalEntries=entries,
+        completed=completed,
+        dropped=dropped,
+        conversionRate=round((completed / entries * 100) if entries else 0, 2),
+    )
 
 
 # Получить сценарии из библиотеки
@@ -392,6 +522,49 @@ def save_to_library(
     return library_scenario
 
 
+@router.post("/{scenario_id}/save-as-scenario", response_model=ScenarioOut)
+def save_as_scenario(
+    scenario_id: int,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Сохранить текущий сценарий как отдельный сценарий в разделе "Мои сценарии".
+    Создаётся КОПИЯ без привязки к боту.
+    """
+    source = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    _check_scenario_access(source, current_user.id, db)
+
+    copied_content = copy.deepcopy(source.content or {"nodes": [], "edges": []})
+    meta = copied_content.get("meta") if isinstance(copied_content.get("meta"), dict) else {}
+    meta["source_scenario_id"] = source.id
+    copied_content["meta"] = meta
+
+    copied = Scenario(
+        user_id=current_user.id,
+        bot_id=None,
+        name=name or f"{source.name} (копия)",
+        description=description if description is not None else source.description,
+        icon=source.icon,
+        category=source.category,
+        content=copied_content,
+        published_content=copy.deepcopy(source.published_content) if source.published_content else None,
+        status=SCENARIO_STATUS_DRAFT,
+        is_library=False,
+        is_main=False,
+        order=0,
+    )
+    db.add(copied)
+    db.commit()
+    db.refresh(copied)
+    setattr(copied, "usage_bots_count", 0)
+    return copied
+
+
 # Получить список блоков внутри сценария
 @router.get("/{scenario_id}/nodes", response_model=List[ScenarioNodeOut])
 def get_scenario_nodes(
@@ -591,5 +764,55 @@ def add_from_library(
     db.commit()
     db.refresh(bot_scenario)
     
+    return bot_scenario
+
+
+@router.post("/{scenario_id}/use-in-bot", response_model=ScenarioOut)
+def use_scenario_in_bot(
+    scenario_id: int,
+    bot_id: int,
+    name: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Использовать сценарий в боте: добавить КОПИЮ в выбранный бот.
+    Оригинал сценария не меняется.
+    """
+    source = db.query(Scenario).filter(Scenario.id == scenario_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Сценарий не найден")
+    _check_scenario_access(source, current_user.id, db)
+
+    bot = check_bot_access(bot_id, current_user.id, db)
+    if not check_bot_edit_permission(bot, current_user.id, db):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Your role does not allow adding scenarios"
+        )
+
+    copied_content = copy.deepcopy(source.content or {"nodes": [], "edges": []})
+    meta = copied_content.get("meta") if isinstance(copied_content.get("meta"), dict) else {}
+    meta["source_scenario_id"] = source.id
+    copied_content["meta"] = meta
+
+    bot_scenario = Scenario(
+        user_id=current_user.id,
+        bot_id=bot_id,
+        name=name or source.name,
+        description=source.description,
+        icon=source.icon,
+        category=source.category,
+        content=copied_content,
+        published_content=copy.deepcopy(source.published_content) if source.published_content else None,
+        status=SCENARIO_STATUS_DRAFT,
+        is_library=False,
+        is_main=False,
+        order=0,
+    )
+    db.add(bot_scenario)
+    db.commit()
+    db.refresh(bot_scenario)
+    setattr(bot_scenario, "usage_bots_count", 0)
     return bot_scenario
 

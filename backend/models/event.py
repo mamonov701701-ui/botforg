@@ -116,3 +116,29 @@ class DailyStats(Base):
         Index('ix_daily_stats_date_bot', 'date', 'bot_id'),
     )
 
+
+class ScenarioEvent(Base):
+    """Событие прохождения сценария пользователем"""
+    __tablename__ = "scenario_events"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    scenario_id = Column(Integer, ForeignKey("scenarios.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    step = Column(String(255), nullable=True, index=True)
+    event_type = Column(String(40), nullable=False, index=True)  # enter_step | complete | drop
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class UserSession(Base):
+    """Сессия пользователя в сценарии"""
+    __tablename__ = "user_sessions"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    scenario_id = Column(Integer, ForeignKey("scenarios.id"), nullable=False, index=True)
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    finished_at = Column(DateTime, nullable=True)
+    status = Column(String(20), default="active", nullable=False, index=True)  # active | completed | dropped
+

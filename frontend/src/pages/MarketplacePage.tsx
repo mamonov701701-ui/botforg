@@ -20,6 +20,9 @@ import {
   createMarketOrder,
   createFreelancerProfile,
   getMarketItems,
+  installMarketBot,
+  installMarketScenario,
+  type MarketItemCreate,
 } from '../api/market';
 import { toast } from '../utils/toast';
 import { useAuthStore } from '../stores/authStore';
@@ -100,6 +103,7 @@ export default function MarketplacePage() {
   const [marketOrders, setMarketOrders] = useState<any[]>([]);
   const [freelancers, setFreelancers] = useState<any[]>([]);
   const [isLoadingItems, setIsLoadingItems] = useState(false);
+  const [installingItemId, setInstallingItemId] = useState<number | null>(null);
 
   // Стили для select и option элементов
   const selectStyles = `
@@ -218,7 +222,28 @@ export default function MarketplacePage() {
     );
   };
 
-  const renderProductCard = (item: MarketItem) => (
+  const handleInstall = async (sourceItem: any) => {
+    if (!sourceItem?.id || !sourceItem?.item_type) {
+      toast.error('Не удалось определить товар для установки');
+      return;
+    }
+    setInstallingItemId(sourceItem.id);
+    try {
+      const result =
+        sourceItem.item_type === 'scenario'
+          ? await installMarketScenario(sourceItem.id)
+          : await installMarketBot(sourceItem.id);
+      toast.success(result.message || 'Установка завершена');
+    } catch (error: any) {
+      const errorMessage =
+        error?.response?.data?.detail || error?.message || 'Ошибка при установке товара';
+      toast.error(errorMessage);
+    } finally {
+      setInstallingItemId(null);
+    }
+  };
+
+  const renderProductCard = (item: MarketItem, sourceItem: any) => (
     <div
       key={item.id}
       style={{
@@ -378,18 +403,26 @@ export default function MarketplacePage() {
             )}
           </div>
           <button
+            onClick={e => {
+              e.stopPropagation();
+              handleInstall(sourceItem);
+            }}
+            disabled={installingItemId === sourceItem?.id}
             style={{
               padding: '10px 20px',
-              background: 'var(--primary)',
-              color: 'var(--text-on-primary)',
+              background: installingItemId === sourceItem?.id ? 'var(--surface)' : 'var(--primary)',
+              color:
+                installingItemId === sourceItem?.id
+                  ? 'var(--text-muted)'
+                  : 'var(--text-on-primary)',
               border: 'none',
               borderRadius: '8px',
               fontSize: '14px',
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: installingItemId === sourceItem?.id ? 'not-allowed' : 'pointer',
             }}
           >
-            Подробнее
+            {installingItemId === sourceItem?.id ? 'Установка...' : 'Установить'}
           </button>
         </div>
       </div>
@@ -700,7 +733,7 @@ export default function MarketplacePage() {
                         tags: item.tags || [],
                         isPremium: item.is_premium || false,
                       };
-                      return renderProductCard(formattedItem);
+                      return renderProductCard(formattedItem, item);
                     })
                 )}
               </div>
@@ -777,7 +810,7 @@ export default function MarketplacePage() {
                         tags: item.tags || [],
                         isPremium: item.is_premium || false,
                       };
-                      return renderProductCard(formattedItem);
+                      return renderProductCard(formattedItem, item);
                     })
                 )}
               </div>
@@ -943,8 +976,10 @@ export default function MarketplacePage() {
                           .filter(t => t.length > 0)
                       : [];
 
-                    const marketItemData = {
-                      item_type: activeTab === 'templates' ? 'template' : 'scenario',
+                    const marketItemData: MarketItemCreate = {
+                      item_type: (activeTab === 'templates' ? 'template' : 'scenario') as
+                        | 'template'
+                        | 'scenario',
                       title,
                       description,
                       additional_description: additionalDescription || undefined,
