@@ -41,6 +41,14 @@ python test_all_login.py
 1. Смотрите traceback в терминале uvicorn.
 2. Проверьте миграции: из корня `python -m alembic upgrade head`.
 
+### Проблема: `no such column: users.token_version` (SQLite)
+
+**Причина:** Файл БД старше текущих моделей; не применены миграции Alembic.
+
+**Решение:**
+1. Из **корня репозитория**: `python -m alembic upgrade head`
+2. Перезапустите uvicorn. В режиме **development + SQLite** при старте backend сам выполняет `alembic upgrade head` (см. `backend/services/ensure_migrations.py`).
+
 ---
 
 ### Проблема: Страница не обновляется после изменений

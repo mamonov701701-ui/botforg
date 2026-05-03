@@ -190,6 +190,11 @@ def startup_retention_job():
     if not db_ok:
         raise RuntimeError(f"Database is not ready at startup: {db_msg}")
 
+    # Локальный SQLite без прогнанных миграций ломает ORM (нет колонок вроде users.token_version).
+    from backend.services.ensure_migrations import ensure_dev_sqlite_migrations_applied
+
+    ensure_dev_sqlite_migrations_applied()
+
     if settings.ENVIRONMENT == "production" and settings.STRICT_REDIS:
         redis_ok, redis_msg = check_redis_connection()
         if not redis_ok:
