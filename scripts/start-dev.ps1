@@ -10,7 +10,7 @@ $root = if ($PSScriptRoot) {
 }
 Set-Location -LiteralPath $root
 
-$BackendPort = 8001
+$BackendPort = 8011
 $LegacyBackendPort = 8002
 $FrontendPort = 5173
 $FrontendAltPort = 5174
@@ -30,6 +30,8 @@ function Stop-ProcessOnPort {
             if ($proc) {
                 Write-Host "Port ${Port}: stopping PID $owningPid ($($proc.ProcessName))" -ForegroundColor Yellow
                 Stop-Process -Id $owningPid -Force -ErrorAction SilentlyContinue
+                # дерево процессов (cmd → python): иначе на 8001 остаются «зомби»-слушатели
+                & taskkill.exe /T /F /PID $owningPid 2>$null | Out-Null
             }
         }
     } catch {
@@ -101,15 +103,24 @@ function Test-AuthEmailLoginProbe {
     if (-not $curl) { return $true }
     $respFile = [System.IO.Path]::GetTempFileName()
     $payloadFile = [System.IO.Path]::GetTempFileName()
+    Set-Content -LiteralPath $payloadFile -Value '{"email":"dev-probe-not-exists@example.com","password":"x"}' -Encoding ascii -NoNewline
     try {
-        Set-Content -LiteralPath $payloadFile -Value '{"email":"dev-probe-not-exists@example.com","password":"x"}' -Encoding ascii -NoNewline
-        $raw = & curl.exe -s -S --connect-timeout 3 --max-time 10 -o $respFile -w '%{http_code}' `
-            -X POST ("http://127.0.0.1:$BackendPort/auth/email/login") `
-            -H 'Content-Type: application/json' `
-            --data-binary "@$payloadFile" 2>$null
-        if ($LASTEXITCODE -ne 0) { return $false }
-        $code = ($raw | Out-String).Trim()
-        return ($code -eq '401' -or $code -eq '422')
+        $lastCode = ''
+        for ($attempt = 0; $attempt -lt 10; $attempt++) {
+            $raw = & curl.exe -s -S --connect-timeout 3 --max-time 12 -o $respFile -w '%{http_code}' `
+                -X POST ("http://127.0.0.1:$BackendPort/auth/email/login") `
+                -H 'Content-Type: application/json' `
+                --data-binary "@$payloadFile" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $lastCode = ($raw | Out-String).Trim()
+                if ($lastCode -eq '401' -or $lastCode -eq '422') {
+                    return $true
+                }
+            }
+            Start-Sleep -Seconds 2
+        }
+        Write-Host ("Auth probe: expected 401 or 422, last http_code={0} (retries exhausted)." -f $lastCode) -ForegroundColor Yellow
+        return $false
     } finally {
         Remove-Item -LiteralPath $respFile -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $payloadFile -Force -ErrorAction SilentlyContinue
@@ -127,6 +138,20 @@ foreach ($p in $LegacyBackendPort, $BackendPort, $FrontendPort, $FrontendAltPort
     Stop-ProcessOnPort -Port $p
 }
 Start-Sleep -Seconds 2
+for ($drain = 0; $drain -lt 10; $drain++) {
+    $stillBusy = @()
+    foreach ($p in $LegacyBackendPort, $BackendPort, $FrontendPort, $FrontendAltPort) {
+        $stillBusy += @(Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue)
+    }
+    if (-not $stillBusy) { break }
+    foreach ($row in $stillBusy) {
+        if ($row.OwningProcess) {
+            Stop-Process -Id $row.OwningProcess -Force -ErrorAction SilentlyContinue
+            & taskkill.exe /T /F /PID $row.OwningProcess 2>$null | Out-Null
+        }
+    }
+    Start-Sleep -Milliseconds 400
+}
 
 $venvPython = Join-Path $root 'backend\venv\Scripts\python.exe'
 if (Test-Path -LiteralPath $venvPython) {
@@ -159,7 +184,14 @@ if (-not $npm) {
 }
 $npmExe = $npm.Source
 
-$beCmd = 'cd /d "' + $root + '" && "' + $pyExe + '" -m uvicorn backend.main:app --host 0.0.0.0 --port ' + $BackendPort + ' --reload'
+# По умолчанию без --reload: под StatReload uvicorn может принимать запросы до завершения lifespan в worker → 500 на /auth/email/login во время SQLite/Alembic.
+# Горячая перезагрузка: `$env:BOTFORG_UVICORN_RELOAD='1'` перед запуском (с узкой директорией `backend/`).
+$reloadExtra = ''
+if ($env:BOTFORG_UVICORN_RELOAD -eq '1') {
+    $reloadBackendDir = Join-Path $root 'backend'
+    $reloadExtra = ' --reload --reload-dir "' + $reloadBackendDir + '"'
+}
+$beCmd = 'cd /d "' + $root + '" && "' + $pyExe + '" -u -m uvicorn backend.main:app --host 0.0.0.0 --port ' + $BackendPort + $reloadExtra
 Write-Host ("Starting backend ($BackendPort)...") -ForegroundColor Cyan
 $beWrapper = $beCmd + ' > "' + $logBackend + '" 2>&1'
 $beProc = Start-Process -FilePath 'cmd.exe' `
@@ -221,6 +253,9 @@ if ($failed.Count -gt 0) {
 
     exit 1
 }
+
+# После первого ответа Vite приложение часто шлёт пачку запросов на API; при SQLite одиночный writer и POST login-probe может получить 500.
+Start-Sleep -Seconds 6
 
 # NOTE: backend/frontend readiness is already validated in the wait loop above.
 # Avoid single-shot rechecks here to prevent flaky startup failures.

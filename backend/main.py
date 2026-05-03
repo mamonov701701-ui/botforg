@@ -4,6 +4,7 @@ import os
 import sys
 import threading
 import time
+from contextlib import asynccontextmanager
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI, Request
@@ -63,98 +64,6 @@ from backend.services.bot_crm.overview_aggregate_service import refresh_overview
 
 logger = logging.getLogger(__name__)
 
-# В prod (ENVIRONMENT=production) по умолчанию /docs, /redoc, /openapi.json отключены (404)
-_docs_enabled = getattr(settings, "ALLOW_DOCS", True)
-app = FastAPI(
-    docs_url="/docs" if _docs_enabled else None,
-    redoc_url="/redoc" if _docs_enabled else None,
-    openapi_url="/openapi.json" if _docs_enabled else None,
-)
-
-# Add session middleware for OAuth state
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=settings.SESSION_SECRET
-    if settings.SESSION_SECRET
-    else settings.JWT_SECRET,
-    same_site="lax",
-)
-
-# Security: чистый ASGI (SecurityASGIMiddleware), не второй BaseHTTPMiddleware — иначе uvicorn + POST ломаются.
-# ПДн-лог в том же слое. Рядом только SessionMiddleware (BaseHTTPMiddleware) — см. backend/middleware/security.py
-app.add_middleware(SecurityMiddleware)
-
-# Настройка CORS - разрешаем localhost + туннели
-allowed_origins = [settings.FRONTEND_ORIGIN, settings.FRONTEND_URL]
-
-# В dev режиме добавляем localhost варианты
-if settings.ENVIRONMENT == "development":
-    allowed_origins.extend([
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8001",
-        "http://127.0.0.1:8001",
-        "http://localhost:8002",
-        "http://127.0.0.1:8002",
-    ])
-    # Убираем дубликаты
-    allowed_origins = list(set(allowed_origins))
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,  # Всегда используем конкретные origins (нельзя использовать "*" с credentials)
-    allow_credentials=True,  # Important for OAuth cookies
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Убираем Base.metadata.create_all(bind=engine) - используем Alembic
-
-# OAuth routes (new)
-app.include_router(oauth_routes.router)
-app.include_router(email_routes.router)
-app.include_router(account_router.router)
-app.include_router(plans_router.router)
-
-# Existing routes
-# app.include_router(auth.router, prefix="/auth")  # ОТКЛЮЧЕН - используем email_routes вместо этого
-app.include_router(templates.router)  # без prefix
-app.include_router(bot_router.router, prefix="/bots")
-app.include_router(bot_crm_router.router, prefix="/bots")
-app.include_router(review_router.router)  # без prefix
-app.include_router(user_template_router.router, prefix="/user-templates")
-app.include_router(bot_template_router.router, prefix="/bot-templates")
-app.include_router(message_router.router, prefix="/messages")
-app.include_router(billing_router.router, prefix="/billing")
-app.include_router(payment_router.router)
-app.include_router(editor_router.router)
-app.include_router(blocks_router.router)
-app.include_router(scenario_router.router)
-app.include_router(platform_admin_router.router)
-app.include_router(user_security_router.router)
-app.include_router(my_roles_router.router)
-app.include_router(team_router.router, prefix="/api/team")
-app.include_router(ai_router.router)
-app.include_router(analytics_router.router)
-app.include_router(media_router.router, prefix="/media")
-app.include_router(bot_tags_router.router)
-app.include_router(bot_contacts_router.router)
-app.include_router(market_router.router)
-app.include_router(market_admin_router.router)
-app.include_router(chat_router.router)
-app.include_router(legal_router.router)
-app.include_router(privacy_router.router)
-app.include_router(channels_router.router)
-app.include_router(max_router.router)
-app.include_router(whatsapp_router.router)
-app.include_router(channel_webhooks_router.router)
-app.include_router(webhook_router.router)
-
-# Настройка раздачи статических файлов для загруженных медиа
-UPLOAD_DIR = Path("uploads/media")
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
 
 def _check_production_env():
     """152-ФЗ: в production запретить запуск без обязательных env (РФ)."""
@@ -182,15 +91,13 @@ def _check_production_env():
         sys.exit(1)
 
 
-@app.on_event("startup")
-def startup_retention_job():
-    """Проверка prod-переменных (152-ФЗ), затем запуск ежедневной очистки по retention."""
+def _run_startup_sync() -> None:
+    """Синхронный старт: миграции SQLite + фоновые потоки. Вызывается из lifespan до yield (трафик не обрабатывается)."""
     _check_production_env()
     db_ok, db_msg = check_db_connection()
     if not db_ok:
         raise RuntimeError(f"Database is not ready at startup: {db_msg}")
 
-    # Локальный SQLite без прогнанных миграций ломает ORM (нет колонок вроде users.token_version).
     from backend.services.ensure_migrations import ensure_dev_sqlite_migrations_applied
 
     ensure_dev_sqlite_migrations_applied()
@@ -260,13 +167,114 @@ def startup_retention_job():
                 error_sleep_seconds = min(86400, error_sleep_seconds * 2)
             time.sleep(sleep_seconds)
 
-    # Для SQLite (локальный dev) фоновая полная CRM-агрегация может блокировать всю БД.
-    # В проде используется PostgreSQL, поэтому там поток остаётся включённым.
     if is_sqlite:
         logger.info("Skipping CRM aggregate background loop for SQLite database")
     else:
         threading.Thread(target=_crm_aggregate_loop, daemon=True).start()
     threading.Thread(target=_loop, daemon=True).start()
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """lifespan до yield блокирует приём запросов — Alembic на SQLite не конкурирует с POST /auth/email/login."""
+    _run_startup_sync()
+    yield
+
+
+# В prod (ENVIRONMENT=production) по умолчанию /docs, /redoc, /openapi.json отключены (404)
+_docs_enabled = getattr(settings, "ALLOW_DOCS", True)
+app = FastAPI(
+    lifespan=_lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
+)
+
+# Add session middleware for OAuth state
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SESSION_SECRET
+    if settings.SESSION_SECRET
+    else settings.JWT_SECRET,
+    same_site="lax",
+)
+
+# Security: чистый ASGI (SecurityASGIMiddleware), не второй BaseHTTPMiddleware — иначе uvicorn + POST ломаются.
+# ПДн-лог в том же слое. Рядом только SessionMiddleware (BaseHTTPMiddleware) — см. backend/middleware/security.py
+app.add_middleware(SecurityMiddleware)
+
+# Настройка CORS - разрешаем localhost + туннели
+allowed_origins = [settings.FRONTEND_ORIGIN, settings.FRONTEND_URL]
+
+# В dev режиме добавляем localhost варианты
+if settings.ENVIRONMENT == "development":
+    allowed_origins.extend([
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+        "http://localhost:8011",
+        "http://127.0.0.1:8011",
+        "http://localhost:8002",
+        "http://127.0.0.1:8002",
+    ])
+    # Убираем дубликаты
+    allowed_origins = list(set(allowed_origins))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,  # Всегда используем конкретные origins (нельзя использовать "*" с credentials)
+    allow_credentials=True,  # Important for OAuth cookies
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Убираем Base.metadata.create_all(bind=engine) - используем Alembic
+
+# OAuth routes (new)
+app.include_router(oauth_routes.router)
+app.include_router(email_routes.router)
+app.include_router(account_router.router)
+app.include_router(plans_router.router)
+
+# Existing routes
+# app.include_router(auth.router, prefix="/auth")  # ОТКЛЮЧЕН - используем email_routes вместо этого
+app.include_router(templates.router)  # без prefix
+app.include_router(bot_router.router, prefix="/bots")
+app.include_router(bot_crm_router.router, prefix="/bots")
+app.include_router(review_router.router)  # без prefix
+app.include_router(user_template_router.router, prefix="/user-templates")
+app.include_router(bot_template_router.router, prefix="/bot-templates")
+app.include_router(message_router.router, prefix="/messages")
+app.include_router(billing_router.router, prefix="/billing")
+app.include_router(payment_router.router)
+app.include_router(editor_router.router)
+app.include_router(blocks_router.router)
+app.include_router(scenario_router.router)
+app.include_router(platform_admin_router.router)
+app.include_router(user_security_router.router)
+app.include_router(my_roles_router.router)
+app.include_router(team_router.router, prefix="/api/team")
+app.include_router(ai_router.router)
+app.include_router(analytics_router.router)
+app.include_router(media_router.router, prefix="/media")
+app.include_router(bot_tags_router.router)
+app.include_router(bot_contacts_router.router)
+app.include_router(market_router.router)
+app.include_router(market_admin_router.router)
+app.include_router(chat_router.router)
+app.include_router(legal_router.router)
+app.include_router(privacy_router.router)
+app.include_router(channels_router.router)
+app.include_router(max_router.router)
+app.include_router(whatsapp_router.router)
+app.include_router(channel_webhooks_router.router)
+app.include_router(webhook_router.router)
+
+# Настройка раздачи статических файлов для загруженных медиа
+UPLOAD_DIR = Path("uploads/media")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/health")

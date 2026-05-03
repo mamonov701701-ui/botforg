@@ -22,7 +22,7 @@ function Stop-ProcessOnPort {
 }
 
 $LegacyBackendPort = 8002
-$BackendPort = 8001
+$BackendPort = 8011
 $FrontendPort = 5173
 $FrontendAltPort = 5174
 
