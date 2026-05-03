@@ -1,5 +1,5 @@
 ﻿#requires -Version 5.1
-# Stop dev servers: free ports 8002, 5173, 5174 (BotForg)
+# Stop dev servers: free backend + frontend ports (BotForg)
 
 $ErrorActionPreference = 'Continue'
 
@@ -21,8 +21,8 @@ function Stop-ProcessOnPort {
     }
 }
 
-$LegacyBackendPort = 8001
-$BackendPort = 8002
+$LegacyBackendPort = 8002
+$BackendPort = 8001
 $FrontendPort = 5173
 $FrontendAltPort = 5174
 

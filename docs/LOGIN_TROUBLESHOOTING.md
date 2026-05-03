@@ -28,12 +28,18 @@ python test_all_login.py
 
 ### Проблема: "Internal Server Error" (500)
 
-**Причина:** Ошибка в коде backend при обработке запроса.
+**Причина 1 (самая частая в dev):** Vite проксирует `/auth` не на тот порт, где реально запущен uvicorn (несовпадение порта фронта и бэкенда).
 
 **Решение:**
-1. Проверьте файл `backend/models/__init__.py`
-2. Убедитесь, что все модели импортированы
-3. Перезапустите backend
+1. Откройте [DEV_PORTS.md](./DEV_PORTS.md): backend по умолчанию **`8001`**, прокси Vite без `BOTFORG_BACKEND_PORT` тоже **`8001`**.
+2. Убедитесь: `Get-NetTCPConnection -LocalPort 8001 -State Listen` показывает ваш uvicorn.
+3. Либо запускайте всё через **`.\scripts\start-dev.ps1`** из корня — один порт для backend и для прокси.
+
+**Причина 2:** Реальная ошибка в коде backend при обработке запроса.
+
+**Решение:**
+1. Смотрите traceback в терминале uvicorn.
+2. Проверьте миграции: из корня `python -m alembic upgrade head`.
 
 ---
 

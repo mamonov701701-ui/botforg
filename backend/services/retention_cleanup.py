@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, delete
+from sqlalchemy.exc import OperationalError
 
 from backend.database import SessionLocal
 from backend.models.bot import Bot
@@ -27,8 +28,17 @@ def run_retention_cleanup(db: Session) -> tuple[int, int, int]:
     deleted_events = 0
 
     cutoff_processed = now - timedelta(days=PROCESSED_UPDATES_RETENTION_DAYS)
-    r_pu = db.execute(delete(ProcessedUpdate).where(ProcessedUpdate.created_at < cutoff_processed))
-    deleted_processed_updates = r_pu.rowcount or 0
+    deleted_processed_updates = 0
+    try:
+        r_pu = db.execute(delete(ProcessedUpdate).where(ProcessedUpdate.created_at < cutoff_processed))
+        deleted_processed_updates = r_pu.rowcount or 0
+    except OperationalError as e:
+        # SQLite без миграций / старая БД — таблицы может не быть; не ломаем фоновый цикл.
+        msg = str(e).lower()
+        if "no such table" in msg and "processed_updates" in msg:
+            logger.warning("retention_cleanup: skip processed_updates (table missing)")
+        else:
+            raise
 
     bots = db.query(Bot).all()
     for bot in bots:

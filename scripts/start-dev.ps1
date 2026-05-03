@@ -10,8 +10,8 @@ $root = if ($PSScriptRoot) {
 }
 Set-Location -LiteralPath $root
 
-$BackendPort = 8002
-$LegacyBackendPort = 8001
+$BackendPort = 8001
+$LegacyBackendPort = 8002
 $FrontendPort = 5173
 $FrontendAltPort = 5174
 
@@ -186,7 +186,7 @@ $feProc = Start-Process -FilePath 'cmd.exe' `
 if (-not $feProc) {
     Write-Host 'ERROR: failed to start frontend process.' -ForegroundColor Red
     try { Stop-Process -Id $beProc.Id -Force -ErrorAction SilentlyContinue } catch {}
-    foreach ($p in 8001, 5173, 5174) { Stop-ProcessOnPort -Port $p }
+    foreach ($p in $LegacyBackendPort, $BackendPort, $FrontendPort, $FrontendAltPort) { Stop-ProcessOnPort -Port $p }
     exit 1
 }
 

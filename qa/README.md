@@ -14,7 +14,7 @@
 
 1. Создаёт **qa_artifacts/YYYY-MM-DD_HHmm/**.
 2. Запускает миграции (`alembic upgrade head`), лог в `backend_alembic.log`.
-3. Запускает backend на **8002**, логи в `backend_stdout.log`, `backend_stderr.log`, ждёт `/health` или `/` (30 с).
+3. Запускает backend на **8001**, логи в `backend_stdout.log`, `backend_stderr.log`, ждёт `/health` или `/` (30 с).
 4. Сохраняет роуты в `backend_routes.txt`, при возможности — `openapi.json`.
 5. Запускает **pytest -q** → `pytest_all.txt`, затем выбранные тесты → `pytest_selected.txt`.
 6. Запускает frontend через `cmd.exe /c` (устойчивый запуск npm на Windows), логи в `frontend_stdout.log`, `frontend_stderr.log`, ждёт доступности http://127.0.0.1:5173 до 60 с; при неудаче — P0 в отчёте.

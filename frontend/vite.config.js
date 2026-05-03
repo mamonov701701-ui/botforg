@@ -4,7 +4,9 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const backendPort = Number(process.env.BOTFORG_BACKEND_PORT || '8002');
+// Должен совпадать с портом uvicorn при ручном запуске (см. docs/DEV_PORTS.md).
+// Скрипт scripts/start-dev.ps1 задаёт BOTFORG_BACKEND_PORT явно.
+const backendPort = Number(process.env.BOTFORG_BACKEND_PORT || '8001');
 const backendTarget = `http://localhost:${backendPort}`;
 
 export default defineConfig({
@@ -44,7 +46,7 @@ export default defineConfig({
   server: {
     // ВАЖНО: dev-порты синхронизированы с docs/DEV_PORTS.md
     // Frontend: http://localhost:5173
-    // Backend API (см. proxy ниже): http://localhost:${BOTFORG_BACKEND_PORT|8002}
+    // Backend API (см. proxy ниже): http://localhost:${BOTFORG_BACKEND_PORT|8001}
     host: '0.0.0.0',
     port: 5173,
     // Иначе при занятом 5173 Vite уходит на 5174, а start-dev.ps1 и документация ждут только 5173
@@ -115,7 +117,7 @@ export default defineConfig({
         secure: false,
       },
       '/uploads': {
-        target: 'http://localhost:8001',
+        target: backendTarget,
         changeOrigin: true,
         secure: false,
       },
