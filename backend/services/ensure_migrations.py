@@ -22,30 +22,51 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _verify_sqlite_users_columns_after_upgrade() -> None:
-    """Минимальная проверка: ORM User ожидает эти поля (без изменения данных)."""
+# Таблицы, без которых типичный dev-путь (логин, сценарии, редактор шаблонов, BF-команда) ломается на ORM.
+_SQLITE_REQUIRED_TABLES = (
+    "users",
+    "scenarios",
+    "scenario_versions",
+    "nodes",
+    "edges",
+    "scenario_events",
+    "user_sessions",
+    "bf_team_members",
+)
+
+_USERS_REQUIRED_COLUMNS = ("token_version", "plan_code", "public_id")
+
+
+def _verify_sqlite_schema_after_upgrade() -> None:
+    """Проверка наличия ключевых таблиц и колонок users (без изменения данных)."""
     from sqlalchemy import inspect
 
     from backend.database import engine
 
     insp = inspect(engine)
-    if not insp.has_table("users"):
-        logger.error("ensure_migrations: таблица users отсутствует в SQLite после upgrade")
-        raise RuntimeError("SQLite schema: missing users table after alembic upgrade")
+
+    missing_tables = [t for t in _SQLITE_REQUIRED_TABLES if not insp.has_table(t)]
+    if missing_tables:
+        logger.error(
+            "ensure_migrations: после upgrade отсутствуют таблицы %s. "
+            "Из корня репозитория: python -m alembic upgrade head",
+            missing_tables,
+        )
+        raise RuntimeError(f"SQLite schema incomplete: missing tables {missing_tables}")
 
     cols = {c["name"] for c in insp.get_columns("users")}
-    required = ("token_version", "plan_code", "public_id")
-    missing = [c for c in required if c not in cols]
-    if missing:
+    missing_cols = [c for c in _USERS_REQUIRED_COLUMNS if c not in cols]
+    if missing_cols:
         logger.error(
             "ensure_migrations: в users не хватает колонок %s после upgrade. "
-            "Выполните из корня репозитория: python -m alembic upgrade head",
-            missing,
+            "Из корня репозитория: python -m alembic upgrade head",
+            missing_cols,
         )
-        raise RuntimeError(f"SQLite schema incomplete: users missing columns {missing}")
+        raise RuntimeError(f"SQLite schema incomplete: users missing columns {missing_cols}")
 
     logger.info(
-        "ensure_migrations: проверка схемы OK (users: token_version, plan_code, public_id)"
+        "ensure_migrations: проверка схемы OK (таблицы ORM + users.%s)",
+        ", ".join(_USERS_REQUIRED_COLUMNS),
     )
 
 
@@ -94,7 +115,7 @@ def ensure_dev_sqlite_migrations_applied() -> None:
         raise
 
     try:
-        _verify_sqlite_users_columns_after_upgrade()
+        _verify_sqlite_schema_after_upgrade()
     except Exception:
-        logger.exception("ensure_migrations: проверка схемы users после upgrade не прошла")
+        logger.exception("ensure_migrations: проверка схемы SQLite после upgrade не прошла")
         raise
