@@ -98,7 +98,8 @@ def ensure_dev_sqlite_migrations_applied() -> None:
         raise RuntimeError(f"alembic.ini not found at {alembic_ini}")
 
     logger.info(
-        "ensure_migrations: запуск alembic upgrade head (development, SQLite)"
+        "ensure_migrations: запуск alembic upgrade head (development, SQLite), DATABASE_URL=%s",
+        url,
     )
 
     try:

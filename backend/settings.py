@@ -2,11 +2,15 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, model_validator
 from pydantic_settings import BaseSettings
 
 _KEYS_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _KEYS_DIR.parent
 _ENV_FILE = _KEYS_DIR / ".env"
+
+# Дефолт в .env/доках: sqlite:///./botforg.db — иначе путь считается от cwd и миграции/uvicorn видят РАЗНЫЕ файлы.
+_DEV_DEFAULT_SQLITE_URL = "sqlite:///./botforg.db"
 
 
 class Settings(BaseSettings):
@@ -41,8 +45,8 @@ class Settings(BaseSettings):
     SMTP_PASS: str = ""
     EMAIL_FROM: str = "BotForg <noreply@botforg.app>"
 
-    # Database
-    DATABASE_URL: str = "sqlite:///./botforg.db"
+    # Database (см. _anchor_dev_sqlite_url: дефолт привязывается к корню репозитория)
+    DATABASE_URL: str = _DEV_DEFAULT_SQLITE_URL
     REDIS_URL: str = "redis://localhost:6379/0"
     STRICT_REDIS: bool = os.getenv("STRICT_REDIS", "false").lower() == "true"
     DB_STATEMENT_TIMEOUT_MS: int = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "5000"))
@@ -91,6 +95,16 @@ class Settings(BaseSettings):
         env_file=str(_ENV_FILE) if _ENV_FILE.exists() else ".env",
         env_file_encoding="utf-8",
     )
+
+    @model_validator(mode="after")
+    def _anchor_dev_sqlite_url(self) -> "Settings":
+        """Один и тот же botforg.db независимо от текущего каталога процесса (Alembic vs uvicorn)."""
+        raw = (self.DATABASE_URL or "").strip()
+        if raw != _DEV_DEFAULT_SQLITE_URL:
+            return self
+        db_path = (_REPO_ROOT / "botforg.db").resolve()
+        self.DATABASE_URL = f"sqlite:///{db_path.as_posix()}"
+        return self
 
 
 settings = Settings()
