@@ -16,11 +16,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "users",
-        sa.Column("public_id", sa.BigInteger(), nullable=True),
-    )
     conn = op.get_bind()
+    insp = sa.inspect(conn)
+    cols = {c["name"]: c for c in insp.get_columns("users")}
+    if "public_id" not in cols:
+        op.add_column(
+            "users",
+            sa.Column("public_id", sa.BigInteger(), nullable=True),
+        )
+
     rows = conn.execute(sa.text("SELECT id FROM users WHERE public_id IS NULL")).fetchall()
     used = set()
     for (user_id,) in rows:
@@ -30,13 +34,21 @@ def upgrade() -> None:
                 used.add(public_id)
                 break
         conn.execute(sa.text("UPDATE users SET public_id = :pid WHERE id = :id"), {"pid": public_id, "id": user_id})
-    with op.batch_alter_table("users") as batch:
-        batch.alter_column(
-            "public_id",
-            existing_type=sa.BigInteger(),
-            nullable=False,
-        )
-    op.create_index(op.f("ix_users_public_id"), "users", ["public_id"], unique=True)
+
+    insp = sa.inspect(conn)
+    pub_col = next(c for c in insp.get_columns("users") if c["name"] == "public_id")
+    if pub_col.get("nullable", True):
+        with op.batch_alter_table("users") as batch:
+            batch.alter_column(
+                "public_id",
+                existing_type=sa.BigInteger(),
+                nullable=False,
+            )
+
+    insp = sa.inspect(conn)
+    idx_keys = {ix["name"] for ix in insp.get_indexes("users")}
+    if "ix_users_public_id" not in idx_keys:
+        op.create_index(op.f("ix_users_public_id"), "users", ["public_id"], unique=True)
 
 
 def downgrade() -> None:
