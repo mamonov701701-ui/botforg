@@ -1504,7 +1504,8 @@ function InnerEditor() {
   // КРИТИЧНО: Максимально агрессивно убираем контур selection box
   React.useEffect(() => {
     // ОТКЛЮЧЕНО - конфликтует с connection line
-    if (true) return;
+    const selectionBoxCleanupEnabled = false;
+    if (!selectionBoxCleanupEnabled) return;
 
     const removeSelectionBox = () => {
       // 1. Находим и УДАЛЯЕМ все элементы nodesselection

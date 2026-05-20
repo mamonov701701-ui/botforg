@@ -161,7 +161,9 @@ export default function ScenarioHubDropdown({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current?.contains(event.target as Node)) return;
+      if (event.target instanceof HTMLElement && dropdownRef.current?.contains(event.target)) {
+        return;
+      }
       void (async () => {
         if (editingIdRef.current !== null) {
           const ok = await attemptFinishRename(false);

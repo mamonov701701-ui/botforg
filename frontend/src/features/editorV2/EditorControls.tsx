@@ -215,7 +215,6 @@ const EditorControls: React.FC<EditorControlsProps> = ({
     };
     // pickScenarioId читается из location.state при смене botId (переход «Открыть» с другого бота).
     // Не добавляем location.state в deps — иначе после replace с пустым state будет лишняя перезагрузка.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [botId, user, isReadOnly, canEditScenario]);
 
   // Обработчик beforeunload — предупреждение при закрытии вкладки с несохранёнными изменениями

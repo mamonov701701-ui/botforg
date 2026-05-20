@@ -409,7 +409,6 @@ export default function TeamPage() {
 
   useEffect(() => {
     loadTeamData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery]);
 
   const canInvite = hasAccessToAction(user?.role as RoleValue, 'team_invite');

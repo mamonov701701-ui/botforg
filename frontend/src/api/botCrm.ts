@@ -242,6 +242,12 @@ export async function crmListUsers(
   return api.get(`/bots/${botId}/crm/users${suffix}`);
 }
 
+function withEnvironment(path: string, environment?: CrmEnvironmentFilter): string {
+  if (!environment) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  return `${path}${sep}environment=${environment}`;
+}
+
 export async function crmOverview(
   botId: number,
   environment?: CrmEnvironmentFilter
@@ -254,12 +260,6 @@ export async function crmStatusesSummary(
   environment?: CrmEnvironmentFilter
 ): Promise<CrmStatusesSummary> {
   return api.get(withEnvironment(`/bots/${botId}/crm/statuses/summary`, environment));
-}
-
-function withEnvironment(path: string, environment?: CrmEnvironmentFilter): string {
-  if (!environment) return path;
-  const sep = path.includes('?') ? '&' : '?';
-  return `${path}${sep}environment=${environment}`;
 }
 
 export async function crmUserDetail(
