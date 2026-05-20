@@ -1,0 +1,56 @@
+---
+description: Тестирование — typecheck, pytest, smoke
+alwaysApply: true
+---
+
+# Testing (BotForg)
+
+## Frontend (после изменений в `frontend/`)
+
+```bash
+cd frontend
+npm run typecheck
+npm run lint
+```
+
+Опционально при UI/flow-изменениях:
+
+```bash
+npm run test          # vitest
+npm run test:e2e      # playwright, если настроено для сценария
+```
+
+## Backend (после изменений в `backend/`)
+
+```bash
+backend\venv\Scripts\python.exe -m pytest backend/tests/<relevant>_test.py -v
+```
+
+Запускать тесты **затронутой области** (auth, billing, scenarios, publish, CRM — по имени файла в `backend/tests/`).
+
+Корневые тесты: `tests/` (pytest из корня с `TESTING=true` в `pytest.ini`).
+
+## Smoke (обязательно при изменениях)
+
+Запускать smoke, если задача затрагивает:
+
+- **auth** — login, JWT, OAuth, сессии;
+- **editor** — граф, узлы, handles, simulator;
+- **save/load** — черновик, версии, publish.
+
+Минимальный ручной smoke (dev поднят через `npm run dev`):
+
+1. http://localhost:5173 — открывается UI.
+2. Login (email) — не 500 на `POST /auth/email/login`.
+3. Редактор: открыть сценарий, сохранить, перезагрузить — данные на месте.
+4. `GET http://127.0.0.1:8000/healthz` → ok.
+
+## Если тесты не запускались
+
+Агент **обязан** в отчёте написать:
+
+- что не запускалось;
+- **почему** (нет venv, нет npm, sandbox, только docs/ignore, время, и т.д.);
+- что пользователь должен запустить сам.
+
+Запрещено писать «тесты пройдены», если команды не выполнялись.

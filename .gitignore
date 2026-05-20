@@ -1,63 +1,86 @@
 ########################################
-# Python
+# BotForg — local / generated (not in git)
+########################################
+
+# --- Secrets & local env ---
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env.development
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+!frontend/.env.example
+
+# --- Python ---
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 *.log
-*.sqlite3
-*.db
-*.db.*
-botforg.db
-botforg.db.*
-
-.env
-.env.*
 .venv/
 venv/
 backend/venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.cache/
+htmlcov/
 
-# Логи и временные файлы backend
-backend_stderr.txt
-backend_stderr*.txt
-uvicorn_err.txt
-uvicorn_out.txt
-**/uvicorn_*.txt
-**/backend_stderr*.txt
+# --- Databases (local only) ---
+*.db
+*.db.*
+*.sqlite
+*.sqlite3
+botforg.db
+botforg.db.*
+test_botforg.db
 
-# Локальные lock/результаты
-**/monitoring/prompt_agent.lock
-TEST_RESULTS.md
-test-results/
-*.bak
-*.bak_*
-
-# Node / Frontend
+# --- Node / Frontend build ---
 node_modules/
 frontend/node_modules/
 frontend/.vite/
 frontend/dist/
 *.tsbuildinfo
 
-# Build / Misc
+# --- Build / coverage ---
 dist/
 build/
 coverage/
-.pytest_cache/
-.mypy_cache/
-.cache/
 
-# IDE
+# --- User uploads & QA artifacts ---
+uploads/
+backend/uploads/
+qa_artifacts/
+test-results/
+
+# --- Dev / runtime logs ---
+LOGS/
+backend_stderr.txt
+backend_stderr*.txt
+uvicorn_err.txt
+uvicorn_out.txt
+**/uvicorn_*.txt
+**/backend_stderr*.txt
+scripts/.dev-*.log
+**/monitoring/prompt_agent.lock
+
+# --- IDE / OS ---
 .vscode/
 .idea/
 *.iml
+.DS_Store
+Thumbs.db
 
-# Alembic
+# --- Misc local ---
+*.bak
+*.bak_*
+TEST_RESULTS.md
+
+# Alembic cache inside versions
 backend/migrations/versions/__pycache__/
 
-# QA Tester Agent (generated)
-qa_artifacts/
-
-# Локальные загрузки пользователей (не в репозиторий)
-uploads/
 ########################################

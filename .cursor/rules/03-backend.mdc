@@ -1,0 +1,42 @@
+---
+description: Backend — FastAPI, модели, auth, миграции, тесты
+globs: backend/**/*
+alwaysApply: false
+---
+
+# Backend (FastAPI)
+
+## Стабильность контрактов
+
+- **Не ломать auth** (JWT, сессии, OAuth, email/login, blacklist).
+- **Не ломать роли и access control** (`dependencies/auth`, middleware, owner/admin).
+- **Не ломать оплату** (billing, webhooks, платёжные провайдеры).
+- Роуты, Pydantic-схемы и коды HTTP — менять только при явной задаче на API.
+
+## Модели и импорты
+
+- Импорты моделей: **`from backend.models.<module> import ...`**
+- **Не смешивать** `backend.models` и устаревший `models` / относительные импорты в новом коде.
+- Перед правкой роутера — проверить связанные `schemas`, `services`, `dependencies`.
+
+## Миграции (Alembic)
+
+- **Не менять уже применённые миграции задним числом** без веской причины и согласования.
+- Новые изменения схемы — **новая revision** (`alembic revision`), не правка старых файлов в `backend/migrations/versions/`.
+- Локально: `alembic upgrade head` из корня (см. `scripts/start-dev.ps1`).
+
+## Конфигурация
+
+- Секреты и `.env` — только локально; шаблоны: `.env.example`, `backend/.env.example`.
+- Настройки: `backend/settings.py`; не хардкодить production-секреты.
+
+## Тесты (обязательно для backend-правок)
+
+```bash
+# из корня, venv backend
+backend\venv\Scripts\python.exe -m pytest backend/tests/test_<area>.py -v
+```
+
+Или точечный файл/тест. Для auth: `backend/tests/test_auth.py`, billing: `test_billing.py`, scenarios: `test_scenarios.py`.
+
+Если тесты не запускались — **явно указать причину** в отчёте агента.

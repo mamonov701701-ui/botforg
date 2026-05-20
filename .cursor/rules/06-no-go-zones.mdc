@@ -1,0 +1,40 @@
+---
+description: Запретные зоны — секреты, БД, порты, удаление модулей
+alwaysApply: true
+---
+
+# No-go zones
+
+## Секреты и окружение
+
+- **Не трогать** реальные `.env`, `backend/.env`, `frontend/.env.development` (только читать при диагностике, не коммитить).
+- **Не вставлять** в код, правила, примеры и коммиты: реальные токены, пароли, API keys, приватные URL, production credentials.
+- Шаблоны только из: `.env.example`, `backend/.env.example`, `frontend/.env.example`, `env.production.example`.
+
+## Git и артефакты
+
+- **Не коммитить:** `*.db`, `*.sqlite*`, `node_modules/`, `venv/`, `backend/venv/`, `uploads/`, `qa_artifacts/`, `test-results/`, логи dev-скриптов.
+- Не добавлять в PR бинарные загрузки пользователей из `backend/uploads/`.
+
+## Порты и dev-инфраструктура
+
+- **Не менять** защищённые dev-порты и proxy без **прямого разрешения** пользователя:
+  - Frontend: `5173` (`frontend/vite.config.js`, `strictPort`)
+  - Backend: `8001` (`scripts/start-dev.ps1`, `docs/DEV_PORTS.md`)
+  - `BOTFORG_BACKEND_PORT` должен совпадать с портом uvicorn.
+- Legacy `8002` — только для очистки старых процессов, не как новый дефолт.
+
+## Удаление и крупные изменения
+
+- **Не удалять** рабочие модули, роутеры, страницы, stores без **отдельного подтверждения**.
+- **Не менять** бизнес-логику, UI и API «в проходе» при задачах на docs/ignore/rules.
+- **Не править** уже применённые миграции Alembic задним числом (см. `03-backend.mdc`).
+
+## Cursor / Agents
+
+- `.cursorignore` — не исключать исходники (`backend/**/*.py`, `frontend/src/**`).
+- Правила в `.cursor/rules/` — не дублировать секреты и не отключать тестирование без причины.
+
+## При нарушении границ
+
+Остановиться, сообщить пользователю риск, предложить безопасную альтернативу (example-файл, новая миграция, feature flag).

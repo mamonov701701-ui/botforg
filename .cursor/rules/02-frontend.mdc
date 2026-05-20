@@ -1,0 +1,41 @@
+---
+description: Frontend — React/Vite/TS, UI, API-контракты
+globs: frontend/**/*
+alwaysApply: false
+---
+
+# Frontend (React + Vite + TypeScript)
+
+## UI и UX
+
+- **Не менять внешний вид** (layout, цвета, отступы, тексты) без явного запроса.
+- **Не делать большой рефакторинг** и не переносить компоненты между папками без веской причины.
+- **Desktop-поведение сохранять** — регрессии на широких экранах недопустимы.
+
+## Технические ограничения
+
+- React / Vite / TypeScript — аккуратно: типы, мелкие компоненты, без лишних абстракций.
+- **Не добавлять зависимости** без необходимости.
+- Effects: cleanup для listeners, intervals, subscriptions; избегать циклов обновления state.
+
+## Редактор сценариев
+
+- **Source of truth:** `scenarioStore` / `editorStore` — не дублировать граф в локальном state без причины.
+- **BotSimulator:** маппинг `RunStepResult` через `context`, не `state`.
+- Рёбра React Flow: нормализация handles через `utils/flowHandleCompatibility` при sync store → RF.
+
+## API
+
+- Любые вызовы API **сверять с backend** (роуты, схемы, коды ответов в `backend/routers`, `backend/schemas`).
+- Dev: запросы через **Vite proxy** (`docs/DEV_PORTS.md`), не хардкодить случайные порты.
+- `VITE_API_URL` — в основном для production build/preview; в dev — относительные пути + proxy.
+
+## Проверка после изменений
+
+```bash
+cd frontend
+npm run typecheck
+npm run lint
+```
+
+При изменениях auth / editor / save-load — см. также `05-testing.mdc` (smoke / e2e).
