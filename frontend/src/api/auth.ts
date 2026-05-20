@@ -35,6 +35,7 @@ export interface AgentSettingsOut {
   enabled: boolean;
   mode: string;
   data_policy: string;
+  allow_send_text_to_ai?: boolean;
 }
 
 export interface SettingsOut {
@@ -219,7 +220,12 @@ export async function updateSettings(data: {
     email?: { bot_errors?: boolean; payments?: boolean; team_changes?: boolean };
     telegram?: { bot_errors?: boolean; payments?: boolean; team_changes?: boolean };
   };
-  agent?: { enabled?: boolean; mode?: string; data_policy?: string };
+  agent?: {
+    enabled?: boolean;
+    mode?: string;
+    data_policy?: string;
+    allow_send_text_to_ai?: boolean;
+  };
 }): Promise<SettingsOut> {
   return put('/me/settings', data);
 }

@@ -266,10 +266,10 @@ export default function PlatformAnalyticsPage() {
     const totalSum = dataPoints.reduce((sum, p) => sum + p.value, 0);
 
     const points = dataPoints.map((p, i) => ({
+      ...p,
       x: padding + (i / (dataPoints.length - 1 || 1)) * (width - padding * 2),
       y: height - padding - (maxVal > 0 ? (p.value / maxVal) * (height - padding * 2) : 0),
       percent: totalSum > 0 ? ((p.value / totalSum) * 100).toFixed(1) : '0',
-      ...p,
     }));
 
     const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');

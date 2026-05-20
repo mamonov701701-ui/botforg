@@ -5,6 +5,8 @@ interface CardProps {
   padding?: string;
   hoverable?: boolean;
   onClick?: () => void;
+  onMouseEnter?: React.MouseEventHandler<HTMLDivElement>;
+  onMouseLeave?: React.MouseEventHandler<HTMLDivElement>;
   style?: React.CSSProperties;
   className?: string;
 }
@@ -17,6 +19,8 @@ export default function Card({
   padding = '24px',
   hoverable = false,
   onClick,
+  onMouseEnter,
+  onMouseLeave,
   style = {},
   className = '',
 }: CardProps) {
@@ -44,8 +48,14 @@ export default function Card({
       className={className || undefined}
       style={baseStyle}
       onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={e => {
+        setIsHovered(true);
+        onMouseEnter?.(e);
+      }}
+      onMouseLeave={e => {
+        setIsHovered(false);
+        onMouseLeave?.(e);
+      }}
     >
       {children}
     </div>

@@ -45,14 +45,17 @@ export function AccessLocked({ hasAccess, actionKey, children, onClick }: Access
       title={getAccessDeniedMessage(actionKey)}
     >
       {isValidElement(children)
-        ? cloneElement(children, {
-            disabled: true,
-            style: {
-              ...(children.props.style || {}),
-              pointerEvents: 'none' as const,
-              cursor: 'not-allowed',
-            },
-          } as Record<string, unknown>)
+        ? cloneElement(
+            children as ReactElement<{ style?: React.CSSProperties; disabled?: boolean }>,
+            {
+              disabled: true,
+              style: {
+                ...((children as ReactElement<{ style?: React.CSSProperties }>).props.style || {}),
+                pointerEvents: 'none' as const,
+                cursor: 'not-allowed',
+              },
+            }
+          )
         : children}
     </span>
   );

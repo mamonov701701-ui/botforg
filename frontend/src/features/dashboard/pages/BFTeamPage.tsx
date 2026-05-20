@@ -896,7 +896,7 @@ function AssignRoleModal({
     }
   };
 
-  const handleStartEditRole = (role: PlatformRole) => {
+  const handleStartEditRole = (role: { id: number; expires_at: string | null }) => {
     setEditingRoleId(role.id);
     if (role.expires_at) {
       const expires = new Date(role.expires_at);

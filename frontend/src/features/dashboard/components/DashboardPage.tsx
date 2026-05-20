@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface DashboardPageProps {
-  title: string;
+  title: React.ReactNode;
   subtitle?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;

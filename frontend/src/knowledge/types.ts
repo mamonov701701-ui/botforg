@@ -15,9 +15,25 @@ export type KnowledgePreview = {
   differences: string[];
 };
 
+export type KnowledgeBranch =
+  | string
+  | {
+      condition: string;
+      then: string;
+      else: string;
+    };
+
+export type KnowledgeErrorItem =
+  | string
+  | {
+      code: string;
+      reason: string;
+      fix: string;
+    };
+
 export type KnowledgeBehavior = {
   steps: string[];
-  branches: string[];
+  branches: KnowledgeBranch[];
   dataRules: string[];
 };
 
@@ -64,7 +80,7 @@ export type KnowledgeEntity = {
 
   preview: KnowledgePreview;
 
-  errors: string[];
+  errors: KnowledgeErrorItem[];
 
   example: KnowledgeExample;
 

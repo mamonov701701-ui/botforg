@@ -3,6 +3,23 @@
  */
 import api from './client';
 
+function getWithQuery<T>(
+  path: string,
+  params?: Record<string, string | number | boolean | undefined>
+): Promise<T> {
+  if (!params) {
+    return api.get(path);
+  }
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') {
+      qs.set(key, String(value));
+    }
+  }
+  const query = qs.toString();
+  return api.get(query ? `${path}?${query}` : path);
+}
+
 // ================== Types ==================
 
 export interface MarketItem {
@@ -330,7 +347,7 @@ export async function getMarketOrders(params?: {
   page_size?: number;
 }): Promise<MarketOrderListResponse> {
   try {
-    return await api.get('/api/market/orders', params);
+    return await getWithQuery<MarketOrderListResponse>('/api/market/orders', params);
   } catch (error: any) {
     console.error('Failed to fetch market orders:', error);
     throw error;
@@ -364,7 +381,12 @@ export async function getFreelancers(params?: {
   page_size?: number;
 }): Promise<{ total: number; items: FreelancerProfile[]; page: number; page_size: number }> {
   try {
-    return await api.get('/api/market/freelancers', params);
+    return await getWithQuery<{
+      total: number;
+      items: FreelancerProfile[];
+      page: number;
+      page_size: number;
+    }>('/api/market/freelancers', params);
   } catch (error: any) {
     console.error('Failed to fetch freelancers:', error);
     throw error;
@@ -408,7 +430,7 @@ export async function getMarketReviews(
   params?: { page?: number; page_size?: number }
 ): Promise<MarketReview[]> {
   try {
-    return await api.get('/api/market/reviews', {
+    return await getWithQuery<MarketReview[]>('/api/market/reviews', {
       item_type: itemType,
       item_id: itemId,
       ...params,

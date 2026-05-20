@@ -3,11 +3,12 @@ import { NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { getBot, type Bot } from '../../../api/bot';
 import { LayoutDashboard, Users, Workflow, BarChart3, Settings, ChevronLeft } from 'lucide-react';
 import './botWorkspace.css';
+import type { DashboardIcon } from '../../../types/icons';
 
 type WorkspaceTab = {
   to: string;
   label: string;
-  icon: React.ComponentType<{ size?: number }>;
+  icon: DashboardIcon;
 };
 
 function BotHeader({

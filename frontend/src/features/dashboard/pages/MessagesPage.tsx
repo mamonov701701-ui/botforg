@@ -105,7 +105,7 @@ export default function MessagesPage() {
   // UI state
   const [showEmojiPicker, setShowEmojiPicker] = useState<number | null>(null);
   const [showMessageMenu, setShowMessageMenu] = useState<number | null>(null);
-  const [showChatMenu, setShowChatMenu] = useState<number | null>(null);
+  const [showChatMenu, setShowChatMenu] = useState<number | string | null>(null);
   const [contactViewUser, setContactViewUser] = useState<UserBrief | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -488,11 +488,7 @@ export default function MessagesPage() {
   };
 
   return (
-    <DashboardPage
-      title="Сообщения"
-      subtitle="Общайтесь с друзьями на платформе"
-      icon={<MessageCircle size={28} />}
-    >
+    <DashboardPage title="Сообщения" subtitle="Общайтесь с друзьями на платформе">
       <div
         style={{ display: 'flex', gap: '20px', height: 'calc(100vh - 200px)', minHeight: '600px' }}
       >

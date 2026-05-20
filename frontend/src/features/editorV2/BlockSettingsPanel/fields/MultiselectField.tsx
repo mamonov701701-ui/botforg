@@ -1,13 +1,23 @@
 import React from 'react';
 import { FieldProps } from './types';
+import type { SelectOption } from '../../../../types/blocks';
+
+function optionValue(opt: SelectOption): string {
+  return typeof opt === 'string' ? opt : opt.value;
+}
+
+function optionLabel(opt: SelectOption): string {
+  return typeof opt === 'string' ? opt : opt.label;
+}
 
 export const MultiselectField: React.FC<FieldProps> = ({ field, value, onChange, error }) => {
   const selectedValues = Array.isArray(value) ? value : [];
 
-  const toggleOption = (option: string) => {
-    const newValues = selectedValues.includes(option)
-      ? selectedValues.filter(v => v !== option)
-      : [...selectedValues, option];
+  const toggleOption = (option: SelectOption) => {
+    const key = optionValue(option);
+    const newValues = selectedValues.includes(key)
+      ? selectedValues.filter(v => v !== key)
+      : [...selectedValues, key];
     onChange(newValues);
   };
 
@@ -23,7 +33,7 @@ export const MultiselectField: React.FC<FieldProps> = ({ field, value, onChange,
       >
         {field.options?.map(opt => (
           <label
-            key={opt}
+            key={optionValue(opt)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -35,11 +45,11 @@ export const MultiselectField: React.FC<FieldProps> = ({ field, value, onChange,
           >
             <input
               type="checkbox"
-              checked={selectedValues.includes(opt)}
+              checked={selectedValues.includes(optionValue(opt))}
               onChange={() => toggleOption(opt)}
               style={{ width: 16, height: 16, cursor: 'pointer' }}
             />
-            <span>{opt}</span>
+            <span>{optionLabel(opt)}</span>
           </label>
         ))}
       </div>

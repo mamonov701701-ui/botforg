@@ -126,10 +126,7 @@ function ProviderCard({ provider }: { provider: PaymentProvider }) {
     disabled: { bg: '#6b728020', color: '#6b7280', label: 'Отключён' },
   };
 
-  const iconMap: Record<
-    string,
-    React.ComponentType<{ size?: number; style?: React.CSSProperties }>
-  > = {
+  const iconMap: Record<string, import('../../../types/icons').DashboardIcon> = {
     Smartphone,
     CreditCard,
     Gem,

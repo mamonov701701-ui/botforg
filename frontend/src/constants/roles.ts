@@ -12,6 +12,14 @@ export const ROLES = {
 export type RoleKey = keyof typeof ROLES;
 export type RoleValue = (typeof ROLES)[RoleKey];
 
+const ROLE_VALUES = new Set<string>(Object.values(ROLES));
+
+/** Нормализует строку роли из API в RoleValue. */
+export function asRoleValue(role: RoleValue | string | undefined): RoleValue | undefined {
+  if (!role) return undefined;
+  return ROLE_VALUES.has(role) ? (role as RoleValue) : undefined;
+}
+
 // Переводы ролей на русский
 export const ROLE_NAMES: Record<RoleValue, string> = {
   owner: 'Владелец проекта',
@@ -108,9 +116,13 @@ export type ActionKey = keyof typeof ACTION_ACCESS;
 /**
  * Проверяет, есть ли у роли доступ к разделу
  */
-export function hasAccessToSection(userRole: RoleValue | undefined, section: SectionKey): boolean {
-  if (!userRole) return false;
-  return SECTION_ACCESS[section].includes(userRole as any);
+export function hasAccessToSection(
+  userRole: RoleValue | string | undefined,
+  section: SectionKey
+): boolean {
+  const role = asRoleValue(userRole);
+  if (!role) return false;
+  return SECTION_ACCESS[section].includes(role as any);
 }
 
 /** Действия, требующие тариф Developer (template_publish, marketplace_stats) */
@@ -119,9 +131,13 @@ export const PLAN_DEVELOPER_ACTIONS: ActionKey[] = ['template_publish', 'marketp
 /**
  * Проверяет, есть ли у роли право на действие
  */
-export function hasAccessToAction(userRole: RoleValue | undefined, action: ActionKey): boolean {
-  if (!userRole) return false;
-  return ACTION_ACCESS[action].includes(userRole as any);
+export function hasAccessToAction(
+  userRole: RoleValue | string | undefined,
+  action: ActionKey
+): boolean {
+  const role = asRoleValue(userRole);
+  if (!role) return false;
+  return ACTION_ACCESS[action].includes(role as any);
 }
 
 /**
@@ -141,10 +157,11 @@ export function hasAccessToPlanRestrictedAction(
 /**
  * Получает список доступных разделов для роли
  */
-export function getAvailableSections(userRole: RoleValue | undefined): SectionKey[] {
-  if (!userRole) return [];
+export function getAvailableSections(userRole: RoleValue | string | undefined): SectionKey[] {
+  const role = asRoleValue(userRole);
+  if (!role) return [];
   return Object.entries(SECTION_ACCESS)
-    .filter(([_, roles]) => roles.includes(userRole as any))
+    .filter(([_, roles]) => roles.includes(role as any))
     .map(([section]) => section as SectionKey);
 }
 
@@ -192,15 +209,19 @@ const FULL_EDIT_ROLES: RoleValue[] = ['owner', 'admin', 'developer', 'user'];
  * Проверяет, находится ли пользователь в демо-режиме (только просмотр) для редактора.
  * Демо-режим: viewer, support, templates_manager — могут смотреть, но не редактировать.
  */
-export function isEditorDemoMode(userRole: RoleValue | undefined): boolean {
-  if (!userRole) return true;
-  return !FULL_EDIT_ROLES.includes(userRole as RoleValue);
+export function isEditorDemoMode(userRole: RoleValue | string | undefined): boolean {
+  const role = asRoleValue(userRole);
+  if (!role) return true;
+  return !FULL_EDIT_ROLES.includes(role);
 }
 
 /**
  * Проверяет демо-режим для раздела по ключевому действию.
  * Например: balance — balance_topup, team — team_invite.
  */
-export function isSectionDemoMode(userRole: RoleValue | undefined, keyAction: ActionKey): boolean {
+export function isSectionDemoMode(
+  userRole: RoleValue | string | undefined,
+  keyAction: ActionKey
+): boolean {
   return !hasAccessToAction(userRole, keyAction);
 }

@@ -188,14 +188,14 @@ export default function BlockSettingsPanel({
   );
 
   const initialSettings = selectedNode.data.settings || {};
-  const isConditionBlock = block.id === 'condition';
+  const isConditionBlock = block?.id === 'condition';
   const shownBlockTitle =
     isConditionBlock &&
     (typeof selectedNode.data.title !== 'string' ||
       selectedNode.data.title.trim() === '' ||
       selectedNode.data.title === 'Условие')
       ? 'Выбор'
-      : selectedNode.data.title || block.title;
+      : selectedNode.data.title || block?.title || '';
 
   const liveMessageSchema = useMemo(() => {
     if (block?.id !== 'message' || !block) return null;
@@ -411,7 +411,7 @@ export default function BlockSettingsPanel({
   }, [block, selectedNode.data.settings, liveMessageSchema, liveInputSchema]);
 
   const totalScenarioDiagIssues = scenarioDiagErrors.length + scenarioDiagWarnings.length;
-  const isSaveDisabled = block.id === 'action' && validationErrors > 0;
+  const isSaveDisabled = block?.id === 'action' && validationErrors > 0;
 
   const getDiagnosticTargetLabel = (d: ScenarioDiagnostic): string | null => {
     switch (d.code) {

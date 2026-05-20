@@ -503,10 +503,7 @@ export default function SettingsPage() {
       {activeTab === 'integrations' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {integrations.map(integration => {
-            const iconMap: Record<
-              string,
-              React.ComponentType<{ size?: number; style?: React.CSSProperties }>
-            > = {
+            const iconMap: Record<string, import('../../../types/icons').DashboardIcon> = {
               Smartphone,
               MessageSquare,
               FileSpreadsheet,

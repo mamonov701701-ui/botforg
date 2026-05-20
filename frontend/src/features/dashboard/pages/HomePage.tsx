@@ -22,6 +22,7 @@ import {
   getScenarioStats,
 } from '../../../api/analytics';
 import { getBots, type Bot } from '../../../api/bot';
+import type { DashboardIcon } from '../../../types/icons';
 
 const LS_ONBOARDING_DONE = 'bf_onboarding_done';
 const LS_ONBOARDING_ACTIVE = 'bf_onboarding_active';
@@ -223,7 +224,7 @@ function OnboardingChecklist({ bots, onBump, onOpenCreateBot }: OnboardingCheckl
 }
 
 interface KPICardProps {
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: DashboardIcon;
   label: string;
   value: string | number;
   change?: string;
@@ -305,7 +306,7 @@ interface ActivityEvent {
 }
 
 function ActivityFeed({ events }: { events: ActivityEvent[] }) {
-  const eventIcons: Record<ActivityEvent['type'], React.ComponentType<{ size?: number }>> = {
+  const eventIcons: Record<ActivityEvent['type'], DashboardIcon> = {
     bot_created: BotIcon,
     bot_updated: RefreshCw,
     payment: Wallet,

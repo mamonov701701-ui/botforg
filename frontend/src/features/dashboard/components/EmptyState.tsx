@@ -1,9 +1,10 @@
 import React from 'react';
 import { Inbox } from 'lucide-react';
 import { toast } from '../../../utils/toast';
+import type { DashboardIcon } from '../../../types/icons';
 
 interface EmptyStateProps {
-  icon?: string | React.ComponentType<{ size?: number; style?: React.CSSProperties }>;
+  icon?: string | DashboardIcon;
   title: string;
   description?: string;
   action?: {

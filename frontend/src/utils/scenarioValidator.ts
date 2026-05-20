@@ -61,17 +61,15 @@ function checkNestingDepth(obj: unknown, depth = 0): boolean {
  * Санитизация строки (удаление HTML/JavaScript)
  */
 function sanitizeString(str: unknown): string {
-  if (typeof str !== 'string') {
-    return String(str);
-  }
+  let text = typeof str === 'string' ? str : String(str);
 
   // Ограничение длины
-  if (str.length > MAX_STRING_LENGTH) {
-    str = str.substring(0, MAX_STRING_LENGTH);
+  if (text.length > MAX_STRING_LENGTH) {
+    text = text.substring(0, MAX_STRING_LENGTH);
   }
 
   // Удаление HTML тегов и скриптов
-  const sanitized = DOMPurify.sanitize(str, {
+  const sanitized = DOMPurify.sanitize(text, {
     ALLOWED_TAGS: [], // Не разрешаем никакие HTML теги
     ALLOWED_ATTR: [],
     KEEP_CONTENT: true, // Оставляем текстовое содержимое
@@ -322,15 +320,15 @@ export async function validateScenarioFile(file: File): Promise<ValidationResult
 /**
  * Валидация текстового JSON (для вставки из буфера обмена)
  */
-export function validateScenarioJSON(jsonString: string): ValidationResult {
+export async function validateScenarioJSON(jsonString: string): Promise<ValidationResult> {
   try {
-    const parsed = JSON.parse(jsonString);
+    JSON.parse(jsonString);
 
     // Создаем виртуальный File объект для валидации
     const blob = new Blob([jsonString], { type: 'application/json' });
     const file = new File([blob], 'clipboard.json', { type: 'application/json' });
 
-    return validateScenarioFile(file);
+    return await validateScenarioFile(file);
   } catch (error) {
     return {
       isValid: false,

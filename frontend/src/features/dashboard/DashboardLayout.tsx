@@ -26,7 +26,7 @@ interface NavItem {
   id: SectionKey | 'platform_overview' | 'platform_users' | 'platform_analytics';
   label: string;
   path: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: import('../../types/icons').DashboardIcon;
   mode: DashboardMode; // В каком режиме показывать этот пункт
 }
 
