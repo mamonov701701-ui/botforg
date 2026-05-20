@@ -186,7 +186,7 @@ def test_post_correct_signature_200(meta_cloud_bot_id):
         ],
     }
     body_bytes = json.dumps(body).encode("utf-8")
-    signature = compute_meta_signature(body_bytes, app_secret)
+    signature = _compute_meta_signature(body_bytes, app_secret)
     resp = client.post(
         f"/webhooks/whatsapp/{meta_cloud_bot_id}",
         content=body_bytes,
