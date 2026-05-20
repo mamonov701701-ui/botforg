@@ -43,7 +43,7 @@ backend\venv\Scripts\python.exe -m pytest backend/tests/<relevant>_test.py -v
 1. http://localhost:5173 — открывается UI.
 2. Login (email) — не 500 на `POST /auth/email/login`.
 3. Редактор: открыть сценарий, сохранить, перезагрузить — данные на месте.
-4. `GET http://127.0.0.1:8000/healthz` → ok.
+4. `GET http://127.0.0.1:8001/healthz` → ok.
 
 ## Если тесты не запускались
 

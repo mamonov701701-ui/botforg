@@ -56,6 +56,11 @@ export default defineConfig({
       allow: [path.resolve(__dirname, '..')],
     },
     proxy: {
+      '/dev': {
+        target: backendTarget,
+        changeOrigin: true,
+        secure: false,
+      },
       '/blocks': {
         target: backendTarget,
         changeOrigin: true,

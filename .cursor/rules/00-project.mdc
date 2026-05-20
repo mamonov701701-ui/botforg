@@ -17,7 +17,7 @@ alwaysApply: true
 
 - **Backend:** FastAPI, SQLAlchemy, Alembic, SQLite (dev).
 - **Frontend:** React, Vite, TypeScript, Tailwind, React Flow, Zustand.
-- **Dev-порты:** см. `docs/DEV_PORTS.md` (frontend `5173`, backend `8000`).
+- **Dev-порты:** см. `docs/DEV_PORTS.md` (frontend `5173`, backend `8001`).
 
 ## Принципы любых изменений
 

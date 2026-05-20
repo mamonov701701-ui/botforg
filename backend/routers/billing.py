@@ -65,10 +65,7 @@ async def register_message_billing(
 ):
     """Регистрация биллинга для сообщения"""
 
-    # Проверка не нужна, так как мы используем current_user.id
-    pass
-
-    # Создаем запись биллинга
+    # Создаем запись биллинга (user_id всегда из текущего пользователя)
     db_billing = BillingRecord(
         user_id=current_user.id,  # Используем ID текущего пользователя
         message_id=billing_data.message_id,

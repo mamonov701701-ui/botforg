@@ -85,8 +85,9 @@ def _ctor_dep(bot_id: int, db: Session, user: User) -> int:
 
 
 def _ctor_dep_optional(bot_id: int, db: Session, user: User) -> Optional[int]:
+    """Только разрешённая связка ctor↔platform; без ленивого создания (см. _ctor_dep / webhook)."""
     check_bot_access(bot_id, user.id, db)
-    return ensure_ctor_bot_id(db, bot_id) or resolve_ctor_bot_id(db, bot_id)
+    return resolve_ctor_bot_id(db, bot_id)
 
 
 def _require_write(bot_id: int, db: Session, user: User) -> None:

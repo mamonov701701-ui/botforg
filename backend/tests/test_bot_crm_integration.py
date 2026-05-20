@@ -5,7 +5,10 @@ from backend.models.bot import Bot
 from backend.models.bot import BotInstance
 from backend.models.constructor_core import (
     CtorBot,
+    CtorBotTag,
     CtorBotUser,
+    CtorBotUserSession,
+    CtorBotUserTag,
     CtorBotVariableDefinition,
     PlatformUser,
 )
@@ -37,7 +40,27 @@ def test_crm_list_routes_return_empty_without_ctor_linkage(client):
         db.refresh(bot)
         bot_id = bot.id
 
-        db.query(CtorBot).filter(CtorBot.id == bot_id).delete()
+        # Явная очистка ctor-данных для этого bot_id (без связки ctor ↔ platform CRM отдаёт пустые списки).
+        db.query(CtorBotUserTag).filter(
+            CtorBotUserTag.bot_user_id.in_(
+                db.query(CtorBotUser.id).filter(CtorBotUser.bot_id == bot_id)
+            )
+        ).delete(synchronize_session=False)
+        db.query(CtorBotUserSession).filter(
+            CtorBotUserSession.bot_user_id.in_(
+                db.query(CtorBotUser.id).filter(CtorBotUser.bot_id == bot_id)
+            )
+        ).delete(synchronize_session=False)
+        db.query(CtorBotUser).filter(CtorBotUser.bot_id == bot_id).delete(
+            synchronize_session=False
+        )
+        db.query(CtorBotVariableDefinition).filter(
+            CtorBotVariableDefinition.bot_id == bot_id
+        ).delete(synchronize_session=False)
+        db.query(CtorBotTag).filter(CtorBotTag.bot_id == bot_id).delete(
+            synchronize_session=False
+        )
+        db.query(CtorBot).filter(CtorBot.id == bot_id).delete(synchronize_session=False)
         db.commit()
     finally:
         db.close()

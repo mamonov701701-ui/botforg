@@ -21,8 +21,9 @@ function Stop-ProcessOnPort {
     }
 }
 
+# Legacy cleanup only (old dev defaults); not the current backend port
 $LegacyBackendPort = 8002
-$BackendPort = 8011
+$BackendPort = 8001
 $FrontendPort = 5173
 $FrontendAltPort = 5174
 

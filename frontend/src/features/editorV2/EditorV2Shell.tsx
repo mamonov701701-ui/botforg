@@ -30,6 +30,7 @@ import BlockSettingsPanel from './BlockSettingsPanel';
 import CustomEdge from './CustomEdge';
 import ToastContainer from './ToastContainer';
 import { useEditorStore } from '../../stores/editorStore';
+import type { EditorGraphSnapshot } from '../../stores/editorStore';
 import { useScenarioStore } from '../../stores/scenarioStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUiStore } from '../../stores/uiStore';
@@ -1138,6 +1139,29 @@ function InnerEditor() {
   const edgesRef = useRef<Edge[]>(edges);
   edgesRef.current = edges;
 
+  const getStrippedGraph = useCallback(() => {
+    const n = nodesRef.current.map(({ selected, dragging, ...rest }) => rest);
+    const e = edgesRef.current.map(edge => {
+      const data = { ...((edge.data as Record<string, unknown> | undefined) || {}) };
+      delete data.onDelete;
+      return Object.keys(data).length > 0
+        ? { ...edge, data }
+        : ({ ...edge, data: undefined } as Edge);
+    });
+    return { nodes: n, edges: e };
+  }, []);
+
+  const pushGraphSnapshotIfEditable = useCallback(() => {
+    const u = useAuthStore.getState().user;
+    if (isEditorDemoMode(u?.role as import('../../constants/roles').RoleValue)) return;
+    const { nodes, edges } = getStrippedGraph();
+    useEditorStore.getState().pushSnapshot(nodes, edges);
+  }, [getStrippedGraph]);
+
+  useEffect(() => {
+    useEditorStore.getState().resetUndoRedo();
+  }, [currentScenarioId, routeScenarioId, currentState?.id]);
+
   // Флаг внешней синхронизации (scenarioStore -> ReactFlow), чтобы избежать циклов.
   const isExternalSyncRef = useRef(false);
 
@@ -1692,6 +1716,58 @@ function InnerEditor() {
     return nodes.find(n => n.id === selectedNodeId);
   }, [nodes, selectedNodeId]);
 
+  const buildHydratedEdgesFromSnapshot = useCallback(
+    (scenarioNodes: Node[], scenarioEdges: Edge[]) => {
+      const edgesNormalized = normalizeScenarioEdges(scenarioNodes, scenarioEdges);
+      const nodeIds = new Set(scenarioNodes.map(n => n.id));
+      const edgesSafe = edgesNormalized.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target));
+      const onDel =
+        handleDeleteEdgeRef.current ??
+        ((edgeId: string) => {
+          setEdges(eds => eds.filter(e => e.id !== edgeId));
+          showToast('Соединение удалено', 'success');
+        });
+      return ensureConditionEdgeBranches(
+        edgesSafe.map(e => ({
+          ...e,
+          data: {
+            ...e.data,
+            onDelete: onDel,
+          },
+        })),
+        scenarioNodes
+      );
+    },
+    [setEdges, showToast]
+  );
+
+  const applyRestoredSnapshot = useCallback(
+    (snap: EditorGraphSnapshot) => {
+      const nextEdges = buildHydratedEdgesFromSnapshot(snap.nodes, snap.edges);
+      isExternalSyncRef.current = true;
+      setNodes(snap.nodes);
+      setEdges(nextEdges);
+      setSelectedNodeId(undefined);
+      setIsPanelVisible(false);
+    },
+    [buildHydratedEdgesFromSnapshot, setNodes, setEdges]
+  );
+
+  const doUndo = useCallback(() => {
+    const { nodes: sn, edges: se } = getStrippedGraph();
+    const restored = useEditorStore.getState().undo(sn, se);
+    if (restored) applyRestoredSnapshot(restored);
+  }, [getStrippedGraph, applyRestoredSnapshot]);
+
+  const doRedo = useCallback(() => {
+    const { nodes: sn, edges: se } = getStrippedGraph();
+    const restored = useEditorStore.getState().redo(sn, se);
+    if (restored) applyRestoredSnapshot(restored);
+  }, [getStrippedGraph, applyRestoredSnapshot]);
+
+  const undoStackDepth = useEditorStore(s => s.undoStack.length);
+  const redoStackDepth = useEditorStore(s => s.redoStack.length);
+
   // Node changes are now handled directly by BlockSettingsPanel
 
   const handleDeleteNode = useCallback(() => {
@@ -1699,6 +1775,7 @@ function InnerEditor() {
     const nodeToDelete = nodes.find(n => n.id === selectedNodeId);
     const nodeTitle = nodeToDelete?.data?.title || 'Блок';
 
+    pushGraphSnapshotIfEditable();
     // Удаляем узел и связанные edges из React Flow
     setNodes(ns => ns.filter(n => n.id !== selectedNodeId));
     setEdges(es => es.filter(e => e.source !== selectedNodeId && e.target !== selectedNodeId));
@@ -1706,10 +1783,11 @@ function InnerEditor() {
     setSelectedNodeId(undefined);
     setIsPanelVisible(false);
     showToast(`Блок "${nodeTitle}" удалён`, 'success');
-  }, [selectedNodeId, nodes, setNodes, setEdges, showToast]);
+  }, [selectedNodeId, nodes, setNodes, setEdges, showToast, pushGraphSnapshotIfEditable]);
 
   const handleDuplicateNode = useCallback(() => {
     if (!selectedNode) return;
+    pushGraphSnapshotIfEditable();
     const newNode = {
       ...selectedNode,
       id: nanoid(),
@@ -1725,7 +1803,7 @@ function InnerEditor() {
     };
     setNodes(ns => [...ns, newNode]);
     showToast(`Блок "${selectedNode.data.title || 'Блок'}" продублирован`, 'success');
-  }, [selectedNode, setNodes, showToast]);
+  }, [selectedNode, setNodes, showToast, pushGraphSnapshotIfEditable]);
 
   // Export function - определяется сначала
   const performExport = useCallback(
@@ -1782,8 +1860,31 @@ function InnerEditor() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Игнорируем, если пользователь вводит текст в input/textarea
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const readOnlyDemo = isEditorDemoMode(
+        useAuthStore.getState().user?.role as import('../../constants/roles').RoleValue
+      );
+
+      // Undo / Redo (Cmd/Ctrl клавиши — как стандарт в IDE)
+      if (
+        !readOnlyDemo &&
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        (e.key === 'z' || e.key === 'Z')
+      ) {
+        e.preventDefault();
+        if (e.shiftKey) doRedo();
+        else doUndo();
         return;
       }
 
@@ -1835,6 +1936,8 @@ function InnerEditor() {
     handleDeleteNode,
     handleDuplicateNode,
     handleExport,
+    doUndo,
+    doRedo,
   ]);
 
   // onNodesChange и onEdgesChange уже определены выше с обертками для логирования
@@ -2000,6 +2103,7 @@ function InnerEditor() {
   );
 
   handleDeleteEdgeRef.current = (edgeId: string) => {
+    pushGraphSnapshotIfEditable();
     // Удаляем из React Flow (синхронизация с Zustand произойдет через useEffect)
     setEdges(eds => eds.filter(e => e.id !== edgeId));
     showToast('Соединение удалено', 'success');
@@ -2097,12 +2201,13 @@ function InnerEditor() {
         },
       };
 
+      pushGraphSnapshotIfEditable();
       // Добавляем в React Flow (синхронизация с Zustand произойдет через useEffect)
       setEdges(eds => [...eds, newEdge]);
 
       showToast('Соединение создано', 'success');
     },
-    [nodes, setEdges, showToast, handleDeleteEdge]
+    [nodes, setEdges, showToast, handleDeleteEdge, pushGraphSnapshotIfEditable]
   );
 
   // Handle drag over canvas - улучшаем визуальную обратную связь
@@ -2179,6 +2284,7 @@ function InnerEditor() {
       }
 
       // Access granted — создаём узел с детерминированным размещением (auto-chain + антиколлизия)
+      pushGraphSnapshotIfEditable();
       setNodes(nds => {
         const resolvedPosition = resolveNewNodePosition({
           selectedNode: options?.selectedNode,
@@ -2224,7 +2330,7 @@ function InnerEditor() {
       });
       showToast(`Блок "${block.title}" добавлен`, 'success');
     },
-    [setNodes, showToast, user]
+    [setNodes, showToast, user, pushGraphSnapshotIfEditable]
   );
 
   // Handle drop block from library (legacy drag-n-drop support)
@@ -2303,8 +2409,9 @@ function InnerEditor() {
 
   // Отслеживаем начало и конец drag
   const onNodeDragStart = useCallback(() => {
+    pushGraphSnapshotIfEditable();
     isDraggingRef.current = true;
-  }, []);
+  }, [pushGraphSnapshotIfEditable]);
 
   const onNodeDragStop = useCallback(() => {
     // Небольшая задержка перед сбросом флага, чтобы onPaneClick не сработал
@@ -2351,6 +2458,7 @@ function InnerEditor() {
             return;
           }
 
+          pushGraphSnapshotIfEditable();
           // Import data: загружаем в React Flow, scenarioStore синхронизируется через useEffect
           setNodes(data.nodes);
           setEdges(data.edges);
@@ -2367,7 +2475,7 @@ function InnerEditor() {
       reader.readAsText(file);
     };
     input.click();
-  }, [setNodes, setEdges, showToast, runValidation]);
+  }, [setNodes, setEdges, showToast, runValidation, pushGraphSnapshotIfEditable]);
 
   // Show validation modal
   const handleValidate = useCallback(() => {
@@ -2443,6 +2551,11 @@ function InnerEditor() {
         isReadOnly={isReadOnly}
         onExport={handleExport}
         onSave={handleSave}
+        captureUndoSnapshot={pushGraphSnapshotIfEditable}
+        onUndo={doUndo}
+        onRedo={doRedo}
+        canUndo={undoStackDepth > 0}
+        canRedo={redoStackDepth > 0}
         onOpenScenarioCheck={handleValidate}
         onOpenBlockLibrary={() => {
           if (!user) {
@@ -2717,6 +2830,7 @@ function InnerEditor() {
                 isReadOnly
                   ? undefined
                   : (nodeId, updates) => {
+                      pushGraphSnapshotIfEditable();
                       setNodes(nodes =>
                         nodes.map(n => {
                           if (n.id !== nodeId) return n;

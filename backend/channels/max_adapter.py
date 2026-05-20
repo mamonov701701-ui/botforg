@@ -19,19 +19,55 @@ DEFAULT_UPDATE_TYPES = ["message_created", "bot_started"]
 
 def _extract_message_data(payload: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
     """Извлекает text, chat_id, user_id из payload MAX. Не логирует PII."""
-    text = None
-    chat_id = None
-    user_id = None
-    update_type = payload.get("type") or payload.get("update_type") or ""
+    text: str | None = None
+    chat_id: str | None = None
+    user_id: str | None = None
     msg = payload.get("message") or payload.get("data") or {}
-    if isinstance(msg, dict):
-        text = msg.get("text") or msg.get("body")
-        chat_id = msg.get("chat_id") or msg.get("chatId") or msg.get("sender_id")
-        if chat_id is not None:
-            chat_id = str(chat_id)
-        user_id = msg.get("user_id") or msg.get("userId") or msg.get("from", {}).get("id") if isinstance(msg.get("from"), dict) else None
-        if user_id is not None:
-            user_id = str(user_id)
+    if isinstance(msg, dict) and msg:
+        t = msg.get("text")
+        if t is None:
+            b = msg.get("body")
+            if isinstance(b, dict):
+                t = b.get("text")
+            elif isinstance(b, str):
+                t = b
+        if t is not None:
+            text = str(t).strip() or None
+        cid = msg.get("chat_id") or msg.get("chatId") or msg.get("sender_id")
+        if cid is not None:
+            chat_id = str(cid)
+        uid = msg.get("user_id") or msg.get("userId")
+        if uid is None and isinstance(msg.get("from"), dict):
+            uid = (
+                msg.get("from", {}).get("id")
+                or msg.get("from", {}).get("user_id")
+            )
+        if uid is not None:
+            user_id = str(uid)
+
+    # Плоский envelope (webhook message_created и т.п.)
+    chat = payload.get("chat")
+    if isinstance(chat, dict):
+        cid = chat.get("chat_id") or chat.get("id")
+        if cid is not None:
+            chat_id = str(cid)
+    frm = payload.get("from")
+    if isinstance(frm, dict):
+        uid = frm.get("user_id") or frm.get("id") or frm.get("userId")
+        if uid is not None:
+            user_id = str(uid)
+    body = payload.get("body")
+    if isinstance(body, dict) and text is None:
+        t = body.get("text") or body.get("message")
+        if t is not None:
+            text = str(t).strip() or None
+
+    cq = payload.get("callback_query")
+    if isinstance(cq, dict):
+        cb = cq.get("payload") or cq.get("data") or cq.get("callback_data")
+        if cb is not None:
+            text = str(cb)
+
     return (text, chat_id, user_id)
 
 
@@ -59,7 +95,9 @@ class MaxAdapter(ChannelAdapter):
         credentials: dict[str, Any],
         buttons: list[dict[str, Any]] | None = None,
     ) -> MessageResult:
-        token = credentials.get("token") if isinstance(credentials, dict) else None
+        token = None
+        if isinstance(credentials, dict):
+            token = credentials.get("token") or credentials.get("access_token")
         if not token:
             return MessageResult(success=False, error="MAX token not set")
         base = (settings.MAX_API_BASE or "").rstrip("/")
@@ -96,7 +134,9 @@ class MaxAdapter(ChannelAdapter):
         credentials: dict[str, Any],
         caption: str | None = None,
     ) -> MessageResult:
-        token = credentials.get("token") if isinstance(credentials, dict) else None
+        token = None
+        if isinstance(credentials, dict):
+            token = credentials.get("token") or credentials.get("access_token")
         if not token:
             return MessageResult(success=False, error="MAX token not set")
         base = (settings.MAX_API_BASE or "").rstrip("/")

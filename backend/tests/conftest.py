@@ -26,6 +26,7 @@ if BACKEND_DIR not in sys.path:
 _test_db_path = os.path.abspath(os.path.join(PROJECT_ROOT, "test_botforg.db"))
 TEST_DATABASE_URL = "sqlite:///" + _test_db_path.replace("\\", "/")
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+os.environ["TESTING"] = "true"
 
 # Import after setting DATABASE_URL
 from backend.database import Base, get_db  # noqa: E402
@@ -82,16 +83,21 @@ def client():
     rate_limit_store.clear()
     
     # Clear all data before each test (only tables that exist in migrated DB)
-    # Исключаем plans — справочные данные, не очищаем
+    # Исключаем plans — справочные данные, не очищаем.
+    # Один connection + отключение FK на SQLite, иначе остаются orphans (reuse user id=1 → лимит ботов).
     from sqlalchemy import inspect, text
+
     inspector = inspect(test_engine)
     existing_tables = set(inspector.get_table_names())
     skip_tables = {"plans"}
-    for table in reversed(Base.metadata.sorted_tables):
-        if table.name in existing_tables and table.name not in skip_tables:
-            with test_engine.connect() as conn:
+    with test_engine.begin() as conn:
+        if conn.dialect.name == "sqlite":
+            conn.execute(text("PRAGMA foreign_keys=OFF"))
+        for table in reversed(Base.metadata.sorted_tables):
+            if table.name in existing_tables and table.name not in skip_tables:
                 conn.execute(text(f"DELETE FROM {table.name}"))
-                conn.commit()
+        if conn.dialect.name == "sqlite":
+            conn.execute(text("PRAGMA foreign_keys=ON"))
     
     # Patch rate limiter to do nothing
     with patch("backend.auth.email_routes.check_rate_limit", lambda req, action: None):

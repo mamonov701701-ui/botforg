@@ -23,8 +23,8 @@ export default function Card({
   const [isHovered, setIsHovered] = React.useState(false);
 
   const baseStyle: React.CSSProperties = {
-    background: 'rgba(26, 34, 56, 0.9)',
-    border: '1px solid rgba(255, 210, 76, 0.2)',
+    background: 'var(--color-background-dashboard-card)',
+    border: '1px solid var(--color-border-accent-muted)',
     borderRadius: '12px',
     padding,
     transition: 'all 0.2s',
@@ -34,7 +34,7 @@ export default function Card({
   if (hoverable || onClick) {
     baseStyle.cursor = 'pointer';
     if (isHovered) {
-      baseStyle.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+      baseStyle.boxShadow = 'var(--color-shadow-elevated)';
       baseStyle.transform = 'translateY(-2px)';
     }
   }

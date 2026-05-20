@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { X, PlayCircle } from 'lucide-react';
+import { X, PlayCircle, Database, RotateCcw, Send } from 'lucide-react';
 import { useScenarioStore } from '../../stores/scenarioStore';
 import ChatPreview from './ChatPreview';
 import {
@@ -18,6 +18,7 @@ import {
 import { normalizeScenarioEdges, listInvalidFlowEdges } from '../../utils/flowHandleCompatibility';
 import { getVisiblePreviewHistory } from './historyVisibility';
 import { crmPreviewSync, validateTagKey } from '../../api/botCrm';
+import { post, ApiError } from '../../api/client';
 import { toast } from '../../utils/toast';
 
 interface BotSimulatorProps {
@@ -54,6 +55,16 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
   const [stopReason, setStopReason] = useState<string | null>(null);
   /** Активная визуальная пауза блока wait (мс); по окончании — completeWaitStep + автопродолжение */
   const [waitDelayMs, setWaitDelayMs] = useState<number | null>(null);
+  /** Сброс симуляции: перезапуск init useEffect без закрытия модалки */
+  const [bootKey, setBootKey] = useState(0);
+  const [showVarsPanel, setShowVarsPanel] = useState(false);
+  const [channelTestOpen, setChannelTestOpen] = useState(false);
+  const [channelTestChannel, setChannelTestChannel] = useState<'telegram' | 'max'>('telegram');
+  const [channelTestChatId, setChannelTestChatId] = useState('test_user_1');
+  const [channelTestMessages, setChannelTestMessages] = useState<
+    { text?: string; buttons?: unknown[]; media_url?: string }[]
+  >([]);
+  const [channelTestBusy, setChannelTestBusy] = useState(false);
   const simRef = useRef<SimulatorState | null>(null);
   const isOpenRef = useRef(isOpen);
   const lastPreviewSyncSignatureRef = useRef<string>('');
@@ -82,6 +93,10 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
       setShowManualContinue(false);
       setWaitDelayMs(null);
       setStopReason(null);
+      setShowVarsPanel(false);
+      setChannelTestOpen(false);
+      setChannelTestMessages([]);
+      setChannelTestBusy(false);
       return;
     }
     if (!currentState) return;
@@ -176,7 +191,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     setWaitingForUser(w);
     setWaitDelayMs(stepResult.pendingWaitMs ?? null);
     setStopReason(stepResult.stopReason ?? null);
-  }, [isOpen, currentState, previewBundle, currentScenarioId]);
+  }, [isOpen, currentState, previewBundle, currentScenarioId, bootKey]);
 
   useEffect(() => {
     if (!isOpen || !simState || !currentBotId) return;
@@ -321,6 +336,101 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     [simState?.history]
   );
 
+  const hasAnyVariables = Boolean(simState && Object.keys(simState.variables || {}).length > 0);
+
+  const formatVarValueForPanel = (val: unknown): string => {
+    const trunc = (s: string) => (s.length <= 40 ? s : `${s.slice(0, 40)}...`);
+    if (Array.isArray(val)) {
+      const parts = val.map(el =>
+        el !== null && typeof el === 'object' ? JSON.stringify(el) : String(el)
+      );
+      return trunc(parts.join(', '));
+    }
+    if (val !== null && typeof val === 'object') {
+      return trunc(JSON.stringify(val));
+    }
+    if (typeof val === 'string' || typeof val === 'number') {
+      return trunc(String(val));
+    }
+    if (val == null) return '';
+    return trunc(String(val));
+  };
+
+  const renderVarsPanel = () => {
+    if (!simState) return null;
+    const raw = (simState.variables || {}) as Record<string, unknown>;
+    const userKeys = Object.keys(raw)
+      .filter(k => !k.startsWith('__preview_'))
+      .sort();
+    const sysKeys = Object.keys(raw)
+      .filter(k => k.startsWith('__preview_'))
+      .sort();
+
+    const row = (name: string, valueKey: string) => (
+      <div
+        key={valueKey}
+        style={{
+          display: 'flex',
+          gap: 8,
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: 8,
+        }}
+      >
+        <span
+          style={{
+            color: 'var(--color-text-secondary)',
+            fontSize: 12,
+            flexShrink: 0,
+            maxWidth: '42%',
+          }}
+        >
+          {name}
+        </span>
+        <span
+          style={{ fontSize: 12, wordBreak: 'break-all', textAlign: 'right', minWidth: 0, flex: 1 }}
+        >
+          {formatVarValueForPanel(raw[valueKey])}
+        </span>
+      </div>
+    );
+
+    return (
+      <div
+        style={{
+          width: 260,
+          height: '100%',
+          overflowY: 'auto',
+          borderLeft: '1px solid var(--color-border-tertiary)',
+          padding: 12,
+          boxSizing: 'border-box',
+          flexShrink: 0,
+          background: '#020617',
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 12 }}>Переменные</div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6, opacity: 0.9 }}>
+            Пользовательские
+          </div>
+          {userKeys.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Пока нет</div>
+          ) : (
+            userKeys.map(k => row(k, k))
+          )}
+        </div>
+        {sysKeys.length > 0 && (
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6, opacity: 0.9 }}>
+              Системные
+            </div>
+            {sysKeys.map(k => row(k.replace(/^__preview_/, ''), k))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (!isOpen || !currentState) return null;
 
   /** Нет активного узла, но история уже есть — дальше шагать некуда (тупик или нет перехода со старта). */
@@ -390,6 +500,31 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     handleUserChoice({ label: text, sourceHandle: null, buttonId: undefined });
   };
 
+  const sendChannelDevSimulate = async () => {
+    const text = (simState?.lastUserInput ?? '').trim();
+    if (!text) {
+      toast.error('Нет сохранённого текста ввода. Сначала отправьте сообщение в симуляторе.');
+      return;
+    }
+    if (!currentBotId) return;
+    setChannelTestBusy(true);
+    try {
+      const data = await post(`/dev/bots/${currentBotId}/simulate-message`, {
+        text,
+        channel: channelTestChannel,
+        chat_id: (channelTestChatId || 'test_user_1').trim(),
+      });
+      const arr = Array.isArray(data?.messages) ? data.messages : [];
+      setChannelTestMessages(arr);
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Не удалось выполнить тест канала';
+      toast.error(msg);
+      setChannelTestMessages([]);
+    } finally {
+      setChannelTestBusy(false);
+    }
+  };
+
   return (
     <div
       style={{
@@ -404,7 +539,7 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     >
       <div
         style={{
-          width: 420,
+          width: showVarsPanel ? 'min(680px, 96vw)' : 420,
           maxWidth: '95vw',
           height: 640,
           maxHeight: '95vh',
@@ -450,17 +585,43 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
               <div style={{ fontSize: 11, color: '#9ca3af' }}>Симуляция сценария</div>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#9ca3af',
-              cursor: 'pointer',
-            }}
-          >
-            <X size={18} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              title="Переменные"
+              aria-label="Переменные"
+              onClick={() => setShowVarsPanel(v => !v)}
+              disabled={!simState}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#9ca3af',
+                cursor: simState ? 'pointer' : 'default',
+                opacity: hasAnyVariables ? 1 : 0.4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 2,
+              }}
+            >
+              <Database size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#9ca3af',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+              aria-label="Закрыть"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
         <div
           style={{
@@ -525,16 +686,207 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
             {transitionNotice}
           </div>
         )}
-        <ChatPreview
-          messages={visibleHistory}
-          onButtonClick={handleUserChoice}
-          showTextInput={showTextInput}
-          onSubmitText={handleFreeText}
-          textInputPlaceholder={lastInteractiveBot?.meta?.inputPlaceholder || 'Введите ответ…'}
-          textInputAllowEmpty={Boolean(lastInteractiveBot?.meta?.inputAllowEmpty)}
-          activeButtonMessageId={activeButtonMessageId}
-          showTypingIndicator={Boolean(waitDelayMs != null && waitDelayMs > 0)}
-        />
+        <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+          <div
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <ChatPreview
+              messages={visibleHistory}
+              onButtonClick={handleUserChoice}
+              showTextInput={showTextInput}
+              onSubmitText={handleFreeText}
+              textInputPlaceholder={lastInteractiveBot?.meta?.inputPlaceholder || 'Введите ответ…'}
+              textInputAllowEmpty={Boolean(lastInteractiveBot?.meta?.inputAllowEmpty)}
+              activeButtonMessageId={activeButtonMessageId}
+              showTypingIndicator={Boolean(waitDelayMs != null && waitDelayMs > 0)}
+              textInputAccessoryTop={
+                showTextInput ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div
+                      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14 }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm('Сбросить симуляцию и начать заново?')) {
+                            setSimState(null);
+                            setWaitingForUser(false);
+                            setStopReason(null);
+                            setFatalPreviewError(null);
+                            setShowVarsPanel(false);
+                            setBootKey(k => k + 1);
+                          }
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          background: 'transparent',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          color: 'var(--color-text-secondary)',
+                        }}
+                      >
+                        <RotateCcw size={14} />
+                        Сбросить
+                      </button>
+                      {import.meta.env.DEV && (
+                        <button
+                          type="button"
+                          onClick={() => setChannelTestOpen(o => !o)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: 'transparent',
+                            border: 'none',
+                            padding: 0,
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        >
+                          <Send size={14} />
+                          Тест через канал
+                        </button>
+                      )}
+                    </div>
+                    {import.meta.env.DEV && channelTestOpen && (
+                      <div
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: '1px solid #334155',
+                          background: '#0f172a',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 8,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: 8,
+                            alignItems: 'center',
+                          }}
+                        >
+                          <label
+                            style={{ fontSize: 12, color: '#94a3b8', display: 'flex', gap: 6 }}
+                          >
+                            Канал
+                            <select
+                              value={channelTestChannel}
+                              onChange={e =>
+                                setChannelTestChannel(e.target.value as 'telegram' | 'max')
+                              }
+                              style={{
+                                fontSize: 12,
+                                padding: '4px 8px',
+                                borderRadius: 6,
+                                border: '1px solid #475569',
+                                background: '#020617',
+                                color: '#e5e7eb',
+                              }}
+                            >
+                              <option value="telegram">telegram</option>
+                              <option value="max">max</option>
+                            </select>
+                          </label>
+                          <label
+                            style={{
+                              fontSize: 12,
+                              color: '#94a3b8',
+                              display: 'flex',
+                              gap: 6,
+                              flex: 1,
+                            }}
+                          >
+                            chat_id
+                            <input
+                              type="text"
+                              value={channelTestChatId}
+                              onChange={e => setChannelTestChatId(e.target.value)}
+                              placeholder="test_user_1"
+                              style={{
+                                flex: 1,
+                                minWidth: 120,
+                                fontSize: 12,
+                                padding: '5px 8px',
+                                borderRadius: 6,
+                                border: '1px solid #475569',
+                                background: '#020617',
+                                color: '#e5e7eb',
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={channelTestBusy}
+                          onClick={() => void sendChannelDevSimulate()}
+                          style={{
+                            alignSelf: 'flex-start',
+                            fontSize: 12,
+                            padding: '6px 12px',
+                            borderRadius: 8,
+                            border: 'none',
+                            background: channelTestBusy ? '#334155' : '#2563eb',
+                            color: '#fff',
+                            cursor: channelTestBusy ? 'default' : 'pointer',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Отправить текущий ввод пользователя
+                        </button>
+                        {channelTestMessages.length > 0 && (
+                          <div style={{ marginTop: 4 }}>
+                            <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 6 }}>
+                              Ответ канала (мок):
+                            </div>
+                            <ul
+                              style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: '#e5e7eb' }}
+                            >
+                              {channelTestMessages.map((m, i) => (
+                                <li key={i} style={{ marginBottom: 6 }}>
+                                  {m.media_url ? (
+                                    <>
+                                      media:{' '}
+                                      <span style={{ wordBreak: 'break-all' }}>{m.media_url}</span>
+                                      {m.text ? ` — ${m.text}` : ''}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <span style={{ wordBreak: 'break-all' }}>
+                                        {(m.text ?? '').trim() || '(пустой текст)'}
+                                      </span>
+                                      {Array.isArray(m.buttons) && m.buttons.length > 0
+                                        ? ` [кнопок: ${m.buttons.length}]`
+                                        : ''}
+                                    </>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : undefined
+              }
+            />
+          </div>
+          {showVarsPanel && renderVarsPanel()}
+        </div>
 
         <div
           style={{

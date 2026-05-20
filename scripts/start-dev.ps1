@@ -10,7 +10,8 @@ $root = if ($PSScriptRoot) {
 }
 Set-Location -LiteralPath $root
 
-$BackendPort = 8011
+$BackendPort = 8001
+# Legacy cleanup only (old dev defaults); not the current backend port
 $LegacyBackendPort = 8002
 $FrontendPort = 5173
 $FrontendAltPort = 5174
@@ -30,7 +31,7 @@ function Stop-ProcessOnPort {
             if ($proc) {
                 Write-Host "Port ${Port}: stopping PID $owningPid ($($proc.ProcessName))" -ForegroundColor Yellow
                 Stop-Process -Id $owningPid -Force -ErrorAction SilentlyContinue
-                # дерево процессов (cmd → python): иначе на 8001 остаются «зомби»-слушатели
+                # дерево процессов (cmd → python): иначе на порту backend остаются «зомби»-слушатели
                 & taskkill.exe /T /F /PID $owningPid 2>$null | Out-Null
             }
         }
@@ -43,7 +44,8 @@ function Get-ListenerPids {
     param([int]$Port)
     try {
         return @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
-            Select-Object -ExpandProperty OwningProcess -Unique)
+            Select-Object -ExpandProperty OwningProcess -Unique |
+            Where-Object { $_ -and ($null -ne (Get-Process -Id $_ -ErrorAction SilentlyContinue)) })
     } catch {
         return @()
     }

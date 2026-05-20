@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Plus, Eye, BookOpen } from 'lucide-react';
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { Plus, Eye, BookOpen, Undo2, Redo2 } from 'lucide-react';
+import { useParams, useNavigate, useLocation, Link, useSearchParams } from 'react-router-dom';
 import ScenarioHubDropdown from './ScenarioHubDropdown';
 import NewScenarioNameModal from './NewScenarioNameModal';
 import AddScenarioFromMineModal from './AddScenarioFromMineModal';
@@ -54,6 +54,12 @@ interface EditorControlsProps {
   hasUnsavedChanges?: boolean;
   /** Демо-режим: только просмотр, без редактирования */
   isReadOnly?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  /** Перед изменением графа из этой панели (импорт JSON и т.д.) */
+  captureUndoSnapshot?: () => void;
 }
 
 const EditorControls: React.FC<EditorControlsProps> = ({
@@ -63,10 +69,16 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   onOpenBlockLibrary,
   hasUnsavedChanges = false,
   isReadOnly = false,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
+  captureUndoSnapshot,
 }) => {
   const { id: botId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Bots state
   const [bots, setBots] = useState<Bot[]>([]);
@@ -121,6 +133,14 @@ const EditorControls: React.FC<EditorControlsProps> = ({
   /** UI: кнопки хаба неактивны во время async */
   const [hubMenuBusy, setHubMenuBusy] = useState(false);
   const hubBusyRef = useRef(false);
+
+  useEffect(() => {
+    if (searchParams.get('simulator') !== 'true') return;
+    setIsSimulatorOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('simulator');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const beginHubAction = () => {
     if (hubBusyRef.current) return false;
@@ -372,6 +392,8 @@ const EditorControls: React.FC<EditorControlsProps> = ({
             return;
           }
 
+          captureUndoSnapshot?.();
+
           let st = useScenarioStore.getState();
           if (!st.currentScenarioId) {
             await st.createScenario({
@@ -397,7 +419,7 @@ const EditorControls: React.FC<EditorControlsProps> = ({
       reader.readAsText(file);
     };
     input.click();
-  }, [isReadOnly, user, showToast, openAuth]);
+  }, [isReadOnly, user, showToast, openAuth, captureUndoSnapshot]);
 
   const handleRenameScenario = useCallback(
     async (scenarioId: number, name: string) => {
@@ -684,6 +706,57 @@ const EditorControls: React.FC<EditorControlsProps> = ({
             <BookOpen size={15} />
             <span>Справка по блокам</span>
           </Link>
+
+          {!isReadOnly && onUndo && onRedo && (
+            <>
+              <button
+                type="button"
+                onClick={onUndo}
+                disabled={!canUndo}
+                title="Отменить (Ctrl+Z)"
+                aria-label="Отменить"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 38,
+                  padding: 0,
+                  background: '#0b1120',
+                  borderRadius: 8,
+                  border: '1px solid #1f2937',
+                  color: canUndo ? '#9ca3af' : '#4b5563',
+                  cursor: canUndo ? 'pointer' : 'not-allowed',
+                  opacity: canUndo ? 1 : 0.55,
+                }}
+              >
+                <Undo2 size={18} strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                onClick={onRedo}
+                disabled={!canRedo}
+                title="Повторить (Ctrl+Shift+Z)"
+                aria-label="Повторить"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 38,
+                  padding: 0,
+                  background: '#0b1120',
+                  borderRadius: 8,
+                  border: '1px solid #1f2937',
+                  color: canRedo ? '#9ca3af' : '#4b5563',
+                  cursor: canRedo ? 'pointer' : 'not-allowed',
+                  opacity: canRedo ? 1 : 0.55,
+                }}
+              >
+                <Redo2 size={18} strokeWidth={2} />
+              </button>
+            </>
+          )}
 
           {/* SaveDropdown — в read-only только экспорт */}
           <SaveDropdown

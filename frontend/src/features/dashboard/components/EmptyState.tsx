@@ -40,7 +40,7 @@ export default function EmptyState({ icon = Inbox, title, description, action }:
           width: '80px',
           height: '80px',
           borderRadius: '50%',
-          background: 'rgba(255, 210, 76, 0.1)',
+          background: 'var(--color-background-warning)',
         }}
       >
         {isIconComponent ? (
@@ -76,7 +76,7 @@ export default function EmptyState({ icon = Inbox, title, description, action }:
           style={{
             padding: '12px 24px',
             background: action.disabled ? 'var(--card)' : 'var(--primary)',
-            color: action.disabled ? 'var(--text-muted)' : '#000',
+            color: action.disabled ? 'var(--text-muted)' : 'var(--text-on-primary)',
             border: action.disabled ? '1px solid var(--border)' : 'none',
             borderRadius: '8px',
             fontSize: '15px',

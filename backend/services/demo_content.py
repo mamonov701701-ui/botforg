@@ -7,6 +7,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from backend.settings import settings
 from backend.models.bot import Bot
 from backend.models.scenario import Scenario, SCENARIO_STATUS_PUBLISHED
 from backend.models.template import Template
@@ -75,6 +76,8 @@ def create_demo_content_for_user(db: Session, user_id: int) -> bool:
     Вызывается один раз при первой регистрации.
     Возвращает True если контент создан, False если уже был создан.
     """
+    if settings.TESTING:
+        return False
     if _get_demo_content_created(db, user_id):
         return False
 

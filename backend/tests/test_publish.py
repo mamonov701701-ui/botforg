@@ -7,9 +7,20 @@ from fastapi.testclient import TestClient
 from conftest import create_test_bot, register_and_get_token
 
 
+def _auth_with_pro_plan(client: TestClient) -> str:
+    auth = register_and_get_token(client)
+    res_plan = client.post(
+        "/me/plan",
+        json={"plan_code": "pro"},
+        headers={"Authorization": auth},
+    )
+    assert res_plan.status_code == 200, res_plan.text
+    return auth
+
+
 def test_publish_scenario(client: TestClient):
     """Publish draft scenario."""
-    auth = register_and_get_token(client)
+    auth = _auth_with_pro_plan(client)
     bot_id = create_test_bot(client, auth)
 
     create_res = client.post(
@@ -38,7 +49,7 @@ def test_publish_scenario(client: TestClient):
 
 def test_publish_empty_content(client: TestClient):
     """Publish scenario with empty content fails."""
-    auth = register_and_get_token(client)
+    auth = _auth_with_pro_plan(client)
     bot_id = create_test_bot(client, auth)
 
     create_res = client.post(

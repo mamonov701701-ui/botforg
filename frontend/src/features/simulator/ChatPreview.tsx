@@ -70,6 +70,8 @@ interface ChatPreviewProps {
   activeButtonMessageId?: string | null;
   /** Индикатор «бот печатает» во время паузы wait */
   showTypingIndicator?: boolean;
+  /** Блок над строкой ввода (когда включён текстовый ввод) */
+  textInputAccessoryTop?: React.ReactNode;
 }
 
 /** Единый стиль reply-клавиатуры (как в мессенджере): прямоугольники, одна колонка, фиксированная высота. */
@@ -85,6 +87,7 @@ const ChatPreview: React.FC<ChatPreviewProps> = ({
   textInputAllowEmpty = false,
   activeButtonMessageId = null,
   showTypingIndicator = false,
+  textInputAccessoryTop,
 }) => {
   const [draft, setDraft] = useState('');
   const [hoveredBtn, setHoveredBtn] = useState<string | null>(null);
@@ -368,57 +371,70 @@ const ChatPreview: React.FC<ChatPreviewProps> = ({
       </div>
 
       {showTextInput && (
-        <div
-          style={{
-            padding: '10px 16px 14px',
-            display: 'flex',
-            gap: 8,
-            alignItems: 'stretch',
-            borderTop: '1px solid #1f2937',
-            flexShrink: 0,
-            background: '#020617',
-          }}
-        >
-          <input
-            type="text"
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            placeholder={textInputPlaceholder}
+        <>
+          {textInputAccessoryTop != null && (
+            <div
+              style={{
+                padding: '8px 16px 0',
+                flexShrink: 0,
+                background: '#020617',
+              }}
+            >
+              {textInputAccessoryTop}
+            </div>
+          )}
+          <div
             style={{
-              flex: 1,
-              padding: '10px 12px',
-              borderRadius: 12,
-              border: '1px solid #334155',
-              background: '#0f172a',
-              color: '#e5e7eb',
-              fontSize: 14,
-            }}
-          />
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!textInputAllowEmpty && !draft.trim()}
-            style={{
-              padding: '10px 16px',
-              borderRadius: 12,
-              border: 'none',
-              background: textInputAllowEmpty || draft.trim() ? '#3b82f6' : '#1e293b',
-              color: textInputAllowEmpty || draft.trim() ? '#fff' : '#64748b',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: textInputAllowEmpty || draft.trim() ? 'pointer' : 'default',
-              whiteSpace: 'nowrap',
+              padding: '10px 16px 14px',
+              display: 'flex',
+              gap: 8,
+              alignItems: 'stretch',
+              borderTop: '1px solid #1f2937',
+              flexShrink: 0,
+              background: '#020617',
             }}
           >
-            Отправить
-          </button>
-        </div>
+            <input
+              type="text"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              placeholder={textInputPlaceholder}
+              style={{
+                flex: 1,
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid #334155',
+                background: '#0f172a',
+                color: '#e5e7eb',
+                fontSize: 14,
+              }}
+            />
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!textInputAllowEmpty && !draft.trim()}
+              style={{
+                padding: '10px 16px',
+                borderRadius: 12,
+                border: 'none',
+                background: textInputAllowEmpty || draft.trim() ? '#3b82f6' : '#1e293b',
+                color: textInputAllowEmpty || draft.trim() ? '#fff' : '#64748b',
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: textInputAllowEmpty || draft.trim() ? 'pointer' : 'default',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Отправить
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

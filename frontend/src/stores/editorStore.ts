@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { Edge, Node } from 'reactflow';
 import { nanoid } from 'nanoid';
 import { BlockCatalogItem, PlanType, RoleType } from '../types/blocks';
 import { fetchBlocksCatalog } from '../api/blocks';
@@ -17,6 +18,29 @@ export interface Toast {
 
 // Max items to store in recent blocks
 const MAX_RECENT_BLOCKS = 10;
+
+const MAX_EDITOR_UNDO = 50;
+
+export interface EditorGraphSnapshot {
+  nodes: Node[];
+  edges: Edge[];
+}
+
+function cloneGraph(nodes: Node[], edges: Edge[]): EditorGraphSnapshot {
+  try {
+    return { nodes: structuredClone(nodes), edges: structuredClone(edges) };
+  } catch {
+    return {
+      nodes: JSON.parse(JSON.stringify(nodes)) as Node[],
+      edges: JSON.parse(JSON.stringify(edges)) as Edge[],
+    };
+  }
+}
+
+function trimUndoStack(stack: EditorGraphSnapshot[]): EditorGraphSnapshot[] {
+  if (stack.length <= MAX_EDITOR_UNDO) return stack;
+  return stack.slice(stack.length - MAX_EDITOR_UNDO);
+}
 
 function isBlockedLegacyBlock(block: BlockCatalogItem): boolean {
   const id = String(block.id || '')
@@ -61,6 +85,14 @@ interface EditorStore {
   recentBlockIds: string[];
   collapsedCategories: string[];
 
+  /** Undo/redo для канваса (не сохраняется в persist). */
+  undoStack: EditorGraphSnapshot[];
+  redoStack: EditorGraphSnapshot[];
+  pushSnapshot: (nodes: Node[], edges: Edge[]) => void;
+  undo: (currentNodes: Node[], currentEdges: Edge[]) => EditorGraphSnapshot | null;
+  redo: (currentNodes: Node[], currentEdges: Edge[]) => EditorGraphSnapshot | null;
+  resetUndoRedo: () => void;
+
   // Actions
   setPlan: (plan: PlanType) => void;
   setRole: (role: RoleType) => void;
@@ -100,6 +132,45 @@ export const useEditorStore = create<EditorStore>()(
       favoriteBlockIds: [],
       recentBlockIds: [],
       collapsedCategories: [],
+
+      undoStack: [],
+      redoStack: [],
+
+      pushSnapshot: (nodes, edges) => {
+        const snap = cloneGraph(nodes, edges);
+        set(state => ({
+          undoStack: trimUndoStack([...state.undoStack, snap]),
+          redoStack: [],
+        }));
+      },
+
+      undo: (currentNodes, currentEdges) => {
+        const { undoStack, redoStack } = get();
+        if (undoStack.length === 0) return null;
+        const prevStack = [...undoStack];
+        const restored = prevStack.pop()!;
+        const currentSnap = cloneGraph(currentNodes, currentEdges);
+        set({
+          undoStack: prevStack,
+          redoStack: trimUndoStack([...redoStack, currentSnap]),
+        });
+        return cloneGraph(restored.nodes, restored.edges);
+      },
+
+      redo: (currentNodes, currentEdges) => {
+        const { undoStack, redoStack } = get();
+        if (redoStack.length === 0) return null;
+        const nextRedo = [...redoStack];
+        const restored = nextRedo.pop()!;
+        const currentSnap = cloneGraph(currentNodes, currentEdges);
+        set({
+          redoStack: nextRedo,
+          undoStack: trimUndoStack([...undoStack, currentSnap]),
+        });
+        return cloneGraph(restored.nodes, restored.edges);
+      },
+
+      resetUndoRedo: () => set({ undoStack: [], redoStack: [] }),
 
       // Actions
       setPlan: plan => {

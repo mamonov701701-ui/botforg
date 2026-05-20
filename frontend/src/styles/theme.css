@@ -27,6 +27,20 @@
   --warning: #f59e0b;
   --error: #ef4444;
   --info: #3b82f6;
+
+  /* Semantic UI tokens (dashboard / inline styles) */
+  --color-text-success: #10b981;
+  --color-text-danger: #ef4444;
+  --color-text-warning: #f59e0b;
+  --color-text-info: #3b82f6;
+  --color-text-secondary: #6b7280;
+  --color-background-success: rgba(16, 185, 129, 0.12);
+  --color-background-warning: rgba(255, 210, 76, 0.1);
+  --color-background-warning-hover: rgba(255, 210, 76, 0.15);
+  --color-background-dashboard-card: rgba(26, 34, 56, 0.9);
+  --color-border-accent-muted: rgba(255, 210, 76, 0.2);
+  --color-border-tertiary: rgba(148, 163, 184, 0.28);
+  --color-shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 body {

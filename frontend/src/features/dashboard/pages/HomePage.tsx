@@ -1,29 +1,226 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
-  Bot,
+  Bot as BotIcon,
   Users,
   MessageCircle,
   Wallet,
   Star,
-  Plus,
-  FileText,
-  CreditCard,
   RefreshCw,
   XCircle,
+  CheckCircle,
+  ChevronRight,
 } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
+import NewBotModal from '../../editorV2/NewBotModal';
 import { useAuthStore } from '../../../stores/authStore';
-import { hasAccessToAction, hasAccessToSection } from '../../../constants/roles';
-import { AccessLocked } from '../../../components/AccessLocked';
 import {
   getDashboardData,
   getRecentEvents,
   getGlobalStats,
   getScenarioStats,
 } from '../../../api/analytics';
-import { getBots } from '../../../api/bot';
+import { getBots, type Bot } from '../../../api/bot';
+
+const LS_ONBOARDING_DONE = 'bf_onboarding_done';
+const LS_ONBOARDING_ACTIVE = 'bf_onboarding_active';
+
+function readLs(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(key);
+}
+
+interface OnboardingChecklistProps {
+  bots: Bot[];
+  onBump: () => void;
+  onOpenCreateBot: () => void;
+}
+
+function OnboardingChecklist({ bots, onBump, onOpenCreateBot }: OnboardingChecklistProps) {
+  const editorTo = bots[0]?.id != null ? `/editor/${bots[0].id}` : '/editor';
+  const simulatorTo =
+    bots[0]?.id != null ? `/editor/${bots[0].id}?simulator=true` : '/editor?simulator=true';
+  const channelTo =
+    bots[0]?.id != null ? `/dashboard/bots/${bots[0].id}/settings` : '/dashboard/bots';
+
+  const step1Done = bots.length > 0;
+  const step2Done = readLs('bf_onboarding_editor_visited') === 'true';
+  const step3Done = readLs('bf_onboarding_channel_visited') === 'true';
+  const step4Done = readLs('bf_onboarding_simulator_visited') === 'true';
+
+  const doneCount = [step1Done, step2Done, step3Done, step4Done].filter(Boolean).length;
+
+  const handleHide = () => {
+    localStorage.setItem('bf_onboarding_done', 'true');
+    localStorage.removeItem('bf_onboarding_active');
+    onBump();
+  };
+
+  const StepRow = (p: { done: boolean; label: string; href?: string; onRowClick?: () => void }) => (
+    <>
+      <CheckCircle
+        size={22}
+        style={{
+          flexShrink: 0,
+          color: p.done ? 'var(--color-text-success)' : 'var(--text-muted)',
+        }}
+        aria-hidden
+      />
+      {p.href ? (
+        <Link
+          to={p.href}
+          onClick={() => p.onRowClick?.()}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            textDecoration: 'none',
+            color: 'inherit',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 500,
+              textDecoration: p.done ? 'line-through' : undefined,
+              opacity: p.done ? 0.55 : 1,
+            }}
+          >
+            {p.label}
+          </span>
+          <ChevronRight size={20} style={{ opacity: p.done ? 0.35 : 0.7, flexShrink: 0 }} />
+        </Link>
+      ) : (
+        <button
+          type="button"
+          onClick={() => p.onRowClick?.()}
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            color: 'inherit',
+            font: 'inherit',
+            textAlign: 'left',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 500,
+              textDecoration: p.done ? 'line-through' : undefined,
+              opacity: p.done ? 0.55 : 1,
+            }}
+          >
+            {p.label}
+          </span>
+          <ChevronRight size={20} style={{ opacity: p.done ? 0.35 : 0.7, flexShrink: 0 }} />
+        </button>
+      )}
+    </>
+  );
+
+  return (
+    <Card style={{ position: 'relative', marginBottom: 28 }}>
+      <button
+        type="button"
+        onClick={handleHide}
+        style={{
+          position: 'absolute',
+          top: 20,
+          right: 20,
+          background: 'transparent',
+          border: 'none',
+          color: 'var(--text-muted)',
+          fontSize: 13,
+          fontWeight: 500,
+          cursor: 'pointer',
+          padding: '4px 8px',
+        }}
+      >
+        Скрыть
+      </button>
+      <div style={{ marginBottom: 16 }}>
+        <div
+          style={{
+            height: 6,
+            borderRadius: 4,
+            background: 'var(--color-background-warning)',
+            overflow: 'hidden',
+            marginBottom: 10,
+          }}
+        >
+          <div
+            style={{
+              height: '100%',
+              width: `${(doneCount / 4) * 100}%`,
+              borderRadius: 4,
+              background: 'var(--primary)',
+              transition: 'width 0.25s ease',
+            }}
+          />
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+          {doneCount} из 4 шагов выполнено
+        </p>
+      </div>
+      <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>С чего начать</h2>
+      <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 24, maxWidth: 520 }}>
+        Выполните 4 шага чтобы запустить первого бота
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <StepRow
+            done={step1Done}
+            label="Создайте первого бота"
+            onRowClick={() => !step1Done && onOpenCreateBot()}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <StepRow
+            done={step2Done}
+            label="Откройте редактор сценариев"
+            href={editorTo}
+            onRowClick={() => {
+              localStorage.setItem('bf_onboarding_editor_visited', 'true');
+              onBump();
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <StepRow
+            done={step3Done}
+            label="Подключите Telegram или MAX канал"
+            href={channelTo}
+            onRowClick={() => {
+              localStorage.setItem('bf_onboarding_channel_visited', 'true');
+              onBump();
+            }}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <StepRow
+            done={step4Done}
+            label="Протестируйте в симуляторе"
+            href={simulatorTo}
+            onRowClick={() => {
+              localStorage.setItem('bf_onboarding_simulator_visited', 'true');
+              onBump();
+            }}
+          />
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 interface KPICardProps {
   icon: React.ComponentType<{ size?: number; className?: string }>;
@@ -42,12 +239,6 @@ function KPICard({
   changeType = 'neutral',
   isLoading,
 }: KPICardProps) {
-  const changeColors = {
-    positive: '#10b981',
-    negative: '#ef4444',
-    neutral: 'var(--text-muted)',
-  };
-
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
@@ -58,7 +249,7 @@ function KPICard({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'rgba(255, 210, 76, 0.1)',
+            background: 'var(--color-background-warning)',
             borderRadius: '8px',
           }}
         >
@@ -82,7 +273,19 @@ function KPICard({
             <>
               <p style={{ fontSize: '28px', fontWeight: 700, marginBottom: '4px' }}>{value}</p>
               {change && (
-                <p style={{ fontSize: '13px', color: changeColors[changeType] }}>{change}</p>
+                <p
+                  style={{
+                    fontSize: '13px',
+                    color:
+                      changeType === 'positive'
+                        ? 'var(--color-text-success)'
+                        : changeType === 'negative'
+                          ? 'var(--color-text-danger)'
+                          : 'var(--text-muted)',
+                  }}
+                >
+                  {change}
+                </p>
               )}
             </>
           )}
@@ -103,7 +306,7 @@ interface ActivityEvent {
 
 function ActivityFeed({ events }: { events: ActivityEvent[] }) {
   const eventIcons: Record<ActivityEvent['type'], React.ComponentType<{ size?: number }>> = {
-    bot_created: Bot,
+    bot_created: BotIcon,
     bot_updated: RefreshCw,
     payment: Wallet,
     review: Star,
@@ -140,16 +343,18 @@ function ActivityFeed({ events }: { events: ActivityEvent[] }) {
                   gap: '12px',
                   padding: '12px',
                   borderRadius: '8px',
-                  background: 'rgba(255, 210, 76, 0.1)',
+                  background: 'var(--color-background-warning)',
                   transition: 'background 0.2s',
                   cursor: event.link ? 'pointer' : 'default',
                 }}
                 onClick={() => event.link && console.log('Navigate to:', event.link)}
                 onMouseEnter={e => {
-                  if (event.link) e.currentTarget.style.background = 'rgba(255, 210, 76, 0.15)';
+                  if (event.link)
+                    e.currentTarget.style.background = 'var(--color-background-warning-hover)';
                 }}
                 onMouseLeave={e => {
-                  if (event.link) e.currentTarget.style.background = 'rgba(255, 210, 76, 0.1)';
+                  if (event.link)
+                    e.currentTarget.style.background = 'var(--color-background-warning)';
                 }}
               >
                 <div
@@ -159,7 +364,7 @@ function ActivityFeed({ events }: { events: ActivityEvent[] }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    background: 'rgba(255, 210, 76, 0.1)',
+                    background: 'var(--color-background-warning)',
                     borderRadius: '8px',
                   }}
                 >
@@ -207,7 +412,6 @@ function ActivityFeed({ events }: { events: ActivityEvent[] }) {
 }
 
 export default function HomePage() {
-  const navigate = useNavigate();
   const { user } = useAuthStore();
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [botsData, setBotsData] = useState<any>(null);
@@ -215,6 +419,20 @@ export default function HomePage() {
   const [globalStats, setGlobalStats] = useState<any>(null);
   const [topScenarioProblem, setTopScenarioProblem] = useState<string>('Нет данных');
   const [loading, setLoading] = useState(true);
+  const [onboardingBump, setOnboardingBump] = useState(0);
+  const [showNewBotModal, setShowNewBotModal] = useState(false);
+
+  const bots: Bot[] = botsData?.items ?? [];
+  const onboardingDone = readLs(LS_ONBOARDING_DONE) === 'true';
+  const stepEditorDone = readLs('bf_onboarding_editor_visited') === 'true';
+  const stepChannelDone = readLs('bf_onboarding_channel_visited') === 'true';
+  const stepSimulatorDone = readLs('bf_onboarding_simulator_visited') === 'true';
+  const allOnboardingStepsDone =
+    bots.length > 0 && stepEditorDone && stepChannelDone && stepSimulatorDone;
+  const onboardingActive = readLs(LS_ONBOARDING_ACTIVE) === '1';
+
+  const showOnboardingChecklist =
+    !!user && !loading && !onboardingDone && !allOnboardingStepsDone && onboardingActive;
 
   useEffect(() => {
     async function loadData() {
@@ -257,6 +475,23 @@ export default function HomePage() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!user || loading || onboardingDone || allOnboardingStepsDone) return;
+    if (bots.length === 0 && readLs(LS_ONBOARDING_ACTIVE) !== '1') {
+      localStorage.setItem(LS_ONBOARDING_ACTIVE, '1');
+      setOnboardingBump(b => b + 1);
+    }
+  }, [user, loading, onboardingDone, allOnboardingStepsDone, bots.length]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !allOnboardingStepsDone) return;
+    if (readLs(LS_ONBOARDING_DONE) === 'true') return;
+    localStorage.setItem(LS_ONBOARDING_DONE, 'true');
+    localStorage.removeItem(LS_ONBOARDING_ACTIVE);
+    setOnboardingBump(b => b + 1);
+  }, [allOnboardingStepsDone]);
+
   // Helper functions for event mapping
   function mapEventType(type: string): ActivityEvent['type'] {
     const typeMap: Record<string, ActivityEvent['type']> = {
@@ -284,6 +519,28 @@ export default function HomePage() {
 
   return (
     <DashboardPage title="Главная" subtitle="Обзор вашего проекта">
+      {showOnboardingChecklist && (
+        <OnboardingChecklist
+          bots={bots}
+          onBump={() => setOnboardingBump(b => b + 1)}
+          onOpenCreateBot={() => setShowNewBotModal(true)}
+        />
+      )}
+
+      <NewBotModal
+        isOpen={showNewBotModal}
+        onClose={() => setShowNewBotModal(false)}
+        onBotCreated={async (_botId: number) => {
+          try {
+            const data = await getBots();
+            setBotsData(data);
+          } finally {
+            setShowNewBotModal(false);
+            setOnboardingBump(b => b + 1);
+          }
+        }}
+      />
+
       {/* KPI блок */}
       <div
         style={{
@@ -294,7 +551,7 @@ export default function HomePage() {
         }}
       >
         <KPICard
-          icon={Bot}
+          icon={BotIcon}
           label="Активные боты"
           value={loading ? '...' : dashboardData?.summary?.active_bots || 0}
           change={loading ? '' : `Всего: ${dashboardData?.summary?.total_bots || 0}`}

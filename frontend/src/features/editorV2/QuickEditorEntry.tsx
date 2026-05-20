@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getBots, type Bot } from '../../api/bot';
 import { getBotScenarios, createScenario, type Scenario } from '../../api/scenarios';
 import { useEditorStore } from '../../stores/editorStore';
@@ -13,7 +13,9 @@ import { useEditorStore } from '../../stores/editorStore';
  */
 export default function QuickEditorEntry() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { showToast } = useEditorStore();
+  const simulatorQs = searchParams.get('simulator') === 'true' ? '?simulator=true' : '';
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +59,7 @@ export default function QuickEditorEntry() {
           });
           if (cancelled) return;
           showToast('Создан первый сценарий. Открываем редактор…', 'success');
-          navigate(`/editor/${firstScenario.bot_id}`);
+          navigate(`/editor/${firstScenario.bot_id}${simulatorQs}`);
           return;
         }
 
@@ -68,7 +70,7 @@ export default function QuickEditorEntry() {
           scenarios.find(s => s.is_main) ||
           [...scenarios].sort((a, b) => a.updated_at.localeCompare(b.updated_at)).pop()!;
 
-        navigate(`/editor/${mainScenario.bot_id}`);
+        navigate(`/editor/${mainScenario.bot_id}${simulatorQs}`);
       } catch (error: any) {
         console.error('[QuickEditorEntry] failed:', error);
         showToast(
@@ -84,7 +86,7 @@ export default function QuickEditorEntry() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, showToast]);
+  }, [navigate, showToast, simulatorQs]);
 
   // Короткий экран загрузки, пока подбираем или создаём сценарий
   return (
