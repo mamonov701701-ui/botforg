@@ -23,6 +23,11 @@ import {
   getMarketItems,
   installMarketBot,
   installMarketScenario,
+  isPaidMarketItem,
+  getMarketItemActionLabel,
+  getMarketInstallSuccessMessage,
+  getMarketInstallErrorMessage,
+  MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE,
   type MarketItemCreate,
 } from '../api/market';
 import { toast } from '../utils/toast';
@@ -229,223 +234,232 @@ export default function MarketplacePage() {
       toast.error('Не удалось определить товар для установки');
       return;
     }
+    if (isPaidMarketItem(sourceItem.price)) {
+      toast.info(MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE);
+      return;
+    }
     setInstallingItemId(sourceItem.id);
     try {
-      const result =
-        sourceItem.item_type === 'scenario'
-          ? await installMarketScenario(sourceItem.id)
-          : await installMarketBot(sourceItem.id);
-      toast.success(result.message || 'Установка завершена');
-    } catch (error: any) {
-      const errorMessage =
-        error?.response?.data?.detail || error?.message || 'Ошибка при установке товара';
-      toast.error(errorMessage);
+      await (sourceItem.item_type === 'scenario'
+        ? installMarketScenario(sourceItem.id)
+        : installMarketBot(sourceItem.id));
+      toast.success(getMarketInstallSuccessMessage(sourceItem.item_type));
+    } catch (error: unknown) {
+      toast.error(getMarketInstallErrorMessage(error));
     } finally {
       setInstallingItemId(null);
     }
   };
 
-  const renderProductCard = (item: MarketItem, sourceItem: any) => (
-    <div
-      key={item.id}
-      role="link"
-      tabIndex={0}
-      data-testid="market-item-card"
-      data-item-id={sourceItem?.id ?? item.id}
-      style={{
-        background: 'var(--card)',
-        border: '1px solid var(--border)',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        cursor: 'pointer',
-        transition: 'all 0.2s',
-      }}
-      onClick={() => {
-        const targetId = sourceItem?.id ?? item.id;
-        if (targetId) navigate(`/market/items/${targetId}`);
-      }}
-      onKeyDown={e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
+  const renderProductCard = (item: MarketItem, sourceItem: any) => {
+    const isPaid = isPaidMarketItem(sourceItem?.price ?? item.price);
+    const isInstalling = installingItemId === sourceItem?.id;
+    const actionLabel = getMarketItemActionLabel({
+      price: sourceItem?.price ?? item.price,
+      item_type: sourceItem?.item_type,
+    });
+
+    return (
+      <div
+        key={item.id}
+        role="link"
+        tabIndex={0}
+        data-testid="market-item-card"
+        data-item-id={sourceItem?.id ?? item.id}
+        style={{
+          background: 'var(--card)',
+          border: '1px solid var(--border)',
+          borderRadius: '12px',
+          overflow: 'hidden',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+        }}
+        onClick={() => {
           const targetId = sourceItem?.id ?? item.id;
           if (targetId) navigate(`/market/items/${targetId}`);
-        }
-      }}
-      onMouseEnter={e => {
-        e.currentTarget.style.transform = 'translateY(-4px)';
-        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)';
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = 'none';
-      }}
-    >
-      {/* Image */}
-      <div
-        style={{
-          height: '200px',
-          background: 'var(--surface)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
+        }}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const targetId = sourceItem?.id ?? item.id;
+            if (targetId) navigate(`/market/items/${targetId}`);
+          }
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'translateY(-4px)';
+          e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = 'none';
         }}
       >
-        {item.isPremium && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '12px',
-              right: '12px',
-              background: 'var(--primary)',
-              color: 'var(--text-on-primary)',
-              padding: '4px 12px',
-              borderRadius: '12px',
-              fontSize: '12px',
-              fontWeight: 600,
-            }}
-          >
-            PREMIUM
-          </div>
-        )}
-        <ShoppingCart size={64} color="var(--text-muted)" />
-      </div>
-
-      {/* Content */}
-      <div style={{ padding: '16px' }}>
-        {/* Title */}
-        <h3
+        {/* Image */}
+        <div
           style={{
-            fontSize: '16px',
-            fontWeight: 600,
-            color: 'var(--text)',
-            marginBottom: '8px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            height: '200px',
+            background: 'var(--surface)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            position: 'relative',
           }}
         >
-          {item.title}
-        </h3>
-
-        {/* Description */}
-        <p
-          style={{
-            fontSize: '13px',
-            color: 'var(--text-muted)',
-            marginBottom: '12px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            lineHeight: '1.4',
-            height: '36px',
-          }}
-        >
-          {item.description}
-        </p>
-
-        {/* Rating */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          {renderStars(Math.floor(item.rating))}
-          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
-            {item.rating}
-          </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            ({item.reviewsCount})
-          </span>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-            {item.salesCount} продаж
-          </span>
-        </div>
-
-        {/* Seller */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <div
-            style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              background: 'var(--surface)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <User size={14} color="var(--text-muted)" />
-          </div>
-          <span style={{ fontSize: '13px', color: 'var(--text)' }}>{item.seller.name}</span>
-          {renderStars(Math.floor(item.seller.rating))}
-        </div>
-
-        {/* Tags */}
-        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-          {item.tags.slice(0, 3).map(tag => (
-            <span
-              key={tag}
+          {item.isPremium && (
+            <div
               style={{
-                padding: '4px 10px',
-                background: 'var(--surface)',
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'var(--primary)',
+                color: 'var(--text-on-primary)',
+                padding: '4px 12px',
                 borderRadius: '12px',
-                fontSize: '11px',
-                color: 'var(--text-muted)',
+                fontSize: '12px',
+                fontWeight: 600,
               }}
             >
-              {tag}
-            </span>
-          ))}
+              PREMIUM
+            </div>
+          )}
+          <ShoppingCart size={64} color="var(--text-muted)" />
         </div>
 
-        {/* Price and CTA */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            {item.price === 0 ? (
-              <span
-                style={{
-                  fontSize: '18px',
-                  fontWeight: 700,
-                  color: 'var(--primary)',
-                }}
-              >
-                БЕСПЛАТНО
-              </span>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>
-                  {item.price.toLocaleString('ru-RU')}
-                </span>
-                <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>₽</span>
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={e => {
-              e.stopPropagation();
-              handleInstall(sourceItem);
-            }}
-            disabled={installingItemId === sourceItem?.id}
+        {/* Content */}
+        <div style={{ padding: '16px' }}>
+          {/* Title */}
+          <h3
             style={{
-              padding: '10px 20px',
-              background: installingItemId === sourceItem?.id ? 'var(--surface)' : 'var(--primary)',
-              color:
-                installingItemId === sourceItem?.id
-                  ? 'var(--text-muted)'
-                  : 'var(--text-on-primary)',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '14px',
+              fontSize: '16px',
               fontWeight: 600,
-              cursor: installingItemId === sourceItem?.id ? 'not-allowed' : 'pointer',
+              color: 'var(--text)',
+              marginBottom: '8px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
-            {installingItemId === sourceItem?.id ? 'Установка...' : 'Установить'}
-          </button>
+            {item.title}
+          </h3>
+
+          {/* Description */}
+          <p
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-muted)',
+              marginBottom: '12px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              lineHeight: '1.4',
+              height: '36px',
+            }}
+          >
+            {item.description}
+          </p>
+
+          {/* Rating */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            {renderStars(Math.floor(item.rating))}
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
+              {item.rating}
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              ({item.reviewsCount})
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+              {item.salesCount} продаж
+            </span>
+          </div>
+
+          {/* Seller */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+            <div
+              style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: 'var(--surface)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <User size={14} color="var(--text-muted)" />
+            </div>
+            <span style={{ fontSize: '13px', color: 'var(--text)' }}>{item.seller.name}</span>
+            {renderStars(Math.floor(item.seller.rating))}
+          </div>
+
+          {/* Tags */}
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
+            {item.tags.slice(0, 3).map(tag => (
+              <span
+                key={tag}
+                style={{
+                  padding: '4px 10px',
+                  background: 'var(--surface)',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+
+          {/* Price and CTA */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              {item.price === 0 ? (
+                <span
+                  style={{
+                    fontSize: '18px',
+                    fontWeight: 700,
+                    color: 'var(--primary)',
+                  }}
+                >
+                  БЕСПЛАТНО
+                </span>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                  <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>
+                    {item.price.toLocaleString('ru-RU')}
+                  </span>
+                  <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>₽</span>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              aria-label={actionLabel}
+              title={isPaid ? MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE : undefined}
+              onClick={e => {
+                e.stopPropagation();
+                handleInstall(sourceItem);
+              }}
+              disabled={isInstalling}
+              style={{
+                padding: '10px 20px',
+                background: isInstalling ? 'var(--surface)' : 'var(--primary)',
+                color: isInstalling ? 'var(--text-muted)' : 'var(--text-on-primary)',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: isInstalling ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {isInstalling ? 'Добавление...' : actionLabel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--background)', paddingTop: '100px' }}>

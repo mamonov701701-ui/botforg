@@ -37,6 +37,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/market", tags=["Marketplace"])
 
+MARKET_MANUAL_ACCESS_REQUIRED_DETAIL = {
+    "code": "manual_access_required",
+    "message": "Платные шаблоны устанавливаются после договорённости с автором вне платформы BotForg.",
+}
+
+
+def _ensure_free_market_install(item: MarketItem) -> None:
+    """Блокирует установку платных товаров — доступ согласуется с автором вне платформы."""
+    price = item.price if item.price is not None else Decimal("0")
+    if Decimal(price) > 0:
+        raise HTTPException(status_code=403, detail=MARKET_MANUAL_ACCESS_REQUIRED_DETAIL)
+
 
 # ================== Helper Functions ==================
 
@@ -466,6 +478,7 @@ async def install_market_scenario(
         raise HTTPException(status_code=404, detail="Товар-сценарий не найден")
     if not item.is_published:
         raise HTTPException(status_code=403, detail="Товар не опубликован")
+    _ensure_free_market_install(item)
     if not item.source_scenario_id:
         raise HTTPException(status_code=400, detail="У товара не указан source_scenario_id")
 
@@ -521,6 +534,7 @@ async def install_market_bot(
         raise HTTPException(status_code=404, detail="Товар-шаблон не найден")
     if not item.is_published:
         raise HTTPException(status_code=403, detail="Товар не опубликован")
+    _ensure_free_market_install(item)
     if not item.source_bot_id:
         raise HTTPException(status_code=400, detail="У товара не указан source_bot_id")
 

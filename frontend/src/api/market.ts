@@ -1,7 +1,76 @@
 /**
  * API клиент для маркетплейса
  */
-import api from './client';
+import api, { ApiError } from './client';
+
+export const MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE =
+  'Платные шаблоны устанавливаются после договорённости с автором вне платформы BotForg.';
+
+export const MARKET_SELLER_CONTACTS_PLACEHOLDER = 'Контакты автора будут добавлены позже.';
+
+export function parseMarketPrice(price: number | string | undefined): number {
+  if (price === undefined || price === null) return 0;
+  if (typeof price === 'string') return parseFloat(price) || 0;
+  return price;
+}
+
+export function isPaidMarketItem(price: number | string | undefined): boolean {
+  return parseMarketPrice(price) > 0;
+}
+
+export type MarketItemActionLabelInput = {
+  price?: number | string;
+  item_type?: string;
+};
+
+/** Текст кнопки действия на карточке/детальной странице маркетплейса */
+export function getMarketItemActionLabel(item: MarketItemActionLabelInput): string {
+  if (isPaidMarketItem(item.price)) {
+    return 'Запросить доступ';
+  }
+  if (item.item_type === 'scenario') {
+    return 'Добавить в мои сценарии';
+  }
+  if (item.item_type === 'template') {
+    return 'Добавить в мои боты';
+  }
+  return 'Добавить';
+}
+
+/** Сообщение toast после успешного free install */
+export function getMarketInstallSuccessMessage(itemType: string): string {
+  if (itemType === 'scenario') {
+    return 'Сценарий добавлен в мои сценарии.';
+  }
+  if (itemType === 'template') {
+    return 'Бот добавлен в мои боты.';
+  }
+  return 'Добавление завершено.';
+}
+
+/** Путь в ЛК после успешного free install */
+export function getMarketInstallDestination(result: MarketInstallResult): string {
+  if (result.created_bot_id) {
+    return `/dashboard/bots/${result.created_bot_id}`;
+  }
+  if (result.item_type === 'template') {
+    return '/dashboard/bots';
+  }
+  if (result.created_scenario_id) {
+    return `/dashboard/scenarios/${result.created_scenario_id}`;
+  }
+  return '/dashboard/scenarios';
+}
+
+export function getMarketInstallErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.message || 'Ошибка при установке товара';
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return 'Ошибка при установке товара';
+}
 
 function getWithQuery<T>(
   path: string,

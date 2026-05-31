@@ -2,23 +2,25 @@
  * Детальная страница товара маркетплейса
  */
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Star, User, ShoppingCart } from 'lucide-react';
 import {
   getMarketItem,
   installMarketBot,
   installMarketScenario,
+  parseMarketPrice,
+  isPaidMarketItem,
+  getMarketInstallErrorMessage,
+  getMarketItemActionLabel,
+  getMarketInstallSuccessMessage,
+  getMarketInstallDestination,
+  MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE,
+  MARKET_SELLER_CONTACTS_PLACEHOLDER,
   type MarketItemDetail,
   type MarketReview,
 } from '../api/market';
 import { ApiError } from '../api/client';
 import { toast } from '../utils/toast';
-
-function parsePrice(price: number | string | undefined): number {
-  if (price === undefined || price === null) return 0;
-  if (typeof price === 'string') return parseFloat(price) || 0;
-  return price;
-}
 
 function itemTypeLabel(itemType: string): string {
   if (itemType === 'scenario') return 'Сценарий';
@@ -40,6 +42,7 @@ function formatDetailError(err: unknown): { message: string; notFound: boolean }
 }
 
 export default function MarketItemDetailPage() {
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const itemId = id ? parseInt(id, 10) : NaN;
 
@@ -83,12 +86,16 @@ export default function MarketItemDetailPage() {
     };
   }, [id, itemId]);
 
+  const handleRequestAccess = useCallback(() => {
+    toast.info(MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE);
+    toast.info(MARKET_SELLER_CONTACTS_PLACEHOLDER);
+  }, []);
+
   const handleInstall = useCallback(async () => {
     if (!item) return;
 
-    const price = parsePrice(item.price);
-    if (price > 0) {
-      toast.info('Покупка платных шаблонов будет подключена на следующем этапе.');
+    if (isPaidMarketItem(item.price)) {
+      handleRequestAccess();
       return;
     }
 
@@ -98,16 +105,25 @@ export default function MarketItemDetailPage() {
         item.item_type === 'scenario'
           ? await installMarketScenario(item.id)
           : await installMarketBot(item.id);
-      toast.success(result.message || 'Установка завершена');
+      const successMessage = getMarketInstallSuccessMessage(item.item_type);
+      if (item.item_type === 'scenario') {
+        toast.success(`${successMessage} Перейти в мои сценарии.`);
+      } else {
+        toast.success(successMessage);
+      }
+      navigate(getMarketInstallDestination(result));
     } catch (err: unknown) {
-      const { message } = formatDetailError(err);
-      toast.error(message);
+      toast.error(getMarketInstallErrorMessage(err));
     } finally {
       setInstalling(false);
     }
-  }, [item]);
+  }, [item, handleRequestAccess, navigate]);
 
-  const price = item ? parsePrice(item.price) : 0;
+  const price = item ? parseMarketPrice(item.price) : 0;
+  const isPaid = price > 0;
+  const actionLabel = item
+    ? getMarketItemActionLabel({ price: item.price, item_type: item.item_type })
+    : 'Добавить';
   const rating = item?.average_rating ?? 0;
   const reviews: MarketReview[] = item?.reviews ?? [];
 
@@ -273,18 +289,30 @@ export default function MarketItemDetailPage() {
                 </div>
 
                 {item.seller && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      marginBottom: '16px',
-                    }}
-                  >
-                    <User size={18} color="var(--text-muted)" />
-                    <span style={{ fontSize: '14px', color: 'var(--text)' }}>
-                      {item.seller.name || item.seller.email}
-                    </span>
+                  <div style={{ marginBottom: '16px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <User size={18} color="var(--text-muted)" />
+                      <span style={{ fontSize: '14px', color: 'var(--text)' }}>
+                        {item.seller.name || item.seller.email}
+                      </span>
+                    </div>
+                    {isPaid && (
+                      <p
+                        style={{
+                          fontSize: '13px',
+                          color: 'var(--text-muted)',
+                          margin: '8px 0 0 26px',
+                        }}
+                      >
+                        {MARKET_SELLER_CONTACTS_PLACEHOLDER}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -336,21 +364,23 @@ export default function MarketItemDetailPage() {
                   </div>
                   <button
                     type="button"
-                    data-testid="market-item-detail-install"
-                    onClick={handleInstall}
-                    disabled={installing}
+                    data-testid={
+                      isPaid ? 'market-item-detail-request-access' : 'market-item-detail-install'
+                    }
+                    onClick={isPaid ? handleRequestAccess : handleInstall}
+                    disabled={!isPaid && installing}
                     style={{
                       padding: '12px 24px',
-                      background: installing ? 'var(--surface)' : 'var(--primary)',
-                      color: installing ? 'var(--text-muted)' : 'var(--text-on-primary)',
+                      background: !isPaid && installing ? 'var(--surface)' : 'var(--primary)',
+                      color: !isPaid && installing ? 'var(--text-muted)' : 'var(--text-on-primary)',
                       border: 'none',
                       borderRadius: '8px',
                       fontSize: '15px',
                       fontWeight: 600,
-                      cursor: installing ? 'not-allowed' : 'pointer',
+                      cursor: !isPaid && installing ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {installing ? 'Установка...' : price > 0 ? 'Купить' : 'Установить'}
+                    {installing ? 'Добавление...' : actionLabel}
                   </button>
                 </div>
               </div>

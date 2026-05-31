@@ -142,7 +142,14 @@ async function request(path: string, options: RequestOptions = {}): Promise<any>
       let errorMessage = 'Ошибка запроса';
       try {
         const errorData = await response.json();
-        errorMessage = errorData.detail || errorData.message || errorMessage;
+        const detail = errorData.detail;
+        if (detail && typeof detail === 'object' && detail.message) {
+          errorMessage = String(detail.message);
+        } else if (typeof detail === 'string') {
+          errorMessage = detail;
+        } else {
+          errorMessage = errorData.message || errorMessage;
+        }
       } catch {
         // If JSON parsing fails, use default message
       }

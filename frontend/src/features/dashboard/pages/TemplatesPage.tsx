@@ -628,7 +628,7 @@ export default function TemplatesPage() {
       {/* Ссылка на маркетплейс */}
       <div style={{ marginTop: '32px', textAlign: 'center' }}>
         <button
-          onClick={() => navigate('/templates')}
+          onClick={() => navigate('/market')}
           style={{
             padding: '12px 32px',
             background: 'var(--card)',
