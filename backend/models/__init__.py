@@ -37,6 +37,11 @@ from backend.models.market import (
     MarketItem, MarketOrder, OrderProposal, FreelancerProfile, MarketReview,
     MarketItemType, MarketOrderStatus
 )
+from backend.models.market_access import (
+    MarketAccessRequest,
+    MarketAccessRequestStatus,
+    MarketItemAccessGrant,
+)
 from backend.models.legal import Consent
 from backend.models.plan import Plan
 from backend.models.constructor_core import (
@@ -109,6 +114,9 @@ __all__ = [
     "MarketReview",
     "MarketItemType",
     "MarketOrderStatus",
+    "MarketAccessRequest",
+    "MarketAccessRequestStatus",
+    "MarketItemAccessGrant",
     "Consent",
     "Plan",
     "PlatformUser",
