@@ -28,6 +28,13 @@ class MarketAccessRequestOut(BaseModel):
         from_attributes = True
 
 
+class MarketAccessRequestCreatedOut(BaseModel):
+    """Ответ на создание заявки на доступ."""
+    request: MarketAccessRequestOut
+    chat_room_id: int
+    already_exists: bool = False
+
+
 class MarketItemAccessGrantOut(BaseModel):
     """Ручная выдача доступа к market item."""
     id: int

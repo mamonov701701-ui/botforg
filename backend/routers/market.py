@@ -7,7 +7,7 @@ import copy
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional, List, Tuple
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func, desc, asc
 
@@ -19,6 +19,7 @@ from backend.models.market import (
     MarketItem, MarketOrder, OrderProposal, FreelancerProfile, MarketReview,
     MarketItemType, MarketOrderStatus, ModerationStatus
 )
+from backend.models.market_access import MarketAccessRequest, MarketAccessRequestStatus
 from backend.models.bot import Bot
 from backend.models.scenario import Scenario
 from backend.utils.plan_limits import check_max_bots
@@ -31,6 +32,15 @@ from backend.schemas.market import (
     MarketReviewCreate, MarketReviewOut,
     MarketItemListResponse, MarketOrderListResponse, FreelancerListResponse,
     SellerInfo, MyTemplateOut, MarketInstallOut
+)
+from backend.schemas.market_access import (
+    MarketAccessRequestCreate,
+    MarketAccessRequestOut,
+    MarketAccessRequestCreatedOut,
+)
+from backend.services.chat_room_service import (
+    get_or_create_private_room,
+    create_system_chat_message,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,6 +58,36 @@ def _ensure_free_market_install(item: MarketItem) -> None:
     price = item.price if item.price is not None else Decimal("0")
     if Decimal(price) > 0:
         raise HTTPException(status_code=403, detail=MARKET_MANUAL_ACCESS_REQUIRED_DETAIL)
+
+
+ACTIVE_MARKET_ACCESS_STATUSES = (
+    MarketAccessRequestStatus.NEW,
+    MarketAccessRequestStatus.IN_DISCUSSION,
+)
+
+
+def _market_access_request_to_out(request: MarketAccessRequest) -> MarketAccessRequestOut:
+    status = request.status
+    status_val = status.value if hasattr(status, "value") else str(status)
+    return MarketAccessRequestOut(
+        id=request.id,
+        market_item_id=request.market_item_id,
+        requester_user_id=request.requester_user_id,
+        author_user_id=request.author_user_id,
+        chat_room_id=request.chat_room_id,
+        status=status_val,
+        message=request.message,
+        created_at=request.created_at,
+        updated_at=request.updated_at,
+    )
+
+
+def _market_access_system_message(item_title: str) -> str:
+    return (
+        f'Пользователь запросил доступ к «{item_title}». '
+        "Обсуждение проходит во внутреннем чате BotForg, "
+        "расчёты и договорённости по оплате — вне платформы."
+    )
 
 
 # ================== Helper Functions ==================
@@ -594,6 +634,88 @@ async def install_market_bot(
         created_bot_id=copied_bot.id,
         created_scenarios_count=copied_scenarios_count,
         message="Бот и его сценарии успешно установлены",
+    )
+
+
+@router.post(
+    "/items/{item_id}/access-requests",
+    response_model=MarketAccessRequestCreatedOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_market_access_request(
+    item_id: int,
+    body: MarketAccessRequestCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Запросить доступ к платному товару: заявка + private chat с автором."""
+    item = db.query(MarketItem).filter(MarketItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+    if not item.is_published:
+        raise HTTPException(status_code=403, detail="Товар не опубликован")
+
+    price = item.price if item.price is not None else Decimal("0")
+    if Decimal(price) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Для бесплатных товаров заявка на доступ не требуется",
+        )
+    if item.seller_id == current_user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="Нельзя запросить доступ к собственному товару",
+        )
+
+    existing = (
+        db.query(MarketAccessRequest)
+        .filter(
+            MarketAccessRequest.market_item_id == item.id,
+            MarketAccessRequest.requester_user_id == current_user.id,
+            MarketAccessRequest.status.in_(ACTIVE_MARKET_ACCESS_STATUSES),
+        )
+        .first()
+    )
+    if existing:
+        if not existing.chat_room_id:
+            room, _ = get_or_create_private_room(
+                db, current_user.id, item.seller_id, current_user.id
+            )
+            existing.chat_room_id = room.id
+            db.commit()
+            db.refresh(existing)
+        response.status_code = status.HTTP_200_OK
+        return MarketAccessRequestCreatedOut(
+            request=_market_access_request_to_out(existing),
+            chat_room_id=existing.chat_room_id,
+            already_exists=True,
+        )
+
+    room, _room_created = get_or_create_private_room(
+        db, current_user.id, item.seller_id, current_user.id
+    )
+
+    access_request = MarketAccessRequest(
+        market_item_id=item.id,
+        requester_user_id=current_user.id,
+        author_user_id=item.seller_id,
+        chat_room_id=room.id,
+        status=MarketAccessRequestStatus.NEW,
+        message=body.message,
+    )
+    db.add(access_request)
+    db.flush()
+
+    create_system_chat_message(db, room.id, _market_access_system_message(item.title))
+
+    db.commit()
+    db.refresh(access_request)
+
+    return MarketAccessRequestCreatedOut(
+        request=_market_access_request_to_out(access_request),
+        chat_room_id=room.id,
+        already_exists=False,
     )
 
 
