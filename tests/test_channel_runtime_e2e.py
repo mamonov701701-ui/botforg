@@ -98,6 +98,66 @@ def _published_content(action_kind: str) -> dict[str, Any]:
     return {"nodes": nodes, "edges": edges}
 
 
+def _published_content_editor_v2(action_kind: str) -> dict[str, Any]:
+    """EditorV2: type=default + data.blockId; цепочка start → input → action → message."""
+    n_start, n_in, n_act, n_msg = "n_start", "n_input", "n_action", "n_msg"
+    if action_kind == "field":
+        action_settings: dict[str, Any] = {
+            "mode": "field",
+            "fieldAction": "set",
+            "fieldKey": "e2e_action_field",
+            "fieldValue": "stored_ok",
+        }
+    elif action_kind == "tag":
+        action_settings = {
+            "mode": "tag",
+            "tagAction": "add",
+            "tag": "e2e_rt_tag",
+        }
+    else:
+        action_settings = {
+            "mode": "status",
+            "statusAction": "set",
+            "status": "e2e_vip",
+        }
+    nodes = [
+        {
+            "id": n_start,
+            "type": "default",
+            "data": {"blockId": "start", "settings": {}},
+        },
+        {
+            "id": n_in,
+            "type": "default",
+            "data": {
+                "blockId": "input",
+                "settings": {
+                    "variable_key": "user_name",
+                    "variable_label": "Name",
+                    "question_text": "?",
+                    "validation": {"type": "string"},
+                },
+            },
+        },
+        {
+            "id": n_act,
+            "type": "default",
+            "data": {"blockId": "action", "settings": action_settings},
+        },
+        {
+            "id": n_msg,
+            "type": "default",
+            "data": {"blockId": "message", "settings": {"text": "ok"}},
+        },
+    ]
+    edges = [
+        {"id": "e0", "source": n_start, "target": n_in},
+        {"id": "e1", "source": n_in, "target": n_act, "sourceHandle": "success"},
+        {"id": "e2", "source": n_act, "target": n_msg},
+    ]
+    return {"nodes": nodes, "edges": edges}
+
+
 def _create_bot_with_channel(
     *,
     channel: str,
@@ -361,5 +421,44 @@ def test_whatsapp_channel_runtime_input_action_message(action_kind: str) -> None
     db = SessionLocal()
     try:
         _assert_crm(db, external_user_id=from_num, channel="whatsapp", action_kind=action_kind)
+    finally:
+        db.close()
+
+
+@pytest.mark.skipif(
+    not _has_bot_channel_connections(),
+    reason="bot_channel_connections missing (alembic upgrade head)",
+)
+@pytest.mark.parametrize("action_kind", ["field", "tag", "status"])
+def test_max_channel_runtime_editor_v2_start_input_action_message(action_kind: str) -> None:
+    """published_content с EditorV2-узлами (type=default, data.blockId)."""
+    oid = _owner_id()
+    if not oid:
+        pytest.skip("no users row")
+    secret = f"sec-{uuid.uuid4().hex[:8]}"
+    bot_id = _create_bot_with_channel(
+        channel="max",
+        creds={"token": "fake", "webhook_secret": secret},
+    )
+    if not bot_id:
+        pytest.skip("bot not created")
+    chat_id = f"max_v2_{uuid.uuid4().hex[:12]}"
+    _attach_scenario(bot_id, oid, _published_content_editor_v2(action_kind))
+
+    with patch.object(
+        MaxAdapter,
+        "send_text",
+        return_value=MessageResult(success=True),
+    ):
+        r1 = _post_max(bot_id, secret, chat_id, "hello")
+        assert r1.status_code == 200, r1.text
+        r2 = _post_max(bot_id, secret, chat_id, "continue")
+        assert r2.status_code == 200, r2.text
+        r3 = _post_max(bot_id, secret, chat_id, "Alice")
+        assert r3.status_code == 200, r3.text
+
+    db = SessionLocal()
+    try:
+        _assert_crm(db, external_user_id=chat_id, channel="max", action_kind=action_kind)
     finally:
         db.close()

@@ -60,9 +60,34 @@ def _find_scenario_for_bot(db: Session, bot_id: int) -> Optional[Scenario]:
     return db.query(Scenario).filter(Scenario.bot_id == bot_id).order_by(Scenario.id.asc()).first()
 
 
+def resolve_node_kind(node: dict[str, Any]) -> str:
+    """Тип блока сценария: EditorV2 (data.blockId) или legacy (top-level type)."""
+    data = node.get("data") or {}
+    if not isinstance(data, dict):
+        data = {}
+    block_id = data.get("blockId")
+    if block_id:
+        return str(block_id).lower()
+    node_type = node.get("type")
+    if node_type and str(node_type).lower() != "default":
+        return str(node_type).lower()
+    return ""
+
+
 def _find_start_node(nodes: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
-    start = next((n for n in nodes if (n.get("data") or {}).get("is_start")), None)
-    return start or (nodes[0] if nodes else None)
+    for node in nodes:
+        data = node.get("data") or {}
+        if not isinstance(data, dict):
+            data = {}
+        if str(data.get("blockId", "")).lower() == "start":
+            return node
+    for node in nodes:
+        data = node.get("data") or {}
+        if not isinstance(data, dict):
+            data = {}
+        if data.get("is_start") is True:
+            return node
+    return nodes[0] if nodes else None
 
 
 def _edge_label(edge: dict[str, Any]) -> str:
@@ -239,10 +264,10 @@ def process_channel_update(
     user_text = str(normalized.text or "").strip()
     button_label = user_text
     next_node: Optional[dict[str, Any]] = None
-    current_type = str(current.get("type") or "")
+    current_kind = resolve_node_kind(current)
     outgoing = _next_edges(edges, str(current.get("id")))
 
-    if current_type == "input":
+    if current_kind == "input":
         settings = (current.get("data") or {}).get("settings") or {}
         if not user_text:
             return
@@ -266,7 +291,7 @@ def process_channel_update(
                 next_node = _find_node(nodes, success_target_id)
             elif outgoing:
                 next_node = _find_node(nodes, str(outgoing[0].get("target")))
-    elif current_type == "button":
+    elif current_kind == "button":
         selected = next((e for e in outgoing if _edge_label(e) == button_label), None)
         if selected is None and outgoing:
             selected = outgoing[0]
@@ -277,7 +302,7 @@ def process_channel_update(
             next_node = _find_node(nodes, str(outgoing[0].get("target")))
 
     # Автоматическое выполнение service-цепочки.
-    while next_node and str(next_node.get("type")) == "action":
+    while next_node and resolve_node_kind(next_node) == "action":
         _apply_action(
             db,
             ctor_user_id=user.id,
