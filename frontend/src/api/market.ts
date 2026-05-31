@@ -3,8 +3,15 @@
  */
 import api, { ApiError } from './client';
 
+export const MARKET_ACCESS_REQUEST_SUCCESS_MESSAGE =
+  'Заявка отправлена. Обсуждение проходит во внутреннем чате BotForg, а расчёты и условия оплаты — вне платформы.';
+
+export const MARKET_ACCESS_REQUEST_ALREADY_EXISTS_MESSAGE =
+  'Заявка уже создана. Открываем чат с автором.';
+
+/** Сообщение при 403 manual_access_required на install (текст с backend) */
 export const MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE =
-  'Платные шаблоны устанавливаются после договорённости с автором вне платформы BotForg.';
+  'Доступ к платному товару нужно получить у автора через заявку и чат BotForg.';
 
 export const MARKET_SELLER_CONTACTS_PLACEHOLDER = 'Контакты автора будут добавлены позже.';
 
@@ -70,6 +77,26 @@ export function getMarketInstallErrorMessage(err: unknown): string {
     return err.message;
   }
   return 'Ошибка при установке товара';
+}
+
+export function getMarketAccessRequestSuccessMessage(alreadyExists: boolean): string {
+  return alreadyExists
+    ? MARKET_ACCESS_REQUEST_ALREADY_EXISTS_MESSAGE
+    : MARKET_ACCESS_REQUEST_SUCCESS_MESSAGE;
+}
+
+export function getMarketAccessRequestErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.message || 'Не удалось отправить заявку';
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return 'Не удалось отправить заявку';
+}
+
+export function getMarketAccessRequestChatPath(chatRoomId: number): string {
+  return `/dashboard/messages?roomId=${chatRoomId}`;
 }
 
 function getWithQuery<T>(
@@ -165,6 +192,28 @@ export interface MarketInstallResult {
   created_scenario_id?: number;
   created_scenarios_count: number;
   message: string;
+}
+
+export interface MarketAccessRequest {
+  id: number;
+  market_item_id: number;
+  requester_user_id: number;
+  author_user_id: number;
+  chat_room_id: number | null;
+  status: string;
+  message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketAccessRequestCreatePayload {
+  message?: string;
+}
+
+export interface MarketAccessRequestCreated {
+  request: MarketAccessRequest;
+  chat_room_id: number;
+  already_exists: boolean;
 }
 
 export interface MarketOrder {
@@ -401,6 +450,21 @@ export async function installMarketBot(itemId: number): Promise<MarketInstallRes
     return await api.post(`/api/market/items/${itemId}/install-bot`);
   } catch (error: any) {
     console.error('Failed to install market bot:', error);
+    throw error;
+  }
+}
+
+/**
+ * Запросить доступ к платному товару: заявка + private chat с автором.
+ */
+export async function createMarketAccessRequest(
+  itemId: number,
+  payload?: MarketAccessRequestCreatePayload
+): Promise<MarketAccessRequestCreated> {
+  try {
+    return await api.post(`/api/market/items/${itemId}/access-requests`, payload ?? {});
+  } catch (error: any) {
+    console.error('Failed to create market access request:', error);
     throw error;
   }
 }

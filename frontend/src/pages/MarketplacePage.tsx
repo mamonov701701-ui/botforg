@@ -23,15 +23,20 @@ import {
   getMarketItems,
   installMarketBot,
   installMarketScenario,
+  createMarketAccessRequest,
   isPaidMarketItem,
   getMarketItemActionLabel,
   getMarketInstallSuccessMessage,
   getMarketInstallErrorMessage,
-  MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE,
+  getMarketAccessRequestSuccessMessage,
+  getMarketAccessRequestErrorMessage,
+  getMarketAccessRequestChatPath,
   type MarketItemCreate,
 } from '../api/market';
+import { ApiError } from '../api/client';
 import { toast } from '../utils/toast';
 import { useAuthStore } from '../stores/authStore';
+import { useUiStore } from '../stores/uiStore';
 import { hasAccessToPlanRestrictedAction } from '../constants/roles';
 import { AccessLocked } from '../components/AccessLocked';
 import { Link } from 'react-router-dom';
@@ -97,6 +102,7 @@ interface Freelancer {
 export default function MarketplacePage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const { openAuth } = useUiStore();
   const [activeTab, setActiveTab] = useState<MarketTab>('templates');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -229,13 +235,31 @@ export default function MarketplacePage() {
     );
   };
 
+  const handleRequestAccess = async (sourceItem: { id: number }) => {
+    setInstallingItemId(sourceItem.id);
+    try {
+      const result = await createMarketAccessRequest(sourceItem.id);
+      toast.success(getMarketAccessRequestSuccessMessage(result.already_exists));
+      navigate(getMarketAccessRequestChatPath(result.chat_room_id));
+    } catch (error: unknown) {
+      if (error instanceof ApiError && error.status === 401) {
+        openAuth(`/market/items/${sourceItem.id}`);
+        toast.info('Войдите, чтобы запросить доступ');
+      } else {
+        toast.error(getMarketAccessRequestErrorMessage(error));
+      }
+    } finally {
+      setInstallingItemId(null);
+    }
+  };
+
   const handleInstall = async (sourceItem: any) => {
     if (!sourceItem?.id || !sourceItem?.item_type) {
       toast.error('Не удалось определить товар для установки');
       return;
     }
     if (isPaidMarketItem(sourceItem.price)) {
-      toast.info(MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE);
+      await handleRequestAccess(sourceItem);
       return;
     }
     setInstallingItemId(sourceItem.id);
@@ -436,7 +460,7 @@ export default function MarketplacePage() {
             <button
               type="button"
               aria-label={actionLabel}
-              title={isPaid ? MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE : undefined}
+              title={isPaid ? 'Обсудите доступ с автором во внутреннем чате BotForg' : undefined}
               onClick={e => {
                 e.stopPropagation();
                 handleInstall(sourceItem);
@@ -453,7 +477,7 @@ export default function MarketplacePage() {
                 cursor: isInstalling ? 'not-allowed' : 'pointer',
               }}
             >
-              {isInstalling ? 'Добавление...' : actionLabel}
+              {isInstalling ? 'Отправка...' : actionLabel}
             </button>
           </div>
         </div>

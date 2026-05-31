@@ -8,19 +8,23 @@ import {
   getMarketItem,
   installMarketBot,
   installMarketScenario,
+  createMarketAccessRequest,
   parseMarketPrice,
   isPaidMarketItem,
   getMarketInstallErrorMessage,
   getMarketItemActionLabel,
   getMarketInstallSuccessMessage,
   getMarketInstallDestination,
-  MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE,
+  getMarketAccessRequestSuccessMessage,
+  getMarketAccessRequestErrorMessage,
+  getMarketAccessRequestChatPath,
   MARKET_SELLER_CONTACTS_PLACEHOLDER,
   type MarketItemDetail,
   type MarketReview,
 } from '../api/market';
 import { ApiError } from '../api/client';
 import { toast } from '../utils/toast';
+import { useUiStore } from '../stores/uiStore';
 
 function itemTypeLabel(itemType: string): string {
   if (itemType === 'scenario') return 'Сценарий';
@@ -43,6 +47,7 @@ function formatDetailError(err: unknown): { message: string; notFound: boolean }
 
 export default function MarketItemDetailPage() {
   const navigate = useNavigate();
+  const { openAuth } = useUiStore();
   const { id } = useParams<{ id: string }>();
   const itemId = id ? parseInt(id, 10) : NaN;
 
@@ -51,6 +56,7 @@ export default function MarketItemDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [requestingAccess, setRequestingAccess] = useState(false);
 
   useEffect(() => {
     if (!id || Number.isNaN(itemId) || itemId <= 0) {
@@ -86,16 +92,31 @@ export default function MarketItemDetailPage() {
     };
   }, [id, itemId]);
 
-  const handleRequestAccess = useCallback(() => {
-    toast.info(MARKET_MANUAL_ACCESS_REQUIRED_MESSAGE);
-    toast.info(MARKET_SELLER_CONTACTS_PLACEHOLDER);
-  }, []);
+  const handleRequestAccess = useCallback(async () => {
+    if (!item) return;
+
+    setRequestingAccess(true);
+    try {
+      const result = await createMarketAccessRequest(item.id);
+      toast.success(getMarketAccessRequestSuccessMessage(result.already_exists));
+      navigate(getMarketAccessRequestChatPath(result.chat_room_id));
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) {
+        openAuth(`/market/items/${item.id}`);
+        toast.info('Войдите, чтобы запросить доступ');
+      } else {
+        toast.error(getMarketAccessRequestErrorMessage(err));
+      }
+    } finally {
+      setRequestingAccess(false);
+    }
+  }, [item, navigate, openAuth]);
 
   const handleInstall = useCallback(async () => {
     if (!item) return;
 
     if (isPaidMarketItem(item.price)) {
-      handleRequestAccess();
+      await handleRequestAccess();
       return;
     }
 
@@ -368,19 +389,29 @@ export default function MarketItemDetailPage() {
                       isPaid ? 'market-item-detail-request-access' : 'market-item-detail-install'
                     }
                     onClick={isPaid ? handleRequestAccess : handleInstall}
-                    disabled={!isPaid && installing}
+                    disabled={isPaid ? requestingAccess : installing}
                     style={{
                       padding: '12px 24px',
-                      background: !isPaid && installing ? 'var(--surface)' : 'var(--primary)',
-                      color: !isPaid && installing ? 'var(--text-muted)' : 'var(--text-on-primary)',
+                      background: (isPaid ? requestingAccess : installing)
+                        ? 'var(--surface)'
+                        : 'var(--primary)',
+                      color: (isPaid ? requestingAccess : installing)
+                        ? 'var(--text-muted)'
+                        : 'var(--text-on-primary)',
                       border: 'none',
                       borderRadius: '8px',
                       fontSize: '15px',
                       fontWeight: 600,
-                      cursor: !isPaid && installing ? 'not-allowed' : 'pointer',
+                      cursor: (isPaid ? requestingAccess : installing) ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {installing ? 'Добавление...' : actionLabel}
+                    {isPaid
+                      ? requestingAccess
+                        ? 'Отправка...'
+                        : actionLabel
+                      : installing
+                        ? 'Добавление...'
+                        : actionLabel}
                   </button>
                 </div>
               </div>

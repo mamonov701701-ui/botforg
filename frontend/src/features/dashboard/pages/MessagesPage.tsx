@@ -1,7 +1,8 @@
 /**
  * Messages Page - Chat and Friends Management
  */
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from '../../../utils/toast';
 import {
   MessageCircle,
@@ -70,6 +71,14 @@ const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '�
 
 export default function MessagesPage() {
   const { user } = useAuthStore();
+  const [searchParams] = useSearchParams();
+
+  const roomIdFromQuery = useMemo(() => {
+    const raw = searchParams.get('roomId');
+    if (!raw) return null;
+    const id = parseInt(raw, 10);
+    return Number.isNaN(id) || id <= 0 ? null : id;
+  }, [searchParams]);
 
   // Tab state
   const [activeTab, setActiveTab] = useState<TabType>('chats');
@@ -117,6 +126,13 @@ export default function MessagesPage() {
     loadFriends();
     loadFriendRequests();
   }, []);
+
+  // Deep link: /dashboard/messages?roomId=
+  useEffect(() => {
+    if (roomIdFromQuery == null || loadingChats) return;
+    setActiveTab('chats');
+    setSelectedRoomId(roomIdFromQuery);
+  }, [roomIdFromQuery, loadingChats, chatRooms]);
 
   // Load messages when room changes
   useEffect(() => {
@@ -1584,291 +1600,322 @@ export default function MessagesPage() {
                     <p style={{ fontSize: '13px', marginTop: '8px' }}>Напишите первое сообщение!</p>
                   </div>
                 ) : (
-                  messages.map(msg => (
-                    <div
-                      key={msg.id}
-                      style={{
-                        marginBottom: '12px',
-                        display: 'flex',
-                        flexDirection: msg.is_mine ? 'row-reverse' : 'row',
-                        gap: '8px',
-                      }}
-                    >
-                      {/* Avatar */}
-                      {!msg.is_mine && (
+                  messages.map(msg => {
+                    if (msg.message_type === 'system') {
+                      return (
                         <div
+                          key={msg.id}
+                          data-testid="chat-system-message"
                           style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '50%',
-                            background: 'var(--surface)',
+                            marginBottom: '12px',
                             display: 'flex',
-                            alignItems: 'center',
                             justifyContent: 'center',
-                            flexShrink: 0,
                           }}
                         >
-                          {msg.sender?.avatar ? (
-                            <img
-                              src={msg.sender.avatar}
-                              alt=""
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                borderRadius: '50%',
-                                objectFit: 'cover',
-                              }}
-                            />
-                          ) : (
-                            <Users size={16} style={{ color: 'var(--text-muted)' }} />
-                          )}
-                        </div>
-                      )}
-
-                      {/* Message Bubble */}
-                      <div style={{ maxWidth: '70%', position: 'relative' }}>
-                        {/* Reply */}
-                        {msg.reply_to && (
                           <div
                             style={{
-                              padding: '6px 10px',
+                              maxWidth: '85%',
+                              padding: '8px 14px',
                               background: 'var(--surface)',
-                              borderRadius: '8px 8px 0 0',
-                              borderLeft: '3px solid var(--primary)',
-                              fontSize: '12px',
+                              borderRadius: '12px',
+                              fontSize: '13px',
                               color: 'var(--text-muted)',
+                              textAlign: 'center',
+                              lineHeight: 1.5,
                             }}
                           >
-                            <span style={{ fontWeight: 500, color: 'var(--text)' }}>
-                              {msg.reply_to.sender_name}
-                            </span>
-                            <p
-                              style={{
-                                margin: '2px 0 0',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {msg.reply_to.content}
-                            </p>
+                            {msg.content}
                           </div>
-                        )}
+                        </div>
+                      );
+                    }
 
-                        <div
-                          style={{
-                            padding: '10px 14px',
-                            background: msg.is_mine ? 'var(--primary)' : 'var(--surface)',
-                            color: msg.is_mine ? 'var(--text-on-primary)' : 'var(--text)',
-                            borderRadius: msg.reply_to
-                              ? '0 0 16px 16px'
-                              : msg.is_mine
-                                ? '16px 4px 16px 16px'
-                                : '4px 16px 16px 16px',
-                          }}
-                        >
-                          {!msg.is_mine && (
-                            <div
-                              style={{
-                                fontSize: '12px',
-                                fontWeight: 500,
-                                marginBottom: '4px',
-                                color: 'var(--primary)',
-                              }}
-                            >
-                              {msg.sender?.name || 'Неизвестный'}
-                            </div>
-                          )}
-                          <p style={{ margin: 0, wordBreak: 'break-word' }}>
-                            {msg.is_deleted ? (
-                              <span style={{ fontStyle: 'italic', opacity: 0.7 }}>
-                                Сообщение удалено
-                              </span>
-                            ) : (
-                              msg.content
-                            )}
-                          </p>
+                    return (
+                      <div
+                        key={msg.id}
+                        style={{
+                          marginBottom: '12px',
+                          display: 'flex',
+                          flexDirection: msg.is_mine ? 'row-reverse' : 'row',
+                          gap: '8px',
+                        }}
+                      >
+                        {/* Avatar */}
+                        {!msg.is_mine && (
                           <div
                             style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              background: 'var(--surface)',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'flex-end',
-                              gap: '4px',
-                              marginTop: '4px',
-                              fontSize: '11px',
-                              opacity: 0.7,
+                              justifyContent: 'center',
+                              flexShrink: 0,
                             }}
                           >
-                            {msg.is_edited && <span>(изм.)</span>}
-                            <span>{formatTime(msg.created_at)}</span>
-                            {msg.is_mine &&
-                              (msg.is_read ? (
-                                <CheckCheck size={14} style={{ color: 'var(--primary)' }} />
-                              ) : (
-                                <Check size={14} style={{ opacity: 0.5 }} />
-                              ))}
-                          </div>
-                        </div>
-
-                        {/* Reactions */}
-                        {msg.reactions.length > 0 && (
-                          <div
-                            style={{
-                              display: 'flex',
-                              gap: '4px',
-                              marginTop: '4px',
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            {Object.entries(
-                              msg.reactions.reduce(
-                                (acc, r) => {
-                                  acc[r.emoji] = (acc[r.emoji] || 0) + 1;
-                                  return acc;
-                                },
-                                {} as Record<string, number>
-                              )
-                            ).map(([emoji, count]) => (
-                              <span
-                                key={emoji}
+                            {msg.sender?.avatar ? (
+                              <img
+                                src={msg.sender.avatar}
+                                alt=""
                                 style={{
-                                  padding: '2px 6px',
-                                  background: 'var(--surface)',
-                                  borderRadius: '10px',
-                                  fontSize: '12px',
+                                  width: '100%',
+                                  height: '100%',
+                                  borderRadius: '50%',
+                                  objectFit: 'cover',
                                 }}
-                              >
-                                {emoji} {count}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Message Actions */}
-                        {!msg.is_deleted && (
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: 0,
-                              [msg.is_mine ? 'left' : 'right']: '-80px',
-                              display: 'flex',
-                              gap: '4px',
-                              opacity: 0,
-                              transition: 'opacity 0.2s',
-                            }}
-                            className="message-actions"
-                          >
-                            <button
-                              onClick={() => setReplyTo(msg)}
-                              style={{
-                                padding: '6px',
-                                background: 'var(--surface)',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                color: 'var(--text-muted)',
-                              }}
-                              title="Ответить"
-                            >
-                              <Reply size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              data-emoji-trigger
-                              onClick={() =>
-                                setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)
-                              }
-                              style={{
-                                padding: '6px',
-                                background: 'var(--surface)',
-                                border: 'none',
-                                borderRadius: '6px',
-                                cursor: 'pointer',
-                                color: 'var(--text-muted)',
-                              }}
-                              title="Реакция"
-                            >
-                              <Smile size={14} />
-                            </button>
-                            {msg.is_mine && (
-                              <>
-                                <button
-                                  onClick={() => {
-                                    setEditingMessage(msg);
-                                    setMessageText(msg.content || '');
-                                  }}
-                                  style={{
-                                    padding: '6px',
-                                    background: 'var(--surface)',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    color: 'var(--text-muted)',
-                                  }}
-                                  title="Редактировать"
-                                >
-                                  <Edit3 size={14} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteMessage(msg.id)}
-                                  style={{
-                                    padding: '6px',
-                                    background: 'var(--surface)',
-                                    border: 'none',
-                                    borderRadius: '6px',
-                                    cursor: 'pointer',
-                                    color: '#ef4444',
-                                  }}
-                                  title="Удалить"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </>
+                              />
+                            ) : (
+                              <Users size={16} style={{ color: 'var(--text-muted)' }} />
                             )}
                           </div>
                         )}
 
-                        {/* Emoji Picker — открывается под сообщением, чтобы не обрезаться и не уходить вверх */}
-                        {showEmojiPicker === msg.id && (
-                          <div
-                            data-emoji-picker
-                            style={{
-                              position: 'absolute',
-                              top: '100%',
-                              marginTop: '6px',
-                              [msg.is_mine ? 'right' : 'left']: 0,
-                              padding: '8px',
-                              background: 'var(--card)',
-                              border: '1px solid var(--border)',
-                              borderRadius: '12px',
-                              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                              display: 'flex',
-                              gap: '4px',
-                              flexWrap: 'wrap',
-                              zIndex: 1000,
-                            }}
-                          >
-                            {EMOJI_LIST.map(emoji => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                onClick={() => handleAddReaction(msg.id, emoji)}
+                        {/* Message Bubble */}
+                        <div style={{ maxWidth: '70%', position: 'relative' }}>
+                          {/* Reply */}
+                          {msg.reply_to && (
+                            <div
+                              style={{
+                                padding: '6px 10px',
+                                background: 'var(--surface)',
+                                borderRadius: '8px 8px 0 0',
+                                borderLeft: '3px solid var(--primary)',
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                              }}
+                            >
+                              <span style={{ fontWeight: 500, color: 'var(--text)' }}>
+                                {msg.reply_to.sender_name}
+                              </span>
+                              <p
                                 style={{
-                                  padding: '6px',
-                                  background: 'transparent',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontSize: '18px',
+                                  margin: '2px 0 0',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
                                 }}
                               >
-                                {emoji}
-                              </button>
-                            ))}
+                                {msg.reply_to.content}
+                              </p>
+                            </div>
+                          )}
+
+                          <div
+                            style={{
+                              padding: '10px 14px',
+                              background: msg.is_mine ? 'var(--primary)' : 'var(--surface)',
+                              color: msg.is_mine ? 'var(--text-on-primary)' : 'var(--text)',
+                              borderRadius: msg.reply_to
+                                ? '0 0 16px 16px'
+                                : msg.is_mine
+                                  ? '16px 4px 16px 16px'
+                                  : '4px 16px 16px 16px',
+                            }}
+                          >
+                            {!msg.is_mine && (
+                              <div
+                                style={{
+                                  fontSize: '12px',
+                                  fontWeight: 500,
+                                  marginBottom: '4px',
+                                  color: 'var(--primary)',
+                                }}
+                              >
+                                {msg.sender?.name || 'Неизвестный'}
+                              </div>
+                            )}
+                            <p style={{ margin: 0, wordBreak: 'break-word' }}>
+                              {msg.is_deleted ? (
+                                <span style={{ fontStyle: 'italic', opacity: 0.7 }}>
+                                  Сообщение удалено
+                                </span>
+                              ) : (
+                                msg.content
+                              )}
+                            </p>
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'flex-end',
+                                gap: '4px',
+                                marginTop: '4px',
+                                fontSize: '11px',
+                                opacity: 0.7,
+                              }}
+                            >
+                              {msg.is_edited && <span>(изм.)</span>}
+                              <span>{formatTime(msg.created_at)}</span>
+                              {msg.is_mine &&
+                                (msg.is_read ? (
+                                  <CheckCheck size={14} style={{ color: 'var(--primary)' }} />
+                                ) : (
+                                  <Check size={14} style={{ opacity: 0.5 }} />
+                                ))}
+                            </div>
                           </div>
-                        )}
+
+                          {/* Reactions */}
+                          {msg.reactions.length > 0 && (
+                            <div
+                              style={{
+                                display: 'flex',
+                                gap: '4px',
+                                marginTop: '4px',
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              {Object.entries(
+                                msg.reactions.reduce(
+                                  (acc, r) => {
+                                    acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                                    return acc;
+                                  },
+                                  {} as Record<string, number>
+                                )
+                              ).map(([emoji, count]) => (
+                                <span
+                                  key={emoji}
+                                  style={{
+                                    padding: '2px 6px',
+                                    background: 'var(--surface)',
+                                    borderRadius: '10px',
+                                    fontSize: '12px',
+                                  }}
+                                >
+                                  {emoji} {count}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Message Actions */}
+                          {!msg.is_deleted && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: 0,
+                                [msg.is_mine ? 'left' : 'right']: '-80px',
+                                display: 'flex',
+                                gap: '4px',
+                                opacity: 0,
+                                transition: 'opacity 0.2s',
+                              }}
+                              className="message-actions"
+                            >
+                              <button
+                                onClick={() => setReplyTo(msg)}
+                                style={{
+                                  padding: '6px',
+                                  background: 'var(--surface)',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-muted)',
+                                }}
+                                title="Ответить"
+                              >
+                                <Reply size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                data-emoji-trigger
+                                onClick={() =>
+                                  setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)
+                                }
+                                style={{
+                                  padding: '6px',
+                                  background: 'var(--surface)',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-muted)',
+                                }}
+                                title="Реакция"
+                              >
+                                <Smile size={14} />
+                              </button>
+                              {msg.is_mine && (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setEditingMessage(msg);
+                                      setMessageText(msg.content || '');
+                                    }}
+                                    style={{
+                                      padding: '6px',
+                                      background: 'var(--surface)',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      color: 'var(--text-muted)',
+                                    }}
+                                    title="Редактировать"
+                                  >
+                                    <Edit3 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteMessage(msg.id)}
+                                    style={{
+                                      padding: '6px',
+                                      background: 'var(--surface)',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      cursor: 'pointer',
+                                      color: '#ef4444',
+                                    }}
+                                    title="Удалить"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Emoji Picker — открывается под сообщением, чтобы не обрезаться и не уходить вверх */}
+                          {showEmojiPicker === msg.id && (
+                            <div
+                              data-emoji-picker
+                              style={{
+                                position: 'absolute',
+                                top: '100%',
+                                marginTop: '6px',
+                                [msg.is_mine ? 'right' : 'left']: 0,
+                                padding: '8px',
+                                background: 'var(--card)',
+                                border: '1px solid var(--border)',
+                                borderRadius: '12px',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                display: 'flex',
+                                gap: '4px',
+                                flexWrap: 'wrap',
+                                zIndex: 1000,
+                              }}
+                            >
+                              {EMOJI_LIST.map(emoji => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => handleAddReaction(msg.id, emoji)}
+                                  style={{
+                                    padding: '6px',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '18px',
+                                  }}
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
                 <div ref={messagesEndRef} />
               </div>
