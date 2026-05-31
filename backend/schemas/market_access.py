@@ -35,6 +35,11 @@ class MarketAccessRequestCreatedOut(BaseModel):
     already_exists: bool = False
 
 
+class MarketAccessGrantCreate(BaseModel):
+    """Выдача доступа по заявке (опциональная заметка автора)."""
+    note: Optional[str] = Field(None, description="Заметка автора")
+
+
 class MarketItemAccessGrantOut(BaseModel):
     """Ручная выдача доступа к market item."""
     id: int
@@ -47,3 +52,10 @@ class MarketItemAccessGrantOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class MarketAccessGrantedOut(BaseModel):
+    """Ответ на выдачу доступа по заявке."""
+    request: MarketAccessRequestOut
+    grant: MarketItemAccessGrantOut
+    already_exists: bool = False

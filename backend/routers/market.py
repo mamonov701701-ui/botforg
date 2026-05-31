@@ -19,7 +19,11 @@ from backend.models.market import (
     MarketItem, MarketOrder, OrderProposal, FreelancerProfile, MarketReview,
     MarketItemType, MarketOrderStatus, ModerationStatus
 )
-from backend.models.market_access import MarketAccessRequest, MarketAccessRequestStatus
+from backend.models.market_access import (
+    MarketAccessRequest,
+    MarketAccessRequestStatus,
+    MarketItemAccessGrant,
+)
 from backend.models.bot import Bot
 from backend.models.scenario import Scenario
 from backend.utils.plan_limits import check_max_bots
@@ -37,6 +41,9 @@ from backend.schemas.market_access import (
     MarketAccessRequestCreate,
     MarketAccessRequestOut,
     MarketAccessRequestCreatedOut,
+    MarketAccessGrantCreate,
+    MarketItemAccessGrantOut,
+    MarketAccessGrantedOut,
 )
 from backend.services.chat_room_service import (
     get_or_create_private_room,
@@ -53,16 +60,32 @@ MARKET_MANUAL_ACCESS_REQUIRED_DETAIL = {
 }
 
 
-def _ensure_free_market_install(item: MarketItem) -> None:
-    """Блокирует установку платных товаров — доступ согласуется с автором вне платформы."""
+def _ensure_market_install_allowed(db: Session, item: MarketItem, user_id: int) -> None:
+    """Free items — всегда; paid — только при наличии MarketItemAccessGrant."""
     price = item.price if item.price is not None else Decimal("0")
-    if Decimal(price) > 0:
-        raise HTTPException(status_code=403, detail=MARKET_MANUAL_ACCESS_REQUIRED_DETAIL)
+    if Decimal(price) <= 0:
+        return
+    grant = (
+        db.query(MarketItemAccessGrant)
+        .filter(
+            MarketItemAccessGrant.market_item_id == item.id,
+            MarketItemAccessGrant.user_id == user_id,
+        )
+        .first()
+    )
+    if grant:
+        return
+    raise HTTPException(status_code=403, detail=MARKET_MANUAL_ACCESS_REQUIRED_DETAIL)
 
 
 ACTIVE_MARKET_ACCESS_STATUSES = (
     MarketAccessRequestStatus.NEW,
     MarketAccessRequestStatus.IN_DISCUSSION,
+)
+
+NO_GRANT_ACCESS_REQUEST_STATUSES = (
+    MarketAccessRequestStatus.REJECTED,
+    MarketAccessRequestStatus.CLOSED,
 )
 
 
@@ -87,6 +110,29 @@ def _market_access_system_message(item_title: str) -> str:
         f'Пользователь запросил доступ к «{item_title}». '
         "Обсуждение проходит во внутреннем чате BotForg, "
         "расчёты и договорённости по оплате — вне платформы."
+    )
+
+
+def _market_access_grant_system_message(item_title: str) -> str:
+    return (
+        f'Автор выдал доступ к «{item_title}». '
+        "Теперь вы можете добавить его в свои боты или сценарии."
+    )
+
+
+def _market_access_reject_system_message(item_title: str) -> str:
+    return f'Автор отклонил заявку на доступ к «{item_title}».'
+
+
+def _market_item_access_grant_to_out(grant: MarketItemAccessGrant) -> MarketItemAccessGrantOut:
+    return MarketItemAccessGrantOut(
+        id=grant.id,
+        market_item_id=grant.market_item_id,
+        user_id=grant.user_id,
+        granted_by_user_id=grant.granted_by_user_id,
+        request_id=grant.request_id,
+        note=grant.note,
+        created_at=grant.created_at,
     )
 
 
@@ -518,7 +564,7 @@ async def install_market_scenario(
         raise HTTPException(status_code=404, detail="Товар-сценарий не найден")
     if not item.is_published:
         raise HTTPException(status_code=403, detail="Товар не опубликован")
-    _ensure_free_market_install(item)
+    _ensure_market_install_allowed(db, item, current_user.id)
     if not item.source_scenario_id:
         raise HTTPException(status_code=400, detail="У товара не указан source_scenario_id")
 
@@ -574,7 +620,7 @@ async def install_market_bot(
         raise HTTPException(status_code=404, detail="Товар-шаблон не найден")
     if not item.is_published:
         raise HTTPException(status_code=403, detail="Товар не опубликован")
-    _ensure_free_market_install(item)
+    _ensure_market_install_allowed(db, item, current_user.id)
     if not item.source_bot_id:
         raise HTTPException(status_code=400, detail="У товара не указан source_bot_id")
 
@@ -717,6 +763,139 @@ async def create_market_access_request(
         chat_room_id=room.id,
         already_exists=False,
     )
+
+
+@router.post(
+    "/access-requests/{request_id}/grant",
+    response_model=MarketAccessGrantedOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def grant_market_access_request(
+    request_id: int,
+    body: MarketAccessGrantCreate,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Выдать доступ к платному товару по заявке (только автор)."""
+    access_request = (
+        db.query(MarketAccessRequest)
+        .filter(MarketAccessRequest.id == request_id)
+        .first()
+    )
+    if not access_request:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    if access_request.author_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Только автор может выдать доступ")
+
+    req_status = access_request.status
+    if req_status in NO_GRANT_ACCESS_REQUEST_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail="Нельзя выдать доступ по отклонённой или закрытой заявке",
+        )
+
+    item = db.query(MarketItem).filter(MarketItem.id == access_request.market_item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    existing_grant = (
+        db.query(MarketItemAccessGrant)
+        .filter(
+            MarketItemAccessGrant.market_item_id == access_request.market_item_id,
+            MarketItemAccessGrant.user_id == access_request.requester_user_id,
+        )
+        .first()
+    )
+    if existing_grant:
+        if access_request.status != MarketAccessRequestStatus.ACCESS_GRANTED:
+            access_request.status = MarketAccessRequestStatus.ACCESS_GRANTED
+            access_request.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(access_request)
+        response.status_code = status.HTTP_200_OK
+        return MarketAccessGrantedOut(
+            request=_market_access_request_to_out(access_request),
+            grant=_market_item_access_grant_to_out(existing_grant),
+            already_exists=True,
+        )
+
+    grant = MarketItemAccessGrant(
+        market_item_id=access_request.market_item_id,
+        user_id=access_request.requester_user_id,
+        granted_by_user_id=current_user.id,
+        request_id=access_request.id,
+        note=body.note,
+    )
+    db.add(grant)
+
+    access_request.status = MarketAccessRequestStatus.ACCESS_GRANTED
+    access_request.updated_at = datetime.now(timezone.utc)
+
+    if access_request.chat_room_id:
+        create_system_chat_message(
+            db, access_request.chat_room_id, _market_access_grant_system_message(item.title)
+        )
+
+    db.commit()
+    db.refresh(access_request)
+    db.refresh(grant)
+
+    return MarketAccessGrantedOut(
+        request=_market_access_request_to_out(access_request),
+        grant=_market_item_access_grant_to_out(grant),
+        already_exists=False,
+    )
+
+
+@router.post(
+    "/access-requests/{request_id}/reject",
+    response_model=MarketAccessRequestOut,
+)
+async def reject_market_access_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Отклонить заявку на доступ (только автор)."""
+    access_request = (
+        db.query(MarketAccessRequest)
+        .filter(MarketAccessRequest.id == request_id)
+        .first()
+    )
+    if not access_request:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    if access_request.author_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Только автор может отклонить заявку")
+
+    req_status = access_request.status
+    if req_status == MarketAccessRequestStatus.ACCESS_GRANTED:
+        raise HTTPException(
+            status_code=409,
+            detail="Нельзя отклонить заявку после выдачи доступа",
+        )
+    if req_status == MarketAccessRequestStatus.REJECTED:
+        return _market_access_request_to_out(access_request)
+
+    if req_status == MarketAccessRequestStatus.CLOSED:
+        raise HTTPException(status_code=409, detail="Заявка уже закрыта")
+
+    item = db.query(MarketItem).filter(MarketItem.id == access_request.market_item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    access_request.status = MarketAccessRequestStatus.REJECTED
+    access_request.updated_at = datetime.now(timezone.utc)
+
+    if access_request.chat_room_id:
+        create_system_chat_message(
+            db, access_request.chat_room_id, _market_access_reject_system_message(item.title)
+        )
+
+    db.commit()
+    db.refresh(access_request)
+
+    return _market_access_request_to_out(access_request)
 
 
 # ================== MarketOrder Endpoints ==================
