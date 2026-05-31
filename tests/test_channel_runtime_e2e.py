@@ -158,6 +158,109 @@ def _published_content_editor_v2(action_kind: str) -> dict[str, Any]:
     return {"nodes": nodes, "edges": edges}
 
 
+def _published_content_condition_last_input() -> dict[str, Any]:
+    """EditorV2: start → input → condition(last_input == "yes") → message_yes / message_no."""
+    n_start, n_in, n_cond, n_yes, n_no = "n_start", "n_input", "n_cond", "n_yes", "n_no"
+    nodes = [
+        {"id": n_start, "type": "default", "data": {"blockId": "start", "settings": {}}},
+        {
+            "id": n_in,
+            "type": "default",
+            "data": {
+                "blockId": "input",
+                "settings": {
+                    "variable_key": "user_choice",
+                    "variable_label": "Choice",
+                    "question_text": "?",
+                    "validation": {"type": "string"},
+                },
+            },
+        },
+        {
+            "id": n_cond,
+            "type": "default",
+            "data": {
+                "blockId": "condition",
+                "settings": {
+                    "conditionSourceType": "last_input",
+                    "operator": "equals",
+                    "value": "yes",
+                },
+            },
+        },
+        {"id": n_yes, "type": "default", "data": {"blockId": "message", "settings": {"text": "YES"}}},
+        {"id": n_no, "type": "default", "data": {"blockId": "message", "settings": {"text": "NO"}}},
+    ]
+    edges = [
+        {"id": "e0", "source": n_start, "target": n_in},
+        {"id": "e1", "source": n_in, "target": n_cond, "sourceHandle": "success"},
+        {
+            "id": "e2",
+            "source": n_cond,
+            "target": n_yes,
+            "sourceHandle": "condition_yes",
+            "data": {"conditionBranch": "true"},
+        },
+        {
+            "id": "e3",
+            "source": n_cond,
+            "target": n_no,
+            "sourceHandle": "condition_no",
+            "data": {"conditionBranch": "false"},
+        },
+    ]
+    return {"nodes": nodes, "edges": edges}
+
+
+def _published_content_tag_condition() -> dict[str, Any]:
+    """EditorV2: start → action(add tag) → condition(user_tag) → message_yes / message_no."""
+    n_start, n_act, n_cond, n_yes, n_no = "n_start", "n_action", "n_cond", "n_yes", "n_no"
+    nodes = [
+        {"id": n_start, "type": "default", "data": {"blockId": "start", "settings": {}}},
+        {
+            "id": n_act,
+            "type": "default",
+            "data": {
+                "blockId": "action",
+                "settings": {"mode": "tag", "tagAction": "add", "tag": "cond_rt_tag"},
+            },
+        },
+        {
+            "id": n_cond,
+            "type": "default",
+            "data": {
+                "blockId": "condition",
+                "settings": {
+                    "conditionSourceType": "user_tag",
+                    "operator": "equals",
+                    "variable": "cond_rt_tag",
+                },
+            },
+        },
+        {"id": n_yes, "type": "default", "data": {"blockId": "message", "settings": {"text": "YES"}}},
+        {"id": n_no, "type": "default", "data": {"blockId": "message", "settings": {"text": "NO"}}},
+    ]
+    edges = [
+        {"id": "e0", "source": n_start, "target": n_act},
+        {"id": "e1", "source": n_act, "target": n_cond},
+        {
+            "id": "e2",
+            "source": n_cond,
+            "target": n_yes,
+            "sourceHandle": "condition_yes",
+            "data": {"conditionBranch": "true"},
+        },
+        {
+            "id": "e3",
+            "source": n_cond,
+            "target": n_no,
+            "sourceHandle": "condition_no",
+            "data": {"conditionBranch": "false"},
+        },
+    ]
+    return {"nodes": nodes, "edges": edges}
+
+
 def _create_bot_with_channel(
     *,
     channel: str,
@@ -462,3 +565,78 @@ def test_max_channel_runtime_editor_v2_start_input_action_message(action_kind: s
         _assert_crm(db, external_user_id=chat_id, channel="max", action_kind=action_kind)
     finally:
         db.close()
+
+
+def _sent_texts(mock_send: Any) -> list[str]:
+    return [str(c.kwargs.get("text", "")) for c in mock_send.call_args_list]
+
+
+@pytest.mark.skipif(
+    not _has_bot_channel_connections(),
+    reason="bot_channel_connections missing (alembic upgrade head)",
+)
+@pytest.mark.parametrize(
+    "answer,expected,unexpected",
+    [("yes", "YES", "NO"), ("no", "NO", "YES")],
+)
+def test_max_condition_last_input_routes_branch(
+    answer: str, expected: str, unexpected: str
+) -> None:
+    """start → input → condition(last_input) → message_yes/message_no."""
+    oid = _owner_id()
+    if not oid:
+        pytest.skip("no users row")
+    secret = f"sec-{uuid.uuid4().hex[:8]}"
+    bot_id = _create_bot_with_channel(
+        channel="max",
+        creds={"token": "fake", "webhook_secret": secret},
+    )
+    if not bot_id:
+        pytest.skip("bot not created")
+    chat_id = f"max_cond_{uuid.uuid4().hex[:12]}"
+    _attach_scenario(bot_id, oid, _published_content_condition_last_input())
+
+    with patch.object(
+        MaxAdapter,
+        "send_text",
+        return_value=MessageResult(success=True),
+    ) as mock_send:
+        assert _post_max(bot_id, secret, chat_id, "hi").status_code == 200
+        assert _post_max(bot_id, secret, chat_id, "go").status_code == 200
+        assert _post_max(bot_id, secret, chat_id, answer).status_code == 200
+
+    texts = _sent_texts(mock_send)
+    assert expected in texts, texts
+    assert unexpected not in texts, texts
+
+
+@pytest.mark.skipif(
+    not _has_bot_channel_connections(),
+    reason="bot_channel_connections missing (alembic upgrade head)",
+)
+def test_max_condition_user_tag_routes_yes_after_action() -> None:
+    """start → action(add tag) → condition(user_tag) → message_yes/message_no."""
+    oid = _owner_id()
+    if not oid:
+        pytest.skip("no users row")
+    secret = f"sec-{uuid.uuid4().hex[:8]}"
+    bot_id = _create_bot_with_channel(
+        channel="max",
+        creds={"token": "fake", "webhook_secret": secret},
+    )
+    if not bot_id:
+        pytest.skip("bot not created")
+    chat_id = f"max_tagcond_{uuid.uuid4().hex[:12]}"
+    _attach_scenario(bot_id, oid, _published_content_tag_condition())
+
+    with patch.object(
+        MaxAdapter,
+        "send_text",
+        return_value=MessageResult(success=True),
+    ) as mock_send:
+        assert _post_max(bot_id, secret, chat_id, "hi").status_code == 200
+        assert _post_max(bot_id, secret, chat_id, "go").status_code == 200
+
+    texts = _sent_texts(mock_send)
+    assert "YES" in texts, texts
+    assert "NO" not in texts, texts

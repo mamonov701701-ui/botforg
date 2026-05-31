@@ -208,6 +208,156 @@ def _apply_action(
                 mark_crm_overview_dirty(user.bot_id, user.environment)
 
 
+def _condition_is_empty(value: Any) -> bool:
+    return value is None or str(value).strip() == ""
+
+
+def _condition_values_equal(actual: Any, expected: Any) -> bool:
+    """Сравнение значений условия: строковое с trim + числовое приведение (как в simulator)."""
+    sa = "" if actual is None else str(actual).strip()
+    sb = "" if expected is None else str(expected).strip()
+    if sa == sb:
+        return True
+    try:
+        return float(sa) == float(sb)
+    except (TypeError, ValueError):
+        return False
+
+
+def _compare_condition(operator: str, actual: Any, expected: Any) -> bool:
+    """MVP-операторы condition. greaterThan/lessThan — только числовые, иначе False."""
+    op = str(operator or "equals")
+    if op == "equals":
+        return _condition_values_equal(actual, expected)
+    if op == "notEquals":
+        return not _condition_values_equal(actual, expected)
+    if op == "contains":
+        return str(expected or "").strip() in str(actual or "").strip()
+    if op == "isEmpty":
+        return _condition_is_empty(actual)
+    if op == "isNotEmpty":
+        return not _condition_is_empty(actual)
+    if op in ("greaterThan", "lessThan"):
+        try:
+            a = float(str(actual).strip())
+            b = float(str(expected).strip())
+        except (TypeError, ValueError):
+            return False
+        return a > b if op == "greaterThan" else a < b
+    return bool(actual)
+
+
+def _pick_condition_branch_targets(
+    outgoing: list[dict[str, Any]],
+) -> tuple[Optional[str], Optional[str]]:
+    """Цели веток yes/no: sourceHandle → data.conditionBranch → fallback по id."""
+    yes_t: Optional[str] = None
+    no_t: Optional[str] = None
+    for e in outgoing:
+        handle = str(e.get("sourceHandle") or "")
+        if handle == "condition_yes":
+            yes_t = e.get("target")
+        elif handle == "condition_no":
+            no_t = e.get("target")
+    if yes_t is not None or no_t is not None:
+        return yes_t, no_t
+
+    for e in outgoing:
+        branch = (e.get("data") or {}).get("conditionBranch")
+        if branch == "true":
+            yes_t = e.get("target")
+        elif branch == "false":
+            no_t = e.get("target")
+    if yes_t is not None or no_t is not None:
+        return yes_t, no_t
+
+    ordered = sorted(outgoing, key=lambda e: str(e.get("id")))
+    if ordered:
+        yes_t = ordered[0].get("target")
+    if len(ordered) > 1:
+        no_t = ordered[1].get("target")
+    return yes_t, no_t
+
+
+def _get_user_variable_text(db: Session, ctor_user_id: int, key: str) -> Optional[str]:
+    key = str(key or "").strip()
+    if not key:
+        return None
+    vs = VariableService(db)
+    res = vs.get_user_variable_by_key(ctor_user_id, key)
+    if not res.ok or res.data is None:
+        return None
+    v = res.data
+    if v.value_text is not None:
+        return v.value_text
+    if v.value_number is not None:
+        return str(v.value_number)
+    if v.value_boolean is not None:
+        return "true" if v.value_boolean else "false"
+    return None
+
+
+def _evaluate_tag_condition(db: Session, *, ctor_user_id: int, settings: dict[str, Any]) -> bool:
+    op = str(settings.get("operator") or "equals")
+    selected = str(settings.get("variable") or "").strip()
+    ts = TagService(db)
+    res = ts.get_user_tags(ctor_user_id)
+    keys = [t.key for t in res.data] if res.ok and res.data else []
+    if op == "isEmpty":
+        return len(keys) == 0
+    if op == "isNotEmpty":
+        return len(keys) > 0
+    if op == "notEquals":
+        return selected not in keys if selected else True
+    # equals и прочее: наличие тега
+    return selected in keys if selected else False
+
+
+def _resolve_condition_actual(
+    db: Session, *, ctor_user_id: int, settings: dict[str, Any], source_type: str
+) -> Any:
+    if source_type == "user_status":
+        bu = VariableService(db)._repo.get_bot_user(ctor_user_id)
+        return bu.status if bu else None
+    if source_type == "last_input":
+        return _get_user_variable_text(db, ctor_user_id, "last_input")
+    # saved_answer / profile_field / прочее: ключ → fallback last_input (как в simulator)
+    key = str(settings.get("conditionKey") or settings.get("variable") or "").strip()
+    if not key:
+        return _get_user_variable_text(db, ctor_user_id, "last_input")
+    val = _get_user_variable_text(db, ctor_user_id, key)
+    if val is None:
+        return _get_user_variable_text(db, ctor_user_id, "last_input")
+    return val
+
+
+def _resolve_condition_target(
+    db: Session,
+    ctor_user_id: int,
+    node: dict[str, Any],
+    edges: list[dict[str, Any]],
+) -> Optional[str]:
+    """Вычисляет условие и возвращает target нужной ветки (yes/no)."""
+    settings = (node.get("data") or {}).get("settings") or {}
+    if not isinstance(settings, dict):
+        settings = {}
+    outgoing = _next_edges(edges, str(node.get("id")))
+    if not outgoing:
+        return None
+    yes_t, no_t = _pick_condition_branch_targets(outgoing)
+    source_type = str(settings.get("conditionSourceType") or "").strip()
+    if source_type == "user_tag":
+        cond_ok = _evaluate_tag_condition(db, ctor_user_id=ctor_user_id, settings=settings)
+    else:
+        actual = _resolve_condition_actual(
+            db, ctor_user_id=ctor_user_id, settings=settings, source_type=source_type
+        )
+        cond_ok = _compare_condition(settings.get("operator"), actual, settings.get("value"))
+    if cond_ok:
+        return yes_t if yes_t is not None else no_t
+    return no_t if no_t is not None else yes_t
+
+
 def process_channel_update(
     db: Session,
     *,
@@ -301,16 +451,27 @@ def process_channel_update(
         if outgoing:
             next_node = _find_node(nodes, str(outgoing[0].get("target")))
 
-    # Автоматическое выполнение service-цепочки.
-    while next_node and resolve_node_kind(next_node) == "action":
-        _apply_action(
-            db,
-            ctor_user_id=user.id,
-            settings=((next_node.get("data") or {}).get("settings") or {}),
-            last_input_text=user_text,
-        )
-        out2 = _next_edges(edges, str(next_node.get("id")))
-        next_node = _find_node(nodes, str(out2[0].get("target"))) if out2 else None
+    # Автоматическое выполнение транзитных блоков (action, condition) без ввода пользователя.
+    # guard ограничивает число шагов на случай циклов в графе.
+    guard = 0
+    max_steps = len(nodes) + 1
+    while next_node and guard < max_steps:
+        guard += 1
+        transit_kind = resolve_node_kind(next_node)
+        if transit_kind == "action":
+            _apply_action(
+                db,
+                ctor_user_id=user.id,
+                settings=((next_node.get("data") or {}).get("settings") or {}),
+                last_input_text=user_text,
+            )
+            out2 = _next_edges(edges, str(next_node.get("id")))
+            next_node = _find_node(nodes, str(out2[0].get("target"))) if out2 else None
+        elif transit_kind == "condition":
+            target_id = _resolve_condition_target(db, user.id, next_node, edges)
+            next_node = _find_node(nodes, str(target_id)) if target_id else None
+        else:
+            break
 
     if next_node is None:
         vs.set_user_variable(user.id, STATE_NODE_KEY, "", commit=True)
