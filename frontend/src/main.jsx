@@ -9,6 +9,7 @@ import QuickEditorEntry from './features/editorV2/QuickEditorEntry';
 import Home from './pages/Home';
 import Pricing from './pages/Pricing';
 import MarketplacePage from './pages/MarketplacePage';
+import MarketItemDetailPage from './pages/MarketItemDetailPage';
 import DeveloperTemplatesPage from './pages/DeveloperTemplatesPage';
 import FeaturesPage from './pages/features/FeaturesPage';
 import NotFound from './pages/NotFound';
@@ -77,6 +78,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="pricing" element={<Pricing />} />
           <Route path="login" element={<Login />} />
           <Route path="market" element={<MarketplacePage />} />
+          <Route path="market/items/:id" element={<MarketItemDetailPage />} />
           <Route
             path="developer/templates"
             element={

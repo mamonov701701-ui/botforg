@@ -103,6 +103,31 @@ test.describe('S1: Public pages', () => {
     await page.screenshot({ path: path.join(screensDir(), 'market.png'), fullPage: true });
   });
 
+  test('Market item detail from list or fallback', async ({ page }) => {
+    await setupPageCollectors(page);
+    await page.goto('/market');
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    await page.waitForTimeout(2000);
+
+    const card = page.locator('[data-testid="market-item-card"]').first();
+    if ((await card.count()) > 0) {
+      await card.click();
+      await expect(page).toHaveURL(/\/market\/items\/\d+/);
+      await expect(page.locator('[data-testid="market-item-detail"]')).toBeVisible();
+      const detailLoaded = page.locator('[data-testid="market-item-detail-title"]');
+      const detailError = page.locator('[data-testid="market-item-detail-error"]');
+      await expect(detailLoaded.or(detailError)).toBeVisible({ timeout: 15000 });
+    } else {
+      await page.goto('/market/items/1');
+      await expect(page.locator('[data-testid="market-item-detail"]')).toBeVisible();
+      await expect(
+        page
+          .locator('[data-testid="market-item-detail-error"]')
+          .or(page.locator('[data-testid="market-item-detail-loading"]'))
+      ).toBeVisible({ timeout: 15000 });
+    }
+  });
+
   test('Features page', async ({ page }) => {
     await setupPageCollectors(page);
     await page.goto('/features');

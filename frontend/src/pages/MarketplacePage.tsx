@@ -2,6 +2,7 @@
  * Marketplace Page - Маркетплейс для шаблонов, сценариев, заказов и услуг
  */
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Star,
@@ -89,6 +90,7 @@ interface Freelancer {
 }
 
 export default function MarketplacePage() {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<MarketTab>('templates');
   const [searchQuery, setSearchQuery] = useState('');
@@ -246,6 +248,10 @@ export default function MarketplacePage() {
   const renderProductCard = (item: MarketItem, sourceItem: any) => (
     <div
       key={item.id}
+      role="link"
+      tabIndex={0}
+      data-testid="market-item-card"
+      data-item-id={sourceItem?.id ?? item.id}
       style={{
         background: 'var(--card)',
         border: '1px solid var(--border)',
@@ -253,6 +259,17 @@ export default function MarketplacePage() {
         overflow: 'hidden',
         cursor: 'pointer',
         transition: 'all 0.2s',
+      }}
+      onClick={() => {
+        const targetId = sourceItem?.id ?? item.id;
+        if (targetId) navigate(`/market/items/${targetId}`);
+      }}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const targetId = sourceItem?.id ?? item.id;
+          if (targetId) navigate(`/market/items/${targetId}`);
+        }
       }}
       onMouseEnter={e => {
         e.currentTarget.style.transform = 'translateY(-4px)';
@@ -403,6 +420,7 @@ export default function MarketplacePage() {
             )}
           </div>
           <button
+            type="button"
             onClick={e => {
               e.stopPropagation();
               handleInstall(sourceItem);

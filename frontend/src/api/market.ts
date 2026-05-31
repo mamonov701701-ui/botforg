@@ -66,6 +66,10 @@ export interface MarketItemCreate {
   is_published?: boolean;
 }
 
+export interface MarketItemDetail extends MarketItem {
+  reviews?: MarketReview[];
+}
+
 export interface MarketItemListResponse {
   total: number;
   items: MarketItem[];
@@ -260,7 +264,7 @@ export async function getMarketItems(params?: {
 /**
  * Получить детальную информацию о товаре
  */
-export async function getMarketItem(itemId: number): Promise<MarketItem> {
+export async function getMarketItem(itemId: number): Promise<MarketItemDetail> {
   try {
     return await api.get(`/api/market/items/${itemId}`);
   } catch (error: any) {
