@@ -44,6 +44,11 @@ from backend.schemas.market_access import (
     MarketAccessGrantCreate,
     MarketItemAccessGrantOut,
     MarketAccessGrantedOut,
+    MarketAccessUserBriefOut,
+    MarketAccessRequestListItemMarketOut,
+    MarketAccessRequestListItemOut,
+    MarketAccessRequestListResponse,
+    MarketItemAccessStatusOut,
 )
 from backend.services.chat_room_service import (
     get_or_create_private_room,
@@ -133,6 +138,51 @@ def _market_item_access_grant_to_out(grant: MarketItemAccessGrant) -> MarketItem
         request_id=grant.request_id,
         note=grant.note,
         created_at=grant.created_at,
+    )
+
+
+def _market_access_user_brief(user: User) -> MarketAccessUserBriefOut:
+    return MarketAccessUserBriefOut(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        avatar=getattr(user, "avatar", None),
+    )
+
+
+def _market_access_request_list_item(
+    access_request: MarketAccessRequest,
+    item: MarketItem,
+    requester: User,
+    author: User,
+) -> MarketAccessRequestListItemOut:
+    item_type = item.item_type
+    item_type_val = item_type.value if hasattr(item_type, "value") else str(item_type)
+    return MarketAccessRequestListItemOut(
+        request=_market_access_request_to_out(access_request),
+        market_item=MarketAccessRequestListItemMarketOut(
+            id=item.id,
+            title=item.title,
+            item_type=item_type_val,
+            price=item.price if item.price is not None else Decimal("0"),
+        ),
+        requester=_market_access_user_brief(requester),
+        author=_market_access_user_brief(author),
+        chat_room_id=access_request.chat_room_id,
+    )
+
+
+def _latest_market_access_request(
+    db: Session, item_id: int, user_id: int
+) -> Optional[MarketAccessRequest]:
+    return (
+        db.query(MarketAccessRequest)
+        .filter(
+            MarketAccessRequest.market_item_id == item_id,
+            MarketAccessRequest.requester_user_id == user_id,
+        )
+        .order_by(desc(MarketAccessRequest.updated_at), desc(MarketAccessRequest.id))
+        .first()
     )
 
 
@@ -762,6 +812,174 @@ async def create_market_access_request(
         request=_market_access_request_to_out(access_request),
         chat_room_id=room.id,
         already_exists=False,
+    )
+
+
+@router.get("/access-requests", response_model=MarketAccessRequestListResponse)
+async def list_market_access_requests(
+    role: str = Query("requester", description="author или requester"),
+    status_filter: Optional[str] = Query(None, alias="status", description="Фильтр по статусу"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Список заявок на доступ (для автора или заявителя)."""
+    role_val = role.strip().lower()
+    if role_val not in ("author", "requester"):
+        raise HTTPException(status_code=400, detail="role должен быть author или requester")
+
+    query = db.query(MarketAccessRequest)
+    if role_val == "author":
+        query = query.filter(MarketAccessRequest.author_user_id == current_user.id)
+    else:
+        query = query.filter(MarketAccessRequest.requester_user_id == current_user.id)
+
+    if status_filter:
+        try:
+            status_enum = MarketAccessRequestStatus(status_filter)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Недопустимый status: {status_filter}")
+        query = query.filter(MarketAccessRequest.status == status_enum)
+
+    total = query.count()
+    requests = (
+        query.options(
+            joinedload(MarketAccessRequest.market_item),
+            joinedload(MarketAccessRequest.requester),
+            joinedload(MarketAccessRequest.author),
+        )
+        .order_by(desc(MarketAccessRequest.created_at))
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    items = []
+    for access_request in requests:
+        item = access_request.market_item
+        requester = access_request.requester
+        author = access_request.author
+        if not item or not requester or not author:
+            continue
+        items.append(
+            _market_access_request_list_item(access_request, item, requester, author)
+        )
+
+    return MarketAccessRequestListResponse(
+        items=items,
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/items/{item_id}/access-status", response_model=MarketItemAccessStatusOut)
+async def get_market_item_access_status(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Статус доступа текущего пользователя к товару маркетплейса."""
+    item = db.query(MarketItem).filter(MarketItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Товар не найден")
+
+    price = item.price if item.price is not None else Decimal("0")
+    is_paid = Decimal(price) > 0
+
+    if not is_paid:
+        return MarketItemAccessStatusOut(
+            item_id=item.id,
+            is_paid=False,
+            has_grant=True,
+            can_install=True,
+            status="free",
+            request=None,
+            chat_room_id=None,
+        )
+
+    if item.seller_id == current_user.id:
+        return MarketItemAccessStatusOut(
+            item_id=item.id,
+            is_paid=True,
+            has_grant=False,
+            can_install=False,
+            status="owner",
+            request=None,
+            chat_room_id=None,
+        )
+
+    grant = (
+        db.query(MarketItemAccessGrant)
+        .filter(
+            MarketItemAccessGrant.market_item_id == item.id,
+            MarketItemAccessGrant.user_id == current_user.id,
+        )
+        .first()
+    )
+    latest_request = _latest_market_access_request(db, item.id, current_user.id)
+
+    if grant:
+        chat_room_id = latest_request.chat_room_id if latest_request else None
+        req_out = (
+            _market_access_request_to_out(latest_request) if latest_request else None
+        )
+        return MarketItemAccessStatusOut(
+            item_id=item.id,
+            is_paid=True,
+            has_grant=True,
+            can_install=True,
+            status="access_granted",
+            request=req_out,
+            chat_room_id=chat_room_id,
+        )
+
+    if latest_request:
+        req_status = latest_request.status
+        status_val = req_status.value if hasattr(req_status, "value") else str(req_status)
+
+        if req_status in ACTIVE_MARKET_ACCESS_STATUSES:
+            return MarketItemAccessStatusOut(
+                item_id=item.id,
+                is_paid=True,
+                has_grant=False,
+                can_install=False,
+                status=status_val,
+                request=_market_access_request_to_out(latest_request),
+                chat_room_id=latest_request.chat_room_id,
+            )
+
+        if req_status == MarketAccessRequestStatus.ACCESS_GRANTED:
+            return MarketItemAccessStatusOut(
+                item_id=item.id,
+                is_paid=True,
+                has_grant=False,
+                can_install=False,
+                status="access_granted",
+                request=_market_access_request_to_out(latest_request),
+                chat_room_id=latest_request.chat_room_id,
+            )
+
+        if req_status == MarketAccessRequestStatus.REJECTED:
+            return MarketItemAccessStatusOut(
+                item_id=item.id,
+                is_paid=True,
+                has_grant=False,
+                can_install=False,
+                status="rejected",
+                request=_market_access_request_to_out(latest_request),
+                chat_room_id=latest_request.chat_room_id,
+            )
+
+    return MarketItemAccessStatusOut(
+        item_id=item.id,
+        is_paid=True,
+        has_grant=False,
+        can_install=False,
+        status="none",
+        request=None,
+        chat_room_id=None,
     )
 
 

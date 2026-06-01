@@ -9,10 +9,17 @@ from backend.models.market_access import MarketAccessRequest, MarketAccessReques
 from backend.tests.conftest import TestingSessionLocal, get_user_id, register_and_get_token
 
 
-def _create_paid_item(db, seller_id: int, *, published: bool = True, price=Decimal("500.00")) -> MarketItem:
+def _create_paid_item(
+    db,
+    seller_id: int,
+    *,
+    published: bool = True,
+    price=Decimal("500.00"),
+    title: str = "Платный сценарий",
+) -> MarketItem:
     item = MarketItem(
         item_type=MarketItemType.SCENARIO,
-        title="Платный сценарий",
+        title=title,
         seller_id=seller_id,
         price=price,
         is_published=published,
@@ -190,3 +197,114 @@ def test_access_request_unpublished_item_403(client):
         headers={"Authorization": auth_requester},
     )
     assert res.status_code == 403
+
+
+def test_list_access_requests_author(client):
+    auth_author = register_and_get_token(client)
+    author_id = get_user_id(client, auth_author)
+    auth_requester = register_and_get_token(client)
+    auth_other = register_and_get_token(client)
+
+    db = TestingSessionLocal()
+    try:
+        item = _create_paid_item(db, author_id, title="Товар автора")
+        item_id = item.id
+        _create_paid_item(db, get_user_id(client, auth_other), title="Чужой товар")
+    finally:
+        db.close()
+
+    client.post(
+        f"/api/market/items/{item_id}/access-requests",
+        json={},
+        headers={"Authorization": auth_requester},
+    )
+
+    res = client.get(
+        "/api/market/access-requests?role=author",
+        headers={"Authorization": auth_author},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total"] >= 1
+    assert len(data["items"]) >= 1
+    row = data["items"][0]
+    assert row["market_item"]["title"] == "Товар автора"
+    assert row["author"]["id"] == author_id
+    assert row["chat_room_id"] is not None
+
+    res_other = client.get(
+        "/api/market/access-requests?role=author",
+        headers={"Authorization": auth_other},
+    )
+    assert res_other.status_code == 200
+    other_item_ids = [i["market_item"]["id"] for i in res_other.json()["items"]]
+    assert item_id not in other_item_ids
+
+
+def test_list_access_requests_requester(client):
+    auth_author = register_and_get_token(client)
+    author_id = get_user_id(client, auth_author)
+    auth_requester = register_and_get_token(client)
+    requester_id = get_user_id(client, auth_requester)
+
+    db = TestingSessionLocal()
+    try:
+        item = _create_paid_item(db, author_id)
+        item_id = item.id
+    finally:
+        db.close()
+
+    client.post(
+        f"/api/market/items/{item_id}/access-requests",
+        json={"message": "Моя заявка"},
+        headers={"Authorization": auth_requester},
+    )
+
+    res = client.get(
+        "/api/market/access-requests?role=requester",
+        headers={"Authorization": auth_requester},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total"] >= 1
+    assert any(i["request"]["requester_user_id"] == requester_id for i in data["items"])
+
+
+def test_list_access_requests_filter_status(client):
+    auth_author = register_and_get_token(client)
+    author_id = get_user_id(client, auth_author)
+    auth_requester = register_and_get_token(client)
+
+    db = TestingSessionLocal()
+    try:
+        item = _create_paid_item(db, author_id)
+        item_id = item.id
+    finally:
+        db.close()
+
+    created = client.post(
+        f"/api/market/items/{item_id}/access-requests",
+        json={},
+        headers={"Authorization": auth_requester},
+    )
+    request_id = created.json()["request"]["id"]
+
+    client.post(
+        f"/api/market/access-requests/{request_id}/reject",
+        headers={"Authorization": auth_author},
+    )
+
+    res_new = client.get(
+        "/api/market/access-requests?role=requester&status=new",
+        headers={"Authorization": auth_requester},
+    )
+    assert res_new.status_code == 200
+    assert res_new.json()["total"] == 0
+
+    res_rejected = client.get(
+        "/api/market/access-requests?role=requester&status=rejected",
+        headers={"Authorization": auth_requester},
+    )
+    assert res_rejected.status_code == 200
+    assert res_rejected.json()["total"] >= 1
+    assert all(i["request"]["status"] == "rejected" for i in res_rejected.json()["items"])

@@ -2,7 +2,8 @@
 Pydantic schemas for marketplace manual access (requests and grants).
 """
 from datetime import datetime
-from typing import Optional
+from decimal import Decimal
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -59,3 +60,47 @@ class MarketAccessGrantedOut(BaseModel):
     request: MarketAccessRequestOut
     grant: MarketItemAccessGrantOut
     already_exists: bool = False
+
+
+class MarketAccessUserBriefOut(BaseModel):
+    """Краткая информация о пользователе в заявке на доступ."""
+    id: int
+    name: Optional[str] = None
+    email: str
+    avatar: Optional[str] = None
+
+
+class MarketAccessRequestListItemMarketOut(BaseModel):
+    """Товар маркетплейса в списке заявок."""
+    id: int
+    title: str
+    item_type: str
+    price: Decimal
+
+
+class MarketAccessRequestListItemOut(BaseModel):
+    """Заявка на доступ с данными для UI."""
+    request: MarketAccessRequestOut
+    market_item: MarketAccessRequestListItemMarketOut
+    requester: MarketAccessUserBriefOut
+    author: MarketAccessUserBriefOut
+    chat_room_id: Optional[int] = None
+
+
+class MarketAccessRequestListResponse(BaseModel):
+    """Список заявок на доступ."""
+    items: List[MarketAccessRequestListItemOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class MarketItemAccessStatusOut(BaseModel):
+    """Статус доступа текущего пользователя к market item."""
+    item_id: int
+    is_paid: bool
+    has_grant: bool
+    can_install: bool
+    status: str
+    request: Optional[MarketAccessRequestOut] = None
+    chat_room_id: Optional[int] = None
