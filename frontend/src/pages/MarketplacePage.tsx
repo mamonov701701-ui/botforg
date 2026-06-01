@@ -42,8 +42,15 @@ import { toast } from '../utils/toast';
 import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
 import { hasAccessToPlanRestrictedAction } from '../constants/roles';
-import { AccessLocked } from '../components/AccessLocked';
 import { Link } from 'react-router-dom';
+
+/** Контраст текста на тёмном фоне /market (desktop, без смены глобальной темы) */
+const MARKET_TEXT = {
+  subtitle: '#c8d0dc',
+  tabInactive: '#c5ced8',
+  muted: '#b0bcc9',
+  placeholder: '#9fb0c3',
+} as const;
 
 type MarketTab = 'templates' | 'scenarios' | 'customers' | 'freelancers';
 
@@ -132,7 +139,14 @@ export default function MarketplacePage() {
     .marketplace-select {
       color-scheme: dark;
     }
+    .marketplace-search::placeholder {
+      color: ${MARKET_TEXT.placeholder};
+      opacity: 1;
+    }
   `;
+
+  const canPublishTemplate = hasAccessToPlanRestrictedAction(user, 'template_publish');
+  const canViewMyTemplates = hasAccessToPlanRestrictedAction(user, 'marketplace_stats');
 
   // Загрузка товаров с маркетплейса
   useEffect(() => {
@@ -539,7 +553,7 @@ export default function MarketplacePage() {
           >
             Маркет
           </h1>
-          <p style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
+          <p style={{ fontSize: '16px', lineHeight: 1.5, color: MARKET_TEXT.subtitle }}>
             Покупайте и продавайте шаблоны, сценарии, размещайте заказы и находите исполнителей
           </p>
         </div>
@@ -570,7 +584,7 @@ export default function MarketplacePage() {
                 border: 'none',
                 borderBottom:
                   activeTab === 'templates' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'templates' ? 'var(--primary)' : 'var(--text-muted)',
+                color: activeTab === 'templates' ? 'var(--primary)' : MARKET_TEXT.tabInactive,
                 fontSize: '15px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -588,7 +602,7 @@ export default function MarketplacePage() {
                 border: 'none',
                 borderBottom:
                   activeTab === 'scenarios' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'scenarios' ? 'var(--primary)' : 'var(--text-muted)',
+                color: activeTab === 'scenarios' ? 'var(--primary)' : MARKET_TEXT.tabInactive,
                 fontSize: '15px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -606,7 +620,7 @@ export default function MarketplacePage() {
                 border: 'none',
                 borderBottom:
                   activeTab === 'customers' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'customers' ? 'var(--primary)' : 'var(--text-muted)',
+                color: activeTab === 'customers' ? 'var(--primary)' : MARKET_TEXT.tabInactive,
                 fontSize: '15px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -626,7 +640,7 @@ export default function MarketplacePage() {
                   activeTab === 'freelancers'
                     ? '3px solid var(--primary)'
                     : '3px solid transparent',
-                color: activeTab === 'freelancers' ? 'var(--primary)' : 'var(--text-muted)',
+                color: activeTab === 'freelancers' ? 'var(--primary)' : MARKET_TEXT.tabInactive,
                 fontSize: '15px',
                 fontWeight: 600,
                 cursor: 'pointer',
@@ -648,11 +662,12 @@ export default function MarketplacePage() {
                   left: '16px',
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)',
+                  color: MARKET_TEXT.muted,
                 }}
               />
               <input
                 type="text"
+                className="marketplace-search"
                 placeholder="Поиск..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
@@ -671,7 +686,7 @@ export default function MarketplacePage() {
             {/* Create button */}
             {activeTab === 'templates' ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                {hasAccessToPlanRestrictedAction(user, 'marketplace_stats') && (
+                {canViewMyTemplates && (
                   <Link
                     to="/developer/templates"
                     style={{
@@ -692,12 +707,10 @@ export default function MarketplacePage() {
                     Мои шаблоны
                   </Link>
                 )}
-                <AccessLocked
-                  hasAccess={hasAccessToPlanRestrictedAction(user, 'template_publish')}
-                  actionKey="template_publish"
-                  onClick={() => setShowCreateModal(true)}
-                >
+                {canPublishTemplate ? (
                   <button
+                    type="button"
+                    onClick={() => setShowCreateModal(true)}
                     style={{
                       padding: '14px 24px',
                       background: 'var(--primary)',
@@ -716,18 +729,27 @@ export default function MarketplacePage() {
                     <Plus size={20} />
                     Опубликовать шаблон
                   </button>
-                </AccessLocked>
-                {!hasAccessToPlanRestrictedAction(user, 'template_publish') && (
+                ) : (
                   <Link
                     to="/pricing"
+                    title="Публикация шаблонов доступна на тарифе Developer"
                     style={{
-                      fontSize: '14px',
-                      color: 'var(--primary)',
+                      padding: '14px 24px',
+                      background: 'transparent',
+                      color: MARKET_TEXT.subtitle,
+                      border: '1px solid var(--border)',
+                      borderRadius: '12px',
+                      fontSize: '15px',
+                      fontWeight: 600,
                       textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    Тариф Developer →
+                    <Plus size={20} />
+                    Публикация на тарифе Developer
                   </Link>
                 )}
               </div>
@@ -773,7 +795,8 @@ export default function MarketplacePage() {
                       gridColumn: '1 / -1',
                       textAlign: 'center',
                       padding: '40px',
-                      color: 'var(--text-muted)',
+                      color: MARKET_TEXT.subtitle,
+                      fontSize: '16px',
                     }}
                   >
                     Загрузка товаров...
@@ -784,10 +807,12 @@ export default function MarketplacePage() {
                       gridColumn: '1 / -1',
                       textAlign: 'center',
                       padding: '48px 24px',
-                      color: 'var(--text-muted)',
+                      color: MARKET_TEXT.subtitle,
+                      fontSize: '16px',
+                      lineHeight: 1.5,
                     }}
                   >
-                    <ShoppingCart size={64} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                    <ShoppingCart size={64} style={{ margin: '0 auto 16px', opacity: 0.45 }} />
                     <p>Товары не найдены. Станьте первым, кто разместит товар на маркетплейсе!</p>
                   </div>
                 ) : (
@@ -848,7 +873,8 @@ export default function MarketplacePage() {
                       gridColumn: '1 / -1',
                       textAlign: 'center',
                       padding: '40px',
-                      color: 'var(--text-muted)',
+                      color: MARKET_TEXT.subtitle,
+                      fontSize: '16px',
                     }}
                   >
                     Загрузка сценариев...
@@ -859,10 +885,12 @@ export default function MarketplacePage() {
                       gridColumn: '1 / -1',
                       textAlign: 'center',
                       padding: '48px 24px',
-                      color: 'var(--text-muted)',
+                      color: MARKET_TEXT.subtitle,
+                      fontSize: '16px',
+                      lineHeight: 1.5,
                     }}
                   >
-                    <Briefcase size={64} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+                    <Briefcase size={64} style={{ margin: '0 auto 16px', opacity: 0.45 }} />
                     <p>
                       Сценарии не найдены. Станьте первым, кто разместит сценарий на маркетплейсе!
                     </p>

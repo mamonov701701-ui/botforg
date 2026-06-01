@@ -552,6 +552,13 @@ async def update_market_item(
     
     if item.seller_id != current_user.id:
         raise HTTPException(status_code=403, detail="Вы не являетесь владельцем этого товара")
+
+    # Публикация шаблона — только тариф Developer (как при POST /items)
+    if (
+        item.item_type == MarketItemType.TEMPLATE
+        and item_data.is_published is True
+    ):
+        check_can_publish_templates(db, current_user)
     
     # Обновление полей
     update_data = item_data.model_dump(exclude_unset=True)
