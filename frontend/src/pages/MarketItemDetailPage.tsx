@@ -6,20 +6,25 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Star, User, ShoppingCart } from 'lucide-react';
 import {
   getMarketItem,
+  getMarketItemAccessStatus,
   installMarketBot,
   installMarketScenario,
   createMarketAccessRequest,
   parseMarketPrice,
   isPaidMarketItem,
   getMarketInstallErrorMessage,
-  getMarketItemActionLabel,
+  getMarketItemPrimaryActionState,
   getMarketInstallSuccessMessage,
   getMarketInstallDestination,
   getMarketAccessRequestSuccessMessage,
   getMarketAccessRequestErrorMessage,
   getMarketAccessRequestChatPath,
+  resolveMarketItemAccessChatRoomId,
+  MARKET_ACCESS_REQUEST_REJECTED_MESSAGE,
+  MARKET_ACCESS_REQUEST_PENDING_LABEL,
   MARKET_SELLER_CONTACTS_PLACEHOLDER,
   type MarketItemDetail,
+  type MarketItemAccessStatus,
   type MarketReview,
 } from '../api/market';
 import { ApiError } from '../api/client';
@@ -57,6 +62,8 @@ export default function MarketItemDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [requestingAccess, setRequestingAccess] = useState(false);
+  const [accessStatus, setAccessStatus] = useState<MarketItemAccessStatus | null>(null);
+  const [accessLoading, setAccessLoading] = useState(false);
 
   useEffect(() => {
     if (!id || Number.isNaN(itemId) || itemId <= 0) {
@@ -92,6 +99,32 @@ export default function MarketItemDetailPage() {
     };
   }, [id, itemId]);
 
+  const loadAccessStatus = useCallback(async (marketItemId: number) => {
+    setAccessLoading(true);
+    try {
+      const status = await getMarketItemAccessStatus(marketItemId);
+      setAccessStatus(status);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) {
+        setAccessStatus(null);
+      } else {
+        console.error('Failed to load market access status:', err);
+        setAccessStatus(null);
+      }
+    } finally {
+      setAccessLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!item || !isPaidMarketItem(item.price)) {
+      setAccessStatus(null);
+      setAccessLoading(false);
+      return;
+    }
+    void loadAccessStatus(item.id);
+  }, [item?.id, item?.price, loadAccessStatus]);
+
   const handleRequestAccess = useCallback(async () => {
     if (!item) return;
 
@@ -99,6 +132,7 @@ export default function MarketItemDetailPage() {
     try {
       const result = await createMarketAccessRequest(item.id);
       toast.success(getMarketAccessRequestSuccessMessage(result.already_exists));
+      await loadAccessStatus(item.id);
       navigate(getMarketAccessRequestChatPath(result.chat_room_id));
     } catch (err: unknown) {
       if (err instanceof ApiError && err.status === 401) {
@@ -110,15 +144,10 @@ export default function MarketItemDetailPage() {
     } finally {
       setRequestingAccess(false);
     }
-  }, [item, navigate, openAuth]);
+  }, [item, navigate, openAuth, loadAccessStatus]);
 
-  const handleInstall = useCallback(async () => {
+  const runInstall = useCallback(async () => {
     if (!item) return;
-
-    if (isPaidMarketItem(item.price)) {
-      await handleRequestAccess();
-      return;
-    }
 
     setInstalling(true);
     try {
@@ -138,13 +167,49 @@ export default function MarketItemDetailPage() {
     } finally {
       setInstalling(false);
     }
-  }, [item, handleRequestAccess, navigate]);
+  }, [item, navigate]);
+
+  const handlePrimaryAction = useCallback(async () => {
+    if (!item) return;
+
+    const action = getMarketItemPrimaryActionState(
+      { price: item.price, item_type: item.item_type },
+      accessStatus,
+      { loading: accessLoading }
+    );
+
+    if (action.mode === 'install') {
+      await runInstall();
+      return;
+    }
+    if (action.mode === 'owner' || action.mode === 'loading') {
+      return;
+    }
+    if (action.mode === 'pending') {
+      const roomId = resolveMarketItemAccessChatRoomId(accessStatus);
+      if (roomId != null) {
+        navigate(getMarketAccessRequestChatPath(roomId));
+      } else {
+        toast.info(MARKET_ACCESS_REQUEST_PENDING_LABEL);
+      }
+      return;
+    }
+    await handleRequestAccess();
+  }, [item, accessStatus, accessLoading, runInstall, handleRequestAccess, navigate]);
 
   const price = item ? parseMarketPrice(item.price) : 0;
   const isPaid = price > 0;
-  const actionLabel = item
-    ? getMarketItemActionLabel({ price: item.price, item_type: item.item_type })
-    : 'Добавить';
+  const primaryAction = item
+    ? getMarketItemPrimaryActionState(
+        { price: item.price, item_type: item.item_type },
+        accessStatus,
+        { loading: accessLoading }
+      )
+    : { mode: 'install' as const, label: 'Добавить', disabled: false };
+  const actionBusy = installing || requestingAccess;
+  const actionDisabled = primaryAction.disabled || actionBusy || accessLoading;
+  const showRejectedHint =
+    isPaid && accessStatus?.status === 'rejected' && !accessStatus.can_install;
   const rating = item?.average_rating ?? 0;
   const reviews: MarketReview[] = item?.reviews ?? [];
 
@@ -383,36 +448,57 @@ export default function MarketItemDetailPage() {
                       </div>
                     )}
                   </div>
-                  <button
-                    type="button"
-                    data-testid={
-                      isPaid ? 'market-item-detail-request-access' : 'market-item-detail-install'
-                    }
-                    onClick={isPaid ? handleRequestAccess : handleInstall}
-                    disabled={isPaid ? requestingAccess : installing}
+                  <div
                     style={{
-                      padding: '12px 24px',
-                      background: (isPaid ? requestingAccess : installing)
-                        ? 'var(--surface)'
-                        : 'var(--primary)',
-                      color: (isPaid ? requestingAccess : installing)
-                        ? 'var(--text-muted)'
-                        : 'var(--text-on-primary)',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '15px',
-                      fontWeight: 600,
-                      cursor: (isPaid ? requestingAccess : installing) ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-end',
+                      gap: '8px',
                     }}
                   >
-                    {isPaid
-                      ? requestingAccess
-                        ? 'Отправка...'
-                        : actionLabel
-                      : installing
-                        ? 'Добавление...'
-                        : actionLabel}
-                  </button>
+                    {showRejectedHint && (
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: '12px',
+                          color: 'var(--text-muted)',
+                          maxWidth: '280px',
+                          textAlign: 'right',
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        {MARKET_ACCESS_REQUEST_REJECTED_MESSAGE}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      data-testid={
+                        primaryAction.mode === 'install'
+                          ? 'market-item-detail-install'
+                          : 'market-item-detail-request-access'
+                      }
+                      onClick={() => void handlePrimaryAction()}
+                      disabled={actionDisabled}
+                      style={{
+                        padding: '12px 24px',
+                        background: actionDisabled ? 'var(--surface)' : 'var(--primary)',
+                        color: actionDisabled ? 'var(--text-muted)' : 'var(--text-on-primary)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '15px',
+                        fontWeight: 600,
+                        cursor: actionDisabled ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {accessLoading
+                        ? 'Проверка доступа...'
+                        : requestingAccess
+                          ? 'Отправка...'
+                          : installing
+                            ? 'Добавление...'
+                            : primaryAction.label}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

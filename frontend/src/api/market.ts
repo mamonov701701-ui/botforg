@@ -30,18 +30,104 @@ export type MarketItemActionLabelInput = {
   item_type?: string;
 };
 
-/** Текст кнопки действия на карточке/детальной странице маркетплейса */
-export function getMarketItemActionLabel(item: MarketItemActionLabelInput): string {
-  if (isPaidMarketItem(item.price)) {
-    return 'Запросить доступ';
-  }
-  if (item.item_type === 'scenario') {
+export interface MarketItemAccessStatus {
+  item_id: number;
+  is_paid: boolean;
+  has_grant: boolean;
+  can_install: boolean;
+  status: string;
+  request?: MarketAccessRequest | null;
+  chat_room_id?: number | null;
+}
+
+export type MarketItemPrimaryActionMode =
+  | 'install'
+  | 'request_access'
+  | 'pending'
+  | 'owner'
+  | 'loading';
+
+export interface MarketItemPrimaryActionState {
+  mode: MarketItemPrimaryActionMode;
+  label: string;
+  disabled: boolean;
+}
+
+const PENDING_MARKET_ACCESS_STATUSES = new Set(['new', 'in_discussion']);
+
+export const MARKET_ACCESS_REQUEST_PENDING_LABEL = 'Заявка отправлена';
+
+export const MARKET_ACCESS_REQUEST_REJECTED_MESSAGE =
+  'Автор отклонил заявку. Вы можете отправить новую заявку на доступ.';
+
+/** Текст кнопки добавления (free или paid с выданным доступом) */
+export function getMarketInstallActionLabel(itemType: string | undefined): string {
+  if (itemType === 'scenario') {
     return 'Добавить в мои сценарии';
   }
-  if (item.item_type === 'template') {
+  if (itemType === 'template') {
     return 'Добавить в мои боты';
   }
   return 'Добавить';
+}
+
+/** Состояние основной кнопки на карточке/детальной странице с учётом access-status */
+export function getMarketItemPrimaryActionState(
+  item: MarketItemActionLabelInput,
+  access?: MarketItemAccessStatus | null,
+  options?: { loading?: boolean }
+): MarketItemPrimaryActionState {
+  if (options?.loading) {
+    return { mode: 'loading', label: 'Проверка доступа...', disabled: true };
+  }
+  if (!isPaidMarketItem(item.price)) {
+    return {
+      mode: 'install',
+      label: getMarketInstallActionLabel(item.item_type),
+      disabled: false,
+    };
+  }
+  if (!access) {
+    return { mode: 'request_access', label: 'Запросить доступ', disabled: false };
+  }
+  if (access.can_install) {
+    return {
+      mode: 'install',
+      label: getMarketInstallActionLabel(item.item_type),
+      disabled: false,
+    };
+  }
+  if (access.status === 'owner') {
+    return { mode: 'owner', label: 'Ваш товар', disabled: true };
+  }
+  if (access.status === 'rejected') {
+    return { mode: 'request_access', label: 'Запросить доступ снова', disabled: false };
+  }
+  if (PENDING_MARKET_ACCESS_STATUSES.has(access.status)) {
+    return { mode: 'pending', label: MARKET_ACCESS_REQUEST_PENDING_LABEL, disabled: false };
+  }
+  return { mode: 'request_access', label: 'Запросить доступ', disabled: false };
+}
+
+/** Текст кнопки действия на карточке/детальной странице маркетплейса */
+export function getMarketItemActionLabel(
+  item: MarketItemActionLabelInput,
+  access?: MarketItemAccessStatus | null
+): string {
+  return getMarketItemPrimaryActionState(item, access).label;
+}
+
+export function resolveMarketItemAccessChatRoomId(
+  access?: MarketItemAccessStatus | null
+): number | null {
+  if (!access) return null;
+  const candidates = [access.chat_room_id, access.request?.chat_room_id];
+  for (const value of candidates) {
+    if (typeof value === 'number' && !Number.isNaN(value) && value > 0) {
+      return value;
+    }
+  }
+  return null;
 }
 
 /** Сообщение toast после успешного free install */
@@ -544,6 +630,18 @@ export async function installMarketBot(itemId: number): Promise<MarketInstallRes
     return await api.post(`/api/market/items/${itemId}/install-bot`);
   } catch (error: any) {
     console.error('Failed to install market bot:', error);
+    throw error;
+  }
+}
+
+/**
+ * Статус доступа текущего пользователя к товару (paid / grant / заявка).
+ */
+export async function getMarketItemAccessStatus(itemId: number): Promise<MarketItemAccessStatus> {
+  try {
+    return await api.get(`/api/market/items/${itemId}/access-status`);
+  } catch (error: unknown) {
+    console.error('Failed to fetch market item access status:', error);
     throw error;
   }
 }

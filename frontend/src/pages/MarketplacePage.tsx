@@ -24,13 +24,17 @@ import {
   installMarketBot,
   installMarketScenario,
   createMarketAccessRequest,
+  getMarketItemAccessStatus,
   isPaidMarketItem,
   getMarketItemActionLabel,
   getMarketInstallSuccessMessage,
+  getMarketInstallDestination,
   getMarketInstallErrorMessage,
   getMarketAccessRequestSuccessMessage,
   getMarketAccessRequestErrorMessage,
   getMarketAccessRequestChatPath,
+  resolveMarketItemAccessChatRoomId,
+  MARKET_ACCESS_REQUEST_PENDING_LABEL,
   type MarketItemCreate,
 } from '../api/market';
 import { ApiError } from '../api/client';
@@ -259,15 +263,48 @@ export default function MarketplacePage() {
       return;
     }
     if (isPaidMarketItem(sourceItem.price)) {
+      try {
+        const access = await getMarketItemAccessStatus(sourceItem.id);
+        if (access.can_install) {
+          setInstallingItemId(sourceItem.id);
+          try {
+            const result = await (sourceItem.item_type === 'scenario'
+              ? installMarketScenario(sourceItem.id)
+              : installMarketBot(sourceItem.id));
+            toast.success(getMarketInstallSuccessMessage(sourceItem.item_type));
+            navigate(getMarketInstallDestination(result));
+          } catch (error: unknown) {
+            toast.error(getMarketInstallErrorMessage(error));
+          } finally {
+            setInstallingItemId(null);
+          }
+          return;
+        }
+        const roomId = resolveMarketItemAccessChatRoomId(access);
+        if (access.status === 'new' || access.status === 'in_discussion') {
+          if (roomId != null) {
+            navigate(getMarketAccessRequestChatPath(roomId));
+          } else {
+            toast.info(MARKET_ACCESS_REQUEST_PENDING_LABEL);
+          }
+          return;
+        }
+      } catch (error: unknown) {
+        if (!(error instanceof ApiError && error.status === 401)) {
+          toast.error(getMarketInstallErrorMessage(error));
+          return;
+        }
+      }
       await handleRequestAccess(sourceItem);
       return;
     }
     setInstallingItemId(sourceItem.id);
     try {
-      await (sourceItem.item_type === 'scenario'
+      const result = await (sourceItem.item_type === 'scenario'
         ? installMarketScenario(sourceItem.id)
         : installMarketBot(sourceItem.id));
       toast.success(getMarketInstallSuccessMessage(sourceItem.item_type));
+      navigate(getMarketInstallDestination(result));
     } catch (error: unknown) {
       toast.error(getMarketInstallErrorMessage(error));
     } finally {
