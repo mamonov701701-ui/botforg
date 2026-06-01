@@ -2,7 +2,7 @@
  * Messages Page - Chat and Friends Management
  */
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from '../../../utils/toast';
 import {
   MessageCircle,
@@ -30,6 +30,7 @@ import {
   Hash,
   Circle,
   Copy,
+  KeyRound,
 } from 'lucide-react';
 import { useAuthStore } from '../../../stores/authStore';
 import DashboardPage from '../components/DashboardPage';
@@ -64,14 +65,19 @@ import {
   type BlockedUser,
   type UserBrief,
 } from '../../../api/chat';
+import { getMarketAccessRequestChatPath } from '../../../api/market';
+import MessagesAccessRequestsPanel from './MessagesAccessRequestsPanel';
 
 type TabType = 'chats' | 'friends' | 'requests' | 'blocked';
+type PageMainTab = 'messages' | 'access-requests';
 
 const EMOJI_LIST = ['👍', '❤️', '😂', '😮', '😢', '😡', '🎉', '🔥'];
 
 export default function MessagesPage() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const [pageMainTab, setPageMainTab] = useState<PageMainTab>('messages');
 
   const roomIdFromQuery = useMemo(() => {
     const raw = searchParams.get('roomId');
@@ -129,10 +135,17 @@ export default function MessagesPage() {
 
   // Deep link: /dashboard/messages?roomId=
   useEffect(() => {
-    if (roomIdFromQuery == null || loadingChats) return;
+    if (roomIdFromQuery == null) return;
+    setPageMainTab('messages');
+    if (loadingChats) return;
     setActiveTab('chats');
     setSelectedRoomId(roomIdFromQuery);
   }, [roomIdFromQuery, loadingChats, chatRooms]);
+
+  const handleOpenAccessRequestChat = (roomId: number) => {
+    setPageMainTab('messages');
+    navigate(getMarketAccessRequestChatPath(roomId));
+  };
 
   // Load messages when room changes
   useEffect(() => {
@@ -506,513 +519,773 @@ export default function MessagesPage() {
   return (
     <DashboardPage title="Сообщения" subtitle="Общайтесь с друзьями на платформе">
       <div
-        style={{ display: 'flex', gap: '20px', height: 'calc(100vh - 200px)', minHeight: '600px' }}
+        style={{
+          display: 'flex',
+          gap: '8px',
+          marginBottom: '16px',
+          borderBottom: '1px solid var(--border)',
+        }}
       >
-        {/* Left Sidebar - Chat List / Friends */}
-        <Card
-          style={{ width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-        >
-          {/* User ID Banner */}
-          <div
+        {(
+          [
+            { id: 'messages' as const, label: 'Сообщения', icon: MessageCircle },
+            { id: 'access-requests' as const, label: 'Заявки на доступ', icon: KeyRound },
+          ] as const
+        ).map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setPageMainTab(tab.id)}
             style={{
-              padding: '12px 16px',
-              background: 'var(--primary-bg)',
-              borderBottom: '1px solid var(--border)',
+              padding: '10px 16px',
+              background: 'transparent',
+              border: 'none',
+              borderBottom:
+                pageMainTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent',
+              color: pageMainTab === tab.id ? 'var(--primary)' : 'var(--text-muted)',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
+              gap: '8px',
+              marginBottom: '-1px',
             }}
           >
-            <div>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Ваш ID:</span>
-              <span
-                style={{
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: 'var(--primary)',
-                  marginLeft: '8px',
-                }}
-              >
-                {user?.public_id}
-              </span>
-            </div>
-            <button
-              onClick={copyUserId}
+            <tab.icon size={16} />
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {pageMainTab === 'access-requests' ? (
+        <div style={{ height: 'calc(100vh - 260px)', minHeight: '560px', display: 'flex' }}>
+          <MessagesAccessRequestsPanel onOpenChat={handleOpenAccessRequestChat} />
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'flex',
+            gap: '20px',
+            height: 'calc(100vh - 260px)',
+            minHeight: '560px',
+          }}
+        >
+          {/* Left Sidebar - Chat List / Friends */}
+          <Card
+            style={{ width: '340px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          >
+            {/* User ID Banner */}
+            <div
               style={{
-                padding: '6px 10px',
-                background: 'var(--primary)',
-                color: 'var(--text-on-primary)',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '12px',
-                cursor: 'pointer',
+                padding: '12px 16px',
+                background: 'var(--primary-bg)',
+                borderBottom: '1px solid var(--border)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
+                justifyContent: 'space-between',
               }}
             >
-              <Copy size={12} />
-              Копировать
-            </button>
-          </div>
-
-          {/* Tabs */}
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
-            {[
-              { id: 'chats', label: 'Чаты', icon: MessageCircle },
-              { id: 'friends', label: 'Друзья', icon: Users },
-              {
-                id: 'requests',
-                label: 'Запросы',
-                icon: UserPlus,
-                badge: friendRequests.incoming.length,
-              },
-            ].map(tab => (
+              <div>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Ваш ID:</span>
+                <span
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: 'var(--primary)',
+                    marginLeft: '8px',
+                  }}
+                >
+                  {user?.public_id}
+                </span>
+              </div>
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabType)}
+                onClick={copyUserId}
                 style={{
-                  flex: 1,
-                  padding: '12px 8px',
-                  background: 'transparent',
+                  padding: '6px 10px',
+                  background: 'var(--primary)',
+                  color: 'var(--text-on-primary)',
                   border: 'none',
-                  borderBottom:
-                    activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent',
-                  color: activeTab === tab.id ? 'var(--primary)' : 'var(--text-muted)',
-                  fontSize: '13px',
-                  fontWeight: 500,
+                  borderRadius: '6px',
+                  fontSize: '12px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  position: 'relative',
+                  gap: '4px',
                 }}
               >
-                <tab.icon size={16} />
-                {tab.label}
-                {tab.badge ? (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      top: '6px',
-                      right: '6px',
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '50%',
-                      background: '#ef4444',
-                      color: 'white',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {tab.badge}
-                  </span>
-                ) : null}
+                <Copy size={12} />
+                Копировать
               </button>
-            ))}
-          </div>
-
-          {/* Search */}
-          <div
-            data-search-container
-            style={{
-              padding: '12px',
-              borderBottom: '1px solid var(--border)',
-              position: 'relative',
-            }}
-          >
-            <div style={{ position: 'relative' }}>
-              <Search
-                size={16}
-                style={{
-                  position: 'absolute',
-                  left: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: 'var(--text-muted)',
-                }}
-              />
-              <input
-                type="text"
-                placeholder={
-                  activeTab === 'chats' ? 'Поиск чатов...' : 'Найти по ID (например: 49835940)'
-                }
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && handleSearch()}
-                onFocus={() => setShowSearch(true)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px 10px 36px',
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  color: 'var(--text)',
-                  fontSize: '14px',
-                }}
-              />
             </div>
-            {activeTab !== 'chats' && (
-              <div
-                style={{
-                  fontSize: '11px',
-                  color: 'var(--text-muted)',
-                  marginTop: '6px',
-                  paddingLeft: '4px',
-                }}
-              >
-                💡 Используйте 8-значный ID пользователя или имя
-              </div>
-            )}
 
-            {/* Search Results - Simple List */}
-            {showSearch && searchResults.length > 0 && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 'calc(100% - 12px)',
-                  left: '12px',
-                  right: '12px',
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  marginTop: '4px',
-                  zIndex: 1000,
-                  maxHeight: '300px',
-                  overflow: 'auto',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-                }}
-              >
-                {searchResults.map(result => (
-                  <div
-                    key={result.id}
-                    onClick={() => {
-                      setSelectedUserProfile(result);
-                      setShowSearch(false);
-                    }}
-                    style={{
-                      padding: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      borderBottom: '1px solid var(--border)',
-                      cursor: 'pointer',
-                      transition: 'background 0.2s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <div
+            {/* Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
+              {[
+                { id: 'chats', label: 'Чаты', icon: MessageCircle },
+                { id: 'friends', label: 'Друзья', icon: Users },
+                {
+                  id: 'requests',
+                  label: 'Запросы',
+                  icon: UserPlus,
+                  badge: friendRequests.incoming.length,
+                },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as TabType)}
+                  style={{
+                    flex: 1,
+                    padding: '12px 8px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderBottom:
+                      activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: activeTab === tab.id ? 'var(--primary)' : 'var(--text-muted)',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    position: 'relative',
+                  }}
+                >
+                  <tab.icon size={16} />
+                  {tab.label}
+                  {tab.badge ? (
+                    <span
                       style={{
-                        width: '40px',
-                        height: '40px',
+                        position: 'absolute',
+                        top: '6px',
+                        right: '6px',
+                        width: '18px',
+                        height: '18px',
                         borderRadius: '50%',
-                        background: 'var(--primary-bg)',
+                        background: '#ef4444',
+                        color: 'white',
+                        fontSize: '11px',
+                        fontWeight: 600,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
                     >
-                      {result.avatar ? (
-                        <img
-                          src={result.avatar}
-                          alt=""
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            borderRadius: '50%',
-                            objectFit: 'cover',
-                          }}
-                        />
-                      ) : (
-                        <Users size={20} style={{ color: 'var(--primary)' }} />
-                      )}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                        {result.name || 'Без имени'}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        ID: {result.public_id}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                      Нажмите для просмотра →
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                      {tab.badge}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
 
-          {/* Content */}
-          <div style={{ flex: 1, overflow: 'auto' }}>
-            {/* Chats Tab */}
-            {activeTab === 'chats' && (
-              <>
-                {chatRooms.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '40px 20px',
-                      textAlign: 'center',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    <MessageCircle size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                    <p>У вас пока нет чатов</p>
-                    <p style={{ fontSize: '13px', marginTop: '8px' }}>
-                      Добавьте друзей, чтобы начать общение
-                    </p>
-                  </div>
-                ) : (
-                  chatRooms.map(room => (
+            {/* Search */}
+            <div
+              data-search-container
+              style={{
+                padding: '12px',
+                borderBottom: '1px solid var(--border)',
+                position: 'relative',
+              }}
+            >
+              <div style={{ position: 'relative' }}>
+                <Search
+                  size={16}
+                  style={{
+                    position: 'absolute',
+                    left: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--text-muted)',
+                  }}
+                />
+                <input
+                  type="text"
+                  placeholder={
+                    activeTab === 'chats' ? 'Поиск чатов...' : 'Найти по ID (например: 49835940)'
+                  }
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleSearch()}
+                  onFocus={() => setShowSearch(true)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px 10px 36px',
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    color: 'var(--text)',
+                    fontSize: '14px',
+                  }}
+                />
+              </div>
+              {activeTab !== 'chats' && (
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: 'var(--text-muted)',
+                    marginTop: '6px',
+                    paddingLeft: '4px',
+                  }}
+                >
+                  💡 Используйте 8-значный ID пользователя или имя
+                </div>
+              )}
+
+              {/* Search Results - Simple List */}
+              {showSearch && searchResults.length > 0 && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% - 12px)',
+                    left: '12px',
+                    right: '12px',
+                    background: 'var(--card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '8px',
+                    marginTop: '4px',
+                    zIndex: 1000,
+                    maxHeight: '300px',
+                    overflow: 'auto',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  {searchResults.map(result => (
                     <div
-                      key={room.id}
-                      onClick={() => setSelectedRoomId(room.id)}
+                      key={result.id}
+                      onClick={() => {
+                        setSelectedUserProfile(result);
+                        setShowSearch(false);
+                      }}
                       style={{
-                        padding: '12px 16px',
+                        padding: '12px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '12px',
-                        cursor: 'pointer',
-                        background:
-                          selectedRoomId === room.id ? 'var(--primary-bg)' : 'transparent',
                         borderBottom: '1px solid var(--border)',
-                        position: 'relative',
+                        cursor: 'pointer',
+                        transition: 'background 0.2s',
                       }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
-                      {/* Avatar */}
-                      <div style={{ position: 'relative' }}>
-                        <div
-                          style={{
-                            width: '48px',
-                            height: '48px',
-                            borderRadius: '50%',
-                            background: 'var(--surface)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          {room.avatar ? (
-                            <img
-                              src={room.avatar}
-                              alt=""
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <Users size={24} style={{ color: 'var(--text-muted)' }} />
-                          )}
-                        </div>
-                        {room.is_pinned && (
-                          <Pin
-                            size={12}
-                            style={{
-                              position: 'absolute',
-                              top: -2,
-                              right: -2,
-                              color: 'var(--primary)',
-                            }}
-                          />
-                        )}
-                      </div>
-
-                      {/* Info */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontWeight: 500,
-                              color: 'var(--text)',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {room.name || 'Чат'}
-                          </span>
-                          {room.last_message && (
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                              {formatTime(room.last_message.created_at)}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span
-                            style={{
-                              fontSize: '13px',
-                              color: 'var(--text-muted)',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              flex: 1,
-                            }}
-                          >
-                            {room.last_message?.content || 'Нет сообщений'}
-                          </span>
-                          {room.unread_count > 0 && (
-                            <span
-                              style={{
-                                minWidth: '20px',
-                                height: '20px',
-                                borderRadius: '10px',
-                                background: 'var(--primary)',
-                                color: 'var(--text-on-primary)',
-                                fontSize: '11px',
-                                fontWeight: 600,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '0 6px',
-                              }}
-                            >
-                              {room.unread_count}
-                            </span>
-                          )}
-                          {room.is_muted && (
-                            <BellOff size={14} style={{ color: 'var(--text-muted)' }} />
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Menu */}
-                      <button
-                        data-menu-trigger
-                        onClick={e => {
-                          e.stopPropagation();
-                          setShowChatMenu(showChatMenu === room.id ? null : room.id);
-                        }}
+                      <div
                         style={{
-                          padding: '4px',
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: 'var(--text-muted)',
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          background: 'var(--primary-bg)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                         }}
                       >
-                        <MoreVertical size={16} />
-                      </button>
-
-                      {showChatMenu === room.id && (
-                        <div
-                          data-menu-container
-                          style={{
-                            position: 'absolute',
-                            top: '50px',
-                            right: '16px',
-                            background: 'var(--card)',
-                            border: '1px solid var(--border)',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                            zIndex: 100,
-                            minWidth: '160px',
-                          }}
-                        >
-                          <button
-                            onClick={() => handleTogglePin(room.id)}
+                        {result.avatar ? (
+                          <img
+                            src={result.avatar}
+                            alt=""
                             style={{
                               width: '100%',
-                              padding: '10px 16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'var(--text)',
-                              cursor: 'pointer',
-                              fontSize: '14px',
+                              height: '100%',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
                             }}
-                          >
-                            <Pin size={16} />
-                            {room.is_pinned ? 'Открепить' : 'Закрепить'}
-                          </button>
-                          <button
-                            onClick={() => handleToggleMute(room.id)}
-                            style={{
-                              width: '100%',
-                              padding: '10px 16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'var(--text)',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                            }}
-                          >
-                            {room.is_muted ? <Bell size={16} /> : <BellOff size={16} />}
-                            {room.is_muted ? 'Включить уведомления' : 'Выключить уведомления'}
-                          </button>
-                          <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
-                          <button
-                            onClick={() => handleDeleteChat(room.id)}
-                            style={{
-                              width: '100%',
-                              padding: '10px 16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              background: 'transparent',
-                              border: 'none',
-                              color: '#ef4444',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                            }}
-                          >
-                            <Trash2 size={16} />
-                            Удалить чат
-                          </button>
+                          />
+                        ) : (
+                          <Users size={20} style={{ color: 'var(--primary)' }} />
+                        )}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>
+                          {result.name || 'Без имени'}
                         </div>
-                      )}
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          ID: {result.public_id}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        Нажмите для просмотра →
+                      </div>
                     </div>
-                  ))
-                )}
-              </>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
 
-            {/* Friends Tab */}
-            {activeTab === 'friends' && (
-              <>
-                {friends.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '40px 20px',
-                      textAlign: 'center',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    <Users size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                    <p>У вас пока нет друзей</p>
-                    <p style={{ fontSize: '13px', marginTop: '8px' }}>
-                      Найдите пользователей по ID и отправьте запрос
-                    </p>
-                  </div>
-                ) : (
-                  friends.map(friend => (
+            {/* Content */}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              {/* Chats Tab */}
+              {activeTab === 'chats' && (
+                <>
+                  {chatRooms.length === 0 ? (
                     <div
-                      key={friend.id}
                       style={{
-                        padding: '12px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        borderBottom: '1px solid var(--border)',
-                        position: 'relative',
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        color: 'var(--text-muted)',
                       }}
                     >
-                      <div style={{ position: 'relative' }}>
+                      <MessageCircle size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                      <p>У вас пока нет чатов</p>
+                      <p style={{ fontSize: '13px', marginTop: '8px' }}>
+                        Добавьте друзей, чтобы начать общение
+                      </p>
+                    </div>
+                  ) : (
+                    chatRooms.map(room => (
+                      <div
+                        key={room.id}
+                        onClick={() => setSelectedRoomId(room.id)}
+                        style={{
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          cursor: 'pointer',
+                          background:
+                            selectedRoomId === room.id ? 'var(--primary-bg)' : 'transparent',
+                          borderBottom: '1px solid var(--border)',
+                          position: 'relative',
+                        }}
+                      >
+                        {/* Avatar */}
+                        <div style={{ position: 'relative' }}>
+                          <div
+                            style={{
+                              width: '48px',
+                              height: '48px',
+                              borderRadius: '50%',
+                              background: 'var(--surface)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {room.avatar ? (
+                              <img
+                                src={room.avatar}
+                                alt=""
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <Users size={24} style={{ color: 'var(--text-muted)' }} />
+                            )}
+                          </div>
+                          {room.is_pinned && (
+                            <Pin
+                              size={12}
+                              style={{
+                                position: 'absolute',
+                                top: -2,
+                                right: -2,
+                                color: 'var(--primary)',
+                              }}
+                            />
+                          )}
+                        </div>
+
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: 500,
+                                color: 'var(--text)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {room.name || 'Чат'}
+                            </span>
+                            {room.last_message && (
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                {formatTime(room.last_message.created_at)}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span
+                              style={{
+                                fontSize: '13px',
+                                color: 'var(--text-muted)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flex: 1,
+                              }}
+                            >
+                              {room.last_message?.content || 'Нет сообщений'}
+                            </span>
+                            {room.unread_count > 0 && (
+                              <span
+                                style={{
+                                  minWidth: '20px',
+                                  height: '20px',
+                                  borderRadius: '10px',
+                                  background: 'var(--primary)',
+                                  color: 'var(--text-on-primary)',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  padding: '0 6px',
+                                }}
+                              >
+                                {room.unread_count}
+                              </span>
+                            )}
+                            {room.is_muted && (
+                              <BellOff size={14} style={{ color: 'var(--text-muted)' }} />
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Menu */}
+                        <button
+                          data-menu-trigger
+                          onClick={e => {
+                            e.stopPropagation();
+                            setShowChatMenu(showChatMenu === room.id ? null : room.id);
+                          }}
+                          style={{
+                            padding: '4px',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+
+                        {showChatMenu === room.id && (
+                          <div
+                            data-menu-container
+                            style={{
+                              position: 'absolute',
+                              top: '50px',
+                              right: '16px',
+                              background: 'var(--card)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                              zIndex: 100,
+                              minWidth: '160px',
+                            }}
+                          >
+                            <button
+                              onClick={() => handleTogglePin(room.id)}
+                              style={{
+                                width: '100%',
+                                padding: '10px 16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--text)',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                              }}
+                            >
+                              <Pin size={16} />
+                              {room.is_pinned ? 'Открепить' : 'Закрепить'}
+                            </button>
+                            <button
+                              onClick={() => handleToggleMute(room.id)}
+                              style={{
+                                width: '100%',
+                                padding: '10px 16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--text)',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                              }}
+                            >
+                              {room.is_muted ? <Bell size={16} /> : <BellOff size={16} />}
+                              {room.is_muted ? 'Включить уведомления' : 'Выключить уведомления'}
+                            </button>
+                            <div
+                              style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }}
+                            />
+                            <button
+                              onClick={() => handleDeleteChat(room.id)}
+                              style={{
+                                width: '100%',
+                                padding: '10px 16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                              }}
+                            >
+                              <Trash2 size={16} />
+                              Удалить чат
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+
+              {/* Friends Tab */}
+              {activeTab === 'friends' && (
+                <>
+                  {friends.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      <Users size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                      <p>У вас пока нет друзей</p>
+                      <p style={{ fontSize: '13px', marginTop: '8px' }}>
+                        Найдите пользователей по ID и отправьте запрос
+                      </p>
+                    </div>
+                  ) : (
+                    friends.map(friend => (
+                      <div
+                        key={friend.id}
+                        style={{
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          borderBottom: '1px solid var(--border)',
+                          position: 'relative',
+                        }}
+                      >
+                        <div style={{ position: 'relative' }}>
+                          <div
+                            style={{
+                              width: '44px',
+                              height: '44px',
+                              borderRadius: '50%',
+                              background: 'var(--surface)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            {friend.avatar ? (
+                              <img
+                                src={friend.avatar}
+                                alt=""
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              <Users size={22} style={{ color: 'var(--text-muted)' }} />
+                            )}
+                          </div>
+                          <Circle
+                            size={12}
+                            fill={getStatusColor(friend.online_status)}
+                            style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              right: 0,
+                              color: getStatusColor(friend.online_status),
+                            }}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500, color: 'var(--text)' }}>
+                            {friend.name || 'Без имени'}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            {friend.online_status === 'online'
+                              ? 'В сети'
+                              : friend.last_seen_at
+                                ? `Был(а) ${formatTime(friend.last_seen_at)}`
+                                : 'Не в сети'}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleStartChat(friend.id)}
+                          style={{
+                            padding: '8px 12px',
+                            background: 'var(--primary)',
+                            color: 'var(--text-on-primary)',
+                            border: 'none',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          <MessageCircle size={14} />
+                          Написать
+                        </button>
+
+                        {/* Friend menu */}
+                        <button
+                          data-menu-trigger
+                          onClick={e => {
+                            e.stopPropagation();
+                            setShowChatMenu(
+                              showChatMenu === `friend-${friend.id}` ? null : `friend-${friend.id}`
+                            );
+                          }}
+                          style={{
+                            padding: '4px',
+                            background: 'transparent',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--text-muted)',
+                          }}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+
+                        {showChatMenu === `friend-${friend.id}` && (
+                          <div
+                            data-menu-container
+                            style={{
+                              position: 'absolute',
+                              top: '50px',
+                              right: '16px',
+                              background: 'var(--card)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                              zIndex: 100,
+                              minWidth: '180px',
+                            }}
+                          >
+                            <button
+                              onClick={() => handleRemoveFriend(friend.id)}
+                              style={{
+                                width: '100%',
+                                padding: '10px 16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: 'var(--text)',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                              }}
+                            >
+                              <UserX size={16} />
+                              Удалить из друзей
+                            </button>
+                            <div
+                              style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }}
+                            />
+                            <button
+                              onClick={() => {
+                                handleBlockUser(friend.id);
+                                setShowChatMenu(null);
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '10px 16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                              }}
+                            >
+                              <UserX size={16} />
+                              Заблокировать
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+
+                  {/* Blocked Users Link */}
+                  <button
+                    onClick={() => setActiveTab('blocked')}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderTop: '1px solid var(--border)',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                    }}
+                  >
+                    <UserX size={16} />
+                    Заблокированные ({blockedUsers.length})
+                  </button>
+                </>
+              )}
+
+              {/* Requests Tab */}
+              {activeTab === 'requests' && (
+                <>
+                  {/* Incoming */}
+                  <div
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Входящие ({friendRequests.incoming.length})
+                  </div>
+                  {friendRequests.incoming.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '20px',
+                        textAlign: 'center',
+                        color: 'var(--text-muted)',
+                        fontSize: '13px',
+                      }}
+                    >
+                      Нет входящих запросов
+                    </div>
+                  ) : (
+                    friendRequests.incoming.map(req => (
+                      <div
+                        key={req.id}
+                        style={{
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
                         <div
                           style={{
                             width: '44px',
@@ -1022,69 +1295,777 @@ export default function MessagesPage() {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            overflow: 'hidden',
                           }}
                         >
-                          {friend.avatar ? (
-                            <img
-                              src={friend.avatar}
-                              alt=""
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            <Users size={22} style={{ color: 'var(--text-muted)' }} />
-                          )}
+                          <Users size={22} style={{ color: 'var(--text-muted)' }} />
                         </div>
-                        <Circle
-                          size={12}
-                          fill={getStatusColor(friend.online_status)}
-                          style={{
-                            position: 'absolute',
-                            bottom: 0,
-                            right: 0,
-                            color: getStatusColor(friend.online_status),
-                          }}
-                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500, color: 'var(--text)' }}>
+                            {req.user.name || req.user.email}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            ID: {req.user.public_id}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={() => handleAcceptRequest(req.id)}
+                            style={{
+                              padding: '8px',
+                              background: 'rgba(34, 197, 94, 0.1)',
+                              color: '#22c55e',
+                              border: 'none',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <Check size={18} />
+                          </button>
+                          <button
+                            onClick={() => handleDeclineRequest(req.id)}
+                            style={{
+                              padding: '8px',
+                              background: 'rgba(239, 68, 68, 0.1)',
+                              color: '#ef4444',
+                              border: 'none',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <X size={18} />
+                          </button>
+                        </div>
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                          {friend.name || 'Без имени'}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          {friend.online_status === 'online'
-                            ? 'В сети'
-                            : friend.last_seen_at
-                              ? `Был(а) ${formatTime(friend.last_seen_at)}`
-                              : 'Не в сети'}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleStartChat(friend.id)}
+                    ))
+                  )}
+
+                  {/* Outgoing */}
+                  <div
+                    style={{
+                      padding: '8px 16px',
+                      marginTop: '16px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Исходящие ({friendRequests.outgoing.length})
+                  </div>
+                  {friendRequests.outgoing.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '20px',
+                        textAlign: 'center',
+                        color: 'var(--text-muted)',
+                        fontSize: '13px',
+                      }}
+                    >
+                      Нет исходящих запросов
+                    </div>
+                  ) : (
+                    friendRequests.outgoing.map(req => (
+                      <div
+                        key={req.id}
                         style={{
-                          padding: '8px 12px',
-                          background: 'var(--primary)',
-                          color: 'var(--text-on-primary)',
-                          border: 'none',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          cursor: 'pointer',
+                          padding: '12px 16px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
+                          gap: '12px',
+                          borderBottom: '1px solid var(--border)',
                         }}
                       >
-                        <MessageCircle size={14} />
-                        Написать
-                      </button>
+                        <div
+                          style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '50%',
+                            background: 'var(--surface)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Users size={22} style={{ color: 'var(--text-muted)' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500, color: 'var(--text)' }}>
+                            {req.user.name || req.user.email}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            <Clock
+                              size={12}
+                              style={{ marginRight: '4px', verticalAlign: 'middle' }}
+                            />
+                            Ожидает подтверждения
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
 
-                      {/* Friend menu */}
+              {/* Blocked Tab */}
+              {activeTab === 'blocked' && (
+                <>
+                  <button
+                    onClick={() => setActiveTab('friends')}
+                    style={{
+                      width: '100%',
+                      padding: '12px 16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderBottom: '1px solid var(--border)',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                    }}
+                  >
+                    <ChevronLeft size={16} />
+                    Назад к друзьям
+                  </button>
+
+                  {blockedUsers.length === 0 ? (
+                    <div
+                      style={{
+                        padding: '40px 20px',
+                        textAlign: 'center',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      <UserX size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
+                      <p>Нет заблокированных пользователей</p>
+                    </div>
+                  ) : (
+                    blockedUsers.map(blocked => (
+                      <div
+                        key={blocked.id}
+                        style={{
+                          padding: '12px 16px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          borderBottom: '1px solid var(--border)',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: '44px',
+                            height: '44px',
+                            borderRadius: '50%',
+                            background: 'var(--surface)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <UserX size={22} style={{ color: '#ef4444' }} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500, color: 'var(--text)' }}>
+                            {blocked.name || 'Без имени'}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                            ID: {blocked.public_id}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleUnblockUser(blocked.id)}
+                          style={{
+                            padding: '8px 12px',
+                            background: 'var(--surface)',
+                            color: 'var(--text)',
+                            border: '1px solid var(--border)',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Разблокировать
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </>
+              )}
+            </div>
+          </Card>
+
+          {/* Right Side - Chat Area */}
+          <Card style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            {!selectedRoomId ? (
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                <MessageCircle size={64} style={{ marginBottom: '20px', opacity: 0.3 }} />
+                <p style={{ fontSize: '18px', marginBottom: '8px' }}>Выберите чат</p>
+                <p style={{ fontSize: '14px' }}>или начните новую беседу с другом</p>
+              </div>
+            ) : (
+              <>
+                {/* Chat Header */}
+                <div
+                  style={{
+                    padding: '12px 16px',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '50%',
+                      background: 'var(--surface)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {selectedRoom?.avatar ? (
+                      <img
+                        src={selectedRoom.avatar}
+                        alt=""
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <Users size={24} style={{ color: 'var(--text-muted)' }} />
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                      {selectedRoom?.name || 'Чат'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {selectedRoom?.room_type === 'private'
+                        ? 'Личный чат'
+                        : `${selectedRoom?.participants?.length ?? 0} участников`}
+                    </div>
+                  </div>
+                  {selectedRoom?.room_type === 'private' &&
+                    (() => {
+                      const otherParticipant = selectedRoom?.participants?.find(
+                        p => p.id !== user?.id
+                      ) as UserBrief | undefined;
+                      const isAlreadyFriend =
+                        otherParticipant &&
+                        friends.some(f => f.public_id === otherParticipant.public_id);
+                      const hasOutgoingRequest =
+                        otherParticipant &&
+                        friendRequests.outgoing.some(
+                          r => r.user.public_id === otherParticipant.public_id
+                        );
+                      const canAddFriend =
+                        otherParticipant &&
+                        otherParticipant.id !== user?.id &&
+                        !isAlreadyFriend &&
+                        !hasOutgoingRequest;
+                      return otherParticipant ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setContactViewUser(otherParticipant)}
+                            title="Просмотр контакта"
+                            style={{
+                              padding: '8px 12px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              background: 'var(--surface)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '8px',
+                              color: 'var(--text)',
+                              fontSize: '13px',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <User size={16} />
+                            Контакт
+                          </button>
+                          {canAddFriend ? (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  const res = await sendFriendRequest(otherParticipant.public_id);
+                                  toast.success(res.message);
+                                  loadFriendRequests();
+                                  loadFriends();
+                                } catch (err: unknown) {
+                                  const ax = err as { response?: { data?: { detail?: string } } };
+                                  toast.error(
+                                    ax.response?.data?.detail || 'Не удалось отправить запрос'
+                                  );
+                                }
+                              }}
+                              title="Добавить в друзья"
+                              style={{
+                                padding: '8px 12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: 'var(--primary)',
+                                border: 'none',
+                                borderRadius: '8px',
+                                color: 'var(--text-on-primary)',
+                                fontSize: '13px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <UserPlus size={16} />В друзья
+                            </button>
+                          ) : isAlreadyFriend ? (
+                            <span
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                              }}
+                            >
+                              <UserCheck size={16} />В друзьях
+                            </span>
+                          ) : hasOutgoingRequest ? (
+                            <span
+                              style={{
+                                fontSize: '12px',
+                                color: 'var(--text-muted)',
+                              }}
+                            >
+                              Запрос отправлен
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : null;
+                    })()}
+                </div>
+
+                {/* Messages */}
+                <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
+                  {loadingMessages ? (
+                    <div
+                      style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}
+                    >
+                      Загрузка сообщений...
+                    </div>
+                  ) : messages.length === 0 ? (
+                    <div
+                      style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}
+                    >
+                      <p>Нет сообщений</p>
+                      <p style={{ fontSize: '13px', marginTop: '8px' }}>
+                        Напишите первое сообщение!
+                      </p>
+                    </div>
+                  ) : (
+                    messages.map(msg => {
+                      if (msg.message_type === 'system') {
+                        return (
+                          <div
+                            key={msg.id}
+                            data-testid="chat-system-message"
+                            style={{
+                              marginBottom: '12px',
+                              display: 'flex',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            <div
+                              style={{
+                                maxWidth: '85%',
+                                padding: '8px 14px',
+                                background: 'var(--surface)',
+                                borderRadius: '12px',
+                                fontSize: '13px',
+                                color: 'var(--text-muted)',
+                                textAlign: 'center',
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {msg.content}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={msg.id}
+                          style={{
+                            marginBottom: '12px',
+                            display: 'flex',
+                            flexDirection: msg.is_mine ? 'row-reverse' : 'row',
+                            gap: '8px',
+                          }}
+                        >
+                          {/* Avatar */}
+                          {!msg.is_mine && (
+                            <div
+                              style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '50%',
+                                background: 'var(--surface)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                              }}
+                            >
+                              {msg.sender?.avatar ? (
+                                <img
+                                  src={msg.sender.avatar}
+                                  alt=""
+                                  style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                  }}
+                                />
+                              ) : (
+                                <Users size={16} style={{ color: 'var(--text-muted)' }} />
+                              )}
+                            </div>
+                          )}
+
+                          {/* Message Bubble */}
+                          <div style={{ maxWidth: '70%', position: 'relative' }}>
+                            {/* Reply */}
+                            {msg.reply_to && (
+                              <div
+                                style={{
+                                  padding: '6px 10px',
+                                  background: 'var(--surface)',
+                                  borderRadius: '8px 8px 0 0',
+                                  borderLeft: '3px solid var(--primary)',
+                                  fontSize: '12px',
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                <span style={{ fontWeight: 500, color: 'var(--text)' }}>
+                                  {msg.reply_to.sender_name}
+                                </span>
+                                <p
+                                  style={{
+                                    margin: '2px 0 0',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {msg.reply_to.content}
+                                </p>
+                              </div>
+                            )}
+
+                            <div
+                              style={{
+                                padding: '10px 14px',
+                                background: msg.is_mine ? 'var(--primary)' : 'var(--surface)',
+                                color: msg.is_mine ? 'var(--text-on-primary)' : 'var(--text)',
+                                borderRadius: msg.reply_to
+                                  ? '0 0 16px 16px'
+                                  : msg.is_mine
+                                    ? '16px 4px 16px 16px'
+                                    : '4px 16px 16px 16px',
+                              }}
+                            >
+                              {!msg.is_mine && (
+                                <div
+                                  style={{
+                                    fontSize: '12px',
+                                    fontWeight: 500,
+                                    marginBottom: '4px',
+                                    color: 'var(--primary)',
+                                  }}
+                                >
+                                  {msg.sender?.name || 'Неизвестный'}
+                                </div>
+                              )}
+                              <p style={{ margin: 0, wordBreak: 'break-word' }}>
+                                {msg.is_deleted ? (
+                                  <span style={{ fontStyle: 'italic', opacity: 0.7 }}>
+                                    Сообщение удалено
+                                  </span>
+                                ) : (
+                                  msg.content
+                                )}
+                              </p>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-end',
+                                  gap: '4px',
+                                  marginTop: '4px',
+                                  fontSize: '11px',
+                                  opacity: 0.7,
+                                }}
+                              >
+                                {msg.is_edited && <span>(изм.)</span>}
+                                <span>{formatTime(msg.created_at)}</span>
+                                {msg.is_mine &&
+                                  (msg.is_read ? (
+                                    <CheckCheck size={14} style={{ color: 'var(--primary)' }} />
+                                  ) : (
+                                    <Check size={14} style={{ opacity: 0.5 }} />
+                                  ))}
+                              </div>
+                            </div>
+
+                            {/* Reactions */}
+                            {msg.reactions.length > 0 && (
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  gap: '4px',
+                                  marginTop: '4px',
+                                  flexWrap: 'wrap',
+                                }}
+                              >
+                                {Object.entries(
+                                  msg.reactions.reduce(
+                                    (acc, r) => {
+                                      acc[r.emoji] = (acc[r.emoji] || 0) + 1;
+                                      return acc;
+                                    },
+                                    {} as Record<string, number>
+                                  )
+                                ).map(([emoji, count]) => (
+                                  <span
+                                    key={emoji}
+                                    style={{
+                                      padding: '2px 6px',
+                                      background: 'var(--surface)',
+                                      borderRadius: '10px',
+                                      fontSize: '12px',
+                                    }}
+                                  >
+                                    {emoji} {count}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Message Actions */}
+                            {!msg.is_deleted && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: 0,
+                                  [msg.is_mine ? 'left' : 'right']: '-80px',
+                                  display: 'flex',
+                                  gap: '4px',
+                                  opacity: 0,
+                                  transition: 'opacity 0.2s',
+                                }}
+                                className="message-actions"
+                              >
+                                <button
+                                  onClick={() => setReplyTo(msg)}
+                                  style={{
+                                    padding: '6px',
+                                    background: 'var(--surface)',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-muted)',
+                                  }}
+                                  title="Ответить"
+                                >
+                                  <Reply size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  data-emoji-trigger
+                                  onClick={() =>
+                                    setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)
+                                  }
+                                  style={{
+                                    padding: '6px',
+                                    background: 'var(--surface)',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-muted)',
+                                  }}
+                                  title="Реакция"
+                                >
+                                  <Smile size={14} />
+                                </button>
+                                {msg.is_mine && (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        setEditingMessage(msg);
+                                        setMessageText(msg.content || '');
+                                      }}
+                                      style={{
+                                        padding: '6px',
+                                        background: 'var(--surface)',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        color: 'var(--text-muted)',
+                                      }}
+                                      title="Редактировать"
+                                    >
+                                      <Edit3 size={14} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteMessage(msg.id)}
+                                      style={{
+                                        padding: '6px',
+                                        background: 'var(--surface)',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        cursor: 'pointer',
+                                        color: '#ef4444',
+                                      }}
+                                      title="Удалить"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Emoji Picker — открывается под сообщением, чтобы не обрезаться и не уходить вверх */}
+                            {showEmojiPicker === msg.id && (
+                              <div
+                                data-emoji-picker
+                                style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  marginTop: '6px',
+                                  [msg.is_mine ? 'right' : 'left']: 0,
+                                  padding: '8px',
+                                  background: 'var(--card)',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '12px',
+                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                  display: 'flex',
+                                  gap: '4px',
+                                  flexWrap: 'wrap',
+                                  zIndex: 1000,
+                                }}
+                              >
+                                {EMOJI_LIST.map(emoji => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => handleAddReaction(msg.id, emoji)}
+                                    style={{
+                                      padding: '6px',
+                                      background: 'transparent',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      fontSize: '18px',
+                                    }}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Input Area */}
+                <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px' }}>
+                  {/* Reply Preview */}
+                  {replyTo && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginBottom: '8px',
+                        padding: '8px 12px',
+                        background: 'var(--surface)',
+                        borderRadius: '8px',
+                        borderLeft: '3px solid var(--primary)',
+                      }}
+                    >
+                      <Reply size={16} style={{ color: 'var(--primary)' }} />
+                      <div style={{ flex: 1, overflow: 'hidden' }}>
+                        <span
+                          style={{ fontSize: '12px', fontWeight: 500, color: 'var(--primary)' }}
+                        >
+                          Ответ на {replyTo.sender?.name || 'сообщение'}
+                        </span>
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: '13px',
+                            color: 'var(--text-muted)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {replyTo.content}
+                        </p>
+                      </div>
                       <button
-                        data-menu-trigger
-                        onClick={e => {
-                          e.stopPropagation();
-                          setShowChatMenu(
-                            showChatMenu === `friend-${friend.id}` ? null : `friend-${friend.id}`
-                          );
+                        onClick={() => setReplyTo(null)}
+                        style={{
+                          padding: '4px',
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--text-muted)',
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Edit Preview */}
+                  {editingMessage && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginBottom: '8px',
+                        padding: '8px 12px',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        borderRadius: '8px',
+                        borderLeft: '3px solid #3b82f6',
+                      }}
+                    >
+                      <Edit3 size={16} style={{ color: '#3b82f6' }} />
+                      <span style={{ flex: 1, fontSize: '13px', color: '#3b82f6' }}>
+                        Редактирование сообщения
+                      </span>
+                      <button
+                        onClick={() => {
+                          setEditingMessage(null);
+                          setMessageText('');
                         }}
                         style={{
                           padding: '4px',
@@ -1094,967 +2075,62 @@ export default function MessagesPage() {
                           color: 'var(--text-muted)',
                         }}
                       >
-                        <MoreVertical size={16} />
-                      </button>
-
-                      {showChatMenu === `friend-${friend.id}` && (
-                        <div
-                          data-menu-container
-                          style={{
-                            position: 'absolute',
-                            top: '50px',
-                            right: '16px',
-                            background: 'var(--card)',
-                            border: '1px solid var(--border)',
-                            borderRadius: '8px',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                            zIndex: 100,
-                            minWidth: '180px',
-                          }}
-                        >
-                          <button
-                            onClick={() => handleRemoveFriend(friend.id)}
-                            style={{
-                              width: '100%',
-                              padding: '10px 16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              background: 'transparent',
-                              border: 'none',
-                              color: 'var(--text)',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                            }}
-                          >
-                            <UserX size={16} />
-                            Удалить из друзей
-                          </button>
-                          <div style={{ borderTop: '1px solid var(--border)', margin: '4px 0' }} />
-                          <button
-                            onClick={() => {
-                              handleBlockUser(friend.id);
-                              setShowChatMenu(null);
-                            }}
-                            style={{
-                              width: '100%',
-                              padding: '10px 16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              background: 'transparent',
-                              border: 'none',
-                              color: '#ef4444',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                            }}
-                          >
-                            <UserX size={16} />
-                            Заблокировать
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-
-                {/* Blocked Users Link */}
-                <button
-                  onClick={() => setActiveTab('blocked')}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderTop: '1px solid var(--border)',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                  }}
-                >
-                  <UserX size={16} />
-                  Заблокированные ({blockedUsers.length})
-                </button>
-              </>
-            )}
-
-            {/* Requests Tab */}
-            {activeTab === 'requests' && (
-              <>
-                {/* Incoming */}
-                <div
-                  style={{
-                    padding: '8px 16px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Входящие ({friendRequests.incoming.length})
-                </div>
-                {friendRequests.incoming.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '20px',
-                      textAlign: 'center',
-                      color: 'var(--text-muted)',
-                      fontSize: '13px',
-                    }}
-                  >
-                    Нет входящих запросов
-                  </div>
-                ) : (
-                  friendRequests.incoming.map(req => (
-                    <div
-                      key={req.id}
-                      style={{
-                        padding: '12px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: '44px',
-                          height: '44px',
-                          borderRadius: '50%',
-                          background: 'var(--surface)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Users size={22} style={{ color: 'var(--text-muted)' }} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                          {req.user.name || req.user.email}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          ID: {req.user.public_id}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={() => handleAcceptRequest(req.id)}
-                          style={{
-                            padding: '8px',
-                            background: 'rgba(34, 197, 94, 0.1)',
-                            color: '#22c55e',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Check size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDeclineRequest(req.id)}
-                          style={{
-                            padding: '8px',
-                            background: 'rgba(239, 68, 68, 0.1)',
-                            color: '#ef4444',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <X size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-
-                {/* Outgoing */}
-                <div
-                  style={{
-                    padding: '8px 16px',
-                    marginTop: '16px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: 'var(--text-muted)',
-                    textTransform: 'uppercase',
-                  }}
-                >
-                  Исходящие ({friendRequests.outgoing.length})
-                </div>
-                {friendRequests.outgoing.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '20px',
-                      textAlign: 'center',
-                      color: 'var(--text-muted)',
-                      fontSize: '13px',
-                    }}
-                  >
-                    Нет исходящих запросов
-                  </div>
-                ) : (
-                  friendRequests.outgoing.map(req => (
-                    <div
-                      key={req.id}
-                      style={{
-                        padding: '12px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: '44px',
-                          height: '44px',
-                          borderRadius: '50%',
-                          background: 'var(--surface)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Users size={22} style={{ color: 'var(--text-muted)' }} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                          {req.user.name || req.user.email}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          <Clock
-                            size={12}
-                            style={{ marginRight: '4px', verticalAlign: 'middle' }}
-                          />
-                          Ожидает подтверждения
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </>
-            )}
-
-            {/* Blocked Tab */}
-            {activeTab === 'blocked' && (
-              <>
-                <button
-                  onClick={() => setActiveTab('friends')}
-                  style={{
-                    width: '100%',
-                    padding: '12px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    background: 'transparent',
-                    border: 'none',
-                    borderBottom: '1px solid var(--border)',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                  }}
-                >
-                  <ChevronLeft size={16} />
-                  Назад к друзьям
-                </button>
-
-                {blockedUsers.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '40px 20px',
-                      textAlign: 'center',
-                      color: 'var(--text-muted)',
-                    }}
-                  >
-                    <UserX size={48} style={{ marginBottom: '16px', opacity: 0.5 }} />
-                    <p>Нет заблокированных пользователей</p>
-                  </div>
-                ) : (
-                  blockedUsers.map(blocked => (
-                    <div
-                      key={blocked.id}
-                      style={{
-                        padding: '12px 16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: '44px',
-                          height: '44px',
-                          borderRadius: '50%',
-                          background: 'var(--surface)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <UserX size={22} style={{ color: '#ef4444' }} />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                          {blocked.name || 'Без имени'}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          ID: {blocked.public_id}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleUnblockUser(blocked.id)}
-                        style={{
-                          padding: '8px 12px',
-                          background: 'var(--surface)',
-                          color: 'var(--text)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '8px',
-                          fontSize: '13px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Разблокировать
+                        <X size={16} />
                       </button>
                     </div>
-                  ))
-                )}
-              </>
-            )}
-          </div>
-        </Card>
-
-        {/* Right Side - Chat Area */}
-        <Card style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {!selectedRoomId ? (
-            <div
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text-muted)',
-              }}
-            >
-              <MessageCircle size={64} style={{ marginBottom: '20px', opacity: 0.3 }} />
-              <p style={{ fontSize: '18px', marginBottom: '8px' }}>Выберите чат</p>
-              <p style={{ fontSize: '14px' }}>или начните новую беседу с другом</p>
-            </div>
-          ) : (
-            <>
-              {/* Chat Header */}
-              <div
-                style={{
-                  padding: '12px 16px',
-                  borderBottom: '1px solid var(--border)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                }}
-              >
-                <div
-                  style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '50%',
-                    background: 'var(--surface)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {selectedRoom?.avatar ? (
-                    <img
-                      src={selectedRoom.avatar}
-                      alt=""
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                  ) : (
-                    <Users size={24} style={{ color: 'var(--text-muted)' }} />
                   )}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, color: 'var(--text)' }}>
-                    {selectedRoom?.name || 'Чат'}
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {selectedRoom?.room_type === 'private'
-                      ? 'Личный чат'
-                      : `${selectedRoom?.participants?.length ?? 0} участников`}
-                  </div>
-                </div>
-                {selectedRoom?.room_type === 'private' &&
-                  (() => {
-                    const otherParticipant = selectedRoom?.participants?.find(
-                      p => p.id !== user?.id
-                    ) as UserBrief | undefined;
-                    const isAlreadyFriend =
-                      otherParticipant &&
-                      friends.some(f => f.public_id === otherParticipant.public_id);
-                    const hasOutgoingRequest =
-                      otherParticipant &&
-                      friendRequests.outgoing.some(
-                        r => r.user.public_id === otherParticipant.public_id
-                      );
-                    const canAddFriend =
-                      otherParticipant &&
-                      otherParticipant.id !== user?.id &&
-                      !isAlreadyFriend &&
-                      !hasOutgoingRequest;
-                    return otherParticipant ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setContactViewUser(otherParticipant)}
-                          title="Просмотр контакта"
-                          style={{
-                            padding: '8px 12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            background: 'var(--surface)',
-                            border: '1px solid var(--border)',
-                            borderRadius: '8px',
-                            color: 'var(--text)',
-                            fontSize: '13px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <User size={16} />
-                          Контакт
-                        </button>
-                        {canAddFriend ? (
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                const res = await sendFriendRequest(otherParticipant.public_id);
-                                toast.success(res.message);
-                                loadFriendRequests();
-                                loadFriends();
-                              } catch (err: unknown) {
-                                const ax = err as { response?: { data?: { detail?: string } } };
-                                toast.error(
-                                  ax.response?.data?.detail || 'Не удалось отправить запрос'
-                                );
-                              }
-                            }}
-                            title="Добавить в друзья"
-                            style={{
-                              padding: '8px 12px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              background: 'var(--primary)',
-                              border: 'none',
-                              borderRadius: '8px',
-                              color: 'var(--text-on-primary)',
-                              fontSize: '13px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <UserPlus size={16} />В друзья
-                          </button>
-                        ) : isAlreadyFriend ? (
-                          <span
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              fontSize: '12px',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            <UserCheck size={16} />В друзьях
-                          </span>
-                        ) : hasOutgoingRequest ? (
-                          <span
-                            style={{
-                              fontSize: '12px',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            Запрос отправлен
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null;
-                  })()}
-              </div>
 
-              {/* Messages */}
-              <div style={{ flex: 1, overflow: 'auto', padding: '16px' }}>
-                {loadingMessages ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                    Загрузка сообщений...
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                    <p>Нет сообщений</p>
-                    <p style={{ fontSize: '13px', marginTop: '8px' }}>Напишите первое сообщение!</p>
-                  </div>
-                ) : (
-                  messages.map(msg => {
-                    if (msg.message_type === 'system') {
-                      return (
-                        <div
-                          key={msg.id}
-                          data-testid="chat-system-message"
-                          style={{
-                            marginBottom: '12px',
-                            display: 'flex',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <div
-                            style={{
-                              maxWidth: '85%',
-                              padding: '8px 14px',
-                              background: 'var(--surface)',
-                              borderRadius: '12px',
-                              fontSize: '13px',
-                              color: 'var(--text-muted)',
-                              textAlign: 'center',
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {msg.content}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={msg.id}
-                        style={{
-                          marginBottom: '12px',
-                          display: 'flex',
-                          flexDirection: msg.is_mine ? 'row-reverse' : 'row',
-                          gap: '8px',
-                        }}
-                      >
-                        {/* Avatar */}
-                        {!msg.is_mine && (
-                          <div
-                            style={{
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '50%',
-                              background: 'var(--surface)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                            }}
-                          >
-                            {msg.sender?.avatar ? (
-                              <img
-                                src={msg.sender.avatar}
-                                alt=""
-                                style={{
-                                  width: '100%',
-                                  height: '100%',
-                                  borderRadius: '50%',
-                                  objectFit: 'cover',
-                                }}
-                              />
-                            ) : (
-                              <Users size={16} style={{ color: 'var(--text-muted)' }} />
-                            )}
-                          </div>
-                        )}
-
-                        {/* Message Bubble */}
-                        <div style={{ maxWidth: '70%', position: 'relative' }}>
-                          {/* Reply */}
-                          {msg.reply_to && (
-                            <div
-                              style={{
-                                padding: '6px 10px',
-                                background: 'var(--surface)',
-                                borderRadius: '8px 8px 0 0',
-                                borderLeft: '3px solid var(--primary)',
-                                fontSize: '12px',
-                                color: 'var(--text-muted)',
-                              }}
-                            >
-                              <span style={{ fontWeight: 500, color: 'var(--text)' }}>
-                                {msg.reply_to.sender_name}
-                              </span>
-                              <p
-                                style={{
-                                  margin: '2px 0 0',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {msg.reply_to.content}
-                              </p>
-                            </div>
-                          )}
-
-                          <div
-                            style={{
-                              padding: '10px 14px',
-                              background: msg.is_mine ? 'var(--primary)' : 'var(--surface)',
-                              color: msg.is_mine ? 'var(--text-on-primary)' : 'var(--text)',
-                              borderRadius: msg.reply_to
-                                ? '0 0 16px 16px'
-                                : msg.is_mine
-                                  ? '16px 4px 16px 16px'
-                                  : '4px 16px 16px 16px',
-                            }}
-                          >
-                            {!msg.is_mine && (
-                              <div
-                                style={{
-                                  fontSize: '12px',
-                                  fontWeight: 500,
-                                  marginBottom: '4px',
-                                  color: 'var(--primary)',
-                                }}
-                              >
-                                {msg.sender?.name || 'Неизвестный'}
-                              </div>
-                            )}
-                            <p style={{ margin: 0, wordBreak: 'break-word' }}>
-                              {msg.is_deleted ? (
-                                <span style={{ fontStyle: 'italic', opacity: 0.7 }}>
-                                  Сообщение удалено
-                                </span>
-                              ) : (
-                                msg.content
-                              )}
-                            </p>
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'flex-end',
-                                gap: '4px',
-                                marginTop: '4px',
-                                fontSize: '11px',
-                                opacity: 0.7,
-                              }}
-                            >
-                              {msg.is_edited && <span>(изм.)</span>}
-                              <span>{formatTime(msg.created_at)}</span>
-                              {msg.is_mine &&
-                                (msg.is_read ? (
-                                  <CheckCheck size={14} style={{ color: 'var(--primary)' }} />
-                                ) : (
-                                  <Check size={14} style={{ opacity: 0.5 }} />
-                                ))}
-                            </div>
-                          </div>
-
-                          {/* Reactions */}
-                          {msg.reactions.length > 0 && (
-                            <div
-                              style={{
-                                display: 'flex',
-                                gap: '4px',
-                                marginTop: '4px',
-                                flexWrap: 'wrap',
-                              }}
-                            >
-                              {Object.entries(
-                                msg.reactions.reduce(
-                                  (acc, r) => {
-                                    acc[r.emoji] = (acc[r.emoji] || 0) + 1;
-                                    return acc;
-                                  },
-                                  {} as Record<string, number>
-                                )
-                              ).map(([emoji, count]) => (
-                                <span
-                                  key={emoji}
-                                  style={{
-                                    padding: '2px 6px',
-                                    background: 'var(--surface)',
-                                    borderRadius: '10px',
-                                    fontSize: '12px',
-                                  }}
-                                >
-                                  {emoji} {count}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Message Actions */}
-                          {!msg.is_deleted && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                top: 0,
-                                [msg.is_mine ? 'left' : 'right']: '-80px',
-                                display: 'flex',
-                                gap: '4px',
-                                opacity: 0,
-                                transition: 'opacity 0.2s',
-                              }}
-                              className="message-actions"
-                            >
-                              <button
-                                onClick={() => setReplyTo(msg)}
-                                style={{
-                                  padding: '6px',
-                                  background: 'var(--surface)',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-muted)',
-                                }}
-                                title="Ответить"
-                              >
-                                <Reply size={14} />
-                              </button>
-                              <button
-                                type="button"
-                                data-emoji-trigger
-                                onClick={() =>
-                                  setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)
-                                }
-                                style={{
-                                  padding: '6px',
-                                  background: 'var(--surface)',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-muted)',
-                                }}
-                                title="Реакция"
-                              >
-                                <Smile size={14} />
-                              </button>
-                              {msg.is_mine && (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setEditingMessage(msg);
-                                      setMessageText(msg.content || '');
-                                    }}
-                                    style={{
-                                      padding: '6px',
-                                      background: 'var(--surface)',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      cursor: 'pointer',
-                                      color: 'var(--text-muted)',
-                                    }}
-                                    title="Редактировать"
-                                  >
-                                    <Edit3 size={14} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteMessage(msg.id)}
-                                    style={{
-                                      padding: '6px',
-                                      background: 'var(--surface)',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      cursor: 'pointer',
-                                      color: '#ef4444',
-                                    }}
-                                    title="Удалить"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Emoji Picker — открывается под сообщением, чтобы не обрезаться и не уходить вверх */}
-                          {showEmojiPicker === msg.id && (
-                            <div
-                              data-emoji-picker
-                              style={{
-                                position: 'absolute',
-                                top: '100%',
-                                marginTop: '6px',
-                                [msg.is_mine ? 'right' : 'left']: 0,
-                                padding: '8px',
-                                background: 'var(--card)',
-                                border: '1px solid var(--border)',
-                                borderRadius: '12px',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                display: 'flex',
-                                gap: '4px',
-                                flexWrap: 'wrap',
-                                zIndex: 1000,
-                              }}
-                            >
-                              {EMOJI_LIST.map(emoji => (
-                                <button
-                                  key={emoji}
-                                  type="button"
-                                  onClick={() => handleAddReaction(msg.id, emoji)}
-                                  style={{
-                                    padding: '6px',
-                                    background: 'transparent',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontSize: '18px',
-                                  }}
-                                >
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                <div ref={messagesEndRef} />
-              </div>
-
-              {/* Input Area */}
-              <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px' }}>
-                {/* Reply Preview */}
-                {replyTo && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      marginBottom: '8px',
-                      padding: '8px 12px',
-                      background: 'var(--surface)',
-                      borderRadius: '8px',
-                      borderLeft: '3px solid var(--primary)',
-                    }}
-                  >
-                    <Reply size={16} style={{ color: 'var(--primary)' }} />
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--primary)' }}>
-                        Ответ на {replyTo.sender?.name || 'сообщение'}
-                      </span>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: '13px',
-                          color: 'var(--text-muted)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {replyTo.content}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setReplyTo(null)}
+                  {/* Input */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+                    <textarea
+                      ref={messageInputRef}
+                      value={messageText}
+                      onChange={e => setMessageText(e.target.value)}
+                      onKeyPress={e => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder="Напишите сообщение..."
+                      rows={1}
                       style={{
-                        padding: '4px',
-                        background: 'transparent',
+                        flex: 1,
+                        padding: '12px 16px',
+                        background: 'var(--surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '20px',
+                        color: 'var(--text)',
+                        fontSize: '14px',
+                        resize: 'none',
+                        maxHeight: '120px',
+                        lineHeight: '1.4',
+                      }}
+                    />
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={!messageText.trim()}
+                      style={{
+                        padding: '12px',
+                        background: messageText.trim() ? 'var(--primary)' : 'var(--surface)',
+                        color: messageText.trim() ? 'var(--text-on-primary)' : 'var(--text-muted)',
                         border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--text-muted)',
+                        borderRadius: '50%',
+                        cursor: messageText.trim() ? 'pointer' : 'not-allowed',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
                     >
-                      <X size={16} />
+                      <Send size={20} />
                     </button>
                   </div>
-                )}
-
-                {/* Edit Preview */}
-                {editingMessage && (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      marginBottom: '8px',
-                      padding: '8px 12px',
-                      background: 'rgba(59, 130, 246, 0.1)',
-                      borderRadius: '8px',
-                      borderLeft: '3px solid #3b82f6',
-                    }}
-                  >
-                    <Edit3 size={16} style={{ color: '#3b82f6' }} />
-                    <span style={{ flex: 1, fontSize: '13px', color: '#3b82f6' }}>
-                      Редактирование сообщения
-                    </span>
-                    <button
-                      onClick={() => {
-                        setEditingMessage(null);
-                        setMessageText('');
-                      }}
-                      style={{
-                        padding: '4px',
-                        background: 'transparent',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: 'var(--text-muted)',
-                      }}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                )}
-
-                {/* Input */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-                  <textarea
-                    ref={messageInputRef}
-                    value={messageText}
-                    onChange={e => setMessageText(e.target.value)}
-                    onKeyPress={e => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSendMessage();
-                      }
-                    }}
-                    placeholder="Напишите сообщение..."
-                    rows={1}
-                    style={{
-                      flex: 1,
-                      padding: '12px 16px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '20px',
-                      color: 'var(--text)',
-                      fontSize: '14px',
-                      resize: 'none',
-                      maxHeight: '120px',
-                      lineHeight: '1.4',
-                    }}
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={!messageText.trim()}
-                    style={{
-                      padding: '12px',
-                      background: messageText.trim() ? 'var(--primary)' : 'var(--surface)',
-                      color: messageText.trim() ? 'var(--text-on-primary)' : 'var(--text-muted)',
-                      border: 'none',
-                      borderRadius: '50%',
-                      cursor: messageText.trim() ? 'pointer' : 'not-allowed',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Send size={20} />
-                  </button>
                 </div>
-              </div>
-            </>
-          )}
-        </Card>
-      </div>
+              </>
+            )}
+          </Card>
+        </div>
+      )}
 
       {/* User Profile Modal */}
       {selectedUserProfile && (

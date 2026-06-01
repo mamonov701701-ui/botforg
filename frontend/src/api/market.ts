@@ -216,6 +216,100 @@ export interface MarketAccessRequestCreated {
   already_exists: boolean;
 }
 
+export interface MarketAccessUserBrief {
+  id: number;
+  name?: string | null;
+  email: string;
+  avatar?: string | null;
+}
+
+export interface MarketAccessRequestListItemMarket {
+  id: number;
+  title: string;
+  item_type: string;
+  price: number | string;
+}
+
+export interface MarketAccessRequestListItem {
+  request: MarketAccessRequest;
+  market_item: MarketAccessRequestListItemMarket;
+  requester: MarketAccessUserBrief;
+  author: MarketAccessUserBrief;
+  chat_room_id?: number | null;
+}
+
+export interface MarketAccessRequestListResponse {
+  items: MarketAccessRequestListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+const TERMINAL_MARKET_ACCESS_REQUEST_STATUSES = new Set(['access_granted', 'rejected', 'closed']);
+
+export function formatMarketAccessRequestStatus(status: string | undefined): string {
+  switch (status) {
+    case 'new':
+      return 'Новая';
+    case 'in_discussion':
+      return 'В обсуждении';
+    case 'access_granted':
+      return 'Доступ выдан';
+    case 'rejected':
+      return 'Отклонена';
+    case 'closed':
+      return 'Закрыта';
+    default:
+      return status?.trim() ? status : '—';
+  }
+}
+
+export function formatMarketAccessItemType(itemType: string | undefined): string {
+  switch (itemType) {
+    case 'scenario':
+      return 'Сценарий';
+    case 'template':
+      return 'Шаблон бота';
+    default:
+      return itemType?.trim() ? itemType : '—';
+  }
+}
+
+export function resolveMarketAccessRequestChatRoomId(
+  row: MarketAccessRequestListItem | Record<string, unknown>
+): number | null {
+  const r = row as MarketAccessRequestListItem & Record<string, unknown>;
+  const candidates = [
+    r.chat_room_id,
+    r.chatRoomId,
+    r.roomId,
+    r.chatId,
+    r.request?.chat_room_id,
+    (r.request as { chatRoomId?: number } | undefined)?.chatRoomId,
+  ];
+  for (const value of candidates) {
+    if (typeof value === 'number' && !Number.isNaN(value) && value > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
+export function canAuthorActOnMarketAccessRequest(status: string | undefined): boolean {
+  if (!status) return false;
+  return !TERMINAL_MARKET_ACCESS_REQUEST_STATUSES.has(status);
+}
+
+export function getMarketAccessRequestActionErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.message || 'Не удалось выполнить действие';
+  }
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return 'Не удалось выполнить действие';
+}
+
 export interface MarketOrder {
   id: number;
   title: string;
@@ -465,6 +559,50 @@ export async function createMarketAccessRequest(
     return await api.post(`/api/market/items/${itemId}/access-requests`, payload ?? {});
   } catch (error: any) {
     console.error('Failed to create market access request:', error);
+    throw error;
+  }
+}
+
+/**
+ * Список заявок на доступ (роль author — для автора товара, requester — для покупателя).
+ */
+export async function getMarketAccessRequests(params?: {
+  role: 'author' | 'requester';
+  status?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<MarketAccessRequestListResponse> {
+  try {
+    return await getWithQuery<MarketAccessRequestListResponse>(
+      '/api/market/access-requests',
+      params
+    );
+  } catch (error: any) {
+    console.error('Failed to fetch market access requests:', error);
+    throw error;
+  }
+}
+
+/**
+ * Выдать доступ по заявке (только автор).
+ */
+export async function grantMarketAccessRequest(requestId: number): Promise<unknown> {
+  try {
+    return await api.post(`/api/market/access-requests/${requestId}/grant`, {});
+  } catch (error: any) {
+    console.error('Failed to grant market access request:', error);
+    throw error;
+  }
+}
+
+/**
+ * Отклонить заявку на доступ (только автор).
+ */
+export async function rejectMarketAccessRequest(requestId: number): Promise<MarketAccessRequest> {
+  try {
+    return await api.post(`/api/market/access-requests/${requestId}/reject`, {});
+  } catch (error: any) {
+    console.error('Failed to reject market access request:', error);
     throw error;
   }
 }
