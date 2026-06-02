@@ -24,6 +24,12 @@ from backend.services.message_idempotency import (
     build_processed_update_key,
     try_register_processed_update,
 )
+from backend.services.tariff_message_enforcement import (
+    REASON_MESSAGE_LIMIT_EXCEEDED,
+    check_and_consume_message_unit,
+    is_webhook_message_billable,
+    refund_consumed_message_unit,
+)
 from backend.settings import settings
 from backend.utils.chat_hash import make_chat_hash
 
@@ -72,14 +78,24 @@ def _dispatch_channel_update(
     analytics_event_type: str | None = None,
 ) -> dict[str, Any]:
     """
-    Единая точка dedup + runtime для POST /webhooks/{channel}/{bot_id}.
+    Единая точка dedup + message enforcement + runtime для POST /webhooks/{channel}/{bot_id}.
 
-    Dedup: атомарная регистрация через try_register_processed_update до runtime
-    (см. docs/TARIFFS_STAGE_5_2_1_MESSAGE_IDEMPOTENCY.md).
+    Порядок: idempotency → billable consume → process_channel_update
+    (см. docs/TARIFFS_STAGE_5_3_MESSAGE_ENFORCEMENT.md).
     """
     external_id = build_processed_update_key(channel_key, bot_id, body)
     if external_id and not try_register_processed_update(db, channel_key, bot_id, external_id):
         return {"ok": True, "duplicate": True}
+
+    limit_result = None
+    if is_webhook_message_billable(normalized, external_id):
+        limit_result = check_and_consume_message_unit(db, bot.owner_id)
+        if limit_result.blocked:
+            return {
+                "ok": True,
+                "blocked_by_limit": True,
+                "reason": limit_result.reason or REASON_MESSAGE_LIMIT_EXCEEDED,
+            }
 
     if channel_key == "whatsapp" and normalized.chat_id and (settings.CHAT_HASH_SALT or "").strip():
         normalized = NormalizedUpdate(
@@ -100,13 +116,18 @@ def _dispatch_channel_update(
         normalized.chat_hash is not None,
         "yes" if external_id else "no",
     )
-    process_channel_update(
-        db,
-        bot=bot,
-        conn=conn,
-        adapter=adapter,
-        normalized=normalized,
-    )
+    try:
+        process_channel_update(
+            db,
+            bot=bot,
+            conn=conn,
+            adapter=adapter,
+            normalized=normalized,
+        )
+    except Exception:
+        if limit_result is not None and limit_result.consumed:
+            refund_consumed_message_unit(db, bot.owner_id, limit_result)
+        raise
 
     if analytics_event_type:
         analytics = get_analytics_service(db)
