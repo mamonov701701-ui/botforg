@@ -21,9 +21,11 @@ from backend.models.user import User
 from backend.services.tariff_limits import get_user_tariff_limits
 from backend.services.tariff_message_enforcement import (
     REASON_MESSAGE_LIMIT_EXCEEDED,
+    REASON_MISSING_STABLE_MESSAGE_ID,
     check_and_consume_message_unit,
     is_webhook_message_billable,
     refund_message_unit,
+    should_block_user_input_without_stable_id,
 )
 from backend.tests.conftest import TestingSessionLocal
 from backend.main import app
@@ -115,9 +117,12 @@ def test_billable_requires_stable_id_and_user_input() -> None:
     with_text = NormalizedUpdate(channel="telegram", chat_id="1", text="hi")
     assert is_webhook_message_billable(with_text, "42") is True
     assert is_webhook_message_billable(with_text, None) is False
+    assert should_block_user_input_without_stable_id(with_text, None) is True
+    assert should_block_user_input_without_stable_id(with_text, "42") is False
 
     noop = NormalizedUpdate(channel="telegram", chat_id="1", text="", raw={"event": "delivery"})
     assert is_webhook_message_billable(noop, "99") is False
+    assert should_block_user_input_without_stable_id(noop, None) is False
 
 
 # --- check_and_consume_message_unit ---
@@ -223,7 +228,7 @@ def test_duplicate_webhook_does_not_increment_counter(client, db) -> None:
     assert summary.messages_used == 1
 
 
-def test_payload_without_stable_id_does_not_consume(client, db) -> None:
+def test_user_input_without_stable_id_blocked(client, db) -> None:
     user = _create_user(db)
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
@@ -244,8 +249,12 @@ def test_payload_without_stable_id_does_not_consume(client, db) -> None:
         res = client.post(url, json=payload)
 
     assert res.status_code == 200
-    assert res.json() == {"ok": True}
-    assert mock_runtime.call_count == 1
+    assert res.json() == {
+        "ok": True,
+        "blocked_by_idempotency": True,
+        "reason": REASON_MISSING_STABLE_MESSAGE_ID,
+    }
+    assert mock_runtime.call_count == 0
     summary = get_user_tariff_limits(db, user.id, at=at)
     assert summary.messages_used == 0
 
@@ -487,7 +496,7 @@ def test_duplicate_webhook_does_not_trigger_refund(client, db) -> None:
     assert summary.messages_used == 4
 
 
-def test_no_stable_id_runtime_failure_does_not_refund(client, db) -> None:
+def test_no_stable_id_user_input_blocked_no_refund(client, db) -> None:
     user = _create_user(db)
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
@@ -505,13 +514,11 @@ def test_no_stable_id_runtime_failure_does_not_refund(client, db) -> None:
     url = f"/webhooks/telegram/{bot.id}"
 
     with patch("backend.routers.channel_webhooks.refund_consumed_message_unit") as mock_refund:
-        with patch(
-            "backend.routers.channel_webhooks.process_channel_update",
-            side_effect=RuntimeError("runtime boom"),
-        ):
-            with TestClient(app, raise_server_exceptions=False) as no_raise_client:
-                no_raise_client.post(url, json=payload)
+        with patch("backend.routers.channel_webhooks.process_channel_update") as mock_runtime:
+            res = client.post(url, json=payload)
 
+    assert res.json()["blocked_by_idempotency"] is True
+    mock_runtime.assert_not_called()
     mock_refund.assert_not_called()
     summary = get_user_tariff_limits(db, user.id, at=at)
     assert summary.messages_used == 2

@@ -26,9 +26,11 @@ from backend.services.message_idempotency import (
 )
 from backend.services.tariff_message_enforcement import (
     REASON_MESSAGE_LIMIT_EXCEEDED,
+    REASON_MISSING_STABLE_MESSAGE_ID,
     check_and_consume_message_unit,
     is_webhook_message_billable,
     refund_consumed_message_unit,
+    should_block_user_input_without_stable_id,
 )
 from backend.settings import settings
 from backend.utils.chat_hash import make_chat_hash
@@ -80,10 +82,16 @@ def _dispatch_channel_update(
     """
     Единая точка dedup + message enforcement + runtime для POST /webhooks/{channel}/{bot_id}.
 
-    Порядок: idempotency → billable consume → process_channel_update
+    Порядок: idempotency policy → dedup register → billable consume → process_channel_update
     (см. docs/TARIFFS_STAGE_5_3_MESSAGE_ENFORCEMENT.md).
     """
     external_id = build_processed_update_key(channel_key, bot_id, body)
+    if should_block_user_input_without_stable_id(normalized, external_id):
+        return {
+            "ok": True,
+            "blocked_by_idempotency": True,
+            "reason": REASON_MISSING_STABLE_MESSAGE_ID,
+        }
     if external_id and not try_register_processed_update(db, channel_key, bot_id, external_id):
         return {"ok": True, "duplicate": True}
 

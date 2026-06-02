@@ -115,19 +115,22 @@ WhatsApp: явное `"duplicate": true` (раньше только `{"ok": true
 
 Если payload не содержит стабильного provider update/message id, idempotency key **не строится** (`None`).
 
-Runtime выполняется, запись в `processed_updates` **не создаётся**.
+### Policy: user input without stable id (Этап 5.3.1)
 
-**На Этапе 5.3** такие события **нельзя списывать** в лимит сообщений, пока не будет безопасного ключа или отдельной политики.
+Если webhook payload содержит реальный пользовательский ввод, но не содержит стабильный provider id для idempotency, событие **не обрабатывается** runtime и **не списывается** в лимит.
 
-### Не deduped, но не billing-relevant сейчас
+Ответ webhook остаётся HTTP 200 с телом:
+
+`{"ok": true, "blocked_by_idempotency": true, "reason": "missing_stable_message_id"}`
+
+Причина: нельзя безопасно тарифицировать событие, которое невозможно дедуплицировать. Иначе возможны бесплатная обработка или двойное списание при retry.
+
+Системные события без user input не тарифицируются; runtime для них может выполняться.
+
+### Служебные события без id
 
 - **WhatsApp status/contact** webhooks без `messages[].id` — delivery/read receipts, не user input.
-- Прочие служебные payload без стабильного id, если они не несут пользовательский ввод для сценария.
-
-### Требует решения перед billing (Этап 5.3)
-
-- Любой **inbound user input** без стабильного id — нельзя безопасно dedup и списать.
-- **MAX** payload с user input, но без `message_id` / `id` / `event_id` — нужен контракт webhook или политика «не списывать без ключа».
+- Прочие служебные payload без user input — dedup и billing не применяются.
 
 ---
 

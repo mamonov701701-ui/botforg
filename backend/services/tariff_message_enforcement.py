@@ -18,6 +18,7 @@ from backend.services.channel_runtime import _has_real_user_input
 from backend.services.tariff_limits import get_user_tariff_limits
 
 REASON_MESSAGE_LIMIT_EXCEEDED = "message_limit_exceeded"
+REASON_MISSING_STABLE_MESSAGE_ID = "missing_stable_message_id"
 
 
 @dataclass
@@ -32,6 +33,16 @@ class MessageLimitResult:
     messages_remaining: int | None
     period_start: datetime | None = None
     period_end: datetime | None = None
+
+
+def should_block_user_input_without_stable_id(
+    normalized: NormalizedUpdate,
+    external_id: str | None,
+) -> bool:
+    """User input без stable id нельзя безопасно dedup/тарифицировать (Этап 5.3.1)."""
+    if external_id:
+        return False
+    return _has_real_user_input(normalized)
 
 
 def is_webhook_message_billable(

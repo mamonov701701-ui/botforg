@@ -195,7 +195,7 @@ def test_duplicate_webhook_skips_process_channel_update(client, db) -> None:
     assert mock_runtime.call_count == 1
 
 
-def test_webhook_without_idempotency_key_runs_runtime_no_processed_row(client, db) -> None:
+def test_webhook_without_idempotency_key_blocks_user_input(client, db) -> None:
     user = _create_user(db)
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
@@ -216,7 +216,11 @@ def test_webhook_without_idempotency_key_runs_runtime_no_processed_row(client, d
         res = client.post(url, json=payload)
 
     assert res.status_code == 200
-    assert res.json() == {"ok": True}
-    assert mock_runtime.call_count == 1
+    assert res.json() == {
+        "ok": True,
+        "blocked_by_idempotency": True,
+        "reason": "missing_stable_message_id",
+    }
+    assert mock_runtime.call_count == 0
     rows = db.query(ProcessedUpdate).filter(ProcessedUpdate.bot_id == bot.id).all()
     assert rows == []

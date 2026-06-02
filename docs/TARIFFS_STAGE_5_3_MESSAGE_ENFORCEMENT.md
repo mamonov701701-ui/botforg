@@ -55,6 +55,7 @@
 POST /webhooks/{channel}/{bot_id}
   → normalize payload
   → build idempotency key
+  → if user input without key → 200 {"ok": true, "blocked_by_idempotency": true, ...}
   → if key: try_register_processed_update
        → duplicate → 200 {"ok": true, "duplicate": true}
   → if billable (key + user input):
@@ -125,21 +126,27 @@ Refund вызывается только если `MessageLimitResult.consumed i
 
 ---
 
-## Payload без стабильного id
+## Policy: user input without stable id
 
-Если payload не содержит стабильного provider update/message id, idempotency key **не строится**, runtime может выполниться, **списание не происходит**.
+Если webhook payload содержит реальный пользовательский ввод, но не содержит стабильный provider id для idempotency, событие **не обрабатывается** runtime и **не списывается** в лимит.
 
-**На Этапе 5.3** такие события **нельзя** включать в лимит сообщений без безопасного ключа или отдельной политики.
+Ответ webhook остаётся HTTP 200 с телом:
 
-### Не deduped / не billing-relevant сейчас
+`{"ok": true, "blocked_by_idempotency": true, "reason": "missing_stable_message_id"}`
 
-- WhatsApp status/contact без `messages[].id`.
-- Служебные payload без user input.
+Причина: нельзя безопасно тарифицировать событие, которое невозможно дедуплицировать. Иначе возможны бесплатная обработка или двойное списание при retry.
 
-### Требует решения перед расширением billing
+Системные события **без user input** не тарифицируются; runtime для них может выполняться по прежней логике.
 
-- Inbound user input без stable id.
-- MAX user input без `message_id`/`id` в webhook.
+---
+
+## Payload без стабильного id (служебные события)
+
+Если payload **не** содержит user input и stable id — idempotency key не строится, runtime может выполниться, списание не происходит.
+
+Примеры: WhatsApp status/contact без `messages[].id`, служебные webhook без текста/callback.
+
+User input без stable id — **блокируется** (см. Policy выше, Этап 5.3.1).
 
 ---
 
