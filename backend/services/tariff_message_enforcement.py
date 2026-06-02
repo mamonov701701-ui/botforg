@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -15,10 +16,23 @@ from sqlalchemy.orm import Session
 from backend.channels.base import NormalizedUpdate
 from backend.models.tariff import UsageCounter
 from backend.services.channel_runtime import _has_real_user_input
+from backend.services.message_idempotency import get_whatsapp_inbound_message_type
 from backend.services.tariff_limits import get_user_tariff_limits
 
 REASON_MESSAGE_LIMIT_EXCEEDED = "message_limit_exceeded"
 REASON_MISSING_STABLE_MESSAGE_ID = "missing_stable_message_id"
+REASON_UNSUPPORTED_MESSAGE_TYPE = "unsupported_message_type"
+
+WHATSAPP_UNSUPPORTED_NON_TEXT_TYPES = frozenset({
+    "image",
+    "document",
+    "audio",
+    "video",
+    "sticker",
+    "location",
+    "contacts",
+    "contact",
+})
 
 
 @dataclass
@@ -43,6 +57,26 @@ def should_block_user_input_without_stable_id(
     if external_id:
         return False
     return _has_real_user_input(normalized)
+
+
+def should_ignore_unsupported_inbound(
+    channel_key: str,
+    body: dict[str, Any],
+    normalized: NormalizedUpdate,
+) -> bool:
+    """
+    WhatsApp non-text inbound с stable id, но без поддерживаемого user input в runtime.
+
+    Не тарифицируется и не запускает scenario runtime (Этап 5.3.2).
+    """
+    if channel_key != "whatsapp":
+        return False
+    if _has_real_user_input(normalized):
+        return False
+    msg_type = get_whatsapp_inbound_message_type(body)
+    if not msg_type:
+        return False
+    return msg_type in WHATSAPP_UNSUPPORTED_NON_TEXT_TYPES
 
 
 def is_webhook_message_billable(

@@ -27,10 +27,12 @@ from backend.services.message_idempotency import (
 from backend.services.tariff_message_enforcement import (
     REASON_MESSAGE_LIMIT_EXCEEDED,
     REASON_MISSING_STABLE_MESSAGE_ID,
+    REASON_UNSUPPORTED_MESSAGE_TYPE,
     check_and_consume_message_unit,
     is_webhook_message_billable,
     refund_consumed_message_unit,
     should_block_user_input_without_stable_id,
+    should_ignore_unsupported_inbound,
 )
 from backend.settings import settings
 from backend.utils.chat_hash import make_chat_hash
@@ -94,6 +96,13 @@ def _dispatch_channel_update(
         }
     if external_id and not try_register_processed_update(db, channel_key, bot_id, external_id):
         return {"ok": True, "duplicate": True}
+
+    if should_ignore_unsupported_inbound(channel_key, body, normalized):
+        return {
+            "ok": True,
+            "ignored": True,
+            "reason": REASON_UNSUPPORTED_MESSAGE_TYPE,
+        }
 
     limit_result = None
     if is_webhook_message_billable(normalized, external_id):

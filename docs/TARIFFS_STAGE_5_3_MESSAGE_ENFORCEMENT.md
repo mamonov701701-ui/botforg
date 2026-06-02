@@ -148,6 +148,24 @@ Refund вызывается только если `MessageLimitResult.consumed i
 
 User input без stable id — **блокируется** (см. Policy выше, Этап 5.3.1).
 
+### WhatsApp non-text inbound (Этап 5.3.2)
+
+Non-text types (`image`, `document`, `audio`, `video`, `sticker`, `location`, `contacts`) с `messages[].id`:
+
+- **не** тарифицируются;
+- **не** запускают `process_channel_update`;
+- HTTP 200: `{"ok": true, "ignored": true, "reason": "unsupported_message_type"}`.
+
+Тарифицируемым user input считается только текстовый inbound (`type: text`).
+
+### MAX unknown payload (Этап 5.3.2)
+
+Supported stable id paths: `message_id`, `id`, `event_id`, `eventId`, `message.id`.
+
+MAX user input без одного из этих paths блокируется до runtime (`missing_stable_message_id`).
+
+**Production policy:** неизвестные payload formats не запускают billable runtime и не списываются до явного добавления контракта и тестов. См. [WEBHOOK_PAYLOAD_CONTRACT.md](./WEBHOOK_PAYLOAD_CONTRACT.md).
+
 ---
 
 ## 9. Тесты
@@ -155,6 +173,7 @@ User input без stable id — **блокируется** (см. Policy выш�
 ```powershell
 backend\venv\Scripts\python.exe -m pytest backend/tests/test_tariff_message_enforcement.py -q
 backend\venv\Scripts\python.exe -m pytest backend/tests/test_message_idempotency.py -q
+backend\venv\Scripts\python.exe -m pytest backend/tests/test_webhook_payload_contract.py -q
 backend\venv\Scripts\python.exe -m pytest backend/tests -q
 ```
 

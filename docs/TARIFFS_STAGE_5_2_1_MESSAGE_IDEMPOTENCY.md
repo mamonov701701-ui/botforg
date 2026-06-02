@@ -132,6 +132,16 @@ WhatsApp: явное `"duplicate": true` (раньше только `{"ok": true
 - **WhatsApp status/contact** webhooks без `messages[].id` — delivery/read receipts, не user input.
 - Прочие служебные payload без user input — dedup и billing не применяются.
 
+### WhatsApp non-text inbound (Этап 5.3.2)
+
+Non-text inbound с stable `messages[].id` регистрируется в dedup, но **не** передаётся в runtime и **не** списывается — ответ `ignored` / `unsupported_message_type`.
+
+### MAX stable id (Этап 5.3.2)
+
+Supported paths: `message_id`, `id`, `event_id`, `eventId`, `message.id`. User input без supported id блокируется до runtime.
+
+**Production policy:** неизвестные formats не запускают billable runtime до явного контракта. См. [WEBHOOK_PAYLOAD_CONTRACT.md](./WEBHOOK_PAYLOAD_CONTRACT.md).
+
 ---
 
 ## 8. Что пока НЕ делается
@@ -149,6 +159,7 @@ WhatsApp: явное `"duplicate": true` (раньше только `{"ok": true
 
 ```powershell
 backend\venv\Scripts\python.exe -m pytest backend/tests/test_message_idempotency.py -q
+backend\venv\Scripts\python.exe -m pytest backend/tests/test_webhook_payload_contract.py -q
 backend\venv\Scripts\python.exe -m pytest backend/tests -q
 ```
 
@@ -159,7 +170,9 @@ backend\venv\Scripts\python.exe -m pytest backend/tests -q
 ## 10. Остаточные риски
 
 - **Runtime failure после регистрации** — retry провайдера не переобработает (см. trade-off выше).
-- **Payload без id с user input** — dedup и billing на 5.3 заблокированы до политики.
+- **Payload без id с user input** — блокируется policy 5.3.1 (`missing_stable_message_id`).
+- **Unsupported WhatsApp non-text** — ignored без runtime (5.3.2); расширение типов — только через контракт + тесты.
+- **MAX unknown formats** — user input без supported stable id блокируется; новые paths — только через контракт + тесты.
 - **Legacy** `/webhook/{bot_id}` — дубликаты Telegram update_id не дедупятся в `ProcessedUpdate`.
 
 ---

@@ -75,6 +75,29 @@ def build_processed_update_key(channel: str, bot_id: int, payload: dict[str, Any
     return None
 
 
+def get_whatsapp_inbound_message_type(payload: dict[str, Any]) -> str | None:
+    """Meta Cloud: messages[0].type (text, image, document, ...)."""
+    messages = payload.get("messages") or []
+    if messages:
+        msg = messages[0] if isinstance(messages, list) else messages
+        if isinstance(msg, dict) and msg.get("type") is not None:
+            return str(msg["type"]).lower()
+    entry = payload.get("entry")
+    if not isinstance(entry, list) or not entry:
+        return None
+    changes = (entry[0] or {}).get("changes")
+    if not isinstance(changes, list) or not changes:
+        return None
+    value = (changes[0] or {}).get("value") or {}
+    messages = value.get("messages") or []
+    if not messages:
+        return None
+    msg = messages[0] if isinstance(messages, list) else messages
+    if isinstance(msg, dict) and msg.get("type") is not None:
+        return str(msg["type"]).lower()
+    return None
+
+
 def try_register_processed_update(
     db: Session,
     channel: str,
