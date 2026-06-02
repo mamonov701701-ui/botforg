@@ -10,7 +10,6 @@ from typing import Any
 
 from fastapi import APIRouter, Request, Depends, HTTPException, Query, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.channels.base import NormalizedUpdate
@@ -19,9 +18,12 @@ from backend.channels.whatsapp.providers.registry import get_whatsapp_provider
 from backend.database import get_db
 from backend.models.bot import Bot
 from backend.models.bot_channel import BotChannelConnection
-from backend.models.processed_update import ProcessedUpdate
 from backend.services.analytics_service import get_analytics_service
 from backend.services.channel_runtime import process_channel_update
+from backend.services.message_idempotency import (
+    build_processed_update_key,
+    try_register_processed_update,
+)
 from backend.settings import settings
 from backend.utils.chat_hash import make_chat_hash
 
@@ -55,6 +57,69 @@ def _get_whatsapp_credentials(conn: BotChannelConnection) -> dict[str, Any]:
 def _request_headers_dict(request: Request) -> dict[str, str]:
     """Словарь заголовков для validate_webhook (нижний регистр ключей)."""
     return {k.lower(): v for k, v in request.headers.items()}
+
+
+def _dispatch_channel_update(
+    db: Session,
+    *,
+    bot: Bot,
+    conn: BotChannelConnection,
+    adapter: Any,
+    channel_key: str,
+    bot_id: int,
+    body: dict[str, Any],
+    normalized: NormalizedUpdate,
+    analytics_event_type: str | None = None,
+) -> dict[str, Any]:
+    """
+    Единая точка dedup + runtime для POST /webhooks/{channel}/{bot_id}.
+
+    Dedup: атомарная регистрация через try_register_processed_update до runtime
+    (см. docs/TARIFFS_STAGE_5_2_1_MESSAGE_IDEMPOTENCY.md).
+    """
+    external_id = build_processed_update_key(channel_key, bot_id, body)
+    if external_id and not try_register_processed_update(db, channel_key, bot_id, external_id):
+        return {"ok": True, "duplicate": True}
+
+    if channel_key == "whatsapp" and normalized.chat_id and (settings.CHAT_HASH_SALT or "").strip():
+        normalized = NormalizedUpdate(
+            channel=normalized.channel,
+            chat_id=normalized.chat_id,
+            chat_hash=make_chat_hash("whatsapp", normalized.chat_id),
+            user_id=normalized.user_id,
+            text=normalized.text,
+            buttons=normalized.buttons,
+            media_url=normalized.media_url,
+            raw=normalized.raw,
+        )
+
+    logger.info(
+        "channel_webhook received: channel=%s bot_id=%s has_chat_hash=%s dedup_key=%s",
+        channel_key,
+        bot_id,
+        normalized.chat_hash is not None,
+        "yes" if external_id else "no",
+    )
+    process_channel_update(
+        db,
+        bot=bot,
+        conn=conn,
+        adapter=adapter,
+        normalized=normalized,
+    )
+
+    if analytics_event_type:
+        analytics = get_analytics_service(db)
+        analytics.track_event(
+            event_type=analytics_event_type,
+            event_name=analytics_event_type,
+            bot_id=bot_id,
+            channel=channel_key,
+            chat_hash=normalized.chat_hash,
+            node_id=None,
+            minimal_storage=True,
+        )
+    return {"ok": True}
 
 
 @router.get("/whatsapp/{bot_id}", response_class=PlainTextResponse)
@@ -168,53 +233,17 @@ async def channel_webhook(
                 str(e),
             )
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload for WhatsApp")
-        message_id = (normalized.raw or {}).get("message_id")
-        if message_id:
-            record = ProcessedUpdate(
-                bot_id=bot_id,
-                channel=channel_key,
-                message_id=str(message_id),
-            )
-            db.add(record)
-            try:
-                db.commit()
-            except IntegrityError:
-                db.rollback()
-                return {"ok": True}
-        if normalized.chat_id and (settings.CHAT_HASH_SALT or "").strip():
-            normalized = NormalizedUpdate(
-                channel=normalized.channel,
-                chat_id=normalized.chat_id,
-                chat_hash=make_chat_hash("whatsapp", normalized.chat_id),
-                user_id=normalized.user_id,
-                text=normalized.text,
-                buttons=normalized.buttons,
-                media_url=normalized.media_url,
-                raw=normalized.raw,
-            )
-        logger.info(
-            "channel_webhook received: channel=whatsapp bot_id=%s has_chat_hash=%s",
-            bot_id,
-            normalized.chat_hash is not None,
-        )
-        process_channel_update(
+        return _dispatch_channel_update(
             db,
             bot=bot,
             conn=conn,
             adapter=adapter,
-            normalized=normalized,
-        )
-        analytics = get_analytics_service(db)
-        analytics.track_event(
-            event_type="whatsapp_update_received",
-            event_name="whatsapp_update_received",
+            channel_key=channel_key,
             bot_id=bot_id,
-            channel=channel_key,
-            chat_hash=normalized.chat_hash,
-            node_id=None,
-            minimal_storage=True,
+            body=body,
+            normalized=normalized,
+            analytics_event_type="whatsapp_update_received",
         )
-        return {"ok": True}
 
     # MAX: проверка секрета webhook (документация MAX — header X-Max-Bot-Api-Secret)
     if channel_key == "max":
@@ -234,31 +263,15 @@ async def channel_webhook(
         )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid payload for channel")
 
-    # Логируем без PII: только channel, bot_id, наличие chat_hash (не значения)
-    logger.info(
-        "channel_webhook received: channel=%s bot_id=%s has_chat_hash=%s",
-        channel_key,
-        bot_id,
-        normalized.chat_hash is not None,
-    )
-    process_channel_update(
+    analytics_event = "max_update_received" if channel_key == "max" else None
+    return _dispatch_channel_update(
         db,
         bot=bot,
         conn=conn,
         adapter=adapter,
+        channel_key=channel_key,
+        bot_id=bot_id,
+        body=body,
         normalized=normalized,
+        analytics_event_type=analytics_event,
     )
-
-    # Для MAX сохраняем агрегированную аналитику без PII/текста.
-    if channel_key == "max":
-        analytics = get_analytics_service(db)
-        analytics.track_event(
-            event_type="max_update_received",
-            event_name="max_update_received",
-            bot_id=bot_id,
-            channel=channel_key,
-            chat_hash=normalized.chat_hash,
-            node_id=None,
-            minimal_storage=True,
-        )
-    return {"ok": True}
