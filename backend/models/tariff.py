@@ -81,6 +81,14 @@ class GiftGrantStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+def _value_enum(enum_cls):
+    """SQLAlchemy Enum: persist/read PEP-435 .value (matches Alembic seed), not .name."""
+    return SQLEnum(
+        enum_cls,
+        values_callable=lambda cls: [item.value for item in cls],
+    )
+
+
 class AddonPackage(Base):
     """Каталог пакетов расширения (сообщения, боты, участники команды)."""
     __tablename__ = "addon_packages"
@@ -95,7 +103,7 @@ class AddonPackage(Base):
     code = Column(String(64), unique=True, nullable=False, index=True)
     name_ru = Column(String(255), nullable=False)
     description_ru = Column(Text, nullable=True)
-    type = Column(SQLEnum(AddonPackageType), nullable=False)
+    type = Column(_value_enum(AddonPackageType), nullable=False)
     amount = Column(Integer, nullable=False, default=0)
     price = Column(Numeric(10, 2), nullable=False, default=Decimal("0.00"))
     currency = Column(String(10), nullable=False, default="RUB")
@@ -133,7 +141,7 @@ class UserSubscription(Base):
     workspace_id = Column(Integer, nullable=True)
     plan_id = Column(Integer, ForeignKey("plans.id", ondelete="RESTRICT"), nullable=False)
     status = Column(
-        SQLEnum(SubscriptionStatus),
+        _value_enum(SubscriptionStatus),
         default=SubscriptionStatus.ACTIVE,
         nullable=False,
     )
@@ -171,11 +179,11 @@ class UserAddon(Base):
     period_start = Column(DateTime, nullable=False)
     period_end = Column(DateTime, nullable=False)
     status = Column(
-        SQLEnum(UserAddonStatus),
+        _value_enum(UserAddonStatus),
         default=UserAddonStatus.ACTIVE,
         nullable=False,
     )
-    source = Column(SQLEnum(UserAddonSource), nullable=False)
+    source = Column(_value_enum(UserAddonSource), nullable=False)
     created_by_admin_id = Column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
@@ -230,7 +238,7 @@ class GiftGrant(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
     target_workspace_id = Column(Integer, nullable=True)
-    gift_type = Column(SQLEnum(GiftType), nullable=False)
+    gift_type = Column(_value_enum(GiftType), nullable=False)
     plan_id = Column(Integer, ForeignKey("plans.id", ondelete="SET NULL"), nullable=True)
     addon_package_id = Column(
         Integer, ForeignKey("addon_packages.id", ondelete="SET NULL"), nullable=True
@@ -244,7 +252,7 @@ class GiftGrant(Base):
     reason = Column(Text, nullable=True)
     admin_comment = Column(Text, nullable=True)
     status = Column(
-        SQLEnum(GiftGrantStatus),
+        _value_enum(GiftGrantStatus),
         default=GiftGrantStatus.ACTIVE,
         nullable=False,
     )
