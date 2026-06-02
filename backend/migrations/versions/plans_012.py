@@ -5,6 +5,8 @@ Revises: scenario_draft_011
 Create Date: 2026-02-02
 
 """
+from datetime import datetime, timezone
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -35,12 +37,32 @@ def upgrade() -> None:
 
     plan_rows = conn.execute(sa.text("SELECT COUNT(*) FROM plans")).scalar()
     if plan_rows == 0:
-        conn.execute(sa.text(
-            "INSERT INTO plans (code, name, limits, created_at) VALUES "
-            "('free', 'Free', '{\"max_bots\": 1, \"can_publish\": false, \"can_use_analytics\": false, \"max_team_members\": 0}', datetime('now')), "
-            "('pro', 'Pro', '{\"max_bots\": 5, \"can_publish\": true, \"can_use_analytics\": true, \"max_team_members\": 3}', datetime('now')), "
-            "('team', 'Team', '{\"max_bots\": 20, \"can_publish\": true, \"can_use_analytics\": true, \"max_team_members\": 10}', datetime('now'))"
-        ))
+        now = datetime.now(timezone.utc)
+        seed_plans = [
+            (
+                "free",
+                "Free",
+                '{"max_bots": 1, "can_publish": false, "can_use_analytics": false, "max_team_members": 0}',
+            ),
+            (
+                "pro",
+                "Pro",
+                '{"max_bots": 5, "can_publish": true, "can_use_analytics": true, "max_team_members": 3}',
+            ),
+            (
+                "team",
+                "Team",
+                '{"max_bots": 20, "can_publish": true, "can_use_analytics": true, "max_team_members": 10}',
+            ),
+        ]
+        for code, name, limits in seed_plans:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO plans (code, name, limits, created_at) "
+                    "VALUES (:code, :name, :limits, :created_at)"
+                ),
+                {"code": code, "name": name, "limits": limits, "created_at": now},
+            )
 
     user_cols = {c["name"] for c in insp.get_columns("users")}
     if "plan_code" not in user_cols:

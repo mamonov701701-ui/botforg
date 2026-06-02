@@ -33,10 +33,14 @@ def upgrade() -> None:
     )
     # Существующие опубликованные шаблоны считаем одобренными
     conn = op.get_bind()
+    if conn.dialect.name == "sqlite":
+        published_clause = "is_published = 1"
+    else:
+        published_clause = "is_published IS TRUE"
     conn.execute(
         sa.text(
             "UPDATE market_items SET moderation_status = 'approved' "
-            "WHERE item_type = 'template' AND is_published = 1"
+            f"WHERE item_type = 'template' AND {published_clause}"
         )
     )
 

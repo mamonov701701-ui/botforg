@@ -19,6 +19,18 @@ branch_labels = None
 depends_on = None
 
 
+def _boolean_server_default_true():
+    if op.get_bind().dialect.name == "postgresql":
+        return sa.text("true")
+    return sa.text("1")
+
+
+def _boolean_server_default_false():
+    if op.get_bind().dialect.name == "postgresql":
+        return sa.text("false")
+    return sa.text("0")
+
+
 def upgrade() -> None:
     op.create_table(
         "platform_users",
@@ -58,7 +70,12 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("bot_id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+        sa.Column(
+            "is_active",
+            sa.Boolean(),
+            nullable=False,
+            server_default=_boolean_server_default_true(),
+        ),
         sa.Column("entry_block_id", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -158,7 +175,12 @@ def upgrade() -> None:
         sa.Column("data_type", sa.String(length=32), nullable=False, server_default="string"),
         sa.Column("scope", sa.String(length=32), nullable=False, server_default="session"),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("is_system", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column(
+            "is_system",
+            sa.Boolean(),
+            nullable=False,
+            server_default=_boolean_server_default_false(),
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(

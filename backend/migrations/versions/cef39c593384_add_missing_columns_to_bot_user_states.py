@@ -18,22 +18,20 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _column_exists(bind, table_name: str, column_name: str) -> bool:
+    insp = sa.inspect(bind)
+    if not insp.has_table(table_name):
+        return False
+    return column_name in {c["name"] for c in insp.get_columns(table_name)}
+
+
 def upgrade() -> None:
     """Upgrade schema."""
     conn = op.get_bind()
     is_sqlite = conn.dialect.name == 'sqlite'
-    
-    # Проверяем существование колонок (для SQLite)
-    def column_exists(table_name, column_name):
-        """Проверка существования колонки в SQLite"""
-        if not is_sqlite:
-            return False
-        result = conn.execute(sa.text(f"PRAGMA table_info({table_name})"))
-        columns = [row[1] for row in result.fetchall()]
-        return column_name in columns
-    
+
     # Добавляем current_scenario_id если не существует
-    if not column_exists('bot_user_states', 'current_scenario_id'):
+    if not _column_exists(conn, 'bot_user_states', 'current_scenario_id'):
         op.add_column('bot_user_states', sa.Column('current_scenario_id', sa.Integer(), nullable=True))
         if is_sqlite:
             # Для SQLite добавляем внешний ключ отдельно
@@ -43,7 +41,7 @@ def upgrade() -> None:
             """))
     
     # Добавляем context если не существует
-    if not column_exists('bot_user_states', 'context'):
+    if not _column_exists(conn, 'bot_user_states', 'context'):
         op.add_column('bot_user_states', sa.Column('context', sa.JSON(), nullable=True))
 
 
