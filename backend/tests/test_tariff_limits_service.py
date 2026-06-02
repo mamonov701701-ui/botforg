@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from backend.models.bot import Bot
+from backend.models.bot_channel import BotChannelConnection
 from backend.models.plan import Plan
 from decimal import Decimal
 
@@ -23,6 +25,7 @@ from backend.models.tariff import (
 )
 from backend.auth.password import hash_password
 from backend.models.user import User
+from backend.services.bot_usage import count_production_active_bots
 from backend.services.tariff_limits import get_user_tariff_limits
 from backend.tests.conftest import TestingSessionLocal
 
@@ -271,12 +274,21 @@ def test_usage_counter_reduces_remaining(db, client):
     user = _create_user(db, plan_code="business", email_suffix="usage")
     period_start, period_end = _month_period()
     db.add(
+        Bot(
+            owner_id=user.id,
+            title="Active",
+            username="active_usage_bot",
+            token="123456789:UsageTestToken",
+            is_active=True,
+        )
+    )
+    db.add(
         UsageCounter(
             user_id=user.id,
             period_start=period_start,
             period_end=period_end,
             messages_used=1200,
-            active_bots_used=1,
+            active_bots_used=99,
             team_members_used=0,
         )
     )
@@ -286,6 +298,97 @@ def test_usage_counter_reduces_remaining(db, client):
     assert summary.messages_remaining == 3000 - 1200
     assert summary.active_bots_used == 1
     assert summary.active_bots_remaining == 0
+
+
+def test_active_bots_used_from_production_count_not_stale_counter(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="stale_counter")
+    period_start, period_end = _month_period()
+    db.add(
+        UsageCounter(
+            user_id=user.id,
+            period_start=period_start,
+            period_end=period_end,
+            messages_used=0,
+            active_bots_used=5,
+            team_members_used=0,
+        )
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.active_bots_used == 0
+
+
+def test_draft_does_not_increase_active_bots_used(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="draft_used")
+    db.add(
+        Bot(
+            owner_id=user.id,
+            title="Draft",
+            username="draft_bot_x",
+            token="placeholder_abc",
+            is_active=False,
+        )
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.active_bots_used == 0
+
+
+def test_channel_connection_increases_active_bots_used(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="ch_used")
+    bot = Bot(
+        owner_id=user.id,
+        title="Ch",
+        username="ch_bot_x",
+        token="placeholder_ch",
+        is_active=False,
+    )
+    db.add(bot)
+    db.commit()
+    db.refresh(bot)
+    db.add(
+        BotChannelConnection(
+            bot_id=bot.id,
+            channel="max",
+            is_enabled=True,
+            credentials_json="{}",
+        )
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.active_bots_used == 1
+
+
+def test_telegram_token_increases_active_bots_used(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="tg_used")
+    db.add(
+        Bot(
+            owner_id=user.id,
+            title="TG",
+            username="tg_bot_x",
+            token="123456789:TelegramReal",
+            is_active=True,
+        )
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.active_bots_used == 1
+
+
+def test_summary_matches_enforcement_count_helper(db, client):
+    user = _create_user(db, plan_code="business", email_suffix="match")
+    db.add(
+        Bot(
+            owner_id=user.id,
+            title="A",
+            username="match_bot_a",
+            token="123456789:MatchA",
+            is_active=True,
+        )
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.active_bots_used == count_production_active_bots(db, user.id)
 
 
 def test_corporate_unlimited_limits(db, client):

@@ -26,7 +26,6 @@ from backend.models.market_access import (
 )
 from backend.models.bot import Bot
 from backend.models.scenario import Scenario
-from backend.utils.plan_limits import check_max_bots
 from backend.utils.plan_limits import check_can_publish_templates, require_developer_plan
 from backend.schemas.market import (
     MarketItemCreate, MarketItemUpdate, MarketItemOut, MarketItemDetailOut,
@@ -685,7 +684,7 @@ async def install_market_bot(
     if not source_bot:
         raise HTTPException(status_code=404, detail="Исходный бот не найден")
 
-    check_max_bots(db, current_user)
+    # Установка шаблона создаёт черновик (is_active=False, placeholder) — без лимита active_bots.
 
     install_suffix = f"market_{item.id}_{current_user.id}_{int(datetime.now(timezone.utc).timestamp())}"
     copied_bot = Bot(

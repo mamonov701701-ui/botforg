@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from backend.models.plan import Plan
 from backend.models.user import User
-from backend.models.bot import Bot
 from backend.models.team import TeamMember
 
 
@@ -40,15 +39,24 @@ def get_user_plan_limits(db: Session, user: User) -> dict[str, Any]:
 
 
 def check_max_bots(db: Session, user: User) -> None:
-    """Проверить лимит ботов. При превышении — 403."""
-    limits = get_user_plan_limits(db, user)
-    max_bots = limits.get("max_bots", 1)
-    count = db.query(Bot).filter(Bot.owner_id == user.id).count()
-    if count >= max_bots:
+    """
+    Legacy-обёртка: лимит **активных** production-ботов (тариф active_bots + пакеты).
+
+    Не считает черновики (placeholder без канала). Предпочтительно вызывать
+    ``ensure_can_activate_bot`` из ``backend.services.tariff_enforcement``.
+    """
+    from backend.services.tariff_enforcement import (
+        TariffLimitExceeded,
+        ensure_can_activate_bot,
+    )
+
+    try:
+        ensure_can_activate_bot(db, user.id)
+    except TariffLimitExceeded as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Лимит ботов ({max_bots}) достигнут. Перейдите на тариф Pro или Team для увеличения лимита.",
-        )
+            detail=exc.message,
+        ) from exc
 
 
 def check_can_publish(db: Session, user: User) -> None:

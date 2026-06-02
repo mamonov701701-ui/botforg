@@ -25,6 +25,7 @@ from backend.models.tariff import (
     UserSubscription,
 )
 from backend.models.user import User
+from backend.services.bot_usage import count_production_active_bots
 
 FALLBACK_PLAN_CODE = "start"
 
@@ -152,7 +153,8 @@ def get_user_tariff_limits(
 
     usage = _find_usage(db, user_id, period_start, period_end)
     messages_used = usage.messages_used if usage else 0
-    active_bots_used = usage.active_bots_used if usage else 0
+    # Источник истины — bot_usage (не UsageCounter.active_bots_used): см. TARIFFS_STAGE_5_1.
+    active_bots_used = count_production_active_bots(db, user_id)
     team_members_used = usage.team_members_used if usage else 0
 
     plan_code = plan.code if plan else FALLBACK_PLAN_CODE

@@ -13,6 +13,12 @@ from backend.models.bot_channel import BotChannelConnection
 from backend.models.user import User
 from backend.schemas.channels import BotChannelConnectionCreate, BotChannelConnectionOut
 from backend.utils.bot_access import check_bot_edit_permission
+from backend.services.bot_usage import is_placeholder_bot_token
+from backend.services.tariff_enforcement import (
+    TariffLimitExceeded,
+    ensure_can_connect_channel,
+    tariff_limit_to_http,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bots/{bot_id}/channels", tags=["channels"])
@@ -69,6 +75,17 @@ def upsert_channel(
         db.refresh(conn)
         return BotChannelConnectionOut.model_validate(conn)
 
+    try:
+        ensure_can_connect_channel(
+            db,
+            bot.owner_id,
+            bot_id,
+            channel_key,
+            updating_existing=False,
+        )
+    except TariffLimitExceeded as exc:
+        raise tariff_limit_to_http(exc) from exc
+
     conn = BotChannelConnection(
         bot_id=bot_id,
         channel=channel_key,
@@ -76,6 +93,8 @@ def upsert_channel(
         credentials_json=credentials_json,
     )
     db.add(conn)
+    if payload.is_enabled and (not bot.is_active or is_placeholder_bot_token(bot.token)):
+        bot.is_active = True
     db.commit()
     db.refresh(conn)
     return BotChannelConnectionOut.model_validate(conn)

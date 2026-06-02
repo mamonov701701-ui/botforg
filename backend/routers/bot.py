@@ -15,7 +15,12 @@ from backend.utils.bot_access import (
     check_bot_delete_permission,
     get_accessible_bot_owner_ids,
 )
-from backend.utils.plan_limits import check_max_bots
+from backend.services.tariff_enforcement import (
+    TariffLimitExceeded,
+    is_bot_production_active,
+    tariff_limit_to_http,
+    ensure_can_activate_bot,
+)
 from backend.utils.ctor_bot_resolve import resolve_ctor_bot_id
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -135,8 +140,11 @@ async def connect_bot(
                 detail="Username mismatch",
             )
 
-        # Проверяем лимит ботов по тарифу
-        check_max_bots(db, current_user)
+        # Лимит активных ботов (тариф + пакеты; не legacy max_bots по всем ботам)
+        try:
+            ensure_can_activate_bot(db, current_user.id)
+        except TariffLimitExceeded as exc:
+            raise tariff_limit_to_http(exc) from exc
 
         # Создаем бота с данными из Telegram API
         db_bot = Bot(
@@ -202,8 +210,7 @@ async def create_bot(
     """
     import uuid
 
-    # Проверяем лимит ботов по тарифу
-    check_max_bots(db, current_user)
+    # Черновики без канала не ограничиваются тарифом активных ботов (этап 5.1)
 
     # Генерируем уникальный placeholder для username и token
     unique_id = str(uuid.uuid4())[:8]
@@ -439,10 +446,18 @@ async def update_bot(
             detail="Access denied: Your role does not allow editing bots"
         )
 
+    was_production_active = is_bot_production_active(bot, db)
+
     # Обновляем только указанные поля
     update_data = bot_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(bot, field, value)
+
+    if not was_production_active and is_bot_production_active(bot, db):
+        try:
+            ensure_can_activate_bot(db, current_user.id, bot_id=bot.id)
+        except TariffLimitExceeded as exc:
+            raise tariff_limit_to_http(exc) from exc
 
     bot.updated_at = datetime.now(timezone.utc)
     db.commit()
