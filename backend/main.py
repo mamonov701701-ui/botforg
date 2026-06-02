@@ -19,6 +19,7 @@ from backend.auth import routes as oauth_routes
 from backend.middleware.security import SecurityMiddleware
 from backend.routers import account as account_router
 from backend.routers import plans as plans_router
+from backend.routers import tariff as tariff_router
 from backend.routers import auth
 from backend.routers import billing as billing_router
 from backend.routers import blocks as blocks_router
@@ -237,6 +238,7 @@ app.include_router(oauth_routes.router)
 app.include_router(email_routes.router)
 app.include_router(account_router.router)
 app.include_router(plans_router.router)
+app.include_router(tariff_router.router)
 
 # Existing routes
 # app.include_router(auth.router, prefix="/auth")  # ОТКЛЮЧЕН - используем email_routes вместо этого

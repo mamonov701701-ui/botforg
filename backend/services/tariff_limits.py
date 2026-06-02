@@ -45,6 +45,20 @@ MESSAGE_WARNING_TEXTS: dict[int, str] = {
     100: "Лимит сообщений исчерпан.",
 }
 
+ACTIVE_BOTS_WARNING_TEXTS: dict[int, str] = {
+    70: "Использовано 70% лимита активных ботов.",
+    85: "Лимит активных ботов скоро закончится.",
+    95: "Лимит активных ботов почти исчерпан.",
+    100: "Лимит активных ботов исчерпан.",
+}
+
+TEAM_MEMBERS_WARNING_TEXTS: dict[int, str] = {
+    70: "Использовано 70% лимита участников команды.",
+    85: "Лимит участников команды скоро закончится.",
+    95: "Лимит участников команды почти исчерпан.",
+    100: "Лимит участников команды исчерпан.",
+}
+
 
 @dataclass
 class TariffLimitWarning:
@@ -78,6 +92,7 @@ class TariffLimitsSummary:
     active_addons: list[dict[str, Any]] = field(default_factory=list)
     active_gifts: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[TariffLimitWarning] = field(default_factory=list)
+    subscription_status: str | None = None
     # Дополнительные поля из Plan.limits (для будущего UI/enforcement)
     analytics_history_days: int | None = None
     export_reports: bool = False
@@ -160,11 +175,16 @@ def get_user_tariff_limits(
     plan_code = plan.code if plan else FALLBACK_PLAN_CODE
     plan_name = _plan_display_name(plan)
 
+    subscription_status = (
+        _enum_value(subscription.status) if subscription else None
+    )
+
     summary = TariffLimitsSummary(
         plan_code=plan_code,
         plan_name=plan_name,
         period_start=period_start,
         period_end=period_end,
+        subscription_status=subscription_status,
         messages_limit=messages_limit,
         messages_used=messages_used,
         messages_remaining=_remaining(messages_limit, messages_used),
@@ -184,8 +204,25 @@ def get_user_tariff_limits(
         scenario_publish=bool(base.get("scenario_publish", True)),
         source=source,
     )
-    summary.warnings = _build_message_warnings(
-        messages_limit, messages_used
+    summary.warnings = (
+        _build_usage_warnings(
+            messages_limit,
+            messages_used,
+            warning_type="messages_usage",
+            texts=MESSAGE_WARNING_TEXTS,
+        )
+        + _build_usage_warnings(
+            active_bots_limit,
+            active_bots_used,
+            warning_type="active_bots_usage",
+            texts=ACTIVE_BOTS_WARNING_TEXTS,
+        )
+        + _build_usage_warnings(
+            team_members_limit,
+            team_members_used,
+            warning_type="team_members_usage",
+            texts=TEAM_MEMBERS_WARNING_TEXTS,
+        )
     )
     return summary
 
@@ -464,21 +501,37 @@ def _remaining(limit: int | None, used: int) -> int | None:
     return max(0, limit - used)
 
 
-def _build_message_warnings(
-    messages_limit: int | None,
-    messages_used: int,
+def _build_usage_warnings(
+    limit: int | None,
+    used: int,
+    *,
+    warning_type: str,
+    texts: dict[int, str],
 ) -> list[TariffLimitWarning]:
-    if messages_limit is None or messages_limit <= 0:
+    if limit is None or limit <= 0:
         return []
-    usage_pct = (messages_used / messages_limit) * 100
+    usage_pct = (used / limit) * 100
     warnings: list[TariffLimitWarning] = []
     for threshold in MESSAGE_WARNING_THRESHOLDS:
         if usage_pct >= threshold:
             warnings.append(
                 TariffLimitWarning(
-                    type="messages_usage",
+                    type=warning_type,
                     threshold=threshold,
-                    message=MESSAGE_WARNING_TEXTS[threshold],
+                    message=texts[threshold],
                 )
             )
     return warnings
+
+
+def _build_message_warnings(
+    messages_limit: int | None,
+    messages_used: int,
+) -> list[TariffLimitWarning]:
+    """Обратная совместимость для прямых вызовов в тестах."""
+    return _build_usage_warnings(
+        messages_limit,
+        messages_used,
+        warning_type="messages_usage",
+        texts=MESSAGE_WARNING_TEXTS,
+    )
