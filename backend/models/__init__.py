@@ -44,6 +44,20 @@ from backend.models.market_access import (
 )
 from backend.models.legal import Consent
 from backend.models.plan import Plan
+from backend.models.tariff import (
+    AddonPackage,
+    AddonPackageType,
+    AdminAuditLog,
+    GiftGrant,
+    GiftGrantStatus,
+    GiftType,
+    SubscriptionStatus,
+    UsageCounter,
+    UserAddon,
+    UserAddonSource,
+    UserAddonStatus,
+    UserSubscription,
+)
 from backend.models.constructor_core import (
     PlatformUser,
     CtorBot,
@@ -119,6 +133,18 @@ __all__ = [
     "MarketItemAccessGrant",
     "Consent",
     "Plan",
+    "AddonPackage",
+    "AddonPackageType",
+    "UserSubscription",
+    "SubscriptionStatus",
+    "UserAddon",
+    "UserAddonStatus",
+    "UserAddonSource",
+    "UsageCounter",
+    "GiftGrant",
+    "GiftType",
+    "GiftGrantStatus",
+    "AdminAuditLog",
     "PlatformUser",
     "CtorBot",
     "CtorBotUser",
