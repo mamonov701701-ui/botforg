@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from backend.models.plan import Plan
 from backend.models.user import User
-from backend.models.team import TeamMember
 
 
 DEFAULT_LIMITS = {
@@ -120,17 +119,22 @@ def check_can_view_marketplace_stats(db: Session, user: User) -> None:
 
 
 def check_max_team_members(db: Session, user: User, owner_id: int) -> None:
-    """Проверить лимит участников команды. При превышении — 403."""
-    limits = get_user_plan_limits(db, user)
-    max_members = limits.get("max_team_members", 0)
-    if max_members <= 0:
+    """
+    Legacy-обёртка: лимит участников команды (тариф + пакеты + подарки + PLAN gift).
+
+    Лимит считается для владельца команды (owner_id), не по устаревшему users.plan_code
+    переданного user. Предпочтительно вызывать ensure_can_add_team_member из tariff_enforcement.
+    """
+    from backend.services.tariff_enforcement import (
+        TariffLimitExceeded,
+        ensure_can_add_team_member,
+    )
+
+    _ = user  # совместимость сигнатуры; источник тарифа — owner_id
+    try:
+        ensure_can_add_team_member(db, owner_id)
+    except TariffLimitExceeded as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Команда недоступна на тарифе Free. Перейдите на Pro или Team.",
-        )
-    count = db.query(TeamMember).filter(TeamMember.owner_id == owner_id).count()
-    if count >= max_members:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Лимит участников команды ({max_members}) достигнут. Перейдите на тариф Team для увеличения.",
-        )
+            detail=exc.message,
+        ) from exc

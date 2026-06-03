@@ -1,5 +1,5 @@
 """
-Enforcement тарифных лимитов (Этап 5.1): активные боты и правило «1 бот = 1 канал».
+Enforcement тарифных лимитов (Этап 5.1+): активные боты, каналы, участники команды.
 
 Не трогает сообщения, webhook runtime и marketplace.
 """
@@ -17,9 +17,12 @@ from backend.services.bot_usage import (
     is_bot_production_active,
 )
 from backend.services.tariff_limits import get_user_tariff_limits
+from backend.services.team_usage import count_team_members_for_owner
 
 MSG_ACTIVE_BOTS_EXCEEDED = "Лимит активных ботов по вашему тарифу исчерпан."
 MSG_ONE_BOT_ONE_CHANNEL = "Один бот может быть подключён только к одному каналу."
+MSG_TEAM_NOT_AVAILABLE = "Команда недоступна на текущем тарифе."
+MSG_TEAM_MEMBERS_EXCEEDED = "Лимит участников команды по вашему тарифу исчерпан."
 
 
 class TariffLimitExceeded(Exception):
@@ -95,3 +98,32 @@ def ensure_can_connect_channel(
         raise TariffLimitExceeded(MSG_ONE_BOT_ONE_CHANNEL, code="one_channel_per_bot")
 
     ensure_can_activate_bot(db, user_id, bot_id=bot_id, at=at)
+
+
+def ensure_can_add_team_member(
+    db: Session,
+    owner_id: int,
+    *,
+    at: datetime | None = None,
+) -> None:
+    """
+    Проверить, можно ли добавить ещё одного участника в команду владельца.
+
+    Лимит и usage — через get_user_tariff_limits / count_team_members_for_owner
+    (согласовано с GET /me/tariff/summary).
+    """
+    summary = get_user_tariff_limits(db, owner_id, at=at)
+    limit = summary.team_members_limit
+    if limit is None:
+        return
+    if limit <= 0:
+        raise TariffLimitExceeded(
+            MSG_TEAM_NOT_AVAILABLE,
+            code="team_members_unavailable",
+        )
+    used = count_team_members_for_owner(db, owner_id)
+    if used >= limit:
+        raise TariffLimitExceeded(
+            MSG_TEAM_MEMBERS_EXCEEDED,
+            code="team_members_limit_exceeded",
+        )
