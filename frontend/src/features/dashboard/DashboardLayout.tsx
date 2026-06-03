@@ -6,6 +6,7 @@ import {
   Bot,
   FileText,
   Wallet,
+  Gauge,
   BarChart3,
   Users,
   Shield,
@@ -49,6 +50,13 @@ const PROJECT_NAV_ITEMS: NavItem[] = [
     mode: 'projects',
   },
   { id: 'balance', label: 'Баланс', path: '/dashboard/balance', icon: Wallet, mode: 'projects' },
+  {
+    id: 'tariff',
+    label: 'Финансы и лимиты',
+    path: '/dashboard/tariff',
+    icon: Gauge,
+    mode: 'projects',
+  },
   {
     id: 'analytics',
     label: 'Аналитика',

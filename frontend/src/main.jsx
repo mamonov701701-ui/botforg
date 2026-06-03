@@ -27,6 +27,7 @@ import ScenariosPage from './features/dashboard/pages/ScenariosPage';
 import ScenarioDetailPage from './features/dashboard/pages/ScenarioDetailPage';
 import TemplatesPage from './features/dashboard/pages/TemplatesPage';
 import BalancePage from './features/dashboard/pages/BalancePage';
+import TariffLimitsPage from './features/dashboard/pages/TariffLimitsPage';
 import AnalyticsPage from './features/dashboard/pages/AnalyticsPage';
 import TeamPage from './features/dashboard/pages/TeamPage';
 import BFTeamPage from './features/dashboard/pages/BFTeamPage';
@@ -134,6 +135,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="scenarios/:scenarioId" element={<ScenarioDetailPage />} />
             <Route path="templates" element={<TemplatesPage />} />
             <Route path="balance" element={<BalancePage />} />
+            <Route path="tariff" element={<TariffLimitsPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="team" element={<TeamPage />} />
             <Route path="messages" element={<MessagesPage />} />

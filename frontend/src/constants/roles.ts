@@ -54,6 +54,7 @@ export const SECTION_ACCESS = {
   scenarios: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer', 'user'],
   templates: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer', 'user'],
   balance: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer', 'user'],
+  tariff: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer', 'user'],
   analytics: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer', 'user'],
   team: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer', 'user'],
   messages: ['owner', 'admin', 'developer', 'templates_manager', 'support', 'viewer', 'user'],
