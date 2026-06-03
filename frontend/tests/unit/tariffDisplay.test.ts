@@ -1,16 +1,28 @@
 import { describe, it, expect } from 'vitest';
+import { coerceUsageBlock, normalizeTariffSummary } from '@/api/tariff';
 import {
+  formatBillingPeriod,
   formatUsageLine,
   giftDetails,
   giftTitle,
   planSourceLabel,
+  subscriptionStatusLabel,
   usagePercent,
 } from '@/features/dashboard/tariff/tariffDisplay';
 
 describe('tariffDisplay', () => {
   it('planSourceLabel maps known sources', () => {
     expect(planSourceLabel('gift_plan')).toBe('Подарочный тариф');
+    expect(planSourceLabel('fallback_start')).toBe('Стартовый тариф');
     expect(planSourceLabel('unknown')).toBe('Тариф');
+  });
+
+  it('subscriptionStatusLabel maps active', () => {
+    expect(subscriptionStatusLabel('active')).toBe('Активна');
+  });
+
+  it('formatBillingPeriod handles null', () => {
+    expect(formatBillingPeriod(null)).toBe('Период не указан');
   });
 
   it('formatUsageLine shows unlimited', () => {
@@ -33,5 +45,41 @@ describe('tariffDisplay', () => {
       message: 'PLAN gift requires plan_id',
     });
     expect(text).toContain('plan_id');
+  });
+});
+
+describe('normalizeTariffSummary', () => {
+  it('normalizes null arrays and partial flags', () => {
+    const summary = normalizeTariffSummary({
+      current_plan: {
+        code: 'start',
+        name: 'Старт',
+        source: 'fallback_start',
+        billing_period: null,
+      },
+      messages: { limit: 500, used: 10, remaining: 490 },
+      active_addons: null,
+      active_gifts: null,
+      warnings: null,
+      flags: { export_reports: false },
+    });
+    expect(summary.active_addons).toEqual([]);
+    expect(summary.active_gifts).toEqual([]);
+    expect(summary.warnings).toEqual([]);
+    expect(summary.flags.marketplace_access).toBe(true);
+    expect(summary.current_plan.billing_period).toBeNull();
+  });
+
+  it('coerceUsageBlock clamps invalid used', () => {
+    expect(coerceUsageBlock({ limit: 5, used: -3, remaining: 8 }).used).toBe(0);
+    expect(coerceUsageBlock({ limit: 5, used: 99, remaining: -1 }).remaining).toBe(0);
+  });
+
+  it('filters broken warnings', () => {
+    const summary = normalizeTariffSummary({
+      current_plan: { code: 'x', name: 'X', billing_period: { start: 'a', end: 'b' } },
+      warnings: [{ type: 'messages_usage', threshold: 70, message: 'ok' }, { threshold: 1 }],
+    });
+    expect(summary.warnings).toHaveLength(1);
   });
 });

@@ -89,4 +89,24 @@ describe('TariffLimitsPage', () => {
       expect(screen.getByText(/Не удалось загрузить информацию о тарифе/i)).toBeTruthy();
     });
   });
+
+  it('renders unsupported gift and missing billing period', async () => {
+    vi.mocked(getTariffSummary).mockResolvedValue({
+      ...mockSummary,
+      current_plan: {
+        ...mockSummary.current_plan,
+        billing_period: null,
+        source: 'gift_plan',
+      },
+      active_gifts: [
+        { id: 1, gift_type: 'messages', amount: 100, status: 'unsupported_missing_plan_id' },
+      ],
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByText(/Период не указан/i)).toBeTruthy();
+    });
+    expect(screen.getByText(/Подарок тарифа \(требует настройки\)/i)).toBeTruthy();
+    expect(screen.getByText(/Подарочный тариф/i)).toBeTruthy();
+  });
 });

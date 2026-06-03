@@ -4,7 +4,23 @@ export const PLAN_SOURCE_LABELS: Record<string, string> = {
   subscription: 'Активная подписка',
   gift_plan: 'Подарочный тариф',
   legacy_plan_code: 'Тариф аккаунта',
-  fallback_start: 'Базовый тариф',
+  fallback_start: 'Стартовый тариф',
+};
+
+export const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
+  active: 'Активна',
+  trialing: 'Пробный период',
+  past_due: 'Ожидает оплаты',
+  cancelled: 'Отменена',
+  expired: 'Истекла',
+};
+
+export const GIFT_TYPE_LABELS: Record<string, string> = {
+  plan: 'Тариф',
+  addon: 'Пакет',
+  messages: 'Сообщения',
+  active_bot: 'Активный бот',
+  team_member: 'Участник команды',
 };
 
 export const WARNING_TYPE_LABELS: Record<string, string> = {
@@ -17,15 +33,25 @@ export function planSourceLabel(source: string): string {
   return PLAN_SOURCE_LABELS[source] ?? 'Тариф';
 }
 
+export function subscriptionStatusLabel(status: string): string {
+  return SUBSCRIPTION_STATUS_LABELS[status] ?? status;
+}
+
+export function formatBillingPeriod(period: { start: string; end: string } | null): string {
+  if (!period) return 'Период не указан';
+  return `${formatPeriodDate(period.start)} — ${formatPeriodDate(period.end)}`;
+}
+
 export function formatLimitValue(value: number | null): string {
   if (value === null) return 'Безлимит';
   return String(value);
 }
 
 export function formatUsageLine(block: UsageBlock): string {
+  const used = Number.isFinite(block.used) ? Math.max(0, block.used) : 0;
   const limitText = formatLimitValue(block.limit);
   const remainingText = block.remaining === null ? '—' : String(Math.max(0, block.remaining));
-  return `${block.used} / ${limitText} · осталось: ${remainingText}`;
+  return `${used} / ${limitText} · осталось: ${remainingText}`;
 }
 
 export function usagePercent(block: UsageBlock): number | null {
@@ -71,8 +97,9 @@ export function giftTitle(item: TariffGiftItem): string {
   if (item.plan_name_ru && typeof item.plan_name_ru === 'string') {
     return `Тариф «${item.plan_name_ru}»`;
   }
-  const giftType = item.gift_type != null ? String(item.gift_type) : 'подарок';
-  return `Подарок: ${giftType}`;
+  const giftType = item.gift_type != null ? String(item.gift_type) : '';
+  const label = giftType ? (GIFT_TYPE_LABELS[giftType] ?? 'Подарок') : 'Подарок';
+  return label;
 }
 
 export function giftDetails(item: TariffGiftItem): string {

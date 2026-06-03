@@ -19,11 +19,12 @@ import { getTariffSummary, type TariffSummary, type UsageBlock } from '../../../
 import {
   addonDetails,
   addonTitle,
-  formatPeriodDate,
+  formatBillingPeriod,
   formatUsageLine,
   giftDetails,
   giftTitle,
   planSourceLabel,
+  subscriptionStatusLabel,
   usagePercent,
   warningSeverityColor,
   WARNING_TYPE_LABELS,
@@ -203,12 +204,11 @@ export default function TariffLimitsPage() {
             </p>
             {summary.current_plan.subscription_status && (
               <p style={{ margin: '0 0 4px', color: 'var(--text-muted)', fontSize: '14px' }}>
-                Статус подписки: {summary.current_plan.subscription_status}
+                Статус подписки: {subscriptionStatusLabel(summary.current_plan.subscription_status)}
               </p>
             )}
             <p style={{ margin: '12px 0 0', fontSize: '14px', color: 'var(--text-muted)' }}>
-              Период: {formatPeriodDate(summary.current_plan.billing_period.start)} —{' '}
-              {formatPeriodDate(summary.current_plan.billing_period.end)}
+              Период: {formatBillingPeriod(summary.current_plan.billing_period)}
             </p>
           </Card>
 
