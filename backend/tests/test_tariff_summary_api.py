@@ -228,6 +228,35 @@ def test_tariff_summary_message_warnings(client, db):
     assert [w["threshold"] for w in msg_full] == [70, 85, 95, 100]
 
 
+def test_tariff_summary_plan_gift_source(client, db):
+    auth = _auth_on_start(client)
+    me = client.get("/me", headers={"Authorization": auth}).json()
+    from backend.models.plan import Plan
+    from backend.models.tariff import GiftGrant, GiftGrantStatus, GiftType
+
+    business_pro = db.query(Plan).filter(Plan.code == "business_pro").first()
+    assert business_pro is not None
+    period_start, period_end = _month_period()
+    db.add(
+        GiftGrant(
+            target_user_id=me["id"],
+            gift_type=GiftType.PLAN,
+            plan_id=business_pro.id,
+            starts_at=period_start,
+            ends_at=period_end,
+            granted_by_user_id=me["id"],
+            status=GiftGrantStatus.ACTIVE,
+        )
+    )
+    db.commit()
+
+    res = client.get("/me/tariff/summary", headers={"Authorization": auth})
+    data = res.json()
+    assert data["current_plan"]["code"] == "business_pro"
+    assert data["current_plan"]["source"] == "gift_plan"
+    assert data["messages"]["limit"] == 10000
+
+
 def test_tariff_summary_does_not_mutate_usage(client, db):
     auth = _auth_on_start(client)
     me = client.get("/me", headers={"Authorization": auth}).json()

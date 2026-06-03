@@ -8,6 +8,7 @@ import pytest
 from backend.models.bot import Bot
 from backend.models.bot_channel import BotChannelConnection
 from backend.models.plan import Plan
+from backend.models.team import TeamMember
 from decimal import Decimal
 
 from backend.models.tariff import (
@@ -456,3 +457,181 @@ def _normalize_cmp(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def _add_plan_gift(
+    db,
+    *,
+    target_user_id: int,
+    plan: Plan,
+    period_start: datetime,
+    period_end: datetime,
+    admin_user_id: int,
+    starts_at: datetime | None = None,
+    ends_at: datetime | None = None,
+) -> GiftGrant:
+    grant = GiftGrant(
+        target_user_id=target_user_id,
+        gift_type=GiftType.PLAN,
+        plan_id=plan.id,
+        starts_at=starts_at or period_start,
+        ends_at=ends_at or period_end,
+        granted_by_user_id=admin_user_id,
+        status=GiftGrantStatus.ACTIVE,
+    )
+    db.add(grant)
+    db.commit()
+    return grant
+
+
+def test_plan_gift_upgrades_start_to_business_pro(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="plan_gift_up")
+    admin = _create_user(db, plan_code="free", email_suffix="plan_gift_admin")
+    business_pro = _get_plan(db, "business_pro")
+    period_start, period_end = _month_period()
+    _add_plan_gift(
+        db,
+        target_user_id=user.id,
+        plan=business_pro,
+        period_start=period_start,
+        period_end=period_end,
+        admin_user_id=admin.id,
+    )
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.plan_code == "business_pro"
+    assert summary.source == "gift_plan"
+    assert summary.messages_limit == 10000
+    assert len(summary.active_gifts) == 1
+    assert summary.active_gifts[0]["plan_code"] == "business_pro"
+
+
+def test_expired_plan_gift_not_applied(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="plan_gift_exp")
+    admin = _create_user(db, plan_code="free", email_suffix="plan_gift_admin2")
+    business_pro = _get_plan(db, "business_pro")
+    _add_plan_gift(
+        db,
+        target_user_id=user.id,
+        plan=business_pro,
+        period_start=_utc(2026, 6, 1),
+        period_end=_utc(2026, 7, 1),
+        admin_user_id=admin.id,
+        starts_at=_utc(2026, 4, 1),
+        ends_at=_utc(2026, 5, 1),
+    )
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.plan_code == "start"
+    assert summary.source == "legacy_plan_code"
+    assert summary.messages_limit == 500
+    assert summary.active_gifts == []
+
+
+def test_multiple_plan_gifts_picks_highest_sort_order(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="plan_gift_multi")
+    admin = _create_user(db, plan_code="free", email_suffix="plan_gift_admin3")
+    business = _get_plan(db, "business")
+    team_plan = _get_plan(db, "team")
+    period_start, period_end = _month_period()
+    _add_plan_gift(
+        db,
+        target_user_id=user.id,
+        plan=business,
+        period_start=period_start,
+        period_end=period_end,
+        admin_user_id=admin.id,
+    )
+    _add_plan_gift(
+        db,
+        target_user_id=user.id,
+        plan=team_plan,
+        period_start=period_start,
+        period_end=period_end,
+        admin_user_id=admin.id,
+    )
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.plan_code == "team"
+    assert summary.source == "gift_plan"
+    assert summary.messages_limit == 20000
+    assert summary.team_members_limit == 5
+
+
+def test_plan_gift_missing_plan_id_unsupported(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="plan_gift_no_id")
+    admin = _create_user(db, plan_code="free", email_suffix="plan_gift_admin4")
+    period_start, period_end = _month_period()
+    db.add(
+        GiftGrant(
+            target_user_id=user.id,
+            gift_type=GiftType.PLAN,
+            plan_id=None,
+            starts_at=period_start,
+            ends_at=period_end,
+            granted_by_user_id=admin.id,
+            status=GiftGrantStatus.ACTIVE,
+        )
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.plan_code == "start"
+    assert summary.messages_limit == 500
+    assert len(summary.active_gifts) == 1
+    assert summary.active_gifts[0]["status"] == "unsupported_missing_plan_id"
+
+
+def test_subscription_beats_lower_plan_gift(db, client):
+    user = _create_user(db, plan_code="start", email_suffix="plan_gift_sub")
+    admin = _create_user(db, plan_code="free", email_suffix="plan_gift_admin5")
+    team_plan = _get_plan(db, "team")
+    business = _get_plan(db, "business")
+    period_start = _utc(2026, 6, 1)
+    period_end = _utc(2026, 7, 1)
+    db.add(
+        UserSubscription(
+            user_id=user.id,
+            plan_id=team_plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=period_start,
+            current_period_end=period_end,
+        )
+    )
+    _add_plan_gift(
+        db,
+        target_user_id=user.id,
+        plan=business,
+        period_start=period_start,
+        period_end=period_end,
+        admin_user_id=admin.id,
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.plan_code == "team"
+    assert summary.source == "subscription"
+    assert summary.messages_limit == 20000
+
+
+def test_team_members_used_from_team_table_not_counter(db, client):
+    user = _create_user(db, plan_code="team", email_suffix="team_used_real")
+    member_a = _create_user(db, plan_code="free", email_suffix="team_member_a")
+    member_b = _create_user(db, plan_code="free", email_suffix="team_member_b")
+    db.add(
+        TeamMember(owner_id=user.id, user_id=member_a.id, role="observer"),
+    )
+    db.add(
+        TeamMember(owner_id=user.id, user_id=member_b.id, role="editor"),
+    )
+    period_start, period_end = _month_period()
+    db.add(
+        UsageCounter(
+            user_id=user.id,
+            period_start=period_start,
+            period_end=period_end,
+            messages_used=0,
+            active_bots_used=0,
+            team_members_used=99,
+        )
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.team_members_used == 2
+    assert summary.team_members_limit == 5
+    assert summary.team_members_remaining == 3

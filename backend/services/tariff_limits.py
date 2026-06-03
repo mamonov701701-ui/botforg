@@ -26,8 +26,17 @@ from backend.models.tariff import (
 )
 from backend.models.user import User
 from backend.services.bot_usage import count_production_active_bots
+from backend.services.team_usage import count_team_members_for_owner
 
 FALLBACK_PLAN_CODE = "start"
+
+# При равном sort_order выше приоритет у подписки, затем gift, legacy, fallback.
+_PLAN_SOURCE_PRIORITY: dict[str, int] = {
+    "subscription": 40,
+    "gift_plan": 30,
+    "legacy_plan_code": 20,
+    "fallback_start": 10,
+}
 
 # Безопасные defaults при отсутствии Plan.limits (тариф «Старт»)
 DEFAULT_NUMERIC_LIMITS: dict[str, int | None] = {
@@ -137,13 +146,22 @@ def get_user_tariff_limits(
     at_dt = _normalize_dt(at or datetime.now(timezone.utc))
 
     subscription = _find_active_subscription(db, user_id, at_dt)
-    plan, source = _resolve_plan(db, user, subscription)
 
     if subscription:
         period_start = _normalize_dt(subscription.current_period_start)
         period_end = _normalize_dt(subscription.current_period_end)
     else:
         period_start, period_end = _calendar_month_period(at_dt)
+
+    plan, source = _resolve_effective_plan(
+        db,
+        user,
+        subscription,
+        user_id,
+        at_dt,
+        period_start,
+        period_end,
+    )
 
     base = _parse_plan_limits(plan)
     messages_limit = base["monthly_messages"]
@@ -170,7 +188,8 @@ def get_user_tariff_limits(
     messages_used = usage.messages_used if usage else 0
     # Источник истины — bot_usage (не UsageCounter.active_bots_used): см. TARIFFS_STAGE_5_1.
     active_bots_used = count_production_active_bots(db, user_id)
-    team_members_used = usage.team_members_used if usage else 0
+    # Источник истины — team_members (не UsageCounter.team_members_used): см. 5.4.1.
+    team_members_used = count_team_members_for_owner(db, user_id)
 
     plan_code = plan.code if plan else FALLBACK_PLAN_CODE
     plan_name = _plan_display_name(plan)
@@ -285,6 +304,80 @@ def _resolve_plan(
         return plan, "legacy_plan_code"
     plan = db.query(Plan).filter(Plan.code == FALLBACK_PLAN_CODE).first()
     return plan, "fallback_start"
+
+
+def _plan_sort_order(plan: Plan | None) -> int:
+    if not plan or plan.sort_order is None:
+        return 0
+    return int(plan.sort_order)
+
+
+def _find_active_plan_gift_grants(
+    db: Session,
+    user_id: int,
+    at: datetime,
+    period_start: datetime,
+    period_end: datetime,
+) -> list[GiftGrant]:
+    grants = (
+        db.query(GiftGrant)
+        .filter(
+            GiftGrant.target_user_id == user_id,
+            GiftGrant.status == GiftGrantStatus.ACTIVE,
+            GiftGrant.gift_type == GiftType.PLAN,
+        )
+        .all()
+    )
+    active: list[GiftGrant] = []
+    for grant in grants:
+        starts = _normalize_dt(grant.starts_at)
+        ends = _normalize_dt(grant.ends_at)
+        if not (starts <= at <= ends):
+            continue
+        if not _periods_overlap(starts, ends, period_start, period_end):
+            continue
+        active.append(grant)
+    return active
+
+
+def _resolve_effective_plan(
+    db: Session,
+    user: User,
+    subscription: UserSubscription | None,
+    user_id: int,
+    at: datetime,
+    period_start: datetime,
+    period_end: datetime,
+) -> tuple[Plan | None, str]:
+    """
+    Базовый тариф: подписка / legacy / fallback + активные PLAN gifts.
+
+    Выбирается план с максимальным sort_order; при равенстве — приоритет источника
+    (subscription > gift_plan > legacy_plan_code > fallback_start).
+    """
+    base_plan, base_source = _resolve_plan(db, user, subscription)
+    candidates: list[tuple[Plan, str]] = []
+    if base_plan:
+        candidates.append((base_plan, base_source))
+
+    for grant in _find_active_plan_gift_grants(
+        db, user_id, at, period_start, period_end
+    ):
+        if not grant.plan_id:
+            continue
+        gift_plan = db.query(Plan).filter(Plan.id == grant.plan_id).first()
+        if gift_plan:
+            candidates.append((gift_plan, "gift_plan"))
+
+    if not candidates:
+        plan = db.query(Plan).filter(Plan.code == FALLBACK_PLAN_CODE).first()
+        return plan, "fallback_start"
+
+    def _rank(item: tuple[Plan, str]) -> tuple[int, int]:
+        plan, source = item
+        return (_plan_sort_order(plan), _PLAN_SOURCE_PRIORITY.get(source, 0))
+
+    return max(candidates, key=_rank)
 
 
 def _parse_plan_limits(plan: Plan | None) -> dict[str, Any]:
@@ -448,9 +541,21 @@ def _sum_active_gifts(
                     )
                     amount = pkg_amount
         elif gift_type == GiftType.PLAN.value:
-            # TODO(этап 5+): подарочный тариф plan — отдельное решение по замене plan_code;
-            # на этапе 4 не перекрываем базовый тариф автоматически.
-            entry["note"] = "plan_gift_not_applied_to_base_tariff"
+            if grant.plan_id:
+                gift_plan = (
+                    db.query(Plan).filter(Plan.id == grant.plan_id).first()
+                )
+                if gift_plan:
+                    entry["plan_id"] = gift_plan.id
+                    entry["plan_code"] = gift_plan.code
+                    entry["plan_name_ru"] = _plan_display_name(gift_plan)
+                else:
+                    entry["status"] = "unsupported_missing_plan_row"
+            else:
+                entry["status"] = "unsupported_missing_plan_id"
+                entry["message"] = (
+                    "PLAN gift requires plan_id; base tariff limits unchanged."
+                )
         out_list.append(entry)
     return bonuses
 
