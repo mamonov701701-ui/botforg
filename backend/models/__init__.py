@@ -44,6 +44,11 @@ from backend.models.market_access import (
 )
 from backend.models.legal import Consent
 from backend.models.plan import Plan
+from backend.models.checkout import (
+    CheckoutIntent,
+    CheckoutIntentStatus,
+    CheckoutProductType,
+)
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
@@ -133,6 +138,9 @@ __all__ = [
     "MarketItemAccessGrant",
     "Consent",
     "Plan",
+    "CheckoutIntent",
+    "CheckoutIntentStatus",
+    "CheckoutProductType",
     "AddonPackage",
     "AddonPackageType",
     "UserSubscription",
