@@ -1,10 +1,40 @@
-"""Pydantic-схемы API сводки тарифов и лимитов (Этап 5.4)."""
+"""Pydantic-схемы API сводки тарифов и лимитов (Этап 5.4+) и публичного каталога (6.1)."""
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from backend.services.tariff_limits import TariffLimitsSummary
+
+
+class PublicTariffOut(BaseModel):
+    """Публичная карточка тарифа (GET /tariffs). Без ORM/admin-полей."""
+
+    code: str
+    name: str
+    description_ru: str | None = None
+    price_month: Decimal | None = None
+    currency: str = "RUB"
+    is_recommended: bool = False
+    sort_order: int = 0
+    limits: dict[str, Any] = Field(default_factory=dict)
+
+
+class PublicAddonOut(BaseModel):
+    """Публичная карточка пакета (GET /addons). Без ORM/admin-полей."""
+
+    code: str
+    name_ru: str
+    description_ru: str | None = None
+    type: str
+    amount: int
+    price: Decimal
+    currency: str = "RUB"
+    duration_type: str
+    available_from_plan: Any = None
+    max_per_period: int | None = None
+    sort_order: int = 0
 
 
 class BillingPeriodOut(BaseModel):
