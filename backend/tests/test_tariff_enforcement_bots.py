@@ -2,7 +2,6 @@
 Тесты enforcement активных ботов и правила «1 бот = 1 канал» (Этап 5.1).
 """
 import uuid
-from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
@@ -33,17 +32,14 @@ from backend.services.tariff_enforcement import (
 )
 from backend.services.tariff_limits import get_user_tariff_limits
 from backend.tests.conftest import TestingSessionLocal, register_and_get_token
+from backend.tests.tariff_time import (
+    FIXED_TARIFF_NOW,
+    freeze_tariff_now,  # noqa: F401 — used via pytestmark
+    month_period,
+    utc as _utc,
+)
 
-
-def _utc(*args, **kwargs) -> datetime:
-    return datetime(*args, tzinfo=timezone.utc, **kwargs)
-
-
-def _month_period():
-    at = _utc(2026, 6, 15)
-    start = at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    end = start.replace(month=at.month + 1)
-    return start, end
+pytestmark = pytest.mark.usefixtures("freeze_tariff_now")
 
 
 def _create_user(db, plan_code: str, suffix: str) -> User:
@@ -93,7 +89,7 @@ def _ensure_bot_addon(db, user_id: int, amount: int = 1) -> None:
         db.add(pkg)
         db.commit()
         db.refresh(pkg)
-    start, end = _month_period()
+    start, end = month_period()
     db.add(
         UserAddon(
             user_id=user_id,
@@ -196,7 +192,7 @@ def test_expired_addon_does_not_increase_limit(db, client):
 def test_summary_active_bots_used_matches_enforcement(db, client):
     user = _create_user(db, "start", "summary_match")
     _active_bot(db, user.id, "sm1")
-    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    summary = get_user_tariff_limits(db, user.id, at=FIXED_TARIFF_NOW)
     assert summary.active_bots_used == count_production_active_bots(db, user.id)
     assert summary.active_bots_used == 1
 

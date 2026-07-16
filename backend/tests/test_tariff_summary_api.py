@@ -1,7 +1,6 @@
 """
 Тесты GET /me/tariff/summary (Этап 5.4).
 """
-from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -20,20 +19,13 @@ from backend.models.tariff import (
 )
 from backend.services.tariff_limits import get_user_tariff_limits
 from backend.tests.conftest import TestingSessionLocal, register_and_get_token
+from backend.tests.tariff_time import (
+    FIXED_TARIFF_NOW,
+    freeze_tariff_now,  # noqa: F401 — used via pytestmark
+    month_period,
+)
 
-
-def _utc(*args, **kwargs) -> datetime:
-    return datetime(*args, tzinfo=timezone.utc, **kwargs)
-
-
-def _month_period(at: datetime | None = None) -> tuple[datetime, datetime]:
-    at = at or _utc(2026, 6, 15, 12, 0, 0)
-    start = at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    if at.month == 12:
-        end = start.replace(year=at.year + 1, month=1)
-    else:
-        end = start.replace(month=at.month + 1)
-    return start, end
+pytestmark = pytest.mark.usefixtures("freeze_tariff_now")
 
 
 def _ensure_addon(db, code: str, pkg_type: AddonPackageType, amount: int) -> AddonPackage:
@@ -119,7 +111,7 @@ def test_tariff_summary_matches_tariff_limits_service(client, db):
     auth = _auth_on_start(client)
     me = client.get("/me", headers={"Authorization": auth}).json()
     user_id = me["id"]
-    service_summary = get_user_tariff_limits(db, user_id, at=_utc(2026, 6, 15))
+    service_summary = get_user_tariff_limits(db, user_id, at=FIXED_TARIFF_NOW)
 
     res = client.get("/me/tariff/summary", headers={"Authorization": auth})
     data = res.json()
@@ -160,7 +152,7 @@ def test_tariff_summary_active_addons_and_gifts(client, db):
     auth = _auth_on_start(client)
     me = client.get("/me", headers={"Authorization": auth}).json()
     user_id = me["id"]
-    period_start, period_end = _month_period()
+    period_start, period_end = month_period()
     pkg = _ensure_addon(db, "api_msg_500", AddonPackageType.MESSAGES, 500)
     db.add(
         UserAddon(
@@ -199,7 +191,7 @@ def test_tariff_summary_active_addons_and_gifts(client, db):
 def test_tariff_summary_message_warnings(client, db):
     auth = _auth_on_start(client)
     me = client.get("/me", headers={"Authorization": auth}).json()
-    period_start, period_end = _month_period()
+    period_start, period_end = month_period()
     db.add(
         UsageCounter(
             user_id=me["id"],
@@ -236,7 +228,7 @@ def test_tariff_summary_plan_gift_source(client, db):
 
     business_pro = db.query(Plan).filter(Plan.code == "business_pro").first()
     assert business_pro is not None
-    period_start, period_end = _month_period()
+    period_start, period_end = month_period()
     db.add(
         GiftGrant(
             target_user_id=me["id"],
@@ -260,7 +252,7 @@ def test_tariff_summary_plan_gift_source(client, db):
 def test_tariff_summary_does_not_mutate_usage(client, db):
     auth = _auth_on_start(client)
     me = client.get("/me", headers={"Authorization": auth}).json()
-    period_start, period_end = _month_period()
+    period_start, period_end = month_period()
     db.add(
         UsageCounter(
             user_id=me["id"],

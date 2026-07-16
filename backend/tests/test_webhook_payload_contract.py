@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -24,6 +23,13 @@ from backend.services.tariff_message_enforcement import (
     REASON_UNSUPPORTED_MESSAGE_TYPE,
 )
 from backend.tests.conftest import TestingSessionLocal
+from backend.tests.tariff_time import (
+    FIXED_TARIFF_NOW,
+    freeze_tariff_now,  # noqa: F401 — used via pytestmark
+    month_period,
+)
+
+pytestmark = pytest.mark.usefixtures("freeze_tariff_now")
 
 
 @pytest.fixture
@@ -33,17 +39,6 @@ def db(client):
         yield session
     finally:
         session.close()
-
-
-def _utc(*args, **kwargs) -> datetime:
-    return datetime(*args, tzinfo=timezone.utc, **kwargs)
-
-
-def _month_period():
-    at = _utc(2026, 6, 15)
-    start = at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    end = start.replace(month=at.month + 1)
-    return start, end
 
 
 def _create_user(db, *, plan_code: str = "start") -> User:
@@ -89,7 +84,7 @@ def _channel_connection(db, bot_id: int, channel: str, credentials: dict) -> Non
 
 
 def _usage_counter(db, user_id: int, messages_used: int = 0) -> None:
-    start, end = _month_period()
+    start, end = month_period()
     db.add(
         UsageCounter(
             user_id=user_id,
@@ -152,7 +147,7 @@ def test_telegram_user_input_without_update_id_blocked(client, db) -> None:
     bot = _active_bot(db, user.id)
     _channel_connection(db, bot.id, "telegram", {"bot_token": "test"})
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "message": {
@@ -180,7 +175,7 @@ def test_telegram_stable_id_consumes_and_runs_runtime(client, db) -> None:
     bot = _active_bot(db, user.id)
     _channel_connection(db, bot.id, "telegram", {"bot_token": "test"})
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "update_id": 20001,
@@ -206,7 +201,7 @@ def test_telegram_duplicate_does_not_consume_twice(client, db) -> None:
     bot = _active_bot(db, user.id)
     _channel_connection(db, bot.id, "telegram", {"bot_token": "test"})
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "update_id": 20002,
@@ -234,7 +229,7 @@ def test_telegram_no_user_input_no_stable_id_not_billed(client, db) -> None:
     bot = _active_bot(db, user.id)
     _channel_connection(db, bot.id, "telegram", {"bot_token": "test"})
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "message": {
@@ -275,7 +270,7 @@ def test_whatsapp_status_not_billed(client, db) -> None:
         {"provider": "meta_cloud", "verify_token": "v", "app_secret": "secret"},
     )
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "entry": [{
@@ -311,7 +306,7 @@ def test_whatsapp_user_input_without_message_id_blocked(client, db) -> None:
         {"provider": "meta_cloud", "verify_token": "v", "app_secret": "secret"},
     )
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "entry": [{
@@ -348,7 +343,7 @@ def test_whatsapp_stable_id_consumes(client, db) -> None:
         {"provider": "meta_cloud", "verify_token": "v", "app_secret": "secret"},
     )
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "entry": [{
@@ -390,7 +385,7 @@ def test_whatsapp_non_text_ignored_without_runtime(client, db, msg_type: str) ->
         {"provider": "meta_cloud", "verify_token": "v", "app_secret": "secret"},
     )
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     message = {
         "id": f"wamid.NONTEXT_{msg_type}",
@@ -464,7 +459,7 @@ def test_max_unknown_user_input_shape_blocked(client, db) -> None:
         {"token": "t", "webhook_secret": "max_secret"},
     )
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "unknown_envelope": True,
@@ -499,7 +494,7 @@ def test_max_no_user_input_no_stable_id_not_billed(client, db) -> None:
         {"token": "t", "webhook_secret": "max_secret"},
     )
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {"type": "bot_started", "chat": {"chat_id": "c1"}}
 
@@ -528,7 +523,7 @@ def test_max_user_input_without_stable_id_blocked(client, db) -> None:
         {"token": "t", "webhook_secret": "max_secret"},
     )
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "chat": {"chat_id": "c1"},
@@ -558,7 +553,7 @@ def test_max_message_id_consumes(client, db) -> None:
         {"token": "t", "webhook_secret": "max_secret"},
     )
     _usage_counter(db, user.id, 0)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "message_id": "msg_max_c1",

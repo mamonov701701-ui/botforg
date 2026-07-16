@@ -6,7 +6,6 @@ from __future__ import annotations
 import inspect
 import json
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -28,8 +27,15 @@ from backend.services.tariff_message_enforcement import (
     should_block_user_input_without_stable_id,
 )
 from backend.tests.conftest import TestingSessionLocal
+from backend.tests.tariff_time import (
+    FIXED_TARIFF_NOW,
+    freeze_tariff_now,  # noqa: F401 — used via pytestmark
+    month_period,
+)
 from backend.main import app
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.usefixtures("freeze_tariff_now")
 
 
 @pytest.fixture
@@ -39,17 +45,6 @@ def db(client):
         yield session
     finally:
         session.close()
-
-
-def _utc(*args, **kwargs) -> datetime:
-    return datetime(*args, tzinfo=timezone.utc, **kwargs)
-
-
-def _month_period():
-    at = _utc(2026, 6, 15)
-    start = at.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    end = start.replace(month=at.month + 1)
-    return start, end
 
 
 def _create_user(db, *, plan_code: str = "start", suffix: str | None = None) -> User:
@@ -95,7 +90,7 @@ def _telegram_connection(db, bot_id: int) -> None:
 
 
 def _usage_counter(db, user_id: int, messages_used: int) -> UsageCounter:
-    start, end = _month_period()
+    start, end = month_period()
     counter = UsageCounter(
         user_id=user_id,
         period_start=start,
@@ -130,7 +125,7 @@ def test_billable_requires_stable_id_and_user_input() -> None:
 
 def test_first_billable_message_increments_counter(db) -> None:
     user = _create_user(db, plan_code="start")
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
     result = check_and_consume_message_unit(db, user.id, at=at)
     assert result.allowed is True
     assert result.blocked is False
@@ -146,7 +141,7 @@ def test_first_billable_message_increments_counter(db) -> None:
 def test_at_limit_message_blocked(db) -> None:
     user = _create_user(db, plan_code="start")
     _usage_counter(db, user.id, messages_used=500)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
     result = check_and_consume_message_unit(db, user.id, at=at)
     assert result.allowed is False
     assert result.blocked is True
@@ -159,7 +154,7 @@ def test_at_limit_message_blocked(db) -> None:
 def test_atomic_update_does_not_exceed_limit(db) -> None:
     user = _create_user(db, plan_code="start")
     counter = _usage_counter(db, user.id, messages_used=499)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
     ok = check_and_consume_message_unit(db, user.id, at=at)
     blocked = check_and_consume_message_unit(db, user.id, at=at)
     db.refresh(counter)
@@ -172,7 +167,7 @@ def test_atomic_update_does_not_exceed_limit(db) -> None:
 def test_remaining_calculated_correctly(db) -> None:
     user = _create_user(db, plan_code="start")
     _usage_counter(db, user.id, messages_used=10)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
     result = check_and_consume_message_unit(db, user.id, at=at)
     assert result.messages_used == 11
     assert result.messages_remaining == 489
@@ -189,7 +184,7 @@ def test_corporate_unlimited_does_not_block(db) -> None:
     }
     db.commit()
     user = _create_user(db, plan_code="corporate")
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
     result = check_and_consume_message_unit(db, user.id, at=at)
     assert result.allowed is True
     assert result.blocked is False
@@ -218,7 +213,7 @@ def test_duplicate_webhook_does_not_increment_counter(client, db) -> None:
         },
     }
     url = f"/webhooks/telegram/{bot.id}"
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     with patch("backend.routers.channel_webhooks.process_channel_update"):
         client.post(url, json=payload)
@@ -243,7 +238,7 @@ def test_user_input_without_stable_id_blocked(client, db) -> None:
         },
     }
     url = f"/webhooks/telegram/{bot.id}"
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     with patch("backend.routers.channel_webhooks.process_channel_update") as mock_runtime:
         res = client.post(url, json=payload)
@@ -274,7 +269,7 @@ def test_no_user_input_does_not_consume(client, db) -> None:
         },
     }
     url = f"/webhooks/telegram/{bot.id}"
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     with patch("backend.routers.channel_webhooks.process_channel_update") as mock_runtime:
         res = client.post(url, json=payload)
@@ -326,7 +321,7 @@ def test_legacy_webhook_router_untouched() -> None:
 
 def test_refund_message_unit_does_not_go_below_zero(db) -> None:
     user = _create_user(db)
-    start, end = _month_period()
+    start, end = month_period()
     counter = _usage_counter(db, user.id, messages_used=0)
     refund_message_unit(db, user.id, start, end)
     db.refresh(counter)
@@ -335,7 +330,7 @@ def test_refund_message_unit_does_not_go_below_zero(db) -> None:
 
 def test_refund_message_unit_decrements_when_positive(db) -> None:
     user = _create_user(db)
-    start, end = _month_period()
+    start, end = month_period()
     counter = _usage_counter(db, user.id, messages_used=5)
     refund_message_unit(db, user.id, start, end)
     db.refresh(counter)
@@ -347,7 +342,7 @@ def test_runtime_failure_after_consume_refunds_counter(client, db) -> None:
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
     _usage_counter(db, user.id, messages_used=10)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "update_id": 888001,
@@ -377,7 +372,7 @@ def test_successful_runtime_keeps_consumed_counter(client, db) -> None:
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
     _usage_counter(db, user.id, messages_used=10)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "update_id": 888002,
@@ -411,7 +406,7 @@ def test_unlimited_runtime_failure_does_not_refund(client, db) -> None:
     user = _create_user(db, plan_code="corporate")
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "update_id": 888003,
@@ -444,7 +439,7 @@ def test_blocked_webhook_does_not_trigger_refund_on_runtime_skip(client, db) -> 
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
     _usage_counter(db, user.id, messages_used=500)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "update_id": 888004,
@@ -473,7 +468,7 @@ def test_duplicate_webhook_does_not_trigger_refund(client, db) -> None:
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
     _usage_counter(db, user.id, messages_used=3)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "update_id": 888005,
@@ -501,7 +496,7 @@ def test_no_stable_id_user_input_blocked_no_refund(client, db) -> None:
     bot = _active_bot(db, user.id)
     _telegram_connection(db, bot.id)
     _usage_counter(db, user.id, messages_used=2)
-    at = _utc(2026, 6, 15)
+    at = FIXED_TARIFF_NOW
 
     payload = {
         "message": {
