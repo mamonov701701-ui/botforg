@@ -166,6 +166,7 @@ class UserAddon(Base):
         Index("ix_user_addons_addon_package_id", "addon_package_id"),
         Index("ix_user_addons_status", "status"),
         Index("ix_user_addons_period", "period_start", "period_end"),
+        Index("ix_user_addons_provider_ref", "provider_ref", unique=True),
         {"extend_existing": True},
     )
 
@@ -184,6 +185,7 @@ class UserAddon(Base):
         nullable=False,
     )
     source = Column(_value_enum(UserAddonSource), nullable=False)
+    provider_ref = Column(String(255), nullable=True, unique=True)
     created_by_admin_id = Column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

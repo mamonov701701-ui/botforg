@@ -48,6 +48,10 @@ from backend.models.checkout import (
     CheckoutIntent,
     CheckoutIntentStatus,
     CheckoutProductType,
+    PaymentAttempt,
+    PaymentAttemptStatus,
+    PaymentWebhookEvent,
+    PaymentWebhookProcessStatus,
 )
 from backend.models.tariff import (
     AddonPackage,
@@ -141,6 +145,10 @@ __all__ = [
     "CheckoutIntent",
     "CheckoutIntentStatus",
     "CheckoutProductType",
+    "PaymentAttempt",
+    "PaymentAttemptStatus",
+    "PaymentWebhookEvent",
+    "PaymentWebhookProcessStatus",
     "AddonPackage",
     "AddonPackageType",
     "UserSubscription",

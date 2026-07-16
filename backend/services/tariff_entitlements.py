@@ -164,9 +164,14 @@ def create_user_addon(
     source: UserAddonSource | str,
     amount: int | None = None,
     created_by_admin_id: int | None = None,
+    provider_ref: str | None = None,
     commit: bool = True,
 ) -> UserAddon:
-    """Создать UserAddon на период. amount по умолчанию из каталога AddonPackage."""
+    """
+    Создать UserAddon на период. amount по умолчанию из каталога AddonPackage.
+
+    Idempotent: если передан provider_ref и запись уже есть — вернуть её.
+    """
     period_start, period_end = _validate_period(period_start, period_end)
     pkg = db.query(AddonPackage).filter(AddonPackage.id == addon_package_id).first()
     if not pkg:
@@ -174,6 +179,14 @@ def create_user_addon(
             f"AddonPackage id={addon_package_id} not found",
             code="addon_not_found",
         )
+
+    ref = (provider_ref or "").strip() or None
+    if ref:
+        existing = (
+            db.query(UserAddon).filter(UserAddon.provider_ref == ref).first()
+        )
+        if existing:
+            return existing
 
     source_val = source if isinstance(source, UserAddonSource) else UserAddonSource(source)
     addon = UserAddon(
@@ -184,6 +197,7 @@ def create_user_addon(
         period_end=period_end,
         status=UserAddonStatus.ACTIVE,
         source=source_val,
+        provider_ref=ref,
         created_by_admin_id=created_by_admin_id,
     )
     db.add(addon)

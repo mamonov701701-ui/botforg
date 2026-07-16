@@ -24,6 +24,15 @@ class CheckoutIntentOut(BaseModel):
     currency: str
     status: str
     idempotency_key: str
+    payment_provider: str | None = None
+    provider_payment_id: str | None = None
+    paid_at: datetime | None = None
+    fulfilled_at: datetime | None = None
+    failed_at: datetime | None = None
+    cancelled_at: datetime | None = None
+    refunded_at: datetime | None = None
+    fulfilled_subscription_id: int | None = None
+    fulfilled_addon_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
