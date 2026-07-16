@@ -45,6 +45,7 @@ from backend.routers import chat as chat_router
 from backend.routers import bot_contacts as bot_contacts_router
 from backend.routers import market as market_router
 from backend.routers import market_admin as market_admin_router
+from backend.routers import tariff_admin as tariff_admin_router
 from backend.routers import legal as legal_router
 from backend.routers import privacy as privacy_router
 from backend.routers import channels as channels_router
@@ -265,6 +266,7 @@ app.include_router(bot_tags_router.router)
 app.include_router(bot_contacts_router.router)
 app.include_router(market_router.router)
 app.include_router(market_admin_router.router)
+app.include_router(tariff_admin_router.router)
 app.include_router(chat_router.router)
 app.include_router(legal_router.router)
 app.include_router(privacy_router.router)

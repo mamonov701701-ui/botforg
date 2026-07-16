@@ -259,12 +259,13 @@ def revoke_gift(
     gift_id: int,
     commit: bool = True,
 ) -> GiftGrant:
-    """Отозвать подарок: status=CANCELLED."""
+    """Отозвать подарок: status=CANCELLED. Повторный revoke идемпотентен."""
     grant = db.query(GiftGrant).filter(GiftGrant.id == gift_id).first()
     if not grant:
         raise EntitlementError(f"GiftGrant id={gift_id} not found", code="gift_not_found")
-    grant.status = GiftGrantStatus.CANCELLED
-    grant.updated_at = _utcnow()
+    if grant.status != GiftGrantStatus.CANCELLED:
+        grant.status = GiftGrantStatus.CANCELLED
+        grant.updated_at = _utcnow()
     if commit:
         db.commit()
         db.refresh(grant)
