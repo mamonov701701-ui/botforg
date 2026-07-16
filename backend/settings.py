@@ -70,6 +70,8 @@ class Settings(BaseSettings):
 
     # Testing mode
     TESTING: bool = os.getenv("TESTING", "false").lower() == "true"
+    # Dev-only: allow mock POST /me/plan and PATCH /billing/quota (never in production)
+    ALLOW_DEV_TARIFF_FULFILLMENT: bool = False
     # Production: must be False (no debug stack traces, no autodocs in unsafe mode)
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     # В prod по умолчанию отключаем /docs, /redoc, /openapi.json (ALLOW_DOCS=false)

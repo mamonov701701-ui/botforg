@@ -27,6 +27,8 @@ _test_db_path = os.path.abspath(os.path.join(PROJECT_ROOT, "test_botforg.db"))
 TEST_DATABASE_URL = "sqlite:///" + _test_db_path.replace("\\", "/")
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["TESTING"] = "true"
+# Enable mock /me/plan and /billing/quota for existing tests (non-production).
+os.environ.setdefault("ALLOW_DEV_TARIFF_FULFILLMENT", "true")
 
 # Import after setting DATABASE_URL
 from backend.database import Base, get_db  # noqa: E402

@@ -1,0 +1,333 @@
+"""
+Внутренний сервис entitlement тарифной системы (Этап 6.3).
+
+Создаёт/завершает UserSubscription, UserAddon, GiftGrant.
+Нет публичных purchase endpoints и нет имитации оплаты.
+Цены от клиента не принимаются.
+"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from backend.models.plan import Plan
+from backend.models.tariff import (
+    AddonPackage,
+    GiftGrant,
+    GiftGrantStatus,
+    GiftType,
+    SubscriptionStatus,
+    UserAddon,
+    UserAddonSource,
+    UserAddonStatus,
+    UserSubscription,
+)
+
+
+class EntitlementError(Exception):
+    """Доменная ошибка entitlement (невалидный период, overlap, missing refs)."""
+
+    def __init__(self, message: str, *, code: str = "entitlement_error") -> None:
+        self.message = message
+        self.code = code
+        super().__init__(message)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _normalize_dt(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _validate_period(start: datetime, end: datetime) -> tuple[datetime, datetime]:
+    start_n = _normalize_dt(start)
+    end_n = _normalize_dt(end)
+    if start_n >= end_n:
+        raise EntitlementError(
+            "period_start must be earlier than period_end",
+            code="invalid_period",
+        )
+    return start_n, end_n
+
+
+def _periods_overlap(
+    a_start: datetime,
+    a_end: datetime,
+    b_start: datetime,
+    b_end: datetime,
+) -> bool:
+    return a_start < b_end and b_start < a_end
+
+
+def _enum_value(value: Any) -> str:
+    return value.value if hasattr(value, "value") else str(value)
+
+
+def activate_subscription(
+    db: Session,
+    *,
+    user_id: int,
+    plan_id: int,
+    period_start: datetime,
+    period_end: datetime,
+    auto_renew: bool = True,
+    payment_provider: str | None = None,
+    provider_subscription_id: str | None = None,
+    replace_active: bool = True,
+    commit: bool = True,
+) -> UserSubscription:
+    """
+    Создать ACTIVE UserSubscription на период.
+
+    Idempotent: если передан provider_subscription_id и запись уже есть — вернуть её.
+    При replace_active=True отменяет пересекающиеся ACTIVE подписки пользователя.
+    При replace_active=False и overlap — EntitlementError.
+    """
+    period_start, period_end = _validate_period(period_start, period_end)
+    plan = db.query(Plan).filter(Plan.id == plan_id).first()
+    if not plan:
+        raise EntitlementError(f"Plan id={plan_id} not found", code="plan_not_found")
+
+    if provider_subscription_id:
+        existing = (
+            db.query(UserSubscription)
+            .filter(
+                UserSubscription.user_id == user_id,
+                UserSubscription.provider_subscription_id == provider_subscription_id,
+            )
+            .first()
+        )
+        if existing:
+            return existing
+
+    active = (
+        db.query(UserSubscription)
+        .filter(
+            UserSubscription.user_id == user_id,
+            UserSubscription.status == SubscriptionStatus.ACTIVE,
+        )
+        .all()
+    )
+    overlapping = [
+        sub
+        for sub in active
+        if _periods_overlap(
+            _normalize_dt(sub.current_period_start),
+            _normalize_dt(sub.current_period_end),
+            period_start,
+            period_end,
+        )
+    ]
+    if overlapping and not replace_active:
+        raise EntitlementError(
+            "Active subscription already overlaps the requested period",
+            code="subscription_overlap",
+        )
+    now = _utcnow()
+    for sub in overlapping:
+        sub.status = SubscriptionStatus.CANCELLED
+        sub.cancelled_at = now
+        sub.updated_at = now
+
+    sub = UserSubscription(
+        user_id=user_id,
+        plan_id=plan_id,
+        status=SubscriptionStatus.ACTIVE,
+        current_period_start=period_start,
+        current_period_end=period_end,
+        auto_renew=auto_renew,
+        payment_provider=payment_provider,
+        provider_subscription_id=provider_subscription_id,
+    )
+    db.add(sub)
+    if commit:
+        db.commit()
+        db.refresh(sub)
+    else:
+        db.flush()
+    return sub
+
+
+def create_user_addon(
+    db: Session,
+    *,
+    user_id: int,
+    addon_package_id: int,
+    period_start: datetime,
+    period_end: datetime,
+    source: UserAddonSource | str,
+    amount: int | None = None,
+    created_by_admin_id: int | None = None,
+    commit: bool = True,
+) -> UserAddon:
+    """Создать UserAddon на период. amount по умолчанию из каталога AddonPackage."""
+    period_start, period_end = _validate_period(period_start, period_end)
+    pkg = db.query(AddonPackage).filter(AddonPackage.id == addon_package_id).first()
+    if not pkg:
+        raise EntitlementError(
+            f"AddonPackage id={addon_package_id} not found",
+            code="addon_not_found",
+        )
+
+    source_val = source if isinstance(source, UserAddonSource) else UserAddonSource(source)
+    addon = UserAddon(
+        user_id=user_id,
+        addon_package_id=addon_package_id,
+        amount=int(amount if amount is not None else pkg.amount),
+        period_start=period_start,
+        period_end=period_end,
+        status=UserAddonStatus.ACTIVE,
+        source=source_val,
+        created_by_admin_id=created_by_admin_id,
+    )
+    db.add(addon)
+    if commit:
+        db.commit()
+        db.refresh(addon)
+    else:
+        db.flush()
+    return addon
+
+
+def grant_gift(
+    db: Session,
+    *,
+    target_user_id: int,
+    gift_type: GiftType | str,
+    starts_at: datetime,
+    ends_at: datetime,
+    granted_by_user_id: int,
+    plan_id: int | None = None,
+    addon_package_id: int | None = None,
+    amount: int | None = None,
+    reason: str | None = None,
+    admin_comment: str | None = None,
+    commit: bool = True,
+) -> GiftGrant:
+    """Выдать GiftGrant (ACTIVE). Не создаёт оплату."""
+    starts_at, ends_at = _validate_period(starts_at, ends_at)
+    gift_type_val = gift_type if isinstance(gift_type, GiftType) else GiftType(gift_type)
+
+    if gift_type_val == GiftType.PLAN and plan_id is None:
+        raise EntitlementError("PLAN gift requires plan_id", code="gift_plan_required")
+    if gift_type_val == GiftType.ADDON and addon_package_id is None:
+        raise EntitlementError(
+            "ADDON gift requires addon_package_id",
+            code="gift_addon_required",
+        )
+    if gift_type_val in (
+        GiftType.MESSAGES,
+        GiftType.ACTIVE_BOT,
+        GiftType.TEAM_MEMBER,
+    ) and amount is None:
+        raise EntitlementError(
+            f"{_enum_value(gift_type_val)} gift requires amount",
+            code="gift_amount_required",
+        )
+
+    grant = GiftGrant(
+        target_user_id=target_user_id,
+        gift_type=gift_type_val,
+        plan_id=plan_id,
+        addon_package_id=addon_package_id,
+        amount=amount,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        granted_by_user_id=granted_by_user_id,
+        reason=reason,
+        admin_comment=admin_comment,
+        status=GiftGrantStatus.ACTIVE,
+    )
+    db.add(grant)
+    if commit:
+        db.commit()
+        db.refresh(grant)
+    else:
+        db.flush()
+    return grant
+
+
+def revoke_gift(
+    db: Session,
+    *,
+    gift_id: int,
+    commit: bool = True,
+) -> GiftGrant:
+    """Отозвать подарок: status=CANCELLED."""
+    grant = db.query(GiftGrant).filter(GiftGrant.id == gift_id).first()
+    if not grant:
+        raise EntitlementError(f"GiftGrant id={gift_id} not found", code="gift_not_found")
+    grant.status = GiftGrantStatus.CANCELLED
+    grant.updated_at = _utcnow()
+    if commit:
+        db.commit()
+        db.refresh(grant)
+    else:
+        db.flush()
+    return grant
+
+
+def expire_entitlements(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    commit: bool = True,
+) -> dict[str, int]:
+    """
+    Пометить истёкшие ACTIVE entitlements как EXPIRED по переданному now.
+
+    Возвращает counts: subscriptions, addons, gifts.
+    """
+    at = _normalize_dt(now or _utcnow())
+    sub_q = (
+        db.query(UserSubscription)
+        .filter(
+            UserSubscription.status == SubscriptionStatus.ACTIVE,
+            UserSubscription.current_period_end <= at,
+        )
+        .all()
+    )
+    for sub in sub_q:
+        sub.status = SubscriptionStatus.EXPIRED
+        sub.updated_at = at
+
+    addon_q = (
+        db.query(UserAddon)
+        .filter(
+            UserAddon.status == UserAddonStatus.ACTIVE,
+            UserAddon.period_end <= at,
+        )
+        .all()
+    )
+    for addon in addon_q:
+        addon.status = UserAddonStatus.EXPIRED
+        addon.updated_at = at
+
+    gift_q = (
+        db.query(GiftGrant)
+        .filter(
+            GiftGrant.status == GiftGrantStatus.ACTIVE,
+            GiftGrant.ends_at <= at,
+        )
+        .all()
+    )
+    for gift in gift_q:
+        gift.status = GiftGrantStatus.EXPIRED
+        gift.updated_at = at
+
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+
+    return {
+        "subscriptions": len(sub_q),
+        "addons": len(addon_q),
+        "gifts": len(gift_q),
+    }

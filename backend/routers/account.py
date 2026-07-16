@@ -3,6 +3,7 @@ from backend.dependencies.auth import get_current_user
 from backend.database import get_db
 from backend.models.user import User, UserSettings
 from backend.models.plan import Plan
+from backend.services.dev_tariff_gate import require_dev_tariff_fulfillment
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -286,8 +287,11 @@ async def change_plan(
 ):
     """
     Смена тарифа текущего пользователя (mock, без оплаты).
-    Для тестов и ручного назначения.
+
+    Fail-closed: только non-production + ALLOW_DEV_TARIFF_FULFILLMENT=true.
+    Не создаёт UserSubscription и не имитирует оплату.
     """
+    require_dev_tariff_fulfillment()
     plan = db.query(Plan).filter(Plan.code == body.plan_code).first()
     if not plan:
         raise HTTPException(

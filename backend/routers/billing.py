@@ -12,6 +12,7 @@ from backend.schemas.billing import (
     UserQuotaOut,
     UserQuotaUpdate,
 )
+from backend.services.dev_tariff_gate import require_dev_tariff_fulfillment
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -91,7 +92,13 @@ async def update_user_quota(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
-    """Обновление квоты пользователя"""
+    """
+    Обновление legacy UserQuota.
+
+    Fail-closed: только non-production + ALLOW_DEV_TARIFF_FULFILLMENT=true.
+    Не является частью новой тарифной системы (GET /me/tariff/summary).
+    """
+    require_dev_tariff_fulfillment()
 
     user_quota = (
         db.query(UserQuota).filter(UserQuota.user_id == current_user.id).first()
