@@ -14,6 +14,9 @@ from backend.models.plan import Plan
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
+    GiftGrant,
+    GiftGrantStatus,
+    GiftType,
     UserAddon,
     UserAddonSource,
     UserAddonStatus,
@@ -326,3 +329,216 @@ def test_channel_endpoint_one_bot_one_channel(client):
     )
     assert r2.status_code == 403
     assert r2.json()["detail"] == MSG_ONE_BOT_ONE_CHANNEL
+
+
+# --- Этап 5.6.3: channel re-enable + soft-delete lifecycle ---
+
+
+def _auth_start(client) -> str:
+    auth = register_and_get_token(client)
+    res = client.post(
+        "/me/plan", json={"plan_code": "start"}, headers={"Authorization": auth}
+    )
+    assert res.status_code == 200
+    return auth
+
+
+def _create_draft_with_enabled_channel(client, auth: str, *, channel: str = "max") -> int:
+    bot_id = client.post(
+        "/bots/",
+        json={"title": "Lifecycle draft"},
+        headers={"Authorization": auth},
+    ).json()["id"]
+    res = client.post(
+        f"/bots/{bot_id}/channels",
+        json={"channel": channel, "is_enabled": True, "credentials": {"token": "x"}},
+        headers={"Authorization": auth},
+    )
+    assert res.status_code == 201
+    assert res.json()["is_enabled"] is True
+    return bot_id
+
+
+def test_channel_reenable_allowed_when_limit_free(client, db):
+    auth = _auth_start(client)
+    bot_id = _create_draft_with_enabled_channel(client, auth)
+
+    disabled = client.post(
+        f"/bots/{bot_id}/channels",
+        json={"channel": "max", "is_enabled": False},
+        headers={"Authorization": auth},
+    )
+    assert disabled.status_code == 201
+    assert disabled.json()["is_enabled"] is False
+
+    me = client.get("/me", headers={"Authorization": auth}).json()
+    assert count_production_active_bots(db, me["id"]) == 0
+
+    reenabled = client.post(
+        f"/bots/{bot_id}/channels",
+        json={"channel": "max", "is_enabled": True},
+        headers={"Authorization": auth},
+    )
+    assert reenabled.status_code == 201
+    assert reenabled.json()["is_enabled"] is True
+    assert count_production_active_bots(db, me["id"]) == 1
+
+
+def test_channel_reenable_blocked_when_limit_exhausted(client, db):
+    auth = _auth_start(client)
+    bot_a = _create_draft_with_enabled_channel(client, auth, channel="max")
+
+    # Free slot by disabling channel on bot A, then occupy it with bot B.
+    assert (
+        client.post(
+            f"/bots/{bot_a}/channels",
+            json={"channel": "max", "is_enabled": False},
+            headers={"Authorization": auth},
+        ).status_code
+        == 201
+    )
+    bot_b = _create_draft_with_enabled_channel(client, auth, channel="whatsapp")
+    me = client.get("/me", headers={"Authorization": auth}).json()
+    assert count_production_active_bots(db, me["id"]) == 1
+
+    blocked = client.post(
+        f"/bots/{bot_a}/channels",
+        json={"channel": "max", "is_enabled": True},
+        headers={"Authorization": auth},
+    )
+    assert blocked.status_code == 403
+    assert blocked.json()["detail"] == MSG_ACTIVE_BOTS_EXCEEDED
+    # bot_a stays disabled; slot still held by bot_b
+    conn = (
+        db.query(BotChannelConnection)
+        .filter(
+            BotChannelConnection.bot_id == bot_a,
+            BotChannelConnection.channel == "max",
+        )
+        .one()
+    )
+    assert conn.is_enabled is False
+    assert count_production_active_bots(db, me["id"]) == 1
+    assert bot_b  # occupied by second bot
+
+
+def test_channel_update_already_enabled_does_not_block(client, db):
+    """Credential update of an already-enabled connection must not re-check the slot."""
+    auth = _auth_start(client)
+    bot_id = _create_draft_with_enabled_channel(client, auth)
+    me = client.get("/me", headers={"Authorization": auth}).json()
+    # start plan limit=1; bot already occupies the only slot.
+    updated = client.post(
+        f"/bots/{bot_id}/channels",
+        json={
+            "channel": "max",
+            "is_enabled": True,
+            "credentials": {"token": "rotated"},
+        },
+        headers={"Authorization": auth},
+    )
+    assert updated.status_code == 201
+    assert updated.json()["is_enabled"] is True
+    assert count_production_active_bots(db, me["id"]) == 1
+
+
+def test_channel_reenable_respects_active_bot_addon(client, db):
+    auth = _auth_start(client)
+    me = client.get("/me", headers={"Authorization": auth}).json()
+    bot_a = _create_draft_with_enabled_channel(client, auth, channel="max")
+    assert (
+        client.post(
+            f"/bots/{bot_a}/channels",
+            json={"channel": "max", "is_enabled": False},
+            headers={"Authorization": auth},
+        ).status_code
+        == 201
+    )
+    _create_draft_with_enabled_channel(client, auth, channel="whatsapp")
+    _ensure_bot_addon(db, me["id"])
+
+    reenabled = client.post(
+        f"/bots/{bot_a}/channels",
+        json={"channel": "max", "is_enabled": True},
+        headers={"Authorization": auth},
+    )
+    assert reenabled.status_code == 201
+    assert count_production_active_bots(db, me["id"]) == 2
+
+
+def test_soft_delete_disables_enabled_channel_and_frees_slot(client, db):
+    auth = _auth_start(client)
+    bot_id = _create_draft_with_enabled_channel(client, auth)
+    me = client.get("/me", headers={"Authorization": auth}).json()
+    assert count_production_active_bots(db, me["id"]) == 1
+
+    deleted = client.delete(f"/bots/{bot_id}", headers={"Authorization": auth})
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "deactivated"
+
+    bot = db.query(Bot).filter(Bot.id == bot_id).one()
+    db.refresh(bot)
+    assert bot.is_active is False
+    conn = (
+        db.query(BotChannelConnection)
+        .filter(BotChannelConnection.bot_id == bot_id, BotChannelConnection.channel == "max")
+        .one()
+    )
+    assert conn.is_enabled is False
+    assert is_bot_production_active(bot, db) is False
+    assert count_production_active_bots(db, me["id"]) == 0
+
+
+def test_soft_delete_frees_slot_for_another_bot(client, db):
+    auth = _auth_start(client)
+    bot_a = _create_draft_with_enabled_channel(client, auth, channel="max")
+    me = client.get("/me", headers={"Authorization": auth}).json()
+
+    assert (
+        client.delete(f"/bots/{bot_a}", headers={"Authorization": auth}).status_code
+        == 200
+    )
+    assert count_production_active_bots(db, me["id"]) == 0
+
+    bot_b = _create_draft_with_enabled_channel(client, auth, channel="whatsapp")
+    assert count_production_active_bots(db, me["id"]) == 1
+    assert bot_b != bot_a
+
+
+def test_soft_delete_already_inactive_is_safe(client, db):
+    auth = _auth_start(client)
+    bot_id = client.post(
+        "/bots/",
+        json={"title": "Already draft"},
+        headers={"Authorization": auth},
+    ).json()["id"]
+    me = client.get("/me", headers={"Authorization": auth}).json()
+
+    first = client.delete(f"/bots/{bot_id}", headers={"Authorization": auth})
+    assert first.status_code == 200
+    second = client.delete(f"/bots/{bot_id}", headers={"Authorization": auth})
+    assert second.status_code == 200
+    assert count_production_active_bots(db, me["id"]) == 0
+
+
+def test_active_bot_gift_increases_limit(db, client):
+    user = _create_user(db, "start", "gift_bot")
+    admin = _create_user(db, "start", "gift_bot_admin")
+    _active_bot(db, user.id, "g1")
+    start, end = month_period()
+    db.add(
+        GiftGrant(
+            target_user_id=user.id,
+            gift_type=GiftType.ACTIVE_BOT,
+            amount=1,
+            starts_at=start,
+            ends_at=end,
+            granted_by_user_id=admin.id,
+            status=GiftGrantStatus.ACTIVE,
+        )
+    )
+    db.commit()
+
+    summary = get_user_tariff_limits(db, user.id, at=FIXED_TARIFF_NOW)
+    assert summary.active_bots_limit == 2
+    ensure_can_activate_bot(db, user.id)

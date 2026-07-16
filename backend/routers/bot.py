@@ -6,6 +6,7 @@ import requests
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.bot import Bot, BotInstance
+from backend.models.bot_channel import BotChannelConnection
 from backend.models.scenario import Scenario
 from backend.models.user import User as UserModel
 from backend.schemas.bot import BotConnectRequest, BotCreateSimple, BotListOut, BotOut, BotUpdate
@@ -483,9 +484,18 @@ async def delete_bot(
             detail="Access denied: Only bot owner can delete bots"
         )
 
-    # Soft delete - деактивируем бота
+    # Soft delete: deactivate bot and free the tariff active-bot slot
+    # (production-active counts enabled BotChannelConnection regardless of is_active).
     bot.is_active = False
     bot.updated_at = datetime.now(timezone.utc)
+    (
+        db.query(BotChannelConnection)
+        .filter(
+            BotChannelConnection.bot_id == bot.id,
+            BotChannelConnection.is_enabled.is_(True),
+        )
+        .update({"is_enabled": False}, synchronize_session=False)
+    )
 
     # Удаляем webhook если он был установлен
     if bot.webhook_url:

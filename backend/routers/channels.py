@@ -68,9 +68,26 @@ def upsert_channel(
         credentials_json = json.dumps(payload.credentials)
 
     if conn:
+        # Re-enable (false → true) occupies an active-bot slot — same checks as create.
+        # Already-enabled updates (credentials / no-op) must not re-check the slot.
+        re_enabling = (not conn.is_enabled) and bool(payload.is_enabled)
+        if re_enabling:
+            try:
+                ensure_can_connect_channel(
+                    db,
+                    bot.owner_id,
+                    bot_id,
+                    channel_key,
+                    updating_existing=False,
+                )
+            except TariffLimitExceeded as exc:
+                raise tariff_limit_to_http(exc) from exc
+
         conn.is_enabled = payload.is_enabled
         if credentials_json is not None:
             conn.credentials_json = credentials_json
+        if re_enabling and (not bot.is_active or is_placeholder_bot_token(bot.token)):
+            bot.is_active = True
         db.commit()
         db.refresh(conn)
         return BotChannelConnectionOut.model_validate(conn)

@@ -251,6 +251,29 @@ def test_active_gift_messages(db, client):
     assert len(summary.active_gifts) == 1
 
 
+def test_active_gift_active_bot(db, client):
+    """GiftType.ACTIVE_BOT увеличивает effective active_bots_limit (Этап 5.6.3)."""
+    user = _create_user(db, plan_code="start", email_suffix="gift_bot")
+    admin = _create_user(db, plan_code="free", email_suffix="gift_bot_admin")
+    period_start, period_end = _month_period()
+    db.add(
+        GiftGrant(
+            target_user_id=user.id,
+            gift_type=GiftType.ACTIVE_BOT,
+            amount=1,
+            starts_at=period_start,
+            ends_at=period_end,
+            granted_by_user_id=admin.id,
+            status=GiftGrantStatus.ACTIVE,
+        )
+    )
+    db.commit()
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.active_bots_limit == 1 + 1
+    assert len(summary.active_gifts) == 1
+    assert summary.active_gifts[0]["gift_type"] == GiftType.ACTIVE_BOT.value
+
+
 def test_expired_gift_not_counted(db, client):
     user = _create_user(db, plan_code="start", email_suffix="gift_expired")
     admin = _create_user(db, plan_code="free", email_suffix="gift_admin2")
