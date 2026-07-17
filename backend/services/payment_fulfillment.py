@@ -82,14 +82,10 @@ def create_payment_attempt(
     """
     Создать PaymentAttempt и перевести intent в awaiting_payment.
 
-    provider=None → имя из PaymentProvider registry (default).
+    provider=None → DB default (admin settings) → env registry fallback.
     Имя провайдера сохраняется на attempt и не меняется при смене default.
     """
-    # Lazy import: registry must not pull SDK into tariff/checkout paths.
-    from backend.payments.registry import (
-        PaymentProviderRegistryError,
-        get_default_provider_name,
-    )
+    from backend.payments.registry import PaymentProviderRegistryError
 
     intent = (
         db.query(CheckoutIntent)
@@ -127,7 +123,12 @@ def create_payment_attempt(
         return existing
 
     try:
-        provider_name = (provider or get_default_provider_name()).strip().lower()
+        if provider:
+            provider_name = provider.strip().lower()
+        else:
+            from backend.services.payment_provider_admin import resolve_default_provider_code
+
+            provider_name = resolve_default_provider_code(db).strip().lower()
     except PaymentProviderRegistryError as exc:
         raise FulfillmentError(exc.message, code=exc.code) from exc
     if not provider_name:

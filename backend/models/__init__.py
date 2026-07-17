@@ -53,6 +53,7 @@ from backend.models.checkout import (
     PaymentWebhookEvent,
     PaymentWebhookProcessStatus,
 )
+from backend.models.payment_provider_settings import PaymentProviderSetting
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
@@ -149,6 +150,7 @@ __all__ = [
     "PaymentAttemptStatus",
     "PaymentWebhookEvent",
     "PaymentWebhookProcessStatus",
+    "PaymentProviderSetting",
     "AddonPackage",
     "AddonPackageType",
     "UserSubscription",
