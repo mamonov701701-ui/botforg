@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     CRM_AGGREGATE_BATCH_SIZE: int = int(os.getenv("CRM_AGGREGATE_BATCH_SIZE", "200"))
     SHADOW_MAX_STALE_SECONDS: int = int(os.getenv("SHADOW_MAX_STALE_SECONDS", "120"))
 
-    # Payment providers (optional)
+    # Payment providers (optional legacy keys — secrets only from env)
     TELEGRAM_PAYMENT_PROVIDER_TOKEN: Optional[str] = None
     YOOKASSA_SHOP_ID: Optional[str] = None
     YOOKASSA_SECRET_KEY: Optional[str] = None
@@ -67,6 +67,16 @@ class Settings(BaseSettings):
     CLOUDPAYMENTS_PAYMENT_URL: Optional[str] = None
     CLOUDPAYMENTS_SUCCESS_URL: Optional[str] = None
     CLOUDPAYMENTS_FAIL_URL: Optional[str] = None
+
+    # Payment provider abstraction (Этап 6.8)
+    # Default provider name (e.g. yookassa). Fake never default in production.
+    PAYMENT_PROVIDER_DEFAULT: str = "yookassa"
+    # Comma-separated enabled provider names (without secrets)
+    PAYMENT_PROVIDERS_AVAILABLE: str = "yookassa"
+    # Test mode: allows FakePaymentProvider outside production
+    PAYMENT_PROVIDER_TEST_MODE: bool = False
+    # Explicit opt-in for fake provider in non-production (in addition to TESTING/test mode)
+    ALLOW_FAKE_PAYMENT_PROVIDER: bool = False
 
     # Testing mode
     TESTING: bool = os.getenv("TESTING", "false").lower() == "true"

@@ -73,16 +73,24 @@ def create_payment_attempt(
     *,
     checkout_intent_id: int,
     user_id: int,
-    provider: str,
     idempotency_key: str,
+    provider: str | None = None,
     provider_payment_id: str | None = None,
     confirmation_url: str | None = None,
     commit: bool = True,
 ) -> PaymentAttempt:
     """
     Создать PaymentAttempt и перевести intent в awaiting_payment.
-    Для тестов и будущего /pay adapter.
+
+    provider=None → имя из PaymentProvider registry (default).
+    Имя провайдера сохраняется на attempt и не меняется при смене default.
     """
+    # Lazy import: registry must not pull SDK into tariff/checkout paths.
+    from backend.payments.registry import (
+        PaymentProviderRegistryError,
+        get_default_provider_name,
+    )
+
     intent = (
         db.query(CheckoutIntent)
         .filter(CheckoutIntent.id == checkout_intent_id)
@@ -118,11 +126,18 @@ def create_payment_attempt(
     if existing:
         return existing
 
+    try:
+        provider_name = (provider or get_default_provider_name()).strip().lower()
+    except PaymentProviderRegistryError as exc:
+        raise FulfillmentError(exc.message, code=exc.code) from exc
+    if not provider_name:
+        raise FulfillmentError("provider is required", code="provider_required")
+
     now = _utcnow()
     attempt = PaymentAttempt(
         checkout_intent_id=intent.id,
         user_id=user_id,
-        provider=provider,
+        provider=provider_name,
         provider_payment_id=provider_payment_id,
         amount=intent.amount,
         currency=intent.currency,
@@ -137,7 +152,7 @@ def create_payment_attempt(
         CheckoutIntentStatus.AWAITING_PAYMENT.value,
     ):
         intent.status = CheckoutIntentStatus.AWAITING_PAYMENT.value
-        intent.payment_provider = provider
+        intent.payment_provider = provider_name
         if provider_payment_id:
             intent.provider_payment_id = provider_payment_id
         intent.updated_at = now
