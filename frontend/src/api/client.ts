@@ -52,7 +52,9 @@ export function clearGetResponseCache(): void {
 export class ApiError extends Error {
   constructor(
     message: string,
-    public status: number
+    public status: number,
+    public code?: string,
+    public field?: string
   ) {
     super(message);
     this.name = 'ApiError';
@@ -140,11 +142,15 @@ async function request(path: string, options: RequestOptions = {}): Promise<any>
 
     if (!response.ok) {
       let errorMessage = 'Ошибка запроса';
+      let errorCode: string | undefined;
+      let errorField: string | undefined;
       try {
         const errorData = await response.json();
         const detail = errorData.detail;
         if (detail && typeof detail === 'object' && detail.message) {
           errorMessage = String(detail.message);
+          if (detail.code) errorCode = String(detail.code);
+          if (detail.field) errorField = String(detail.field);
         } else if (typeof detail === 'string') {
           errorMessage = detail;
         } else {
@@ -169,15 +175,29 @@ async function request(path: string, options: RequestOptions = {}): Promise<any>
         // НЕ очищаем токен автоматически - пусть пользователь попробует снова
         // Токен будет очищен только при явном выходе или при ошибке на /me
         // Это предотвращает потерю токена из-за временных проблем с прокси
-        throw new ApiError(errorMessage || 'Ошибка авторизации', 401);
+        throw new ApiError(errorMessage || 'Ошибка авторизации', 401, errorCode, errorField);
       }
       if (response.status === 429) {
-        throw new ApiError('Слишком много попыток. Попробуйте позже.', 429);
+        throw new ApiError('Слишком много попыток. Попробуйте позже.', 429, errorCode, errorField);
       }
       if (response.status >= 500) {
-        throw new ApiError('Временная ошибка сервера. Попробуйте позже.', response.status);
+        const paymentConfigCodes = new Set([
+          'master_key_missing',
+          'master_key_invalid',
+          'decrypt_failed',
+          'invalid_encryption_version',
+        ]);
+        if (errorCode && paymentConfigCodes.has(errorCode)) {
+          throw new ApiError(errorMessage, response.status, errorCode, errorField);
+        }
+        throw new ApiError(
+          'Временная ошибка сервера. Попробуйте позже.',
+          response.status,
+          errorCode,
+          errorField
+        );
       }
-      throw new ApiError(errorMessage, response.status);
+      throw new ApiError(errorMessage, response.status, errorCode, errorField);
     }
 
     if (response.status === 204) {

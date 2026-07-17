@@ -35,6 +35,7 @@ import SettingsPage from './features/dashboard/pages/SettingsPage';
 import PlatformOverviewPage from './features/dashboard/pages/PlatformOverviewPage';
 import PlatformUsersPage from './features/dashboard/pages/PlatformUsersPage';
 import PlatformAnalyticsPage from './features/dashboard/pages/PlatformAnalyticsPage';
+import PlatformFinancePage from './features/dashboard/pages/PlatformFinancePage';
 import UserDetailPage from './features/dashboard/pages/UserDetailPage';
 import MessagesPage from './features/dashboard/pages/MessagesPage';
 import BotCrmLayout from './features/dashboard/crm/BotCrmLayout';
@@ -168,6 +169,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="platform/users" element={<PlatformUsersPage />} />
             <Route path="platform/users/:userId" element={<UserDetailPage />} />
             <Route path="platform/analytics" element={<PlatformAnalyticsPage />} />
+            <Route path="platform/finance" element={<PlatformFinancePage />} />
             <Route path="platform/settings" element={<SettingsPage />} />
           </Route>
 

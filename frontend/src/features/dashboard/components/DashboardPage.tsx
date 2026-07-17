@@ -2,7 +2,7 @@ import React from 'react';
 
 interface DashboardPageProps {
   title: React.ReactNode;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   actions?: React.ReactNode;
   children: React.ReactNode;
   breadcrumbs?: { label: string; path?: string }[];
@@ -76,7 +76,9 @@ export default function DashboardPage({
           >
             {title}
           </h1>
-          {subtitle && <p style={{ fontSize: '16px', color: 'var(--text-muted)' }}>{subtitle}</p>}
+          {subtitle && (
+            <p style={{ fontSize: '16px', color: 'var(--text-muted)', margin: 0 }}>{subtitle}</p>
+          )}
         </div>
         {actions && <div style={{ flexShrink: 0 }}>{actions}</div>}
       </div>

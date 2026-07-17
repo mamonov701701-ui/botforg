@@ -16,15 +16,22 @@ import {
   Building2,
   TrendingUp,
   MessageCircle,
+  Landmark,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ROLE_NAMES, type SectionKey } from '../../constants/roles';
 import { logout } from '../../api/auth';
+import { isDashboardNavItemActive } from './utils/dashboardNavActive';
 
 type DashboardMode = 'projects' | 'platform';
 
 interface NavItem {
-  id: SectionKey | 'platform_overview' | 'platform_users' | 'platform_analytics';
+  id:
+    | SectionKey
+    | 'platform_overview'
+    | 'platform_users'
+    | 'platform_analytics'
+    | 'platform_finance';
   label: string;
   path: string;
   icon: import('../../types/icons').DashboardIcon;
@@ -105,6 +112,13 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     mode: 'platform',
   },
   {
+    id: 'platform_finance',
+    label: 'Финансы',
+    path: '/dashboard/platform/finance',
+    icon: Landmark,
+    mode: 'platform',
+  },
+  {
     id: 'bf_team',
     label: 'BF команда',
     path: '/dashboard/bf-team',
@@ -125,9 +139,9 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
  */
 function hasPlatformAccess(user: { role: string } | null | undefined): boolean {
   if (!user) return false;
-  // Доступ только для owner и участников BF команды
-  // Пока проверяем только owner, позже можно добавить проверку platform_roles
-  return user.role === 'owner';
+  // owner / admin — как backend require_tariff_admin (User.role)
+  const role = (user.role || '').toLowerCase();
+  return role === 'owner' || role === 'admin';
 }
 
 export default function DashboardLayout() {
@@ -566,9 +580,7 @@ export default function DashboardLayout() {
             {/* Навигация */}
             <nav key={`${dashboardMode}-${location.pathname}`}>
               {availableNavItems.map(item => {
-                const isActive =
-                  location.pathname === item.path ||
-                  (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
+                const isActive = isDashboardNavItemActive(location.pathname, item.path);
                 const IconComponent = item.icon;
                 return (
                   <NavLink
