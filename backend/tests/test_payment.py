@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import register_and_get_token
+from backend.tests.conftest import register_and_get_token
 
 
 def test_create_payment(client):

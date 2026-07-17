@@ -19,8 +19,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, "..", ".."))
 BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
+# Do NOT insert BACKEND_DIR: it creates a second top-level `models` package
+# (models.user.User vs backend.models.user.User) and breaks SQLAlchemy mappers.
 
 # Use file-based test DB so Alembic can run migrations (includes token_version)
 _test_db_path = os.path.abspath(os.path.join(PROJECT_ROOT, "test_botforg.db"))

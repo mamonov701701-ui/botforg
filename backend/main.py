@@ -21,6 +21,7 @@ from backend.routers import account as account_router
 from backend.routers import plans as plans_router
 from backend.routers import tariff as tariff_router
 from backend.routers import checkout as checkout_router
+from backend.routers import checkout_pay as checkout_pay_router
 from backend.routers import auth
 from backend.routers import billing as billing_router
 from backend.routers import blocks as blocks_router
@@ -48,6 +49,7 @@ from backend.routers import market as market_router
 from backend.routers import market_admin as market_admin_router
 from backend.routers import tariff_admin as tariff_admin_router
 from backend.routers import payment_provider_admin as payment_provider_admin_router
+from backend.routers import payment_provider_connections as payment_provider_connections_router
 from backend.routers import legal as legal_router
 from backend.routers import privacy as privacy_router
 from backend.routers import channels as channels_router
@@ -243,6 +245,7 @@ app.include_router(account_router.router)
 app.include_router(plans_router.router)
 app.include_router(tariff_router.router)
 app.include_router(checkout_router.router)
+app.include_router(checkout_pay_router.router)
 
 # Existing routes
 # app.include_router(auth.router, prefix="/auth")  # ОТКЛЮЧЕН - используем email_routes вместо этого
@@ -271,6 +274,7 @@ app.include_router(market_router.router)
 app.include_router(market_admin_router.router)
 app.include_router(tariff_admin_router.router)
 app.include_router(payment_provider_admin_router.router)
+app.include_router(payment_provider_connections_router.router)
 app.include_router(chat_router.router)
 app.include_router(legal_router.router)
 app.include_router(privacy_router.router)

@@ -77,6 +77,7 @@ def create_payment_attempt(
     provider: str | None = None,
     provider_payment_id: str | None = None,
     confirmation_url: str | None = None,
+    connection_id: int | None = None,
     commit: bool = True,
 ) -> PaymentAttempt:
     """
@@ -122,13 +123,24 @@ def create_payment_attempt(
     if existing:
         return existing
 
+    resolved_connection_id = connection_id
     try:
         if provider:
             provider_name = provider.strip().lower()
         else:
-            from backend.services.payment_provider_admin import resolve_default_provider_code
+            from backend.services.payment_provider_connections import (
+                resolve_default_connection,
+            )
+            from backend.services.payment_provider_admin import (
+                resolve_default_provider_code,
+            )
 
-            provider_name = resolve_default_provider_code(db).strip().lower()
+            default_conn = resolve_default_connection(db)
+            if default_conn is not None:
+                provider_name = default_conn.provider_code.strip().lower()
+                resolved_connection_id = default_conn.id
+            else:
+                provider_name = resolve_default_provider_code(db).strip().lower()
     except PaymentProviderRegistryError as exc:
         raise FulfillmentError(exc.message, code=exc.code) from exc
     if not provider_name:
@@ -139,6 +151,7 @@ def create_payment_attempt(
         checkout_intent_id=intent.id,
         user_id=user_id,
         provider=provider_name,
+        connection_id=resolved_connection_id,
         provider_payment_id=provider_payment_id,
         amount=intent.amount,
         currency=intent.currency,

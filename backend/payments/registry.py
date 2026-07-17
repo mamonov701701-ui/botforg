@@ -12,6 +12,8 @@ from typing import Iterable
 from backend.payments.base import PaymentProvider, PaymentProviderError
 from backend.payments.dto import ProviderPublicInfo
 from backend.payments.providers.fake import FAKE_PROVIDER_NAME, FakePaymentProvider
+from backend.payments.providers.yookassa import PROVIDER_NAME as YOOKASSA_NAME
+from backend.payments.providers.yookassa import YooKassaPaymentProvider
 from backend.settings import settings
 
 # Зарезервированные имена будущих адаптеров (ещё не подключены).
@@ -85,7 +87,21 @@ def list_available_provider_names() -> list[str]:
     return names
 
 
-def _build_provider(name: str) -> PaymentProvider:
+def _build_yookassa(credentials: dict | None = None) -> PaymentProvider:
+    creds = credentials or {}
+    shop_id = (creds.get("shop_id") or getattr(settings, "YOOKASSA_SHOP_ID", None) or "").strip()
+    secret_key = (
+        creds.get("secret_key") or getattr(settings, "YOOKASSA_SECRET_KEY", None) or ""
+    ).strip()
+    if not shop_id or not secret_key:
+        raise PaymentProviderRegistryError(
+            "YooKassa credentials are not configured",
+            code="missing_credentials",
+        )
+    return YooKassaPaymentProvider(shop_id=shop_id, secret_key=secret_key)
+
+
+def _build_provider(name: str, *, credentials: dict | None = None) -> PaymentProvider:
     key = (name or "").strip().lower()
     if key == FAKE_PROVIDER_NAME:
         if not _allow_fake_provider():
@@ -94,6 +110,9 @@ def _build_provider(name: str) -> PaymentProvider:
                 code="fake_provider_forbidden",
             )
         return FakePaymentProvider()
+
+    if key == YOOKASSA_NAME:
+        return _build_yookassa(credentials)
 
     # Реальные адаптеры появятся на следующих этапах.
     if key in KNOWN_PROVIDER_NAMES:
@@ -110,6 +129,7 @@ def _build_provider(name: str) -> PaymentProvider:
 @lru_cache(maxsize=16)
 def _cached_provider(name: str, allow_fake: bool, test_mode: bool, env: str) -> PaymentProvider:
     # cache key includes flags so settings monkeypatches in tests can bust via clear
+    # YooKassa is never cached here when built with connection credentials.
     return _build_provider(name)
 
 
@@ -117,15 +137,19 @@ def clear_provider_cache() -> None:
     _cached_provider.cache_clear()
 
 
-def get_payment_provider(name: str | None = None) -> PaymentProvider:
+def get_payment_provider(
+    name: str | None = None,
+    *,
+    credentials: dict | None = None,
+) -> PaymentProvider:
     """
     Получить экземпляр провайдера по имени или default.
+    credentials — только для connection-based адаптеров (не логируются).
     Не возвращает секреты.
     """
     resolved = (name or get_default_provider_name()).strip().lower()
     available = list_available_provider_names()
     if resolved not in available and resolved != FAKE_PROVIDER_NAME:
-        # unknown / not listed
         if resolved not in KNOWN_PROVIDER_NAMES and resolved != FAKE_PROVIDER_NAME:
             raise PaymentProviderRegistryError(
                 f"Unknown payment provider {resolved!r}",
@@ -142,6 +166,9 @@ def get_payment_provider(name: str | None = None) -> PaymentProvider:
             "Fake payment provider is disabled (fail-closed)",
             code="fake_provider_forbidden",
         )
+
+    if resolved == YOOKASSA_NAME:
+        return _build_yookassa(credentials)
 
     return _cached_provider(
         resolved,

@@ -159,6 +159,14 @@ class PaymentAttempt(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     provider = Column(String(64), nullable=False)
+    # Optional link to encrypted PaymentProviderConnection (Этап 6.10A).
+    # SET NULL on connection delete — history keeps provider string snapshot.
+    connection_id = Column(
+        Integer,
+        ForeignKey("payment_provider_connections.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     provider_payment_id = Column(String(255), nullable=True)
     amount = Column(Numeric(10, 2), nullable=False)
     currency = Column(String(10), nullable=False, default="RUB")

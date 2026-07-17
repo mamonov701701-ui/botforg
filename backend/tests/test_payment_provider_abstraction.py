@@ -156,11 +156,23 @@ def test_unimplemented_real_provider_not_instantiated(monkeypatch):
     monkeypatch.setattr(settings, "TESTING", False)
     monkeypatch.setattr(settings, "PAYMENT_PROVIDER_TEST_MODE", False)
     monkeypatch.setattr(settings, "ALLOW_FAKE_PAYMENT_PROVIDER", False)
+    monkeypatch.setattr(settings, "PAYMENT_PROVIDERS_AVAILABLE", "stripe")
+    clear_provider_cache()
+    with pytest.raises(PaymentProviderRegistryError) as exc:
+        get_payment_provider("stripe")
+    assert exc.value.code == "provider_not_implemented"
+
+
+def test_yookassa_requires_credentials(monkeypatch):
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setattr(settings, "TESTING", False)
+    monkeypatch.setattr(settings, "YOOKASSA_SHOP_ID", None)
+    monkeypatch.setattr(settings, "YOOKASSA_SECRET_KEY", None)
     monkeypatch.setattr(settings, "PAYMENT_PROVIDERS_AVAILABLE", "yookassa")
     clear_provider_cache()
     with pytest.raises(PaymentProviderRegistryError) as exc:
         get_payment_provider("yookassa")
-    assert exc.value.code == "provider_not_implemented"
+    assert exc.value.code == "missing_credentials"
 
 
 def test_fake_webhook_signature_roundtrip(monkeypatch):

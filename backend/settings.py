@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     YOOKASSA_SHOP_ID: Optional[str] = None
     YOOKASSA_SECRET_KEY: Optional[str] = None
     YOOKASSA_REDIRECT_URL: Optional[str] = None
+    # Dev/test only: skip official webhook IP allowlist (NEVER in production)
+    YOOKASSA_WEBHOOK_SKIP_IP_CHECK: bool = False
+    PAYMENT_PROVIDER_HTTP_TIMEOUT_SEC: float = 15.0
     STRIPE_API_KEY: Optional[str] = None
     STRIPE_SUCCESS_URL: Optional[str] = None
     STRIPE_CANCEL_URL: Optional[str] = None
@@ -77,6 +80,12 @@ class Settings(BaseSettings):
     PAYMENT_PROVIDER_TEST_MODE: bool = False
     # Explicit opt-in for fake provider in non-production (in addition to TESTING/test mode)
     ALLOW_FAKE_PAYMENT_PROVIDER: bool = False
+
+    # Encrypted payment provider connection credentials (Этап 6.10A)
+    # Master key: base64 (urlsafe) or hex of exactly 32 bytes. Never store in DB.
+    PAYMENT_CREDENTIALS_MASTER_KEY: str = ""
+    PAYMENT_CREDENTIALS_KEY_ID: str = "default"
+    PAYMENT_CREDENTIALS_ENCRYPTION_VERSION: int = 1
 
     # Testing mode
     TESTING: bool = os.getenv("TESTING", "false").lower() == "true"
