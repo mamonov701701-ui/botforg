@@ -54,8 +54,8 @@
 
 ## Следующие этапы
 
-1. **6.14.2** — calc service (тариф time-формула, addon full / `manual_review_required`).
-2. Admin/user API + revisions workflow + final confirmation.
+1. **6.14.2** — calc + revisions service: см. `docs/TARIFFS_STAGE_6_14_2_REFUND_CALCULATION_REVISIONS.md`.
+2. Admin/user API + final confirmation wiring.
 3. Provider refund + webhook + entitlement.
 4. **Обязательно:** per-addon usage ledger + FIFO (контракт 6.13).
 

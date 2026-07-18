@@ -105,17 +105,62 @@ class RefundEntitlementAction(str, Enum):
 
 
 class RefundLedgerEntryType(str, Enum):
-    """Подготовительные типы 6.14.1 — без реальной отправки в провайдер."""
+    """
+    Ledger entry types.
+
+    6.14.1/6.14.2 writers may create planned/reserved only (no provider execution).
+    succeeded / failed / canceled / provider_unknown — reserved for later stages;
+    calculation already buckets them correctly when present.
+    """
 
     PLANNED = "planned"
     RESERVED = "reserved"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
+    PROVIDER_UNKNOWN = "provider_unknown"
+
+
+# Active holds: block re-reservation, NOT counted as money returned.
+REFUND_LEDGER_ACTIVE_RESERVATION_TYPES = frozenset(
+    {
+        RefundLedgerEntryType.PLANNED.value,
+        RefundLedgerEntryType.RESERVED.value,
+    }
+)
+
+# Actually completed refunds that reduce paid balance.
+REFUND_LEDGER_CONFIRMED_TYPES = frozenset(
+    {
+        RefundLedgerEntryType.SUCCEEDED.value,
+    }
+)
+
+# Conservative hold (unknown outcome) — reduces available, not confirmed.
+REFUND_LEDGER_PROVIDER_UNKNOWN_TYPES = frozenset(
+    {
+        RefundLedgerEntryType.PROVIDER_UNKNOWN.value,
+    }
+)
+
+# No impact on refundable available / confirmed.
+REFUND_LEDGER_INACTIVE_TYPES = frozenset(
+    {
+        RefundLedgerEntryType.FAILED.value,
+        RefundLedgerEntryType.CANCELED.value,
+    }
+)
 
 
 class RefundLedgerProviderStatus(str, Enum):
-    """Локальные статусы ledger до provider execution."""
+    """Локальные статусы ledger до / вокруг provider execution."""
 
     LOCAL_ONLY = "local_only"
     NOT_SUBMITTED = "not_submitted"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELED = "canceled"
+    PROVIDER_UNKNOWN = "provider_unknown"
 
 
 class RefundAuditActorType(str, Enum):

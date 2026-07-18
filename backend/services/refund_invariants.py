@@ -44,6 +44,7 @@ ALLOWED_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     ),
     RefundRequestStatus.AWAITING_ADMIN_REVIEW.value: frozenset(
         {
+            RefundRequestStatus.CALCULATING.value,
             RefundRequestStatus.ADMIN_EDITED.value,
             RefundRequestStatus.AWAITING_FINAL_CONFIRMATION.value,
             RefundRequestStatus.APPROVED.value,
@@ -55,6 +56,7 @@ ALLOWED_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     ),
     RefundRequestStatus.MANUAL_REVIEW_REQUIRED.value: frozenset(
         {
+            RefundRequestStatus.CALCULATING.value,
             RefundRequestStatus.ADMIN_EDITED.value,
             RefundRequestStatus.AWAITING_FINAL_CONFIRMATION.value,
             RefundRequestStatus.NEEDS_INFORMATION.value,
@@ -64,6 +66,7 @@ ALLOWED_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     ),
     RefundRequestStatus.ADMIN_EDITED.value: frozenset(
         {
+            RefundRequestStatus.CALCULATING.value,
             RefundRequestStatus.AWAITING_FINAL_CONFIRMATION.value,
             RefundRequestStatus.NEEDS_INFORMATION.value,
             RefundRequestStatus.REJECTED.value,
@@ -73,6 +76,7 @@ ALLOWED_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     ),
     RefundRequestStatus.NEEDS_INFORMATION.value: frozenset(
         {
+            RefundRequestStatus.CALCULATING.value,
             RefundRequestStatus.AWAITING_ADMIN_REVIEW.value,
             RefundRequestStatus.ADMIN_EDITED.value,
             RefundRequestStatus.CANCELED.value,
@@ -81,6 +85,7 @@ ALLOWED_STATUS_TRANSITIONS: dict[str, frozenset[str]] = {
     ),
     RefundRequestStatus.AWAITING_FINAL_CONFIRMATION.value: frozenset(
         {
+            RefundRequestStatus.CALCULATING.value,
             RefundRequestStatus.APPROVED.value,
             RefundRequestStatus.ADMIN_EDITED.value,
             RefundRequestStatus.AWAITING_ADMIN_REVIEW.value,
