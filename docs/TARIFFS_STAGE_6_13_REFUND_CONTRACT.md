@@ -422,12 +422,15 @@ max_refundable = sum(succeeded_attempts.amount) - sum(succeeded_refunds.amount)
 
 ---
 
-## 24. Предлагаемый scope 6.14+ (не реализуется здесь)
+## 24. Предлагаемый scope 6.14+
 
-1. Модели: RefundRequest + Revision + CalcSnapshot + DecisionSnapshot + RefundLedger.
-2. Сервис calc тарифа (time-формула §6) + addon path (full / `manual_review_required`) + validations + optimistic lock.
-3. Admin API review/edit/confirm + audit; final confirmation.
-4. User API submit + status + уведомления.
-5. YooKassa refund + webhook + entitlement apply (без silent revoke).
-6. **Обязательно:** per-addon usage ledger + FIFO (точный auto-calc addon).
-7. Синхронизация опубликованных юр. текстов после legal review.
+**6.14.1 (data foundation) — реализовано:** модели `RefundRequest` / `RefundRevision` / `RefundLedgerEntry` / `RefundAuditEvent`, migration `refund_requests_025`, invariants. См. `docs/TARIFFS_STAGE_6_14_1_REFUND_DATA_FOUNDATION.md`. Provider refund и entitlement **не** реализованы.
+
+Далее:
+
+1. Сервис calc тарифа (time-формула §6) + addon path (full / `manual_review_required`) + optimistic lock.
+2. Admin API review/edit/confirm + audit; final confirmation.
+3. User API submit + status + уведомления.
+4. YooKassa refund + webhook + entitlement apply (без silent revoke).
+5. **Обязательно:** per-addon usage ledger + FIFO (точный auto-calc addon).
+6. Синхронизация опубликованных юр. текстов после legal review.

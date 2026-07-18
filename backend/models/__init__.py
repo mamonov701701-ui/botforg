@@ -55,6 +55,13 @@ from backend.models.checkout import (
 )
 from backend.models.payment_provider_settings import PaymentProviderSetting
 from backend.models.payment_provider_connection import PaymentProviderConnection
+from backend.models.refund import (
+    RefundAuditEvent,
+    RefundLedgerEntry,
+    RefundRequest,
+    RefundRequestStatus,
+    RefundRevision,
+)
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
@@ -153,6 +160,11 @@ __all__ = [
     "PaymentWebhookProcessStatus",
     "PaymentProviderSetting",
     "PaymentProviderConnection",
+    "RefundRequest",
+    "RefundRequestStatus",
+    "RefundRevision",
+    "RefundLedgerEntry",
+    "RefundAuditEvent",
     "AddonPackage",
     "AddonPackageType",
     "UserSubscription",
