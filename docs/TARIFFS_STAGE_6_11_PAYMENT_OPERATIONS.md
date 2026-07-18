@@ -171,6 +171,9 @@ pending → awaiting_payment → paid → fulfilled
 
 ## Что ещё не реализовано
 
+- YooKassa sandbox smoke с реальными тестовыми реквизитами ещё не проводился
+- Внешние вызовы и тестовые платежи относятся к этапу **6.12**
+- Production/live-платежи не проверялись и не должны выполняться без отдельного разрешения
 - Refund / revoke entitlement
 - Полный checkout UI / страница покупки (этап 8.2)
 - Frontend UI журнала платежей (backend API 6.11.3 готов)
