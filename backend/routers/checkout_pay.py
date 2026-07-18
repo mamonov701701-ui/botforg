@@ -1,10 +1,11 @@
 """
-Webhook ЮKassa + pay endpoints для CheckoutIntent (Этап 6.10B / 6.11.2A).
+Webhook ЮKassa + pay/cancel endpoints для CheckoutIntent (Этап 6.10B / 6.11.2A–C).
 """
 from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -14,7 +15,12 @@ from sqlalchemy.orm import Session
 from backend.auth.rate_limit import check_rate_limit
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
-from backend.models.checkout import CheckoutIntent, PaymentAttempt, PaymentAttemptStatus
+from backend.models.checkout import (
+    CheckoutIntent,
+    CheckoutIntentStatus,
+    PaymentAttempt,
+    PaymentAttemptStatus,
+)
 from backend.models.user import User
 from backend.payments.base import PaymentProviderError
 from backend.payments.dto import NormalizedPaymentStatus
@@ -22,6 +28,7 @@ from backend.payments.providers.yookassa import is_yookassa_webhook_ip
 from backend.payments.registry import get_payment_provider
 from backend.services.checkout_pay import (
     CheckoutPayError,
+    cancel_checkout_payment,
     get_checkout_payment_view,
     start_checkout_payment,
     validate_webhook_metadata_against_attempt,
@@ -71,6 +78,15 @@ class PaymentStatusOut(BaseModel):
     normalized_status: str
     is_final: bool
     can_retry: bool
+    message: str
+
+
+class CancelOut(BaseModel):
+    intent_id: int
+    intent_status: str
+    attempt_id: int | None = None
+    attempt_status: str | None = None
+    already_cancelled: bool = False
     message: str
 
 
@@ -134,6 +150,36 @@ async def get_checkout_payment(
             status_code=exc.http_status,
             detail={"message": exc.message, "code": exc.code},
         ) from exc
+
+
+@router.post(
+    "/me/checkout-intents/{intent_id}/cancel",
+    response_model=CancelOut,
+)
+async def cancel_checkout_intent(
+    intent_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    check_rate_limit(request, "checkout_cancel")
+    try:
+        result = cancel_checkout_payment(
+            db, user_id=user.id, intent_id=intent_id
+        )
+    except CheckoutPayError as exc:
+        raise HTTPException(
+            status_code=exc.http_status,
+            detail={"message": exc.message, "code": exc.code},
+        ) from exc
+    return CancelOut(
+        intent_id=result.intent.id,
+        intent_status=result.intent.status,
+        attempt_id=result.attempt.id if result.attempt else None,
+        attempt_status=result.attempt.status if result.attempt else None,
+        already_cancelled=result.already_cancelled,
+        message=result.message,
+    )
 
 
 @router.post("/webhooks/payments/yookassa")
@@ -263,19 +309,44 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
         NormalizedPaymentStatus.FAILED,
         NormalizedPaymentStatus.CANCELLED,
     ) or event_type.endswith("canceled"):
+        is_cancel = (
+            event.status == NormalizedPaymentStatus.CANCELLED
+            or event_type.endswith("canceled")
+        )
         if attempt.status not in _ATTEMPT_NO_DOWNGRADE:
             attempt.status = (
                 PaymentAttemptStatus.CANCELLED.value
-                if event.status == NormalizedPaymentStatus.CANCELLED
-                or event_type.endswith("canceled")
+                if is_cancel
                 else PaymentAttemptStatus.FAILED.value
             )
             db.add(attempt)
-            db.commit()
+        # Keep intent in sync so late succeeded cannot fulfill after cancel/fail.
+        if intent.status in (
+            CheckoutIntentStatus.PENDING.value,
+            CheckoutIntentStatus.AWAITING_PAYMENT.value,
+        ):
+            now = datetime.now(timezone.utc)
+            if is_cancel:
+                intent.status = CheckoutIntentStatus.CANCELLED.value
+                intent.cancelled_at = now
+            else:
+                intent.status = CheckoutIntentStatus.FAILED.value
+                intent.failed_at = now
+            intent.updated_at = now
+            db.add(intent)
+        db.commit()
         return {"ok": True, "ignored": True, "reason": "non_success"}
 
     if event.status != NormalizedPaymentStatus.SUCCEEDED and not event_type.endswith("succeeded"):
         return {"ok": True, "ignored": True, "reason": "ignored_event"}
+
+    # Confirmed local cancel/fail — never grant entitlement on late succeeded.
+    if intent.status in (
+        CheckoutIntentStatus.CANCELLED.value,
+        CheckoutIntentStatus.FAILED.value,
+        CheckoutIntentStatus.REFUNDED.value,
+    ):
+        return {"ok": True, "ignored": True, "reason": "intent_terminal_blocking"}
 
     try:
         fulfill_paid_intent(

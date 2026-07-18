@@ -1,9 +1,10 @@
 """
-Старт оплаты CheckoutIntent через default PaymentProviderConnection (Этап 6.10B / 6.11.2A).
+Старт/отмена оплаты CheckoutIntent (Этап 6.10B / 6.11.2A–C).
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -24,9 +25,59 @@ from backend.services.payment_fulfillment import FulfillmentError, create_paymen
 from backend.services.payment_provider_connections import (
     ConnectionServiceError,
     decrypt_connection_credentials_for_internal_use,
+    get_connection,
     resolve_default_connection,
 )
 from backend.settings import settings
+
+# provider code → (http_status, public_code, safe Russian message). No raw/provider text.
+_SAFE_PROVIDER_ERROR_MAP: dict[str, tuple[int, str, str]] = {
+    "provider_timeout": (
+        504,
+        "provider_timeout",
+        "Платёжная система не ответила вовремя. Попробуйте позже.",
+    ),
+    "provider_network_error": (
+        502,
+        "provider_unavailable",
+        "Не удалось связаться с платёжной системой. Попробуйте позже.",
+    ),
+    "provider_http_error": (
+        502,
+        "provider_error",
+        "Платёжная система временно недоступна. Попробуйте позже.",
+    ),
+    "invalid_credentials": (
+        409,
+        "provider_misconfigured",
+        "Платёжная система настроена неверно. Обратитесь к администратору платформы.",
+    ),
+    "missing_credentials": (
+        409,
+        "provider_misconfigured",
+        "Платёжная система настроена неверно. Обратитесь к администратору платформы.",
+    ),
+    "invalid_api_base": (
+        503,
+        "provider_misconfigured",
+        "Платёжная система настроена неверно. Обратитесь к администратору платформы.",
+    ),
+    "invalid_provider_response": (
+        502,
+        "provider_error",
+        "Платёжная система вернула некорректный ответ. Попробуйте позже.",
+    ),
+    "return_url_required": (
+        422,
+        "return_url_required",
+        "Не указан адрес возврата после оплаты.",
+    ),
+    "payment_not_found": (
+        409,
+        "payment_not_found",
+        "Платёж не найден в платёжной системе.",
+    ),
+}
 
 # Активные (non-terminal) попытки: второй /pay не создаёт новый provider payment.
 ATTEMPT_OPEN_STATUSES = frozenset(
@@ -59,6 +110,52 @@ class CheckoutPayResult:
     provider: str
     provider_payment_id: str | None
     already_started: bool = False
+
+
+@dataclass
+class CheckoutCancelResult:
+    intent: CheckoutIntent
+    attempt: PaymentAttempt | None
+    already_cancelled: bool = False
+    message: str = "Оплата отменена"
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def map_payment_provider_error(exc: PaymentProviderError) -> CheckoutPayError:
+    """Безопасный маппинг ошибок провайдера — без credentials/raw/внутренних текстов."""
+    mapped = _SAFE_PROVIDER_ERROR_MAP.get((exc.code or "").strip())
+    if mapped is not None:
+        http_status, code, message = mapped
+        return CheckoutPayError(message, code=code, http_status=http_status)
+    return CheckoutPayError(
+        "Не удалось выполнить операцию оплаты. Попробуйте позже.",
+        code="provider_error",
+        http_status=502,
+    )
+
+
+def _map_connection_service_error(exc: ConnectionServiceError) -> CheckoutPayError:
+    """Не отдаём наружу тексты расшифровки/криптографии."""
+    code = (exc.code or "").strip()
+    if code in {
+        "master_key_missing",
+        "credentials_decrypt_failed",
+        "credentials_crypto_error",
+        "invalid_ciphertext",
+    }:
+        return CheckoutPayError(
+            "Платёжное подключение недоступно. Обратитесь к администратору платформы.",
+            code="provider_misconfigured",
+            http_status=503 if exc.http_status >= 500 else 409,
+        )
+    return CheckoutPayError(
+        "Платёжное подключение недоступно. Обратитесь к администратору платформы.",
+        code="provider_misconfigured",
+        http_status=409 if exc.http_status < 500 else min(exc.http_status, 503),
+    )
 
 
 def _default_return_url() -> str:
@@ -229,11 +326,15 @@ def start_checkout_payment(
         )
         created = provider.create_payment(create_req)
     except ConnectionServiceError as exc:
-        raise CheckoutPayError(str(exc), code=exc.code, http_status=exc.http_status) from exc
+        raise _map_connection_service_error(exc) from exc
     except PaymentProviderRegistryError as exc:
-        raise CheckoutPayError(exc.message, code=exc.code, http_status=503) from exc
+        raise CheckoutPayError(
+            "Платёжная система временно недоступна. Попробуйте позже.",
+            code="provider_unavailable",
+            http_status=503,
+        ) from exc
     except PaymentProviderError as exc:
-        raise CheckoutPayError(exc.message, code=exc.code, http_status=502) from exc
+        raise map_payment_provider_error(exc) from exc
     finally:
         for k in list(creds.keys()):
             creds[k] = ""
@@ -341,6 +442,141 @@ def start_checkout_payment(
     return _result_from_attempt(intent, attempt, already_started=already)
 
 
+def cancel_checkout_payment(
+    db: Session,
+    *,
+    user_id: int,
+    intent_id: int,
+) -> CheckoutCancelResult:
+    """
+    Отмена неоплаченного checkout владельцем.
+
+    Только pending / awaiting_payment. При pending attempt с provider_payment_id
+    вызывается provider.cancel_payment; при timeout/неизвестном результате
+    локальный статус не помечается cancelled.
+    """
+    intent = (
+        db.query(CheckoutIntent)
+        .filter(CheckoutIntent.id == intent_id, CheckoutIntent.user_id == user_id)
+        .with_for_update()
+        .first()
+    )
+    if not intent:
+        raise CheckoutPayError(
+            "Checkout intent not found", code="intent_not_found", http_status=404
+        )
+
+    if intent.status == CheckoutIntentStatus.CANCELLED.value:
+        attempt = (
+            db.query(PaymentAttempt)
+            .filter(PaymentAttempt.checkout_intent_id == intent.id)
+            .order_by(PaymentAttempt.id.desc())
+            .first()
+        )
+        return CheckoutCancelResult(
+            intent=intent,
+            attempt=attempt,
+            already_cancelled=True,
+            message="Оплата уже отменена",
+        )
+
+    if intent.status in (
+        CheckoutIntentStatus.PAID.value,
+        CheckoutIntentStatus.FULFILLED.value,
+    ):
+        raise CheckoutPayError(
+            "Оплаченный заказ нельзя отменить",
+            code="intent_already_paid",
+            http_status=409,
+        )
+    if intent.status == CheckoutIntentStatus.REFUNDED.value:
+        raise CheckoutPayError(
+            "Заказ уже возвращён",
+            code="intent_not_cancellable",
+            http_status=409,
+        )
+    if intent.status == CheckoutIntentStatus.FAILED.value:
+        raise CheckoutPayError(
+            "Неудачный заказ нельзя отменить",
+            code="intent_not_cancellable",
+            http_status=409,
+        )
+    if intent.status not in (
+        CheckoutIntentStatus.PENDING.value,
+        CheckoutIntentStatus.AWAITING_PAYMENT.value,
+    ):
+        raise CheckoutPayError(
+            "Заказ нельзя отменить в текущем статусе",
+            code="intent_not_cancellable",
+            http_status=409,
+        )
+
+    attempt = (
+        db.query(PaymentAttempt)
+        .filter(
+            PaymentAttempt.checkout_intent_id == intent.id,
+            PaymentAttempt.status.in_(tuple(ATTEMPT_OPEN_STATUSES)),
+        )
+        .order_by(PaymentAttempt.id.desc())
+        .first()
+    )
+
+    if attempt is not None and attempt.provider_payment_id:
+        creds: dict[str, str] = {}
+        try:
+            if attempt.connection_id:
+                conn = get_connection(db, attempt.connection_id)
+                creds = decrypt_connection_credentials_for_internal_use(conn)
+                provider = get_payment_provider(attempt.provider, credentials=creds)
+            else:
+                provider = get_payment_provider(attempt.provider)
+            cancel_result = provider.cancel_payment(attempt.provider_payment_id)
+        except ConnectionServiceError as exc:
+            raise _map_connection_service_error(exc) from exc
+        except PaymentProviderRegistryError as exc:
+            raise CheckoutPayError(
+                "Платёжная система временно недоступна. Попробуйте позже.",
+                code="provider_unavailable",
+                http_status=503,
+            ) from exc
+        except PaymentProviderError as exc:
+            # Timeout / network / HTTP — do not mark local cancel as success.
+            raise map_payment_provider_error(exc) from exc
+        finally:
+            for k in list(creds.keys()):
+                creds[k] = ""
+            creds.clear()
+
+        if cancel_result.status != NormalizedPaymentStatus.CANCELLED:
+            raise CheckoutPayError(
+                "Не удалось подтвердить отмену платежа. Статус не изменён.",
+                code="cancel_not_confirmed",
+                http_status=409,
+            )
+
+    at = _utcnow()
+    if attempt is not None:
+        attempt.status = PaymentAttemptStatus.CANCELLED.value
+        attempt.updated_at = at
+        db.add(attempt)
+
+    intent.status = CheckoutIntentStatus.CANCELLED.value
+    intent.cancelled_at = at
+    intent.updated_at = at
+    db.add(intent)
+    db.commit()
+    db.refresh(intent)
+    if attempt is not None:
+        db.refresh(attempt)
+
+    return CheckoutCancelResult(
+        intent=intent,
+        attempt=attempt,
+        already_cancelled=False,
+        message="Оплата отменена",
+    )
+
+
 def _normalized_payment_view(
     intent: CheckoutIntent, attempt: PaymentAttempt | None
 ) -> dict[str, Any]:
@@ -374,14 +610,14 @@ def _normalized_payment_view(
             "normalized_status": NormalizedPaymentStatus.CANCELLED.value,
             "is_final": True,
             "can_retry": False,
-            "message": "Оплата отменена",
+            "message": "Оплата отменена. Для повторной оплаты создайте новый заказ.",
         }
     if intent_status == CheckoutIntentStatus.FAILED.value:
         return {
             "normalized_status": NormalizedPaymentStatus.FAILED.value,
             "is_final": True,
             "can_retry": False,
-            "message": "Оплата не удалась",
+            "message": "Оплата не удалась. Создайте новый заказ или обратитесь в поддержку.",
         }
 
     if attempt_status == PaymentAttemptStatus.SUCCEEDED.value:
@@ -410,7 +646,7 @@ def _normalized_payment_view(
             "normalized_status": NormalizedPaymentStatus.FAILED.value,
             "is_final": True,
             "can_retry": True,
-            "message": "Оплата не завершена. Можно начать оплату заново.",
+            "message": "Не удалось завершить оплату через платёжную систему. Можно начать оплату заново.",
         }
     if attempt_status == PaymentAttemptStatus.REFUNDED.value:
         return {
