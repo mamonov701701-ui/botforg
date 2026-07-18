@@ -182,10 +182,17 @@ class RefundAuditAction(str, Enum):
 class RefundRequest(Base):
     __tablename__ = "refund_requests"
     __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "idempotency_key",
+            name="uq_refund_requests_user_idempotency",
+        ),
         Index("ix_refund_requests_user_id", "user_id"),
         Index("ix_refund_requests_status", "status"),
         Index("ix_refund_requests_checkout_intent_id", "checkout_intent_id"),
         Index("ix_refund_requests_payment_attempt_id", "payment_attempt_id"),
+        # Partial unique (one open request per intent) is created in Alembic 026 —
+        # SQLite/PostgreSQL WHERE clause is not portable via UniqueConstraint alone.
         {"extend_existing": True},
     )
 
@@ -203,6 +210,8 @@ class RefundRequest(Base):
         ForeignKey("payment_attempts.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    # Nullable for pre-026 rows; submit service always requires a non-empty key.
+    idempotency_key = Column(String(128), nullable=True)
     status = Column(
         String(64),
         nullable=False,

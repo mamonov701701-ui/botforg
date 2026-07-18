@@ -435,7 +435,9 @@ def create_initial_automatic_revision(
             db.refresh(request)
         return rev
     except (RefundCalculationError, RefundInvariantError) as exc:
-        db.rollback()
+        # When commit=False, let the caller own the transaction (no rollback).
+        if commit:
+            db.rollback()
         code = getattr(exc, "code", "calculation_error")
         raise RefundRevisionServiceError(str(exc), code=code) from exc
 
