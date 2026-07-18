@@ -1,7 +1,7 @@
 # Этап 6.11 — Payment operations (lifecycle, concurrency, cancel, safe errors)
 
 **Ветка:** `chore/fresh-clean`  
-**Подэтапы:** 6.11.1 (audit) → 6.11.2A (lifecycle) → 6.11.2B (concurrency) → 6.11.2C (errors + cancel)
+**Подэтапы:** 6.11.1 (audit) → 6.11.2A (lifecycle) → 6.11.2B (concurrency) → 6.11.2C (errors + cancel) → 6.11.3 (admin journal API)
 
 ## Реализованный lifecycle
 
@@ -75,6 +75,49 @@ pending → awaiting_payment → paid → fulfilled
 | GET | `/me/checkout-intents/{id}/payment` |
 | POST | `/me/checkout-intents/{id}/cancel` |
 | POST | `/webhooks/payments/yookassa` |
+| GET | `/api/admin/payments/operations` |
+| GET | `/api/admin/payments/operations/{checkout_intent_id}` |
+
+## Административная диагностика (6.11.3)
+
+Доступ: `owner`, `admin` или активная платформенная роль «BF Администратор» (`require_tariff_admin`).
+Обычный пользователь → **403**.
+
+### Список `GET /api/admin/payments/operations`
+
+Фильтры: `user_id`, `status`, `provider`, `checkout_intent_id`, `date_from`, `date_to`.
+Пагинация: `limit` (1–100, default 20), `offset`.
+
+В списке: intent id, пользователь (id/email), продукт, сумма, статус, провайдер, provider_payment_id, счётчики attempt/webhook, даты.
+
+### Карточка `GET /api/admin/payments/operations/{id}`
+
+Объединяет:
+
+- CheckoutIntent (статус, сумма, продукт, idempotency_key, даты);
+- PaymentAttempt[] (статус, provider_payment_id, confirmation_url, connection summary);
+- webhook-события (тип, process_status, error_message — **без** `payload`);
+- fulfillment (paid/fulfilled/failed/cancelled + id подписки/addon);
+- выданная UserSubscription или UserAddon (кратко);
+- provider connection: id, name, mode, verified, masked public id, `has_credentials` — **без** секретов.
+
+### Запрещено возвращать
+
+- credentials / plaintext secrets;
+- `credentials_ciphertext`, `credentials_nonce`, `credentials_auth_tag`;
+- Authorization headers;
+- raw provider / webhook `payload`;
+- внутренние исключения и stack traces.
+
+### Как расследовать проблемный платёж (владелец)
+
+1. Войти как owner/admin.
+2. `GET /api/admin/payments/operations?user_id=…` или `?provider_payment_id` через `checkout_intent_id` / фильтр пользователя.
+3. Открыть карточку по `checkout_intent_id`.
+4. Сверить цепочку: intent.status → attempts[].status → webhook_events[].process_status → fulfillment.subscription/addon.
+5. Если webhook `error` / `ignored` — смотреть `error_message` (код причины), не raw payload.
+6. Если connection «не готов» — проверить админку подключений (verify/enabled/default), не запрашивая секреты из журнала.
+7. Не проводить live-платежи для диагностики; используйте test-режим ЮKassa.
 
 ## Практические шаги владельца BotForg (без секретов и live)
 
@@ -90,7 +133,7 @@ pending → awaiting_payment → paid → fulfilled
 
 - Refund / revoke entitlement
 - Frontend checkout UI для cancel/статусов
-- Admin payment journal UI
+- Frontend UI журнала платежей (backend API 6.11.3 готов)
 - Cancel API для уже succeeded (refund path)
 - Фоновая reconciliation orphan-платежей с другим idempotency key
 - Новые эквайринг-адаптеры
@@ -100,3 +143,4 @@ pending → awaiting_payment → paid → fulfilled
 - `backend/tests/test_checkout_pay_hardening.py` (6.11.2A)
 - `backend/tests/test_checkout_pay_concurrency.py` (6.11.2B)
 - `backend/tests/test_checkout_pay_errors_cancel.py` (6.11.2C)
+- `backend/tests/test_payment_operations_admin.py` (6.11.3)
