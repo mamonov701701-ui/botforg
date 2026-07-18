@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.models.checkout import (
@@ -96,6 +97,37 @@ def _find_blocking_attempt(db: Session, intent_id: int) -> PaymentAttempt | None
     )
 
 
+def _recover_attempt_after_conflict(
+    db: Session,
+    *,
+    intent_id: int,
+    idempotency_key: str,
+    provider: str,
+    provider_payment_id: str | None,
+) -> PaymentAttempt | None:
+    """После IntegrityError вернуть уже созданный attempt (без HTTP 500)."""
+    recovered = (
+        db.query(PaymentAttempt)
+        .filter(
+            PaymentAttempt.checkout_intent_id == intent_id,
+            PaymentAttempt.idempotency_key == idempotency_key,
+        )
+        .first()
+    )
+    if recovered is not None:
+        return recovered
+    if not provider_payment_id:
+        return None
+    return (
+        db.query(PaymentAttempt)
+        .filter(
+            PaymentAttempt.provider == provider,
+            PaymentAttempt.provider_payment_id == str(provider_payment_id),
+        )
+        .first()
+    )
+
+
 def start_checkout_payment(
     db: Session,
     *,
@@ -137,7 +169,7 @@ def start_checkout_payment(
     if not key:
         raise CheckoutPayError("idempotency_key required", code="idempotency_required", http_status=422)
 
-    # Same idempotency key → always return existing attempt (idempotent replay).
+    # Same idempotency key with provider payment → safe replay (no second charge).
     existing_same_key = (
         db.query(PaymentAttempt)
         .filter(
@@ -146,20 +178,23 @@ def start_checkout_payment(
         )
         .first()
     )
-    if existing_same_key is not None:
-        if existing_same_key.provider_payment_id:
-            return _result_from_attempt(intent, existing_same_key, already_started=True)
-        # Incomplete same-key row without provider id — do not open a second charge;
-        # treat as already started / conflict rather than creating another payment.
+    if existing_same_key is not None and existing_same_key.provider_payment_id:
         return _result_from_attempt(intent, existing_same_key, already_started=True)
 
     # One active (or succeeded) attempt per intent — different key must not create another.
+    # Incomplete same-key row (no provider_payment_id) may recover via provider idempotency.
     blocking = _find_blocking_attempt(db, intent.id)
     if blocking is not None:
-        return _result_from_attempt(intent, blocking, already_started=True)
+        incomplete_same_key = (
+            existing_same_key is not None
+            and blocking.id == existing_same_key.id
+            and not existing_same_key.provider_payment_id
+        )
+        if not incomplete_same_key:
+            return _result_from_attempt(intent, blocking, already_started=True)
 
     # Retry policy (existing): only after terminal failed/cancelled attempts (or none).
-    # No new UX — simply allow create when no open/succeeded attempt remains.
+    # Orphan recovery: same key reuses provider Idempotence-Key contract.
 
     conn = resolve_default_connection(db)
     if conn is None:
@@ -204,6 +239,13 @@ def start_checkout_payment(
             creds[k] = ""
         creds.clear()
 
+    preexisting_attempt_ids = {
+        row_id
+        for (row_id,) in db.query(PaymentAttempt.id)
+        .filter(PaymentAttempt.checkout_intent_id == intent.id)
+        .all()
+    }
+
     try:
         attempt = create_payment_attempt(
             db,
@@ -217,23 +259,86 @@ def start_checkout_payment(
             commit=True,
         )
     except FulfillmentError as exc:
+        if exc.code == "attempt_conflict":
+            recovered = _recover_attempt_after_conflict(
+                db,
+                intent_id=intent.id,
+                idempotency_key=key,
+                provider=conn.provider_code,
+                provider_payment_id=created.provider_payment_id,
+            )
+            if recovered is not None:
+                intent = (
+                    db.query(CheckoutIntent)
+                    .filter(CheckoutIntent.id == intent_id)
+                    .first()
+                    or intent
+                )
+                return _result_from_attempt(intent, recovered, already_started=True)
         raise CheckoutPayError(exc.message, code=exc.code, http_status=409) from exc
 
-    # Ensure connection_id + confirmation persisted even if attempt existed
+    # create_payment_attempt may have rolled back on IntegrityError — re-bind intent.
+    intent = (
+        db.query(CheckoutIntent).filter(CheckoutIntent.id == intent_id).first()
+        or intent
+    )
+
+    # Attach provider fields when missing. Never replace an existing provider_payment_id
+    # (concurrent IntegrityError recovery / already-started winner).
+    already = attempt.id in preexisting_attempt_ids or (
+        bool(attempt.provider_payment_id)
+        and bool(created.provider_payment_id)
+        and attempt.provider_payment_id != created.provider_payment_id
+    )
     if attempt.connection_id is None:
         attempt.connection_id = conn.id
-    if created.confirmation_url:
-        attempt.confirmation_url = created.confirmation_url
-    if created.provider_payment_id:
-        attempt.provider_payment_id = created.provider_payment_id
-    if created.status == NormalizedPaymentStatus.SUCCEEDED:
-        attempt.status = PaymentAttemptStatus.SUCCEEDED.value
+    if not attempt.provider_payment_id:
+        if created.provider_payment_id:
+            attempt.provider_payment_id = created.provider_payment_id
+        if created.confirmation_url:
+            attempt.confirmation_url = created.confirmation_url
+        if created.status == NormalizedPaymentStatus.SUCCEEDED:
+            attempt.status = PaymentAttemptStatus.SUCCEEDED.value
+    elif not attempt.confirmation_url and created.confirmation_url:
+        if created.provider_payment_id in (None, attempt.provider_payment_id):
+            attempt.confirmation_url = created.confirmation_url
+    if intent.status in (
+        CheckoutIntentStatus.PENDING.value,
+        CheckoutIntentStatus.AWAITING_PAYMENT.value,
+    ):
+        intent.status = CheckoutIntentStatus.AWAITING_PAYMENT.value
+        intent.payment_provider = conn.provider_code
+        if not intent.provider_payment_id:
+            intent.provider_payment_id = (
+                attempt.provider_payment_id or created.provider_payment_id
+            )
     db.add(attempt)
-    db.commit()
-    db.refresh(attempt)
-    db.refresh(intent)
+    try:
+        db.commit()
+        db.refresh(attempt)
+        db.refresh(intent)
+    except IntegrityError:
+        db.rollback()
+        recovered = _recover_attempt_after_conflict(
+            db,
+            intent_id=intent.id,
+            idempotency_key=key,
+            provider=conn.provider_code,
+            provider_payment_id=created.provider_payment_id,
+        )
+        if recovered is None:
+            raise CheckoutPayError(
+                "Payment attempt conflict",
+                code="attempt_conflict",
+                http_status=409,
+            ) from None
+        intent = (
+            db.query(CheckoutIntent).filter(CheckoutIntent.id == intent_id).first()
+            or intent
+        )
+        return _result_from_attempt(intent, recovered, already_started=True)
 
-    return _result_from_attempt(intent, attempt, already_started=False)
+    return _result_from_attempt(intent, attempt, already_started=already)
 
 
 def _normalized_payment_view(

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.models.checkout import (
@@ -176,13 +177,40 @@ def create_payment_attempt(
             intent.provider_payment_id = provider_payment_id
         intent.updated_at = now
 
-    if commit:
-        db.commit()
-        db.refresh(attempt)
-        db.refresh(intent)
-    else:
-        db.flush()
-    return attempt
+    try:
+        if commit:
+            db.commit()
+            db.refresh(attempt)
+            db.refresh(intent)
+        else:
+            db.flush()
+        return attempt
+    except IntegrityError:
+        # Concurrent /pay: unique (intent, idempotency_key) or (provider, payment_id).
+        db.rollback()
+        recovered = (
+            db.query(PaymentAttempt)
+            .filter(
+                PaymentAttempt.checkout_intent_id == checkout_intent_id,
+                PaymentAttempt.idempotency_key == key,
+            )
+            .first()
+        )
+        if recovered is None and provider_payment_id:
+            recovered = (
+                db.query(PaymentAttempt)
+                .filter(
+                    PaymentAttempt.provider == provider_name,
+                    PaymentAttempt.provider_payment_id == str(provider_payment_id),
+                )
+                .first()
+            )
+        if recovered is not None:
+            return recovered
+        raise FulfillmentError(
+            "Payment attempt conflict",
+            code="attempt_conflict",
+        ) from None
 
 
 def fulfill_paid_intent(
@@ -264,7 +292,57 @@ def fulfill_paid_intent(
             process_status=PaymentWebhookProcessStatus.RECEIVED.value,
         )
         db.add(event)
-        db.flush()
+        try:
+            db.flush()
+        except IntegrityError:
+            # Concurrent duplicate webhook: unique (provider, provider_event_id).
+            db.rollback()
+            raced = (
+                db.query(PaymentWebhookEvent)
+                .filter(
+                    PaymentWebhookEvent.provider == provider,
+                    PaymentWebhookEvent.provider_event_id == provider_event_id,
+                )
+                .first()
+            )
+            if raced is None:
+                raise FulfillmentError(
+                    "Webhook event conflict",
+                    code="webhook_event_conflict",
+                ) from None
+            intent = (
+                db.query(CheckoutIntent)
+                .filter(CheckoutIntent.id == checkout_intent_id)
+                .first()
+            )
+            attempt = None
+            if raced.payment_attempt_id:
+                attempt = (
+                    db.query(PaymentAttempt)
+                    .filter(PaymentAttempt.id == raced.payment_attempt_id)
+                    .first()
+                )
+            if raced.process_status in (
+                PaymentWebhookProcessStatus.PROCESSED.value,
+                PaymentWebhookProcessStatus.IGNORED.value,
+            ):
+                return FulfillmentResult(
+                    intent=intent,
+                    attempt=attempt,
+                    event=raced,
+                    already_fulfilled=bool(
+                        intent
+                        and intent.status == CheckoutIntentStatus.FULFILLED.value
+                    ),
+                    ignored=raced.process_status
+                    == PaymentWebhookProcessStatus.IGNORED.value,
+                )
+            # Still RECEIVED/ERROR — reuse row for this worker.
+            event = raced
+            event.event_type = event_type
+            event.payload = payload
+            event.error_message = None
+            event.checkout_intent_id = checkout_intent_id
     else:
         # retry after error: reuse same event row
         event.event_type = event_type
