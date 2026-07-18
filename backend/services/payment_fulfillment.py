@@ -107,6 +107,11 @@ def create_payment_attempt(
             "Checkout intent already fulfilled",
             code="intent_already_fulfilled",
         )
+    if intent.status == CheckoutIntentStatus.PAID.value:
+        raise FulfillmentError(
+            "Checkout intent already paid",
+            code="intent_already_paid",
+        )
 
     key = (idempotency_key or "").strip()
     if not key:

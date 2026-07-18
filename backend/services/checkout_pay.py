@@ -1,5 +1,5 @@
 """
-Старт оплаты CheckoutIntent через default PaymentProviderConnection (Этап 6.10B).
+Старт оплаты CheckoutIntent через default PaymentProviderConnection (Этап 6.10B / 6.11.2A).
 """
 from __future__ import annotations
 
@@ -27,6 +27,20 @@ from backend.services.payment_provider_connections import (
 )
 from backend.settings import settings
 
+# Активные (non-terminal) попытки: второй /pay не создаёт новый provider payment.
+ATTEMPT_OPEN_STATUSES = frozenset(
+    {
+        PaymentAttemptStatus.CREATED.value,
+        PaymentAttemptStatus.PENDING.value,
+    }
+)
+
+# Успешная попытка тоже блокирует новый charge (пока intent не terminal failed/cancelled).
+ATTEMPT_SUCCESS_STATUSES = frozenset(
+    {
+        PaymentAttemptStatus.SUCCEEDED.value,
+    }
+)
 
 class CheckoutPayError(Exception):
     def __init__(self, message: str, *, code: str = "checkout_pay_error", http_status: int = 400):
@@ -54,6 +68,34 @@ def _default_return_url() -> str:
     ).strip()
 
 
+def _result_from_attempt(
+    intent: CheckoutIntent, attempt: PaymentAttempt, *, already_started: bool
+) -> CheckoutPayResult:
+    return CheckoutPayResult(
+        intent=intent,
+        attempt=attempt,
+        confirmation_url=attempt.confirmation_url,
+        provider=attempt.provider,
+        provider_payment_id=attempt.provider_payment_id,
+        already_started=already_started,
+    )
+
+
+def _find_blocking_attempt(db: Session, intent_id: int) -> PaymentAttempt | None:
+    """Open или already-succeeded attempt — нельзя создавать новый provider payment."""
+    return (
+        db.query(PaymentAttempt)
+        .filter(
+            PaymentAttempt.checkout_intent_id == intent_id,
+            PaymentAttempt.status.in_(
+                tuple(ATTEMPT_OPEN_STATUSES | ATTEMPT_SUCCESS_STATUSES)
+            ),
+        )
+        .order_by(PaymentAttempt.id.desc())
+        .first()
+    )
+
+
 def start_checkout_payment(
     db: Session,
     *,
@@ -65,6 +107,7 @@ def start_checkout_payment(
     intent = (
         db.query(CheckoutIntent)
         .filter(CheckoutIntent.id == intent_id, CheckoutIntent.user_id == user_id)
+        .with_for_update()
         .first()
     )
     if not intent:
@@ -83,12 +126,19 @@ def start_checkout_payment(
             code="intent_already_fulfilled",
             http_status=409,
         )
+    if intent.status == CheckoutIntentStatus.PAID.value:
+        raise CheckoutPayError(
+            "Intent already paid",
+            code="intent_already_paid",
+            http_status=409,
+        )
 
     key = (idempotency_key or "").strip()
     if not key:
         raise CheckoutPayError("idempotency_key required", code="idempotency_required", http_status=422)
 
-    existing = (
+    # Same idempotency key → always return existing attempt (idempotent replay).
+    existing_same_key = (
         db.query(PaymentAttempt)
         .filter(
             PaymentAttempt.checkout_intent_id == intent.id,
@@ -96,15 +146,20 @@ def start_checkout_payment(
         )
         .first()
     )
-    if existing and existing.provider_payment_id and existing.confirmation_url:
-        return CheckoutPayResult(
-            intent=intent,
-            attempt=existing,
-            confirmation_url=existing.confirmation_url,
-            provider=existing.provider,
-            provider_payment_id=existing.provider_payment_id,
-            already_started=True,
-        )
+    if existing_same_key is not None:
+        if existing_same_key.provider_payment_id:
+            return _result_from_attempt(intent, existing_same_key, already_started=True)
+        # Incomplete same-key row without provider id — do not open a second charge;
+        # treat as already started / conflict rather than creating another payment.
+        return _result_from_attempt(intent, existing_same_key, already_started=True)
+
+    # One active (or succeeded) attempt per intent — different key must not create another.
+    blocking = _find_blocking_attempt(db, intent.id)
+    if blocking is not None:
+        return _result_from_attempt(intent, blocking, already_started=True)
+
+    # Retry policy (existing): only after terminal failed/cancelled attempts (or none).
+    # No new UX — simply allow create when no open/succeeded attempt remains.
 
     conn = resolve_default_connection(db)
     if conn is None:
@@ -178,14 +233,95 @@ def start_checkout_payment(
     db.refresh(attempt)
     db.refresh(intent)
 
-    return CheckoutPayResult(
-        intent=intent,
-        attempt=attempt,
-        confirmation_url=attempt.confirmation_url,
-        provider=attempt.provider,
-        provider_payment_id=attempt.provider_payment_id,
-        already_started=False,
-    )
+    return _result_from_attempt(intent, attempt, already_started=False)
+
+
+def _normalized_payment_view(
+    intent: CheckoutIntent, attempt: PaymentAttempt | None
+) -> dict[str, Any]:
+    """Безопасные поля для polling — без raw provider payload и внутренних ошибок."""
+    intent_status = (intent.status or "").strip().lower()
+    attempt_status = (attempt.status or "").strip().lower() if attempt else None
+
+    if intent_status == CheckoutIntentStatus.FULFILLED.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.SUCCEEDED.value,
+            "is_final": True,
+            "can_retry": False,
+            "message": "Оплата подтверждена",
+        }
+    if intent_status == CheckoutIntentStatus.PAID.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.SUCCEEDED.value,
+            "is_final": True,
+            "can_retry": False,
+            "message": "Оплата получена",
+        }
+    if intent_status == CheckoutIntentStatus.REFUNDED.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.REFUNDED.value,
+            "is_final": True,
+            "can_retry": False,
+            "message": "Оплата возвращена",
+        }
+    if intent_status == CheckoutIntentStatus.CANCELLED.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.CANCELLED.value,
+            "is_final": True,
+            "can_retry": False,
+            "message": "Оплата отменена",
+        }
+    if intent_status == CheckoutIntentStatus.FAILED.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.FAILED.value,
+            "is_final": True,
+            "can_retry": False,
+            "message": "Оплата не удалась",
+        }
+
+    if attempt_status == PaymentAttemptStatus.SUCCEEDED.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.SUCCEEDED.value,
+            "is_final": True,
+            "can_retry": False,
+            "message": "Оплата подтверждена",
+        }
+    if attempt_status in ATTEMPT_OPEN_STATUSES:
+        return {
+            "normalized_status": NormalizedPaymentStatus.PENDING.value,
+            "is_final": False,
+            "can_retry": False,
+            "message": "Ожидаем подтверждение оплаты",
+        }
+    if attempt_status == PaymentAttemptStatus.CANCELLED.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.CANCELLED.value,
+            "is_final": True,
+            "can_retry": True,
+            "message": "Оплата отменена. Можно начать оплату заново.",
+        }
+    if attempt_status == PaymentAttemptStatus.FAILED.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.FAILED.value,
+            "is_final": True,
+            "can_retry": True,
+            "message": "Оплата не завершена. Можно начать оплату заново.",
+        }
+    if attempt_status == PaymentAttemptStatus.REFUNDED.value:
+        return {
+            "normalized_status": NormalizedPaymentStatus.REFUNDED.value,
+            "is_final": True,
+            "can_retry": False,
+            "message": "Оплата возвращена",
+        }
+
+    # Intent pending, no attempt yet — user may call /pay.
+    return {
+        "normalized_status": NormalizedPaymentStatus.PENDING.value,
+        "is_final": False,
+        "can_retry": True,
+        "message": "Ожидает оплаты",
+    }
 
 
 def get_checkout_payment_view(
@@ -207,7 +343,7 @@ def get_checkout_payment_view(
         .order_by(PaymentAttempt.id.desc())
         .first()
     )
-    return {
+    view = {
         "intent_id": intent.id,
         "intent_status": intent.status,
         "amount": str(intent.amount),
@@ -217,3 +353,33 @@ def get_checkout_payment_view(
         "confirmation_url": attempt.confirmation_url if attempt else None,
         "attempt_status": attempt.status if attempt else None,
     }
+    view.update(_normalized_payment_view(intent, attempt))
+    return view
+
+
+def validate_webhook_metadata_against_attempt(
+    *,
+    metadata: dict[str, Any] | None,
+    attempt: PaymentAttempt,
+    intent: CheckoutIntent,
+) -> str | None:
+    """
+    Сверка metadata webhook с attempt/intent.
+    Возвращает reason при mismatch/missing, иначе None.
+    """
+    meta = metadata if isinstance(metadata, dict) else {}
+    raw_intent = meta.get("checkout_intent_id")
+    raw_user = meta.get("user_id")
+    if raw_intent is None or str(raw_intent).strip() == "":
+        return "metadata_missing_checkout_intent_id"
+    if raw_user is None or str(raw_user).strip() == "":
+        return "metadata_missing_user_id"
+    if str(raw_intent).strip() != str(attempt.checkout_intent_id):
+        return "metadata_intent_mismatch"
+    if str(raw_intent).strip() != str(intent.id):
+        return "metadata_intent_mismatch"
+    if str(raw_user).strip() != str(attempt.user_id):
+        return "metadata_user_mismatch"
+    if str(raw_user).strip() != str(intent.user_id):
+        return "metadata_user_mismatch"
+    return None

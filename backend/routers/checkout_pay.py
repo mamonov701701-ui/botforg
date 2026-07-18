@@ -1,5 +1,5 @@
 """
-Webhook ЮKassa + pay endpoints для CheckoutIntent (Этап 6.10B).
+Webhook ЮKassa + pay endpoints для CheckoutIntent (Этап 6.10B / 6.11.2A).
 """
 from __future__ import annotations
 
@@ -14,13 +14,18 @@ from sqlalchemy.orm import Session
 from backend.auth.rate_limit import check_rate_limit
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
-from backend.models.checkout import PaymentAttempt, PaymentAttemptStatus
+from backend.models.checkout import CheckoutIntent, PaymentAttempt, PaymentAttemptStatus
 from backend.models.user import User
 from backend.payments.base import PaymentProviderError
 from backend.payments.dto import NormalizedPaymentStatus
 from backend.payments.providers.yookassa import is_yookassa_webhook_ip
 from backend.payments.registry import get_payment_provider
-from backend.services.checkout_pay import CheckoutPayError, get_checkout_payment_view, start_checkout_payment
+from backend.services.checkout_pay import (
+    CheckoutPayError,
+    get_checkout_payment_view,
+    start_checkout_payment,
+    validate_webhook_metadata_against_attempt,
+)
 from backend.services.payment_fulfillment import FulfillmentError, fulfill_paid_intent
 from backend.services.payment_provider_connections import (
     decrypt_connection_credentials_for_internal_use,
@@ -31,6 +36,13 @@ from backend.settings import settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["checkout-pay"])
+
+_ATTEMPT_NO_DOWNGRADE = frozenset(
+    {
+        PaymentAttemptStatus.SUCCEEDED.value,
+        PaymentAttemptStatus.REFUNDED.value,
+    }
+)
 
 
 class PayIn(BaseModel):
@@ -45,6 +57,21 @@ class PayOut(BaseModel):
     provider_payment_id: str | None
     confirmation_url: str | None
     already_started: bool = False
+
+
+class PaymentStatusOut(BaseModel):
+    intent_id: int
+    intent_status: str
+    amount: str
+    currency: str
+    provider: str | None = None
+    provider_payment_id: str | None = None
+    confirmation_url: str | None = None
+    attempt_status: str | None = None
+    normalized_status: str
+    is_final: bool
+    can_retry: bool
+    message: str
 
 
 def _client_ip(request: Request) -> str | None:
@@ -91,7 +118,10 @@ async def pay_checkout_intent(
     )
 
 
-@router.get("/me/checkout-intents/{intent_id}/payment")
+@router.get(
+    "/me/checkout-intents/{intent_id}/payment",
+    response_model=PaymentStatusOut,
+)
 async def get_checkout_payment(
     intent_id: int,
     db: Session = Depends(get_db),
@@ -143,6 +173,14 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
         # Unknown payment — acknowledge to stop retries, do not fulfill
         return {"ok": True, "ignored": True, "reason": "unknown_payment"}
 
+    intent = (
+        db.query(CheckoutIntent)
+        .filter(CheckoutIntent.id == attempt.checkout_intent_id)
+        .first()
+    )
+    if not intent:
+        return {"ok": True, "ignored": True, "reason": "intent_missing"}
+
     creds: dict[str, str] = {}
     try:
         if attempt.connection_id:
@@ -169,6 +207,19 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
             creds[k] = ""
         creds.clear()
 
+    meta_reason = validate_webhook_metadata_against_attempt(
+        metadata=event.metadata,
+        attempt=attempt,
+        intent=intent,
+    )
+    if meta_reason:
+        logger.warning(
+            "YooKassa webhook metadata rejected reason=%s attempt_id=%s",
+            meta_reason,
+            attempt.id,
+        )
+        return {"ok": True, "ignored": True, "reason": meta_reason}
+
     # Amount/currency vs attempt snapshot
     if event.amount is not None and Decimal(str(attempt.amount)) != event.amount:
         return {"ok": True, "ignored": True, "reason": "amount_mismatch"}
@@ -176,6 +227,29 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
         return {"ok": True, "ignored": True, "reason": "currency_mismatch"}
 
     event_type = (event.event_type or "").lower()
+
+    # Never downgrade a succeeded (or refunded) attempt / fulfilled intent.
+    if attempt.status in _ATTEMPT_NO_DOWNGRADE:
+        if event.status != NormalizedPaymentStatus.SUCCEEDED and not event_type.endswith(
+            "succeeded"
+        ):
+            return {"ok": True, "ignored": True, "reason": "no_downgrade_attempt"}
+    if intent.status in (
+        "fulfilled",
+        "paid",
+    ) and (
+        event.status
+        in (
+            NormalizedPaymentStatus.PENDING,
+            NormalizedPaymentStatus.FAILED,
+            NormalizedPaymentStatus.CANCELLED,
+        )
+        or event_type.endswith("waiting_for_capture")
+        or event_type.endswith("canceled")
+        or event_type.endswith("failed")
+    ):
+        return {"ok": True, "ignored": True, "reason": "no_downgrade_intent"}
+
     if event.status == NormalizedPaymentStatus.PENDING or event_type.endswith(
         "waiting_for_capture"
     ):
@@ -189,12 +263,11 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
         NormalizedPaymentStatus.FAILED,
         NormalizedPaymentStatus.CANCELLED,
     ) or event_type.endswith("canceled"):
-        if attempt.status not in (
-            PaymentAttemptStatus.SUCCEEDED.value,
-        ):
+        if attempt.status not in _ATTEMPT_NO_DOWNGRADE:
             attempt.status = (
                 PaymentAttemptStatus.CANCELLED.value
                 if event.status == NormalizedPaymentStatus.CANCELLED
+                or event_type.endswith("canceled")
                 else PaymentAttemptStatus.FAILED.value
             )
             db.add(attempt)

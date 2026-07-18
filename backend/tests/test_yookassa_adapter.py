@@ -315,6 +315,10 @@ def test_pay_and_webhook_flow(client, db, monkeypatch):
             "id": "yk_pay_99",
             "status": "succeeded",
             "amount": {"value": "199.00", "currency": "RUB"},
+            "metadata": {
+                "checkout_intent_id": str(intent.id),
+                "user_id": str(user_id),
+            },
         },
     }
     with patch("backend.payments.providers.yookassa.httpx.Client", return_value=mock_client):
