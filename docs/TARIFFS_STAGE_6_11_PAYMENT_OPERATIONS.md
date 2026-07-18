@@ -1,7 +1,7 @@
 # Этап 6.11 — Payment operations (lifecycle, concurrency, cancel, safe errors)
 
 **Ветка:** `chore/fresh-clean`  
-**Подэтапы:** 6.11.1 (audit) → 6.11.2A (lifecycle) → 6.11.2B (concurrency) → 6.11.2C (errors + cancel) → 6.11.3 (admin journal API)
+**Подэтапы:** 6.11.1 (audit) → 6.11.2A (lifecycle) → 6.11.2B (concurrency) → 6.11.2C (errors + cancel) → 6.11.3 (admin journal API) → 6.11.4 (frontend payment status polling)
 
 ## Реализованный lifecycle
 
@@ -129,10 +129,50 @@ pending → awaiting_payment → paid → fulfilled
 6. Отдельно: `/pay` → `/cancel` до оплаты → статус `cancelled`, повторный succeeded webhook не выдаёт доступ.
 7. Live-платежи и боевой ключ — только после проверки на test.
 
+## Frontend polling статуса оплаты (6.11.4)
+
+Основа без полной страницы покупки (полный checkout UI — этап **8.2**).
+
+| Артефакт | Путь |
+|----------|------|
+| API-клиент | `frontend/src/api/checkoutPay.ts` |
+| Polling hook | `frontend/src/features/checkout/usePaymentStatusPolling.ts` |
+| Карточка UI | `frontend/src/features/checkout/PaymentStatusCard.tsx` |
+| Состояния | `frontend/src/features/checkout/paymentStatusDisplay.ts` |
+
+### Как работает polling
+
+1. `GET /me/checkout-intents/{id}/payment` сразу при монтировании.
+2. Повтор каждые ~3 с (настраивается), пока `is_final !== true`.
+3. При `is_final` интервал останавливается.
+4. Cleanup при размонтировании (`clearInterval` + флаг mounted).
+5. Пока запрос in-flight, новый не стартует (нет параллельных poll).
+6. Кнопка «Проверить снова» вызывает ручной `refresh`.
+
+### Пользовательские состояния (RU)
+
+| Состояние | Смысл |
+|-----------|--------|
+| Ожидает оплаты | заказ ещё не в процессе подтверждения |
+| Подтверждение обрабатывается | есть pending attempt |
+| Оплачено и активировано | paid / fulfilled / succeeded |
+| Платёж отменён | cancelled, повтор — новый заказ |
+| Ошибка оплаты | failed без retry |
+| Можно повторить оплату | `can_retry=true` |
+
+В UI **не** показываются: intent/attempt id, provider codes, stack traces, raw API, детали webhook.
+
+### Ошибки и отмена
+
+- Network/API error → короткое русское сообщение; можно «Проверить снова».
+- «Отменить оплату» только если `intent_status` ∈ {`pending`, `awaiting_payment`} и не `is_final`.
+- Двойной клик отмены блокируется (lock + disabled).
+- После отмены — toast + повторный fetch статуса.
+
 ## Что ещё не реализовано
 
 - Refund / revoke entitlement
-- Frontend checkout UI для cancel/статусов
+- Полный checkout UI / страница покупки (этап 8.2)
 - Frontend UI журнала платежей (backend API 6.11.3 готов)
 - Cancel API для уже succeeded (refund path)
 - Фоновая reconciliation orphan-платежей с другим idempotency key
@@ -144,3 +184,6 @@ pending → awaiting_payment → paid → fulfilled
 - `backend/tests/test_checkout_pay_concurrency.py` (6.11.2B)
 - `backend/tests/test_checkout_pay_errors_cancel.py` (6.11.2C)
 - `backend/tests/test_payment_operations_admin.py` (6.11.3)
+- `frontend/tests/unit/paymentStatusDisplay.test.ts` (6.11.4)
+- `frontend/tests/unit/usePaymentStatusPolling.test.ts` (6.11.4)
+- `frontend/tests/unit/PaymentStatusCard.test.tsx` (6.11.4)
