@@ -133,12 +133,19 @@ GET /api/admin/payments/yookassa/diagnostics
 
 Без секретов и скринов с ключами:
 
-- `checkout_intent_id`, `attempt_id`, `provider_payment_id`
-- host confirmation URL (без query с токенами, если есть)
-- ответ `GET /me/checkout-intents/{id}/payment` (`normalized_status`, `is_final`)
+- `checkout_intent_id`, `attempt_id` (без shopId / secret / payment ID в тикетах)
+- ответ `GET /me/checkout-intents/{id}/payment` (`normalized_status`, `is_final`, `can_retry`)
 - JSON diagnostics (safe)
-- скрин/лог: webhook принят (HTTP 200), intent → `fulfilled`
+- факт: webhook принят, intent → `fulfilled`, один entitlement
 - запись в админ-журнале `/api/admin/payments/operations/{id}` (без credentials)
+
+Не сохранять: временные tunnel URL, shopId, secret key, provider payment ID, confirmation URL с orderId.
+
+### Журнал проверок (sandbox)
+
+| Дата | Результат | Продукт | Примечание |
+|------|-----------|---------|------------|
+| 2026-07-18 | **passed** | addon `msg_1000`, 190.00 RUB | Локальный smoke через временный Cloudflare tunnel; `TESTING=true` (IP-check webhook off); live не выполнялся. Подробности: `docs/TARIFFS_STAGE_6_12_YOOKASSA_SANDBOX.md` §6.12.4 |
 
 ### Ошибки оплаты (безопасно для UI)
 

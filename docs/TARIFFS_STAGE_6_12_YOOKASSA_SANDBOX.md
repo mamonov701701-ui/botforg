@@ -1,7 +1,7 @@
 # Этап 6.12 — YooKassa sandbox (тестовая проверка)
 
 **Ветка:** `chore/fresh-clean`  
-**Подэтапы:** 6.12.1 (audit) → **6.12.2 (safe stand prep)** → 6.12.3 (sandbox smoke, отдельно)
+**Подэтапы:** 6.12.1 (audit) → 6.12.2 (safe stand prep) → 6.12.3 (sandbox smoke) → **6.12.4 (фиксация результата)**
 
 ## 6.12.2 — что сделано
 
@@ -49,11 +49,36 @@ Webhook path: `/webhooks/payments/yookassa`.
 ## Запрещено до отдельного разрешения
 
 - Внешние вызовы API ЮKassa / verify реальных credentials в рамках автоматизации агента без запроса
-- Создание тестового или live платежа (это 6.12.3)
+- Повторный live-платёж / боевые ключи без отдельного разрешения
 - Live credentials в любом стенде «для пробы»
 - `YOOKASSA_WEBHOOK_SKIP_IP_CHECK` в production
 - Commit/push без явной просьбы
 
 ## Артефакты после smoke (6.12.3)
 
-Сохранить (без секретов): intent id, attempt id, provider_payment_id, confirmation URL host, статус `GET .../payment`, результат diagnostics, скрин ЛК «уведомление доставлено» / webhook HTTP 200, скрин админ-журнала operations (без credentials).
+Сохранить (без секретов): intent id, attempt id, статус `GET .../payment`, результат diagnostics, факт webhook HTTP 200 / intent → `fulfilled`, запись админ-журнала operations.
+**Не сохранять:** временные tunnel URL, shopId, secret key, provider payment ID, confirmation URL с идентификаторами заказа, JWT.
+
+## 6.12.4 — Журнал первой тестовой проверки (sandbox smoke)
+
+| Поле | Значение |
+|------|----------|
+| Дата | 2026-07-18 |
+| Магазин | тестовый магазин ЮKassa (mode=`test` в BotForg; shopId/secret не фиксируются) |
+| Продукт | addon `msg_1000` — «+1 000 сообщений» |
+| Сумма | `190.00 RUB` |
+| CheckoutIntent | `fulfilled` |
+| PaymentAttempt | `succeeded`, provider `yookassa` |
+| Webhook | `payment.succeeded` → `process_status=processed` (без дублей) |
+| Fulfillment | ровно один `UserAddon`, объём **+1000** сообщений |
+| `GET .../payment` | `normalized_status=succeeded`, `is_final=true`, `can_retry=false` |
+| Admin journal | полная цепочка intent → attempt → webhook → fulfillment (без credentials/payload) |
+| Итог | **sandbox smoke: passed** |
+
+### Ограничения этой проверки
+
+- Проводилась **локально** через **временный** Cloudflare quick tunnel к backend `:8001`.
+- В env процесса было `TESTING=true` → **IP allowlist webhook был отключён** (ожидаемо для pytest/dev-флага).
+- **Production IP allowlist этим тестом не проверена.**
+- **Production / live-платёж не выполнялся**; live-ключи и реальные карты не использовались.
+- Секреты, shopId, payment ID, временные публичные URL и ключи **в документацию не вносились**.
