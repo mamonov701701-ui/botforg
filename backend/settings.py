@@ -59,8 +59,12 @@ class Settings(BaseSettings):
     YOOKASSA_SHOP_ID: Optional[str] = None
     YOOKASSA_SECRET_KEY: Optional[str] = None
     YOOKASSA_REDIRECT_URL: Optional[str] = None
-    # Dev/test only: skip official webhook IP allowlist (NEVER in production)
+    # Dev/test only: skip official webhook IP allowlist (NEVER in production; startup fail-closed)
     YOOKASSA_WEBHOOK_SKIP_IP_CHECK: bool = False
+    # Trust X-Forwarded-For / X-Real-IP only when peer is in TRUSTED_PROXIES (explicit opt-in)
+    YOOKASSA_WEBHOOK_TRUST_PROXY: bool = False
+    # Comma-separated IPs or CIDRs of reverse proxies (e.g. 127.0.0.1,10.0.0.0/8)
+    YOOKASSA_WEBHOOK_TRUSTED_PROXIES: str = ""
     PAYMENT_PROVIDER_HTTP_TIMEOUT_SEC: float = 15.0
     STRIPE_API_KEY: Optional[str] = None
     STRIPE_SUCCESS_URL: Optional[str] = None

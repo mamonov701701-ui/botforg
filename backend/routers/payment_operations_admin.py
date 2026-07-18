@@ -18,16 +18,30 @@ from backend.schemas.payment_operations_admin import (
     PaymentOperationDetailOut,
     PaymentOperationListOut,
 )
+from backend.schemas.yookassa_diagnostics import YooKassaDiagnosticsOut
 from backend.services.payment_operations_admin import (
     PaymentOperationsAdminError,
     get_payment_operation_detail,
     list_payment_operations,
 )
+from backend.services.yookassa_diagnostics import build_yookassa_diagnostics
 
 router = APIRouter(
     prefix="/api/admin/payments",
     tags=["Payment Operations Admin"],
 )
+
+
+@router.get("/yookassa/diagnostics", response_model=YooKassaDiagnosticsOut)
+async def admin_yookassa_diagnostics(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    """
+    Безопасная готовность ЮKassa к sandbox smoke.
+    Без shopId, secret, ciphertext и raw ошибок провайдера.
+    """
+    return YooKassaDiagnosticsOut.model_validate(build_yookassa_diagnostics(db))
 
 
 @router.get("/operations", response_model=PaymentOperationListOut)

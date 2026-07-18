@@ -97,6 +97,15 @@ def _check_production_env():
     if not settings.CHAT_HASH_SALT or settings.CHAT_HASH_SALT.strip() == "":
         logger.error("Production: CHAT_HASH_SALT must be set for РФ")
         sys.exit(1)
+    try:
+        from backend.payments.yookassa_webhook_security import (
+            assert_production_yookassa_webhook_safety,
+        )
+
+        assert_production_yookassa_webhook_safety()
+    except RuntimeError as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
 
 
 def _run_startup_sync() -> None:

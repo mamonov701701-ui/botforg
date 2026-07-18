@@ -26,6 +26,10 @@ from backend.payments.base import PaymentProviderError
 from backend.payments.dto import NormalizedPaymentStatus
 from backend.payments.providers.yookassa import is_yookassa_webhook_ip
 from backend.payments.registry import get_payment_provider
+from backend.payments.yookassa_webhook_security import (
+    resolve_yookassa_webhook_client_ip,
+    yookassa_webhook_ip_check_skipped,
+)
 from backend.services.checkout_pay import (
     CheckoutPayError,
     cancel_checkout_payment,
@@ -38,7 +42,6 @@ from backend.services.payment_provider_connections import (
     decrypt_connection_credentials_for_internal_use,
     get_connection,
 )
-from backend.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -88,18 +91,6 @@ class CancelOut(BaseModel):
     attempt_status: str | None = None
     already_cancelled: bool = False
     message: str
-
-
-def _client_ip(request: Request) -> str | None:
-    if request.client and request.client.host:
-        return request.client.host
-    return None
-
-
-def _skip_webhook_ip() -> bool:
-    if bool(getattr(settings, "TESTING", False)):
-        return True
-    return bool(getattr(settings, "YOOKASSA_WEBHOOK_SKIP_IP_CHECK", False))
 
 
 @router.post("/me/checkout-intents/{intent_id}/pay", response_model=PayOut)
@@ -188,8 +179,10 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
     Без JWT. Подлинность: IP allowlist (официальные сети ЮKassa) +
     сверка объекта платежа через API (без HMAC — его нет в официальном API).
     """
-    client_ip = _client_ip(request)
-    if not _skip_webhook_ip() and not is_yookassa_webhook_ip(client_ip):
+    client_ip = resolve_yookassa_webhook_client_ip(request)
+    if not yookassa_webhook_ip_check_skipped() and not is_yookassa_webhook_ip(
+        client_ip
+    ):
         logger.warning("YooKassa webhook rejected: bad IP")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
