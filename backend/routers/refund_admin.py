@@ -1,8 +1,8 @@
 """
-Админский refund API (Этап 6.14.3.4 read / 6.14.3.5 write).
+Админский refund API (Этап 6.14.3.4 read / 6.14.3.5 write / 6.14.6 execute).
 
 Write: recalculate, admin revision, needs-information, reject, confirm, approve.
-Без provider refund, refund_processing, entitlement mutate.
+Execute: provider refund for approved requests (no entitlement / webhook).
 """
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ from backend.schemas.refund_admin import (
     RefundAdminConfirmIn,
     RefundAdminDetailOut,
     RefundAdminEditIn,
+    RefundAdminExecuteIn,
+    RefundAdminExecuteOut,
     RefundAdminListOut,
     RefundAdminNeedsInformationIn,
     RefundAdminRecalculateIn,
@@ -26,6 +28,10 @@ from backend.services.refund_admin_read import (
     RefundAdminReadError,
     get_refund_request_admin,
     list_refund_requests_admin,
+)
+from backend.services.refund_execution import (
+    RefundExecutionError,
+    execute_approved_refund,
 )
 from backend.services.refund_revisions import (
     RefundRevisionServiceError,
@@ -85,6 +91,53 @@ def _http_from_revision_error(exc: RefundRevisionServiceError) -> HTTPException:
     ):
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": code, "message": exc.message},
+        )
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": code, "message": exc.message},
+    )
+
+
+def _http_from_execution_error(exc: RefundExecutionError) -> HTTPException:
+    code = exc.code
+    if code in (
+        "request_not_found",
+        "revision_not_found",
+        "payment_attempt_not_found",
+    ):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": code, "message": exc.message},
+        )
+    if code in (
+        "version_conflict",
+        "execute_not_allowed",
+        "invalid_status_transition",
+        "stale_revision",
+        "revision_ownership",
+        "provider_unknown_no_refund_id",
+        "amount_exceeds_available",
+    ):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": code, "message": exc.message},
+        )
+    if code in (
+        "amount_required",
+        "invalid_refund_amount",
+        "currency_mismatch",
+        "approved_revision_required",
+        "provider_payment_id_required",
+        "provider_missing",
+    ):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": code, "message": exc.message},
+        )
+    if code in ("provider_unavailable", "connection_error"):
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"code": code, "message": exc.message},
         )
     return HTTPException(
@@ -284,3 +337,36 @@ async def admin_approve_refund_revision(
             },
         )
     return _detail_out(db, request_id)
+
+
+@router.post("/{request_id}/execute", response_model=RefundAdminExecuteOut)
+async def admin_execute_refund(
+    request_id: int,
+    body: RefundAdminExecuteIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """
+    Запуск provider refund для approved / recoverable заявки (6.14.6).
+
+    Без entitlement mutate и без webhook. Повтор идемпотентен.
+    """
+    try:
+        result = execute_approved_refund(
+            db,
+            request_id,
+            expected_version=body.expected_version,
+            actor_user_id=admin.id,
+        )
+    except RefundExecutionError as exc:
+        raise _http_from_execution_error(exc) from exc
+
+    detail = _detail_out(db, request_id)
+    ledger_id = result.ledger_entry.id if result.ledger_entry is not None else None
+    return RefundAdminExecuteOut(
+        outcome=result.outcome,
+        provider_refund_id=result.provider_refund_id,
+        ledger_entry_id=ledger_id,
+        already_completed=result.already_completed,
+        detail=detail,
+    )

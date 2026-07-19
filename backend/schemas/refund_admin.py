@@ -226,3 +226,17 @@ class RefundAdminConfirmIn(RefundAdminExpectedVersionIn):
 class RefundAdminApproveIn(BaseModel):
     expected_version: int = Field(..., ge=1)
     revision_id: int = Field(..., ge=1)
+
+
+class RefundAdminExecuteIn(RefundAdminExpectedVersionIn):
+    """Запуск provider refund для approved / recoverable заявки (6.14.6)."""
+
+    pass
+
+
+class RefundAdminExecuteOut(BaseModel):
+    outcome: str
+    provider_refund_id: str | None = None
+    ledger_entry_id: int | None = None
+    already_completed: bool = False
+    detail: RefundAdminDetailOut
