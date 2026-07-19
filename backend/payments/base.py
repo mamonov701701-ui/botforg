@@ -15,6 +15,7 @@ from backend.payments.dto import (
     CreatePaymentRequest,
     CreatePaymentResult,
     CreateRefundRequest,
+    ParsedRefundWebhookEvent,
     ParsedWebhookEvent,
     PaymentStatusResult,
     RefundPaymentResult,
@@ -50,8 +51,11 @@ class PaymentProvider(ABC):
         headers: dict[str, str],
         body: bytes,
         payload: dict[str, Any] | None = None,
-    ) -> ParsedWebhookEvent:
-        """Проверить подпись/аутентичность и вернуть нормализованное событие."""
+    ) -> ParsedWebhookEvent | ParsedRefundWebhookEvent:
+        """
+        Проверить подпись/аутентичность и вернуть нормализованное событие
+        платежа или возврата.
+        """
         raise NotImplementedError
 
     @abstractmethod

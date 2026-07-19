@@ -21,6 +21,7 @@ from backend.payments.dto import (
     CreateRefundRequest,
     NormalizedPaymentStatus,
     NormalizedRefundStatus,
+    ParsedRefundWebhookEvent,
     ParsedWebhookEvent,
     PaymentStatusResult,
     RefundPaymentResult,
@@ -107,7 +108,7 @@ class FakePaymentProvider(PaymentProvider):
         headers: dict[str, str],
         body: bytes,
         payload: dict[str, Any] | None = None,
-    ) -> ParsedWebhookEvent:
+    ) -> ParsedWebhookEvent | ParsedRefundWebhookEvent:
         data = payload
         if data is None:
             try:
@@ -128,6 +129,12 @@ class FakePaymentProvider(PaymentProvider):
                 code="invalid_webhook_signature",
             )
 
+        event_type = str(data.get("event") or data.get("event_type") or "")
+        if event_type.startswith("refund.") or data.get("refund_id") or data.get(
+            "provider_refund_id"
+        ):
+            return self._parse_refund_webhook(data, event_type=event_type)
+
         payment_id = str(data.get("provider_payment_id") or data.get("id") or "")
         if not payment_id:
             raise PaymentProviderError(
@@ -145,17 +152,91 @@ class FakePaymentProvider(PaymentProvider):
 
         event_id = str(data.get("event_id") or f"fake_evt_{uuid.uuid4().hex[:12]}")
         amount = data.get("amount")
+        safe_raw = {
+            "event": event_type or f"payment.{status.value}",
+            "id": payment_id,
+            "status": status.value,
+        }
         return ParsedWebhookEvent(
             provider=self.name,
             provider_event_id=event_id,
-            event_type=str(data.get("event_type") or f"payment.{status.value}"),
+            event_type=str(event_type or f"payment.{status.value}"),
             provider_payment_id=payment_id,
             status=status,
             amount=Decimal(str(amount)) if amount is not None else None,
             currency=(data.get("currency") or "RUB"),
             occurred_at=datetime.now(timezone.utc),
-            metadata=dict(data.get("metadata") or {}),
-            raw=dict(data),
+            metadata={
+                str(k): v
+                for k, v in dict(data.get("metadata") or {}).items()
+                if isinstance(v, (str, int, float, bool)) or v is None
+            },
+            raw=safe_raw,
+        )
+
+    def _parse_refund_webhook(
+        self,
+        data: dict[str, Any],
+        *,
+        event_type: str,
+    ) -> ParsedRefundWebhookEvent:
+        obj = data.get("object") if isinstance(data.get("object"), dict) else {}
+        refund_id = str(
+            data.get("provider_refund_id")
+            or data.get("refund_id")
+            or obj.get("id")
+            or ""
+        ).strip()
+        if not refund_id:
+            raise PaymentProviderError(
+                "Fake refund webhook missing refund id",
+                code="invalid_webhook_payload",
+            )
+        live = self.get_refund_status(refund_id)
+        payment_id = str(
+            data.get("provider_payment_id")
+            or obj.get("payment_id")
+            or live.provider_payment_id
+            or ""
+        ).strip()
+        if not payment_id:
+            raise PaymentProviderError(
+                "Fake refund webhook missing payment id",
+                code="invalid_webhook_payload",
+            )
+        if payment_id != live.provider_payment_id:
+            raise PaymentProviderError(
+                "Fake refund webhook payment_id mismatch",
+                code="webhook_payment_id_mismatch",
+            )
+        status = live.status
+        et = event_type or f"refund.{status.value}"
+        event_id = str(
+            data.get("event_id") or f"fake:{et}:{refund_id}:{status.value}"
+        )
+        amount = live.amount
+        currency = live.currency or "RUB"
+        return ParsedRefundWebhookEvent(
+            provider=self.name,
+            provider_event_id=event_id,
+            event_type=et,
+            provider_refund_id=refund_id,
+            provider_payment_id=payment_id,
+            status=status,
+            amount=amount,
+            currency=currency,
+            occurred_at=live.created_at or datetime.now(timezone.utc),
+            raw={
+                "event": et,
+                "id": refund_id,
+                "status": status.value,
+                "payment_id": payment_id,
+                "amount": {
+                    "value": f"{amount:.2f}" if amount is not None else None,
+                    "currency": currency,
+                },
+                "test": True,
+            },
         )
 
     def cancel_payment(self, provider_payment_id: str) -> CancelPaymentResult:

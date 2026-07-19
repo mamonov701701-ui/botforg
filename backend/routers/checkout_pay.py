@@ -23,7 +23,7 @@ from backend.models.checkout import (
 )
 from backend.models.user import User
 from backend.payments.base import PaymentProviderError
-from backend.payments.dto import NormalizedPaymentStatus
+from backend.payments.dto import NormalizedPaymentStatus, ParsedRefundWebhookEvent
 from backend.payments.providers.yookassa import is_yookassa_webhook_ip
 from backend.payments.registry import get_payment_provider
 from backend.payments.yookassa_webhook_security import (
@@ -42,6 +42,10 @@ from backend.services.payment_provider_connections import (
     decrypt_connection_credentials_for_internal_use,
     get_connection,
 )
+from backend.services.refund_webhook_reconciliation import (
+    RefundWebhookReconcileError,
+    reconcile_refund_webhook,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +55,17 @@ _ATTEMPT_NO_DOWNGRADE = frozenset(
     {
         PaymentAttemptStatus.SUCCEEDED.value,
         PaymentAttemptStatus.REFUNDED.value,
+    }
+)
+
+# Transient / retryable failures during refund webhook API re-fetch (GET /refunds/{id}).
+# invalid_credentials is local connection misconfig — keep 503 so the provider can retry.
+_REFUND_WEBHOOK_RETRYABLE_CODES = frozenset(
+    {
+        "provider_timeout",
+        "provider_network_error",
+        "provider_http_error",
+        "invalid_credentials",
     }
 )
 
@@ -177,7 +192,7 @@ async def cancel_checkout_intent(
 async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Без JWT. Подлинность: IP allowlist (официальные сети ЮKassa) +
-    сверка объекта платежа через API (без HMAC — его нет в официальном API).
+    сверка объекта платежа/возврата через API (без HMAC — его нет в официальном API).
     """
     client_ip = resolve_yookassa_webhook_client_ip(request)
     if not yookassa_webhook_ip_check_skipped() and not is_yookassa_webhook_ip(
@@ -194,7 +209,15 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="Invalid payload")
 
+    event_name = str(payload.get("event") or "")
     obj = payload.get("object") if isinstance(payload.get("object"), dict) else {}
+
+    # --- Refund notifications (Этап 6.14.7) ---
+    if event_name.startswith("refund."):
+        return await _handle_yookassa_refund_webhook(
+            db, request=request, raw=raw, payload=payload, obj=obj
+        )
+
     payment_id = str(obj.get("id") or "")
     if not payment_id:
         return {"ok": True, "ignored": True, "reason": "missing_payment_id"}
@@ -245,6 +268,10 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
         for k in list(creds.keys()):
             creds[k] = ""
         creds.clear()
+
+    if isinstance(event, ParsedRefundWebhookEvent):
+        # Defensive: refund.* should have branched earlier.
+        return {"ok": True, "ignored": True, "reason": "unexpected_refund_event"}
 
     meta_reason = validate_webhook_metadata_against_attempt(
         metadata=event.metadata,
@@ -360,3 +387,94 @@ async def yookassa_webhook(request: Request, db: Session = Depends(get_db)):
         return {"ok": True, "ignored": True, "reason": exc.code}
 
     return {"ok": True}
+
+
+async def _handle_yookassa_refund_webhook(
+    db: Session,
+    *,
+    request: Request,
+    raw: bytes,
+    payload: dict,
+    obj: dict,
+) -> dict:
+    """Reconcile refund.* notifications. Never creates a new provider refund."""
+    refund_id = str(obj.get("id") or "").strip()
+    payment_id = str(obj.get("payment_id") or "").strip()
+    if not refund_id:
+        return {"ok": True, "ignored": True, "reason": "missing_refund_id"}
+    if not payment_id:
+        return {"ok": True, "ignored": True, "reason": "missing_payment_id"}
+
+    attempt = (
+        db.query(PaymentAttempt)
+        .filter(
+            PaymentAttempt.provider == "yookassa",
+            PaymentAttempt.provider_payment_id == payment_id,
+        )
+        .order_by(PaymentAttempt.id.desc())
+        .first()
+    )
+    if not attempt:
+        return {"ok": True, "ignored": True, "reason": "unknown_payment"}
+
+    creds: dict[str, str] = {}
+    try:
+        if attempt.connection_id:
+            conn = get_connection(db, attempt.connection_id)
+            creds = decrypt_connection_credentials_for_internal_use(conn)
+            provider = get_payment_provider("yookassa", credentials=creds)
+        else:
+            provider = get_payment_provider("yookassa")
+        event = provider.verify_and_parse_webhook(
+            headers={k: v for k, v in request.headers.items()},
+            body=raw,
+            payload=payload,
+        )
+    except PaymentProviderError as exc:
+        logger.warning("YooKassa refund webhook verify failed code=%s", exc.code)
+        # Transient GET failures → retryable 5xx; payload/mismatch → permanent 400.
+        if exc.code in _REFUND_WEBHOOK_RETRYABLE_CODES:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Provider temporarily unavailable",
+            ) from exc
+        raise HTTPException(status_code=400, detail="Invalid notification") from exc
+    except Exception:
+        logger.exception("YooKassa refund webhook processing error")
+        raise HTTPException(status_code=500, detail="Webhook error") from None
+    finally:
+        for k in list(creds.keys()):
+            creds[k] = ""
+        creds.clear()
+
+    if not isinstance(event, ParsedRefundWebhookEvent):
+        return {"ok": True, "ignored": True, "reason": "not_refund_event"}
+
+    try:
+        result = reconcile_refund_webhook(db, event=event, attempt=attempt)
+    except RefundWebhookReconcileError as exc:
+        logger.warning(
+            "Refund webhook reconcile rejected code=%s refund_id=%s",
+            exc.code,
+            refund_id,
+        )
+        # Soft-ack safe mismatches so YooKassa does not retry forever;
+        # hard conflicts / verify errors already returned 400/503 above.
+        if exc.code in (
+            "provider_mismatch",
+            "payment_id_mismatch",
+            "payment_attempt_mismatch",
+            "connection_mismatch",
+            "amount_mismatch",
+            "currency_mismatch",
+            "webhook_event_conflict",
+        ):
+            return {"ok": True, "ignored": True, "reason": exc.code}
+        return {"ok": True, "ignored": True, "reason": exc.code}
+
+    return {
+        "ok": True,
+        "ignored": bool(result.ignored),
+        "reason": result.outcome,
+        "already_processed": bool(result.already_processed),
+    }

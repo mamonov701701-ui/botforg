@@ -75,6 +75,28 @@ class ParsedWebhookEvent:
 
 
 @dataclass(frozen=True)
+class ParsedRefundWebhookEvent:
+    """
+    Normalized provider refund notification (Этап 6.14.7).
+
+    ``raw`` must contain only a sanitized safe subset — never full provider body
+    or credentials. Local orchestration states (e.g. provider_unknown) are not
+    represented here.
+    """
+
+    provider: str
+    provider_event_id: str
+    event_type: str
+    provider_refund_id: str
+    provider_payment_id: str
+    status: NormalizedRefundStatus
+    amount: Decimal | None = None
+    currency: str | None = None
+    occurred_at: datetime | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class CancelPaymentResult:
     provider: str
     provider_payment_id: str

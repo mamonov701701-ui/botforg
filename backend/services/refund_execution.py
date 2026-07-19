@@ -4,7 +4,8 @@ Refund execution orchestration (Этап 6.14.6).
 approved → refund_processing → refunded | partially_refunded
 Errors: provider_unknown | refund_failed
 
-No entitlement mutation, no webhook, no live YooKassa in tests (Fake / mocked).
+No entitlement mutation, no live YooKassa in tests (Fake / mocked).
+Webhook reconciliation: Этап 6.14.7 (`refund_webhook_reconciliation`).
 """
 from __future__ import annotations
 
@@ -156,12 +157,13 @@ def _write_audit(
     reason: str | None = None,
     metadata: dict | None = None,
     refund_revision_id: int | None = None,
+    actor_type: str = RefundAuditActorType.ADMIN.value,
 ) -> RefundAuditEvent:
     evt = RefundAuditEvent(
         refund_request_id=request.id,
         refund_revision_id=refund_revision_id,
         actor_user_id=actor_user_id,
-        actor_type=RefundAuditActorType.ADMIN.value,
+        actor_type=actor_type,
         action=action,
         previous_status=previous_status,
         new_status=new_status,
@@ -332,6 +334,7 @@ def _apply_provider_result(
     paid: Decimal,
     actor_user_id: int | None,
     revision_id: int,
+    actor_type: str = RefundAuditActorType.ADMIN.value,
 ) -> str:
     """Update ledger + request from provider result. Returns outcome label."""
     refund_id = (result.refund_id or "").strip() or None
@@ -348,6 +351,7 @@ def _apply_provider_result(
                 db,
                 request,
                 actor_user_id=actor_user_id,
+                actor_type=actor_type,
                 action=RefundAuditAction.STATUS_CHANGED.value,
                 previous_status=prev,
                 new_status=request.status,
@@ -382,6 +386,7 @@ def _apply_provider_result(
                 db,
                 request,
                 actor_user_id=actor_user_id,
+                actor_type=actor_type,
                 action=RefundAuditAction.STATUS_CHANGED.value,
                 previous_status=prev,
                 new_status=new_status,
@@ -399,6 +404,7 @@ def _apply_provider_result(
                 db,
                 request,
                 actor_user_id=actor_user_id,
+                actor_type=actor_type,
                 action=RefundAuditAction.STATUS_CHANGED.value,
                 previous_status=prev,
                 new_status=request.status,

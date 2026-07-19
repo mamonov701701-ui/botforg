@@ -25,6 +25,7 @@ from backend.payments.dto import (
     CreateRefundRequest,
     NormalizedPaymentStatus,
     NormalizedRefundStatus,
+    ParsedRefundWebhookEvent,
     ParsedWebhookEvent,
     PaymentStatusResult,
     RefundPaymentResult,
@@ -393,14 +394,15 @@ class YooKassaPaymentProvider(PaymentProvider):
         headers: dict[str, str],
         body: bytes,
         payload: dict[str, Any] | None = None,
-    ) -> ParsedWebhookEvent:
+    ) -> ParsedWebhookEvent | ParsedRefundWebhookEvent:
         """
         Official authenticity (object check):
-        parse notification JSON, then re-fetch payment via API and compare
-        id/status/amount/currency.
+        parse notification JSON, then re-fetch payment or refund via API and
+        compare id/status/amount/currency.
 
         IP allowlist is enforced by the webhook router (official CIDR list).
         There is no HMAC webhook secret in YooKassa API.
+        Full notification body is never stored — only a sanitized subset.
         """
         _ = headers  # reserved; authenticity via API re-fetch + router IP check
         data = payload
@@ -419,6 +421,9 @@ class YooKassaPaymentProvider(PaymentProvider):
             )
 
         event_type = str(data.get("event") or "")
+        if event_type.startswith("refund."):
+            return self._verify_and_parse_refund_webhook(data, event_type=event_type)
+
         obj = data.get("object") if isinstance(data.get("object"), dict) else {}
         payment_id = str(obj.get("id") or "")
         if not payment_id:
@@ -456,6 +461,89 @@ class YooKassaPaymentProvider(PaymentProvider):
             currency=live.currency or notify_currency,
             metadata={str(k): v for k, v in meta.items()},
             raw={"event": event_type, "id": payment_id, "status": live.status.value},
+        )
+
+    def _verify_and_parse_refund_webhook(
+        self,
+        data: dict[str, Any],
+        *,
+        event_type: str,
+    ) -> ParsedRefundWebhookEvent:
+        obj = data.get("object") if isinstance(data.get("object"), dict) else {}
+        refund_id = str(obj.get("id") or "").strip()
+        if not refund_id:
+            raise PaymentProviderError(
+                "Webhook missing refund id",
+                code="invalid_webhook_payload",
+            )
+        notify_payment_id = str(obj.get("payment_id") or "").strip()
+        notify_amount, notify_currency = _amount_from_obj(obj)
+
+        live = self.get_refund_status(refund_id)
+        if (
+            notify_payment_id
+            and live.provider_payment_id
+            and notify_payment_id != live.provider_payment_id
+        ):
+            raise PaymentProviderError(
+                "Webhook payment_id mismatch with API refund",
+                code="webhook_payment_id_mismatch",
+            )
+        if live.amount is not None and notify_amount is not None and live.amount != notify_amount:
+            raise PaymentProviderError(
+                "Webhook amount mismatch with API refund",
+                code="webhook_amount_mismatch",
+            )
+        if (
+            live.currency
+            and notify_currency
+            and live.currency.upper() != notify_currency.upper()
+        ):
+            raise PaymentProviderError(
+                "Webhook currency mismatch with API refund",
+                code="webhook_currency_mismatch",
+            )
+
+        status = live.status
+        payment_id = live.provider_payment_id or notify_payment_id
+        if not payment_id:
+            raise PaymentProviderError(
+                "Webhook refund missing payment_id",
+                code="invalid_webhook_payload",
+            )
+        event_id = (
+            f"yookassa:{event_type}:{refund_id}:{status.value}"
+        )
+        return ParsedRefundWebhookEvent(
+            provider=self.name,
+            provider_event_id=event_id,
+            event_type=event_type or f"refund.{status.value}",
+            provider_refund_id=refund_id,
+            provider_payment_id=payment_id,
+            status=status,
+            amount=live.amount if live.amount is not None else notify_amount,
+            currency=live.currency or notify_currency,
+            occurred_at=live.created_at,
+            raw={
+                "event": event_type,
+                **_sanitize_refund_raw(
+                    {
+                        "id": refund_id,
+                        "status": status.value,
+                        "payment_id": payment_id,
+                        "amount": {
+                            "value": str(live.amount)
+                            if live.amount is not None
+                            else (str(notify_amount) if notify_amount is not None else None),
+                            "currency": live.currency or notify_currency,
+                        },
+                        "created_at": live.created_at.isoformat()
+                        if live.created_at is not None
+                        else None,
+                        "cancellation_details": live.cancellation_details,
+                    }
+                ),
+            },
         )
 
     def cancel_payment(self, provider_payment_id: str) -> CancelPaymentResult:
