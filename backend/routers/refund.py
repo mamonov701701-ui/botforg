@@ -17,6 +17,7 @@ from backend.models.refund import (
 )
 from backend.models.user import User
 from backend.schemas.refund import (
+    RefundablePurchaseListOut,
     RefundRequestCancelIn,
     RefundRequestCreateIn,
     RefundRequestOut,
@@ -30,6 +31,7 @@ from backend.services.refund_revisions import (
     cancel_request,
 )
 from backend.services.refund_submit import RefundSubmitError, create_refund_request
+from backend.services.refundable_purchases import list_refundable_purchases
 
 router = APIRouter(tags=["refunds"])
 
@@ -156,6 +158,26 @@ def _get_owned_request(
             },
         )
     return req
+
+
+@router.get("/me/refundable-purchases", response_model=RefundablePurchaseListOut)
+async def list_my_refundable_purchases(
+    limit: int = 20,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Paid/fulfilled покупки текущего пользователя для формы возврата.
+    Без credentials и без ручного ввода чужих ID.
+    """
+    data = list_refundable_purchases(
+        db,
+        user_id=current_user.id,
+        limit=limit,
+        offset=offset,
+    )
+    return RefundablePurchaseListOut.model_validate(data)
 
 
 @router.post(

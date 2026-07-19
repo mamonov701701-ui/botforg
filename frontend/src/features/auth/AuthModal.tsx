@@ -407,11 +407,14 @@ export default function AuthModal() {
     >
       <div
         ref={modalRef}
+        className="bf-auth-panel"
         style={{
           maxWidth: '480px',
           width: '100%',
-          background: 'var(--surface)',
-          borderRadius: '12px',
+          background: 'var(--bf-shell-bg)',
+          borderRadius: 'var(--bf-shell-radius)',
+          border: '1px solid var(--bf-shell-border)',
+          boxShadow: 'var(--bf-shell-shadow)',
           padding: '32px',
           position: 'relative',
           maxHeight: '90vh',

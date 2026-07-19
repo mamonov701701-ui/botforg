@@ -3,6 +3,10 @@
   max-width: 1100px;
   margin: 0 auto;
   padding: 48px 24px 80px;
+  background: var(--bf-shell-bg);
+  border: 1px solid var(--bf-shell-border);
+  border-radius: var(--bf-shell-radius);
+  box-shadow: var(--bf-shell-shadow);
 }
 
 .pricing-header {
@@ -72,9 +76,9 @@
 
 /* Cards */
 .pricing-card {
-  background: var(--card, #161c24);
-  border: 1px solid var(--border, #232b36);
-  border-radius: 12px;
+  background: var(--bf-section-bg);
+  border: 1px solid var(--bf-section-border);
+  border-radius: var(--bf-section-radius);
   padding: 28px 24px;
   position: relative;
   transition:
@@ -92,8 +96,8 @@
 }
 
 .pricing-card--developer {
-  background: rgba(22, 28, 36, 0.8);
-  border-color: rgba(255, 210, 76, 0.35);
+  background: var(--bf-section-bg-elevated);
+  border-color: var(--bf-shell-border);
 }
 
 .pricing-card--developer.pricing-card--current {

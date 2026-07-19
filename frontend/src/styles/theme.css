@@ -37,10 +37,39 @@
   --color-background-success: rgba(16, 185, 129, 0.12);
   --color-background-warning: rgba(255, 210, 76, 0.1);
   --color-background-warning-hover: rgba(255, 210, 76, 0.15);
-  --color-background-dashboard-card: rgba(26, 34, 56, 0.9);
+  --color-background-dashboard-card: var(--bf-section-bg);
   --color-border-accent-muted: rgba(255, 210, 76, 0.2);
   --color-border-tertiary: rgba(148, 163, 184, 0.28);
   --color-shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /*
+   * Unified BotForg surfaces (public + ЛК + platform admin).
+   * Editor keeps its own surfaces; do not remap editor CSS to these.
+   */
+  --bf-shell-bg: rgba(10, 27, 61, 0.94);
+  --bf-shell-bg-solid: #0a1b3d;
+  --bf-shell-border: rgba(255, 210, 76, 0.22);
+  --bf-shell-radius: 16px;
+  --bf-shell-shadow: 0 8px 28px rgba(4, 8, 24, 0.38);
+  --bf-shell-padding: 20px;
+
+  --bf-section-bg: rgba(14, 35, 72, 0.78);
+  --bf-section-bg-elevated: rgba(14, 35, 72, 0.88);
+  --bf-section-border: rgba(255, 210, 76, 0.18);
+  --bf-section-radius: 12px;
+  --bf-section-padding: 16px;
+
+  --bf-sidebar-bg: rgba(10, 27, 61, 0.82);
+  --bf-sidebar-border: rgba(255, 210, 76, 0.2);
+  --bf-sidebar-radius: 16px;
+  --bf-sidebar-item-hover: rgba(14, 35, 72, 0.55);
+  --bf-sidebar-item-active-bg: var(--primary-bg);
+  --bf-sidebar-item-active-border: color-mix(in srgb, var(--primary) 45%, transparent);
+
+  --bf-tabs-track-bg: rgba(7, 20, 40, 0.55);
+  --bf-tabs-item-radius: 8px;
+  --bf-tabs-item-active-bg: var(--primary-bg);
+  --bf-tabs-item-active-border: var(--primary);
 }
 
 body {

@@ -13,6 +13,7 @@ import {
 } from './blockGuideRu';
 import { LEARN_CATALOG_FALLBACK } from './learnCatalogFallback';
 import CrmPublicTab from './CrmPublicTab';
+import PageShell from '../../ui/PageShell';
 
 type TabId = 'overview' | 'learning' | 'crm' | 'blocks' | 'videos' | 'policy';
 
@@ -393,274 +394,259 @@ export default function FeaturesPage() {
   }, [filteredBlocks, expandedBlockId]);
 
   return (
-    <div
-      className="min-h-screen font-sans pb-20"
-      style={{ backgroundColor: 'var(--bg)', color: 'var(--text)' }}
-    >
-      <div className="max-w-5xl mx-auto px-4 pt-10 md:pt-14">
-        <p className="text-sm uppercase tracking-wide text-[var(--accent)] mb-2">БотФорг</p>
-        <h1 className="text-3xl md:text-4xl font-bold font-heading mb-3">Возможности платформы</h1>
-        <p className="text-[var(--text-muted)] text-lg max-w-2xl mb-10">
-          Как устроен редактор и блоки сценария, отдельный продуктовый обзор{' '}
-          <strong className="text-[var(--text)]">CRM</strong> по аудитории бота — на одной странице,
-          без отдельного сайта документации.
-        </p>
-
-        <div
-          className="flex gap-1 overflow-x-auto pb-3 mb-8 border-b scrollbar-thin"
-          style={{ borderColor: 'var(--border)' }}
-          role="tablist"
-          aria-label="Разделы возможностей"
+    <div className="min-h-screen font-sans pb-20" style={{ color: 'var(--text)' }}>
+      <div className="max-w-5xl mx-auto px-4 pt-6 md:pt-8">
+        <PageShell
+          testId="features-page-shell"
+          eyebrow="БОТФОРГ"
+          title="Возможности платформы"
+          subtitle={
+            <>
+              Как устроен редактор и блоки сценария, отдельный продуктовый обзор{' '}
+              <strong style={{ color: 'var(--text)' }}>CRM</strong> по аудитории бота — на одной
+              странице, без отдельного сайта документации.
+            </>
+          }
+          tabs={TABS.map(t => ({ id: t.id, label: t.label, testId: `features-tab-${t.id}` }))}
+          activeTabId={tab}
+          onTabChange={id => setTabAndUrl(id as TabId)}
+          tabsAriaLabel="Разделы возможностей"
+          tabsTestId="features-tablist"
         >
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === t.id}
-              onClick={() => setTabAndUrl(t.id)}
-              className="shrink-0 px-4 py-2.5 rounded-t-lg text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: tab === t.id ? 'var(--card)' : 'transparent',
-                color: tab === t.id ? 'var(--text)' : 'var(--text-muted)',
-                borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {tab === 'overview' && (
-          <div className="space-y-6 text-[var(--text-muted)] max-w-3xl">
-            <p className="leading-relaxed">
-              Редактор «БотФорг» — это схема из блоков и стрелок. Каждый блок — один шаг для бота:
-              отправить текст, задать вопрос, проверить ответ, перейти в другой сценарий и т.д.
-              Сценарий всегда начинается с блока «Начало»; дальше пользователь идёт по цепочке, пока
-              есть куда идти.
-            </p>
-            <p className="leading-relaxed">
-              Вы перетаскиваете блоки из библиотеки, соединяете выходы стрелками и заполняете поля в
-              боковой панели. Предпросмотр помогает пройти диалог так, как его увидит клиент.
-            </p>
-            <div className="flex flex-wrap gap-3 items-center">
-              <Link
-                to="/editor"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-black transition hover:opacity-90"
-                style={{ backgroundColor: 'var(--accent)' }}
-              >
-                Открыть редактор
-              </Link>
-              <button
-                type="button"
-                onClick={() => setTabAndUrl('crm')}
-                className="text-sm text-[var(--accent)] hover:underline font-medium"
-              >
-                CRM по аудитории бота →
-              </button>
-              <button
-                type="button"
-                onClick={() => setTabAndUrl('blocks')}
-                className="text-sm text-[var(--accent)] hover:underline font-medium"
-              >
-                Справка по блокам →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {tab === 'crm' && <CrmPublicTab />}
-
-        {tab === 'learning' && (
-          <div className="space-y-8 text-[var(--text-muted)] max-w-3xl">
-            <section>
-              <h2 className="text-xl font-semibold text-[var(--text)] mb-3">
-                Как собрать первый сценарий
-              </h2>
-              <ol className="list-decimal pl-5 space-y-3 leading-relaxed">
-                <li>
-                  Создайте сценарий и поместите блок «Начало». От него протяните стрелку к блоку
-                  «Сообщение».
-                </li>
-                <li>
-                  В сообщении напишите короткий текст приветствия. При необходимости добавьте кнопки
-                  — от каждой кнопки должна уходить своя стрелка к следующему шагу.
-                </li>
-                <li>
-                  Если нужна развилка, поставьте блок «Выбор» и заранее подготовьте значение (после
-                  кнопки, блока «Ввод» или данных пользователя), по которому будет выбираться ветка.
-                </li>
-                <li>
-                  Длинные ветки удобно выносить в отдельный сценарий и соединять блоком «Перейти в
-                  сценарий».
-                </li>
-                <li>Сохраните сценарий и проверьте цепочку в предпросмотре.</li>
-              </ol>
-              <p className="mt-4">
+          {tab === 'overview' && (
+            <div className="space-y-6 text-[var(--text-muted)] max-w-3xl">
+              <p className="leading-relaxed">
+                Редактор «БотФорг» — это схема из блоков и стрелок. Каждый блок — один шаг для бота:
+                отправить текст, задать вопрос, проверить ответ, перейти в другой сценарий и т.д.
+                Сценарий всегда начинается с блока «Начало»; дальше пользователь идёт по цепочке,
+                пока есть куда идти.
+              </p>
+              <p className="leading-relaxed">
+                Вы перетаскиваете блоки из библиотеки, соединяете выходы стрелками и заполняете поля
+                в боковой панели. Предпросмотр помогает пройти диалог так, как его увидит клиент.
+              </p>
+              <div className="flex flex-wrap gap-3 items-center">
+                <Link
+                  to="/editor"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-semibold text-black transition hover:opacity-90"
+                  style={{ backgroundColor: 'var(--accent)' }}
+                >
+                  Открыть редактор
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setTabAndUrl('crm')}
+                  className="text-sm text-[var(--accent)] hover:underline font-medium"
+                >
+                  CRM по аудитории бота →
+                </button>
                 <button
                   type="button"
                   onClick={() => setTabAndUrl('blocks')}
-                  className="text-[var(--accent)] hover:underline font-medium text-base"
+                  className="text-sm text-[var(--accent)] hover:underline font-medium"
                 >
-                  Открыть справку по всем блокам →
+                  Справка по блокам →
                 </button>
-              </p>
-            </section>
-            <section>
-              <h2 className="text-xl font-semibold text-[var(--text)] mb-3">Полезные привычки</h2>
-              <ul className="list-disc pl-5 space-y-2 leading-relaxed">
-                <li>Один сценарий — одна понятная цель (заказ, запись, поддержка).</li>
-                <li>Не оставляйте «висячих» стрелок: у каждого шага должен быть понятный выход.</li>
-                <li>Одинаковые имена переменных во всех блоках, где вы их читаете и пишете.</li>
-              </ul>
-            </section>
-          </div>
-        )}
-
-        {tab === 'blocks' && (
-          <div className="space-y-6">
-            <section
-              className="max-w-3xl space-y-4 text-[var(--text-muted)]"
-              aria-labelledby="blocks-editor-intro"
-            >
-              <h2 id="blocks-editor-intro" className="text-xl font-semibold text-[var(--text)]">
-                Сценарий чат-бота и блоки в редакторе «БотФорг»
-              </h2>
-              <p className="text-sm leading-relaxed">
-                Сценарий чат-бота — это цепочка шагов, по которой бот ведёт человека в чате. В
-                конструкторе чат-ботов «БотФорг» каждый шаг — отдельный блок: отправить сообщение,
-                запросить ответ, сделать паузу, сделать выбор по значению или перейти в другой
-                сценарий. Так на схеме в редакторе сценариев складывается логика чат-бота без кода,
-                и с первого взгляда понятно, как работает бот от входа пользователя до цели.
-              </p>
-              <p className="text-sm leading-relaxed">
-                Ниже — справка по блокам чат-бота, которые доступны в редакторе и ведут себя
-                предсказуемо в предпросмотре. Раздел поможет при создании чат-бота без
-                программирования: что делает шаг, когда его выбирать и какие ошибки чаще всего
-                встречаются.
-              </p>
-              <p
-                className="text-sm leading-relaxed rounded-lg border px-4 py-3"
-                style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
-              >
-                Подробные поля и настройки могут отличаться в зависимости от версии редактора и
-                загружаются из каталога блоков автоматически. Если в карточке нет списка полей —
-                откройте блок в редакторе: там видны актуальные подписи и обязательность.
-              </p>
-            </section>
-            <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-              <label className="flex-1 max-w-md">
-                <span className="sr-only">Поиск по блокам</span>
-                <input
-                  type="search"
-                  placeholder="Поиск по названию и подсказкам…"
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]"
-                  style={{
-                    backgroundColor: 'var(--surface)',
-                    borderColor: 'var(--border)',
-                  }}
-                />
-              </label>
-              <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                <span className="whitespace-nowrap">Категория</span>
-                <select
-                  value={categoryFilter}
-                  onChange={e => setCategoryFilter(e.target.value)}
-                  className="rounded-lg border px-3 py-2.5 text-[var(--text)] min-w-[11rem]"
-                  style={{
-                    backgroundColor: 'var(--surface)',
-                    borderColor: 'var(--border)',
-                  }}
-                >
-                  <option value="all">Все</option>
-                  {categoriesInData.map(c => (
-                    <option key={c} value={c}>
-                      {CATEGORY_LABELS[c]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            {learnCatalogOffline && (
-              <div
-                className="rounded-lg border px-4 py-3 text-sm leading-relaxed"
-                style={{
-                  borderColor: 'rgba(245, 158, 11, 0.45)',
-                  backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                  color: 'var(--text)',
-                }}
-                role="status"
-              >
-                Не удалось загрузить данные с сервера. Показаны базовые блоки и тексты справки — без
-                них тоже можно работать. Чтобы в карточках появился полный список полей из каталога,
-                подключите серверную часть приложения с актуальным каталогом или укажите в
-                настройках сборки адрес этой службы.
               </div>
-            )}
-
-            <div className="max-h-[calc(100vh-12rem)] overflow-y-auto pr-1 space-y-4 custom-scroll">
-              {filteredBlocks.length === 0 && (
-                <p className="text-[var(--text-muted)]">
-                  Ничего не найдено — измените поиск или фильтр.
-                </p>
-              )}
-              {filteredBlocks.map(block => (
-                <BlockCard
-                  key={block.id}
-                  block={block}
-                  expanded={expandedBlockId === block.id}
-                  onExpand={() => setExpandedBlockId(block.id)}
-                  onCollapse={() =>
-                    setExpandedBlockId(current => (current === block.id ? null : current))
-                  }
-                />
-              ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {tab === 'videos' && (
-          <div
-            className="rounded-xl border p-8 text-center max-w-xl mx-auto"
-            style={{ borderColor: 'var(--border)', backgroundColor: 'var(--card)' }}
-          >
-            <p className="text-[var(--text-muted)] leading-relaxed">
-              Видеоуроки по редактору и сценариям мы готовим. Загляните сюда позже или начните с
-              вкладок «Обзор», «Обучение» и «Блоки редактора» — там уже есть пошаговые текстовые
-              материалы.
-            </p>
-          </div>
-        )}
+          {tab === 'crm' && <CrmPublicTab />}
 
-        {tab === 'policy' && (
-          <div className="space-y-6 text-[var(--text-muted)] max-w-3xl">
-            <p className="leading-relaxed">
-              Официальные документы размещены по постоянным адресам. Ознакомьтесь с ними перед
-              запуском бота для клиентов.
-            </p>
-            <ul className="space-y-3">
-              <li>
-                <a
-                  href="/legal/doc/privacy_policy"
-                  className="text-[var(--accent)] hover:underline font-medium"
+          {tab === 'learning' && (
+            <div className="space-y-8 text-[var(--text-muted)] max-w-3xl">
+              <section>
+                <h2 className="text-xl font-semibold text-[var(--text)] mb-3">
+                  Как собрать первый сценарий
+                </h2>
+                <ol className="list-decimal pl-5 space-y-3 leading-relaxed">
+                  <li>
+                    Создайте сценарий и поместите блок «Начало». От него протяните стрелку к блоку
+                    «Сообщение».
+                  </li>
+                  <li>
+                    В сообщении напишите короткий текст приветствия. При необходимости добавьте
+                    кнопки — от каждой кнопки должна уходить своя стрелка к следующему шагу.
+                  </li>
+                  <li>
+                    Если нужна развилка, поставьте блок «Выбор» и заранее подготовьте значение
+                    (после кнопки, блока «Ввод» или данных пользователя), по которому будет
+                    выбираться ветка.
+                  </li>
+                  <li>
+                    Длинные ветки удобно выносить в отдельный сценарий и соединять блоком «Перейти в
+                    сценарий».
+                  </li>
+                  <li>Сохраните сценарий и проверьте цепочку в предпросмотре.</li>
+                </ol>
+                <p className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setTabAndUrl('blocks')}
+                    className="text-[var(--accent)] hover:underline font-medium text-base"
+                  >
+                    Открыть справку по всем блокам →
+                  </button>
+                </p>
+              </section>
+              <section>
+                <h2 className="text-xl font-semibold text-[var(--text)] mb-3">Полезные привычки</h2>
+                <ul className="list-disc pl-5 space-y-2 leading-relaxed">
+                  <li>Один сценарий — одна понятная цель (заказ, запись, поддержка).</li>
+                  <li>
+                    Не оставляйте «висячих» стрелок: у каждого шага должен быть понятный выход.
+                  </li>
+                  <li>Одинаковые имена переменных во всех блоках, где вы их читаете и пишете.</li>
+                </ul>
+              </section>
+            </div>
+          )}
+
+          {tab === 'blocks' && (
+            <div className="space-y-6">
+              <section
+                className="max-w-3xl space-y-4 text-[var(--text-muted)]"
+                aria-labelledby="blocks-editor-intro"
+              >
+                <h2 id="blocks-editor-intro" className="text-xl font-semibold text-[var(--text)]">
+                  Сценарий чат-бота и блоки в редакторе «БотФорг»
+                </h2>
+                <p className="text-sm leading-relaxed">
+                  Сценарий чат-бота — это цепочка шагов, по которой бот ведёт человека в чате. В
+                  конструкторе чат-ботов «БотФорг» каждый шаг — отдельный блок: отправить сообщение,
+                  запросить ответ, сделать паузу, сделать выбор по значению или перейти в другой
+                  сценарий. Так на схеме в редакторе сценариев складывается логика чат-бота без
+                  кода, и с первого взгляда понятно, как работает бот от входа пользователя до цели.
+                </p>
+                <p className="text-sm leading-relaxed">
+                  Ниже — справка по блокам чат-бота, которые доступны в редакторе и ведут себя
+                  предсказуемо в предпросмотре. Раздел поможет при создании чат-бота без
+                  программирования: что делает шаг, когда его выбирать и какие ошибки чаще всего
+                  встречаются.
+                </p>
+                <p
+                  className="text-sm leading-relaxed rounded-lg border px-4 py-3"
+                  style={{ borderColor: 'var(--border)', backgroundColor: 'var(--surface)' }}
                 >
-                  Политика конфиденциальности
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/legal/doc/terms"
-                  className="text-[var(--accent)] hover:underline font-medium"
+                  Подробные поля и настройки могут отличаться в зависимости от версии редактора и
+                  загружаются из каталога блоков автоматически. Если в карточке нет списка полей —
+                  откройте блок в редакторе: там видны актуальные подписи и обязательность.
+                </p>
+              </section>
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+                <label className="flex-1 max-w-md">
+                  <span className="sr-only">Поиск по блокам</span>
+                  <input
+                    type="search"
+                    placeholder="Поиск по названию и подсказкам…"
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    className="w-full rounded-lg border px-3 py-2.5 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]"
+                    style={{
+                      backgroundColor: 'var(--surface)',
+                      borderColor: 'var(--border)',
+                    }}
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <span className="whitespace-nowrap">Категория</span>
+                  <select
+                    value={categoryFilter}
+                    onChange={e => setCategoryFilter(e.target.value)}
+                    className="rounded-lg border px-3 py-2.5 text-[var(--text)] min-w-[11rem]"
+                    style={{
+                      backgroundColor: 'var(--surface)',
+                      borderColor: 'var(--border)',
+                    }}
+                  >
+                    <option value="all">Все</option>
+                    {categoriesInData.map(c => (
+                      <option key={c} value={c}>
+                        {CATEGORY_LABELS[c]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {learnCatalogOffline && (
+                <div
+                  className="rounded-lg border px-4 py-3 text-sm leading-relaxed"
+                  style={{
+                    borderColor: 'rgba(245, 158, 11, 0.45)',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    color: 'var(--text)',
+                  }}
+                  role="status"
                 >
-                  Пользовательское соглашение
-                </a>
-              </li>
-            </ul>
-          </div>
-        )}
+                  Не удалось загрузить данные с сервера. Показаны базовые блоки и тексты справки —
+                  без них тоже можно работать. Чтобы в карточках появился полный список полей из
+                  каталога, подключите серверную часть приложения с актуальным каталогом или укажите
+                  в настройках сборки адрес этой службы.
+                </div>
+              )}
+
+              <div className="max-h-[calc(100vh-12rem)] overflow-y-auto pr-1 space-y-4 custom-scroll">
+                {filteredBlocks.length === 0 && (
+                  <p className="text-[var(--text-muted)]">
+                    Ничего не найдено — измените поиск или фильтр.
+                  </p>
+                )}
+                {filteredBlocks.map(block => (
+                  <BlockCard
+                    key={block.id}
+                    block={block}
+                    expanded={expandedBlockId === block.id}
+                    onExpand={() => setExpandedBlockId(block.id)}
+                    onCollapse={() =>
+                      setExpandedBlockId(current => (current === block.id ? null : current))
+                    }
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === 'videos' && (
+            <div
+              className="rounded-xl border p-8 text-center max-w-xl mx-auto"
+              style={{ borderColor: 'var(--border)', backgroundColor: 'var(--card)' }}
+            >
+              <p className="text-[var(--text-muted)] leading-relaxed">
+                Видеоуроки по редактору и сценариям мы готовим. Загляните сюда позже или начните с
+                вкладок «Обзор», «Обучение» и «Блоки редактора» — там уже есть пошаговые текстовые
+                материалы.
+              </p>
+            </div>
+          )}
+
+          {tab === 'policy' && (
+            <div className="space-y-6 text-[var(--text-muted)] max-w-3xl">
+              <p className="leading-relaxed">
+                Официальные документы размещены по постоянным адресам. Ознакомьтесь с ними перед
+                запуском бота для клиентов.
+              </p>
+              <ul className="space-y-3">
+                <li>
+                  <a
+                    href="/legal/doc/privacy_policy"
+                    className="text-[var(--accent)] hover:underline font-medium"
+                  >
+                    Политика конфиденциальности
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="/legal/doc/terms"
+                    className="text-[var(--accent)] hover:underline font-medium"
+                  >
+                    Пользовательское соглашение
+                  </a>
+                </li>
+              </ul>
+            </div>
+          )}
+        </PageShell>
       </div>
 
       <style>{`

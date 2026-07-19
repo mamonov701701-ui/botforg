@@ -1,11 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import DashboardPage from '../components/DashboardPage';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PaymentProvidersPanel from '../finance/PaymentProvidersPanel';
+import RefundsAdminPanel from '../finance/RefundsAdminPanel';
 import FinancePlaceholderTab from '../finance/FinancePlaceholderTab';
-import { FINANCE_COLORS, FINANCE_TABS, type FinanceTabId } from '../finance/financeHelpers';
+import { FINANCE_TABS, type FinanceTabId } from '../finance/financeHelpers';
+import PageShell from '../../../ui/PageShell';
 
 const PLACEHOLDERS: Record<
-  Exclude<FinanceTabId, 'providers'>,
+  Exclude<FinanceTabId, 'providers' | 'refunds'>,
   { title: string; description: string }
 > = {
   tariffs: {
@@ -29,62 +31,60 @@ const PLACEHOLDERS: Record<
   },
 };
 
+const VALID_TABS = new Set<string>(FINANCE_TABS.map(t => t.id));
+
+function tabFromSearch(raw: string | null): FinanceTabId {
+  if (raw && VALID_TABS.has(raw)) return raw as FinanceTabId;
+  return 'providers';
+}
+
 export default function PlatformFinancePage() {
-  const [tab, setTab] = useState<FinanceTabId>('providers');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<FinanceTabId>(() => tabFromSearch(searchParams.get('tab')));
+
+  useEffect(() => {
+    setTab(tabFromSearch(searchParams.get('tab')));
+  }, [searchParams]);
+
+  const setTabAndUrl = (id: FinanceTabId) => {
+    setTab(id);
+    if (id === 'providers') {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab: id }, { replace: true });
+    }
+  };
 
   const subtitle = useMemo(() => {
     if (tab === 'providers') {
       return 'Настройки эквайринга без секретов: readiness, default, health-check';
     }
+    if (tab === 'refunds') {
+      return 'Очередь заявок на возврат. Одобрение не запускает выплату денег.';
+    }
     return 'Раздел финансов платформы';
   }, [tab]);
 
   return (
-    <DashboardPage
-      title={<span style={{ color: FINANCE_COLORS.text }}>Финансы</span>}
-      subtitle={<span style={{ color: FINANCE_COLORS.textSecondary }}>{subtitle}</span>}
+    <PageShell
+      testId="finance-shell"
+      title={<span data-testid="finance-shell-title">Финансы</span>}
+      subtitle={<span data-testid="finance-shell-subtitle">{subtitle}</span>}
+      tabs={FINANCE_TABS.map(item => ({
+        id: item.id,
+        label: item.label,
+        testId: `finance-tab-${item.id}`,
+      }))}
+      activeTabId={tab}
+      onTabChange={id => setTabAndUrl(id as FinanceTabId)}
+      tabsAriaLabel="Разделы финансов"
+      tabsTestId="finance-tablist"
     >
-      <div style={{ color: FINANCE_COLORS.text }}>
-        <div
-          role="tablist"
-          aria-label="Разделы финансов"
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 8,
-            marginBottom: 20,
-            borderBottom: `1px solid ${FINANCE_COLORS.accentBorder}`,
-            paddingBottom: 12,
-          }}
-        >
-          {FINANCE_TABS.map(item => {
-            const active = tab === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setTab(item.id)}
-                style={{
-                  padding: '10px 14px',
-                  minHeight: 44,
-                  borderRadius: 8,
-                  border: active ? `1px solid ${FINANCE_COLORS.accent}` : '1px solid transparent',
-                  background: active ? FINANCE_COLORS.accentSoftBg : 'transparent',
-                  color: active ? FINANCE_COLORS.accent : FINANCE_COLORS.textSecondary,
-                  fontWeight: active ? 700 : 500,
-                  cursor: 'pointer',
-                }}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-
+      <div data-testid="finance-tabpanel">
         {tab === 'providers' ? (
           <PaymentProvidersPanel />
+        ) : tab === 'refunds' ? (
+          <RefundsAdminPanel />
         ) : (
           <FinancePlaceholderTab
             title={PLACEHOLDERS[tab].title}
@@ -92,6 +92,6 @@ export default function PlatformFinancePage() {
           />
         )}
       </div>
-    </DashboardPage>
+    </PageShell>
   );
 }

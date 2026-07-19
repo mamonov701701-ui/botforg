@@ -1,4 +1,5 @@
 import React from 'react';
+import '../../../styles/shell.css';
 
 interface CardProps {
   children: React.ReactNode;
@@ -12,7 +13,7 @@ interface CardProps {
 }
 
 /**
- * Базовая карточка для контента
+ * Базовая карточка для контента (section surface).
  */
 export default function Card({
   children,
@@ -27,9 +28,9 @@ export default function Card({
   const [isHovered, setIsHovered] = React.useState(false);
 
   const baseStyle: React.CSSProperties = {
-    background: 'var(--color-background-dashboard-card)',
-    border: '1px solid var(--color-border-accent-muted)',
-    borderRadius: '12px',
+    background: 'var(--bf-section-bg)',
+    border: '1px solid var(--bf-section-border)',
+    borderRadius: 'var(--bf-section-radius)',
     padding,
     transition: 'all 0.2s',
     ...style,
@@ -38,14 +39,14 @@ export default function Card({
   if (hoverable || onClick) {
     baseStyle.cursor = 'pointer';
     if (isHovered) {
-      baseStyle.boxShadow = 'var(--color-shadow-elevated)';
+      baseStyle.boxShadow = 'var(--bf-shell-shadow)';
       baseStyle.transform = 'translateY(-2px)';
     }
   }
 
   return (
     <div
-      className={className || undefined}
+      className={`bf-section-card ${className}`.trim() || undefined}
       style={baseStyle}
       onClick={onClick}
       onMouseEnter={e => {

@@ -29,6 +29,13 @@ export const WARNING_TYPE_LABELS: Record<string, string> = {
   team_members_usage: 'Участники команды',
 };
 
+/**
+ * Уровни предупреждений, которые UI умеет отображать.
+ * Backend сейчас отдаёт 70 / 85 / 95 / 100 (см. MESSAGE_WARNING_THRESHOLDS).
+ * 80 / 90 поддержаны на случай расширения API без смены UI.
+ */
+export const USAGE_WARNING_THRESHOLDS = [70, 80, 90, 100] as const;
+
 export function planSourceLabel(source: string): string {
   return PLAN_SOURCE_LABELS[source] ?? 'Тариф';
 }
@@ -61,9 +68,19 @@ export function usagePercent(block: UsageBlock): number | null {
 
 export function warningSeverityColor(threshold: number): string {
   if (threshold >= 100) return '#dc2626';
-  if (threshold >= 95) return '#ef4444';
-  if (threshold >= 85) return '#f97316';
+  if (threshold >= 90) return '#ef4444';
+  if (threshold >= 80) return '#f97316';
+  if (threshold >= 70) return '#f59e0b';
   return '#f59e0b';
+}
+
+/** Цвет прогресс-бара по фактическому % использования. */
+export function usageBarColor(percent: number): string {
+  if (percent >= 100) return 'linear-gradient(90deg, #f97316, #dc2626)';
+  if (percent >= 90) return 'linear-gradient(90deg, #f97316, #ef4444)';
+  if (percent >= 80) return 'linear-gradient(90deg, #f59e0b, #f97316)';
+  if (percent >= 70) return 'linear-gradient(90deg, #fbbf24, #f59e0b)';
+  return 'var(--primary)';
 }
 
 export function formatPeriodDate(iso: string): string {

@@ -1,4 +1,4 @@
-"""Схемы пользовательского refund API (Этап 6.14.3.3)."""
+"""Схемы пользовательского refund API (Этап 6.14.3.3 / 6.14.4)."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -40,3 +40,25 @@ class RefundRequestOut(BaseModel):
     updated_at: datetime
     submitted_at: datetime
     completed_at: datetime | None = None
+
+
+class RefundablePurchaseOut(BaseModel):
+    checkout_intent_id: int
+    payment_attempt_id: int
+    product_type: str
+    product_code: str
+    product_name: str
+    amount: str
+    currency: str
+    paid_at: datetime | None = None
+    current_refund_status: str | None = None
+    current_refund_request_id: int | None = None
+    can_request_refund: bool
+    unavailable_reason: str | None = None
+
+
+class RefundablePurchaseListOut(BaseModel):
+    items: list[RefundablePurchaseOut]
+    total: int
+    limit: int
+    offset: int

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   PLATFORM_NAV_PATHS,
+  PROJECT_FINANCE_NAV,
   countActivePlatformNavItems,
   getActivePlatformNavPaths,
   isDashboardNavItemActive,
@@ -60,5 +61,23 @@ describe('isDashboardNavItemActive / platform menu', () => {
     ]) {
       expect(isDashboardNavItemActive(url, '/dashboard/platform')).toBe(false);
     }
+  });
+});
+
+describe('project finance nav active', () => {
+  it('keeps Финансы active on finance root and refunds', () => {
+    expect(isDashboardNavItemActive(PROJECT_FINANCE_NAV.root, PROJECT_FINANCE_NAV.root)).toBe(true);
+    expect(isDashboardNavItemActive(PROJECT_FINANCE_NAV.refunds, PROJECT_FINANCE_NAV.root)).toBe(
+      true
+    );
+    expect(
+      isDashboardNavItemActive(`${PROJECT_FINANCE_NAV.refunds}/12`, PROJECT_FINANCE_NAV.root)
+    ).toBe(true);
+  });
+
+  it('does not activate finance on legacy tariff/balance paths alone', () => {
+    expect(isDashboardNavItemActive('/dashboard/tariff', PROJECT_FINANCE_NAV.root)).toBe(false);
+    expect(isDashboardNavItemActive('/dashboard/balance', PROJECT_FINANCE_NAV.root)).toBe(false);
+    expect(isDashboardNavItemActive('/dashboard/bots', PROJECT_FINANCE_NAV.root)).toBe(false);
   });
 });

@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import './crm/crmUi.css';
+import '../../styles/shell.css';
 import {
   Home,
   Bot,
   FileText,
   Wallet,
-  Gauge,
   BarChart3,
   Users,
   Shield,
@@ -17,11 +17,14 @@ import {
   TrendingUp,
   MessageCircle,
   Landmark,
+  Menu,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ROLE_NAMES, type SectionKey } from '../../constants/roles';
 import { logout } from '../../api/auth';
 import { isDashboardNavItemActive } from './utils/dashboardNavActive';
+
+const MOBILE_MQ = '(max-width: 768px)';
 
 type DashboardMode = 'projects' | 'platform';
 
@@ -56,12 +59,11 @@ const PROJECT_NAV_ITEMS: NavItem[] = [
     icon: FileText,
     mode: 'projects',
   },
-  { id: 'balance', label: 'Баланс', path: '/dashboard/balance', icon: Wallet, mode: 'projects' },
   {
     id: 'tariff',
     label: 'Финансы и лимиты',
-    path: '/dashboard/tariff',
-    icon: Gauge,
+    path: '/dashboard/finance',
+    icon: Wallet,
     mode: 'projects',
   },
   {
@@ -150,6 +152,10 @@ export default function DashboardLayout() {
   const location = useLocation();
   const isCrmSurface = /\/dashboard\/bots\/\d+\/crm/.test(location.pathname);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(MOBILE_MQ).matches : false
+  );
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Режим работы: 'projects' (Мои проекты) или 'platform' (Управление платформой)
   const [dashboardMode, setDashboardMode] = useState<DashboardMode>(() => {
@@ -159,6 +165,30 @@ export default function DashboardLayout() {
 
   // Принудительное обновление для перерендера списка навигации
   const [, forceUpdate] = useState({});
+
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_MQ);
+    const sync = () => {
+      setIsMobile(mq.matches);
+      if (!mq.matches) setMobileNavOpen(false);
+    };
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileNavOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mobileNavOpen]);
 
   // Сохраняем режим в localStorage при изменении
   useEffect(() => {
@@ -196,7 +226,7 @@ export default function DashboardLayout() {
       ) {
         return hasPlatformAccess(user);
       }
-      // Все остальные разделы (Главная, Боты, Сценарии, Шаблоны, Баланс, Аналитика, Команда, Сообщения, Настройки) — для всех
+      // Все остальные разделы (Главная, Боты, Сценарии, Шаблоны, Финансы, Аналитика, Команда, Сообщения, Настройки) — для всех
       return true;
     });
   }, [currentNavItems, user]);
@@ -309,38 +339,48 @@ export default function DashboardLayout() {
   }
 
   const canAccessPlatform = hasPlatformAccess(user);
+  const sidebarCollapsed = isMobile ? false : isSidebarCollapsed;
 
   return (
-    <div style={{ minHeight: '100vh', color: 'var(--text)' }}>
-      <div
-        style={{
-          maxWidth: '1400px',
-          margin: '0 auto',
-          padding: '32px 24px 100px 24px',
-          display: 'flex',
-          gap: '24px',
-        }}
-      >
-        {/* Боковая навигация */}
+    <div style={{ minHeight: '100vh', color: 'var(--text)' }} data-testid="dashboard-layout">
+      {isMobile && mobileNavOpen ? (
+        <div
+          className="bf-dashboard-drawer-backdrop"
+          data-testid="dashboard-mobile-nav-backdrop"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      ) : null}
+
+      <div className="bf-dashboard-frame">
+        {isMobile ? (
+          <div className="bf-dashboard-mobile-bar">
+            <button
+              type="button"
+              className="bf-dashboard-mobile-nav-toggle"
+              data-testid="dashboard-mobile-nav-toggle"
+              aria-expanded={mobileNavOpen}
+              aria-controls="dashboard-sidebar-nav"
+              onClick={() => setMobileNavOpen(true)}
+            >
+              <Menu size={18} />
+              Меню кабинета
+            </button>
+          </div>
+        ) : null}
+
+        {/* Боковая навигация / mobile drawer */}
         <aside
+          id="dashboard-sidebar-nav"
+          className={`bf-dashboard-aside${isMobile && mobileNavOpen ? ' is-open' : ''}`}
+          data-testid="dashboard-sidebar"
           style={{
-            width: isSidebarCollapsed ? '80px' : '260px',
-            flexShrink: 0,
-            transition: 'width 0.3s ease',
+            width: isMobile ? undefined : sidebarCollapsed ? '80px' : '260px',
           }}
         >
-          <div
-            style={{
-              position: 'sticky',
-              top: '32px',
-              background: 'rgba(26, 34, 56, 0.9)',
-              borderRadius: '16px',
-              padding: '16px',
-              border: '1px solid rgba(255, 210, 76, 0.2)',
-            }}
-          >
+          <div className="bf-dashboard-sidebar">
             {/* Профиль пользователя */}
-            {!isSidebarCollapsed ? (
+            {!sidebarCollapsed ? (
               <div
                 style={{
                   marginBottom: '24px',
@@ -350,32 +390,53 @@ export default function DashboardLayout() {
               >
                 <div
                   style={{
-                    background:
-                      'linear-gradient(135deg, rgba(255, 210, 76, 0.1), rgba(255, 210, 76, 0.05))',
-                    border: '1px solid rgba(255, 210, 76, 0.3)',
-                    borderRadius: '12px',
+                    background: 'var(--bf-section-bg)',
+                    border: '1px solid var(--bf-sidebar-border)',
+                    borderRadius: 'var(--bf-section-radius)',
                     padding: '16px',
                     position: 'relative',
                   }}
                 >
-                  <button
-                    onClick={() => setIsSidebarCollapsed(true)}
-                    style={{
-                      position: 'absolute',
-                      top: '8px',
-                      right: '8px',
-                      background: 'transparent',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      padding: '4px',
-                      color: 'var(--text-muted)',
-                      transition: 'color 0.2s',
-                    }}
-                    title="Свернуть"
-                  >
-                    ←
-                  </button>
+                  {!isMobile ? (
+                    <button
+                      onClick={() => setIsSidebarCollapsed(true)}
+                      style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        padding: '4px',
+                        color: 'var(--text-muted)',
+                        transition: 'color 0.2s',
+                      }}
+                      title="Свернуть"
+                    >
+                      ←
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      data-testid="dashboard-mobile-nav-close"
+                      onClick={() => setMobileNavOpen(false)}
+                      style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '16px',
+                        padding: '4px',
+                        color: 'var(--text-muted)',
+                      }}
+                      title="Закрыть"
+                    >
+                      ✕
+                    </button>
+                  )}
                   <div style={{ paddingRight: '24px' }}>
                     <h2
                       style={{
@@ -450,7 +511,7 @@ export default function DashboardLayout() {
             )}
 
             {/* Переключатель режимов (только если есть доступ к платформе) */}
-            {canAccessPlatform && !isSidebarCollapsed && (
+            {canAccessPlatform && !sidebarCollapsed && (
               <div
                 style={{
                   marginBottom: '24px',
@@ -474,7 +535,7 @@ export default function DashboardLayout() {
                     style={{
                       display: 'flex',
                       gap: '4px',
-                      background: 'rgba(15, 23, 42, 0.5)',
+                      background: 'var(--bf-tabs-track-bg)',
                       borderRadius: '8px',
                       padding: '4px',
                     }}
@@ -498,7 +559,9 @@ export default function DashboardLayout() {
                         borderRadius: '6px',
                         border: 'none',
                         background:
-                          dashboardMode === 'projects' ? 'rgba(255, 210, 76, 0.2)' : 'transparent',
+                          dashboardMode === 'projects'
+                            ? 'var(--bf-sidebar-item-active-bg)'
+                            : 'transparent',
                         color:
                           dashboardMode === 'projects' ? 'var(--primary)' : 'var(--text-muted)',
                         fontSize: '13px',
@@ -512,7 +575,7 @@ export default function DashboardLayout() {
                       }}
                       onMouseEnter={e => {
                         if (dashboardMode !== 'projects') {
-                          e.currentTarget.style.background = 'rgba(26, 34, 56, 0.5)';
+                          e.currentTarget.style.background = 'var(--bf-sidebar-item-hover)';
                           e.currentTarget.style.color = 'var(--text)';
                         }
                       }}
@@ -544,7 +607,9 @@ export default function DashboardLayout() {
                         borderRadius: '6px',
                         border: 'none',
                         background:
-                          dashboardMode === 'platform' ? 'rgba(255, 210, 76, 0.2)' : 'transparent',
+                          dashboardMode === 'platform'
+                            ? 'var(--bf-sidebar-item-active-bg)'
+                            : 'transparent',
                         color:
                           dashboardMode === 'platform' ? 'var(--primary)' : 'var(--text-muted)',
                         fontSize: '13px',
@@ -558,7 +623,7 @@ export default function DashboardLayout() {
                       }}
                       onMouseEnter={e => {
                         if (dashboardMode !== 'platform') {
-                          e.currentTarget.style.background = 'rgba(26, 34, 56, 0.5)';
+                          e.currentTarget.style.background = 'var(--bf-sidebar-item-hover)';
                           e.currentTarget.style.color = 'var(--text)';
                         }
                       }}
@@ -586,32 +651,13 @@ export default function DashboardLayout() {
                   <NavLink
                     key={item.id}
                     to={item.path}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      marginBottom: '4px',
-                      borderRadius: '8px',
-                      textDecoration: 'none',
-                      color: isActive ? 'var(--primary)' : 'var(--text)',
-                      background: isActive ? 'rgba(255, 210, 76, 0.1)' : 'transparent',
-                      fontWeight: isActive ? 600 : 400,
-                      transition: 'all 0.2s',
-                    }}
-                    onMouseEnter={e => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'rgba(26, 34, 56, 0.5)';
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (!isActive) {
-                        e.currentTarget.style.background = 'transparent';
-                      }
+                    className={`bf-dashboard-sidebar__nav-link${isActive ? ' is-active' : ''}`}
+                    onClick={() => {
+                      if (isMobile) setMobileNavOpen(false);
                     }}
                   >
                     <IconComponent size={20} className="lucide-icon" />
-                    {!isSidebarCollapsed && <span>{item.label}</span>}
+                    {!sidebarCollapsed && <span>{item.label}</span>}
                   </NavLink>
                 );
               })}
@@ -651,7 +697,7 @@ export default function DashboardLayout() {
                   title="Выйти из аккаунта"
                 >
                   <LogOut size={20} />
-                  {!isSidebarCollapsed && <span>Выйти</span>}
+                  {!sidebarCollapsed && <span>Выйти</span>}
                 </button>
               </div>
             </nav>
@@ -660,8 +706,8 @@ export default function DashboardLayout() {
 
         {/* Основной контент */}
         <main
-          style={{ flex: 1, minWidth: 0 }}
-          className={isCrmSurface ? 'dashboard-crm-main' : undefined}
+          className={`bf-dashboard-main${isCrmSurface ? ' dashboard-crm-main' : ''}`}
+          data-testid="dashboard-main"
         >
           <Outlet />
         </main>

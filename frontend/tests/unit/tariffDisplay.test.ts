@@ -7,7 +7,10 @@ import {
   giftTitle,
   planSourceLabel,
   subscriptionStatusLabel,
+  usageBarColor,
   usagePercent,
+  warningSeverityColor,
+  USAGE_WARNING_THRESHOLDS,
 } from '@/features/dashboard/tariff/tariffDisplay';
 
 describe('tariffDisplay', () => {
@@ -33,6 +36,18 @@ describe('tariffDisplay', () => {
 
   it('usagePercent caps at 100', () => {
     expect(usagePercent({ used: 600, limit: 500, remaining: 0 })).toBe(100);
+  });
+
+  it('supports warning threshold levels including 70/80/90/100', () => {
+    expect([...USAGE_WARNING_THRESHOLDS]).toEqual([70, 80, 90, 100]);
+    expect(warningSeverityColor(70)).toBe('#f59e0b');
+    expect(warningSeverityColor(80)).toBe('#f97316');
+    expect(warningSeverityColor(85)).toBe('#f97316');
+    expect(warningSeverityColor(90)).toBe('#ef4444');
+    expect(warningSeverityColor(95)).toBe('#ef4444');
+    expect(warningSeverityColor(100)).toBe('#dc2626');
+    expect(usageBarColor(70)).toMatch(/f59e0b|fbbf24/);
+    expect(usageBarColor(100)).toMatch(/dc2626/);
   });
 
   it('giftTitle handles unsupported plan gift', () => {

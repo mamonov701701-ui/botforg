@@ -53,8 +53,10 @@ export default function ResetPassword() {
           maxWidth: '400px',
           width: '100%',
           padding: '24px',
-          background: 'var(--surface)',
-          borderRadius: '12px',
+          background: 'var(--bf-shell-bg)',
+          borderRadius: 'var(--bf-shell-radius)',
+          border: '1px solid var(--bf-shell-border)',
+          boxShadow: 'var(--bf-shell-shadow)',
         }}
       >
         <h1 style={{ marginBottom: '24px', textAlign: 'center' }}>Сброс пароля</h1>

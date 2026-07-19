@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import './styles/theme.css';
+import './styles/shell.css';
 import './output.css';
 import SiteLayout from './layouts/SiteLayout';
 import EditorV2Shell from './features/editorV2/EditorV2Shell';
@@ -26,8 +27,9 @@ import BotsPage from './features/dashboard/pages/BotsPage';
 import ScenariosPage from './features/dashboard/pages/ScenariosPage';
 import ScenarioDetailPage from './features/dashboard/pages/ScenarioDetailPage';
 import TemplatesPage from './features/dashboard/pages/TemplatesPage';
-import BalancePage from './features/dashboard/pages/BalancePage';
 import TariffLimitsPage from './features/dashboard/pages/TariffLimitsPage';
+import RefundRequestsPage from './features/dashboard/pages/RefundRequestsPage';
+import RefundRequestDetailPage from './features/dashboard/pages/RefundRequestDetailPage';
 import AnalyticsPage from './features/dashboard/pages/AnalyticsPage';
 import TeamPage from './features/dashboard/pages/TeamPage';
 import BFTeamPage from './features/dashboard/pages/BFTeamPage';
@@ -63,6 +65,11 @@ function CrmLegacyUserDetail() {
   return (
     <Navigate to={`/dashboard/bots/${botId}/crm/contacts/${ctorUserId}${loc.search}`} replace />
   );
+}
+
+function LegacyTariffRefundRedirect() {
+  const { refundId } = useParams();
+  return <Navigate to={`/dashboard/finance/refunds/${refundId}`} replace />;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
@@ -135,8 +142,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="scenarios/:scenarioId" element={<ScenarioDetailPage />} />
             <Route path="templates" element={<TemplatesPage />} />
-            <Route path="balance" element={<BalancePage />} />
-            <Route path="tariff" element={<TariffLimitsPage />} />
+            <Route path="finance" element={<TariffLimitsPage />} />
+            <Route path="finance/refunds" element={<RefundRequestsPage />} />
+            <Route path="finance/refunds/:refundId" element={<RefundRequestDetailPage />} />
+            {/* Legacy redirects: Баланс / Финансы и лимиты → Финансы */}
+            <Route path="balance" element={<Navigate to="/dashboard/finance" replace />} />
+            <Route path="tariff" element={<Navigate to="/dashboard/finance" replace />} />
+            <Route
+              path="tariff/refunds"
+              element={<Navigate to="/dashboard/finance/refunds" replace />}
+            />
+            <Route path="tariff/refunds/:refundId" element={<LegacyTariffRefundRedirect />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="team" element={<TeamPage />} />
             <Route path="messages" element={<MessagesPage />} />

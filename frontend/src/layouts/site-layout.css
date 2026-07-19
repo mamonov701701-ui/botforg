@@ -33,6 +33,110 @@ html:has(.editor-surface) {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
   height: fit-content;
 }
+
+.site-header-menu-toggle {
+  display: none;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.site-header-mobile-backdrop {
+  display: none;
+}
+
+.site-header-mobile-panel {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .site-header-nav-desktop {
+    display: none !important;
+  }
+
+  .site-header-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .site-header-logo {
+    height: 56px !important;
+  }
+
+  .site-header-brand .text-2xl {
+    font-size: 1.15rem;
+  }
+
+  .site-header-tagline {
+    display: none;
+  }
+
+  .site-header-mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 90;
+  }
+
+  .site-header-mobile-panel {
+    display: block;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 12px;
+    right: 12px;
+    background: #001127;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+    z-index: 110;
+    max-height: min(70vh, 480px);
+    overflow-y: auto;
+  }
+
+  .site-header-mobile-panel:not(.is-open) {
+    display: none;
+  }
+
+  .site-header-mobile-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .site-header-mobile-link {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: #fff !important;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .site-header-mobile-link:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffc107 !important;
+  }
+
+  .site-header-mobile-link--cta {
+    background: #facc15;
+    color: #000 !important;
+    font-weight: 700;
+    justify-content: center;
+    margin-top: 6px;
+  }
+}
 .site-footer {
   position: fixed;
   bottom: 0;
@@ -48,10 +152,17 @@ html:has(.editor-surface) {
   flex: 1 1 0;
   min-height: 0;
   padding-top: var(--header-h, 88px);
-  padding-bottom: 50px;
+  /* Fixed footer clearance — keep actions / pagination reachable */
+  padding-bottom: var(--footer-clearance, 120px);
   display: flex;
   flex-direction: column;
   overflow: visible;
+}
+
+@media (max-width: 768px) {
+  .site-main {
+    padding-bottom: var(--footer-clearance-mobile, 140px);
+  }
 }
 /* Только для редактора блокируем скролл */
 .site-shell:has(.editor-surface) .site-main {

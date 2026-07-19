@@ -67,11 +67,52 @@ describe('TariffLimitsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Старт')).toBeTruthy();
     });
+    expect(screen.getByText('Финансы и лимиты')).toBeTruthy();
+    expect(screen.getByTestId('tariff-current-plan')).toBeTruthy();
+    expect(screen.getByTestId('tariff-usage-messages')).toBeTruthy();
+    expect(screen.getByTestId('tariff-usage-bots')).toBeTruthy();
+    expect(screen.getByTestId('tariff-usage-team')).toBeTruthy();
+    expect(screen.getByTestId('tariff-usage-messages-usage').textContent).toMatch(
+      /350 \/ 500 · осталось: 150/
+    );
+    expect(screen.getByTestId('tariff-usage-messages-percent').textContent).toBe('70%');
+    expect(screen.getByTestId('tariff-warnings')).toBeTruthy();
     expect(screen.queryByText(/Лимиты в норме/i)).toBeNull();
     expect(screen.getByText(/Использовано 70% лимита сообщений/i)).toBeTruthy();
-    expect(screen.getByText('Активных пакетов нет')).toBeTruthy();
+    expect(screen.getByText(/Сообщения · 70%/)).toBeTruthy();
+    expect(screen.getByTestId('tariff-active-addons').textContent).toMatch(/Активных пакетов нет/);
     expect(screen.getByText('Активных подарков нет')).toBeTruthy();
     expect(screen.getByText('Маркетплейс')).toBeTruthy();
+    const refundsLink = screen.getByRole('link', { name: /Открыть возвраты/i });
+    expect(refundsLink.getAttribute('href')).toBe('/dashboard/finance/refunds');
+    const pageText = document.body.textContent || '';
+    const planIdx = pageText.indexOf('Текущий тариф');
+    const flagsIdx = pageText.indexOf('Возможности тарифа');
+    const refundsIdx = pageText.indexOf('Заявки на возврат');
+    expect(planIdx).toBeGreaterThanOrEqual(0);
+    expect(flagsIdx).toBeGreaterThan(planIdx);
+    expect(refundsIdx).toBeGreaterThan(flagsIdx);
+  });
+
+  it('shows multi-threshold warnings from summary', async () => {
+    vi.mocked(getTariffSummary).mockResolvedValue({
+      ...mockSummary,
+      messages: { limit: 100, used: 100, remaining: 0 },
+      warnings: [
+        { type: 'messages_usage', threshold: 70, message: 'Использовано 70% лимита сообщений.' },
+        { type: 'messages_usage', threshold: 85, message: 'Использовано 85% лимита сообщений.' },
+        { type: 'messages_usage', threshold: 95, message: 'Использовано 95% лимита сообщений.' },
+        { type: 'messages_usage', threshold: 100, message: 'Лимит сообщений исчерпан.' },
+      ],
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('tariff-usage-messages-percent').textContent).toBe('100%');
+    });
+    expect(screen.getByText(/Сообщения · 70%/)).toBeTruthy();
+    expect(screen.getByText(/Сообщения · 85%/)).toBeTruthy();
+    expect(screen.getByText(/Сообщения · 95%/)).toBeTruthy();
+    expect(screen.getByText(/Сообщения · 100%/)).toBeTruthy();
   });
 
   it('shows normal state when no warnings', async () => {

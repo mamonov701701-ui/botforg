@@ -23,23 +23,24 @@ export const FINANCE_COLORS = {
   dark: BRAND_DARK,
   accent: 'var(--primary)',
   danger: DANGER_RED,
-  panelBg: '#0A1B3D',
-  panelBgElevated: '#0E2348',
-  text: '#F2F5FA',
-  textSecondary: '#C5CDD9',
-  accentBorder: 'var(--color-border-accent-muted)',
-  accentBorderStrong: 'color-mix(in srgb, var(--primary) 55%, transparent)',
+  panelBg: 'var(--bf-shell-bg)',
+  panelBgElevated: 'var(--bf-section-bg-elevated)',
+  text: 'var(--text)',
+  textSecondary: 'var(--text-muted)',
+  accentBorder: 'var(--bf-shell-border)',
+  accentBorderStrong: 'var(--bf-shell-border)',
   accentSoftBg: 'var(--primary-bg)',
-  fieldBg: '#071428',
-  badgeMutedBorder: 'color-mix(in srgb, #C5CDD9 45%, transparent)',
+  fieldBg: 'var(--bf-tabs-track-bg)',
+  badgeMutedBorder: 'var(--color-border-tertiary)',
 } as const;
 
-export type FinanceTabId = 'tariffs' | 'packages' | 'providers' | 'gifts' | 'audit';
+export type FinanceTabId = 'tariffs' | 'packages' | 'providers' | 'refunds' | 'gifts' | 'audit';
 
 export const FINANCE_TABS: { id: FinanceTabId; label: string }[] = [
   { id: 'tariffs', label: 'Тарифы' },
   { id: 'packages', label: 'Пакеты' },
   { id: 'providers', label: 'Платёжные провайдеры' },
+  { id: 'refunds', label: 'Возвраты' },
   { id: 'gifts', label: 'Подарки' },
   { id: 'audit', label: 'Журнал действий' },
 ];

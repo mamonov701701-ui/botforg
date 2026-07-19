@@ -43,8 +43,10 @@ export default function VerifyEmail() {
         style={{
           maxWidth: '400px',
           padding: '24px',
-          background: 'var(--surface)',
-          borderRadius: '12px',
+          background: 'var(--bf-shell-bg)',
+          borderRadius: 'var(--bf-shell-radius)',
+          border: '1px solid var(--bf-shell-border)',
+          boxShadow: 'var(--bf-shell-shadow)',
           textAlign: 'center',
         }}
       >

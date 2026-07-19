@@ -10,23 +10,21 @@
   --crm-ink-soft: #ffffff;
   --crm-ink-muted: rgba(255, 255, 255, 0.62);
   --crm-ink-faint: rgba(255, 255, 255, 0.42);
-  --crm-edge: rgba(255, 210, 76, 0.2);
-  --crm-edge-soft: rgba(255, 210, 76, 0.12);
+  --crm-edge: var(--bf-shell-border);
+  --crm-edge-soft: var(--bf-section-border);
   /* Плотные поверхности: без просвечивания сетки фона */
-  --crm-surface-deep: #171e30;
-  --crm-surface-mid: #1c253c;
-  --crm-surface-up: #232c44;
-  --crm-input-fill: #141a2c;
+  --crm-surface-deep: var(--bf-shell-bg-solid);
+  --crm-surface-mid: #0e2348;
+  --crm-surface-up: #122a52;
+  --crm-input-fill: var(--bf-tabs-track-bg);
   position: relative;
   isolation: isolate;
-  border-radius: 16px;
+  border-radius: var(--bf-shell-radius);
   padding: 28px 32px 64px;
   margin: 0;
-  background: linear-gradient(165deg, #181f34 0%, #141a2c 100%);
+  background: var(--bf-shell-bg);
   border: 1px solid var(--crm-edge);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 210, 76, 0.07),
-    0 8px 32px rgba(4, 8, 24, 0.35);
+  box-shadow: var(--bf-shell-shadow);
 }
 
 @media (max-width: 960px) {

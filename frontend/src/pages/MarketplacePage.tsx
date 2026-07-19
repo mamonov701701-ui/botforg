@@ -43,6 +43,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useUiStore } from '../stores/uiStore';
 import { hasAccessToPlanRestrictedAction } from '../constants/roles';
 import { Link } from 'react-router-dom';
+import PageShell from '../ui/PageShell';
 
 /** Контраст текста на тёмном фоне /market (desktop, без смены глобальной темы) */
 const MARKET_TEXT = {
@@ -53,6 +54,13 @@ const MARKET_TEXT = {
 } as const;
 
 type MarketTab = 'templates' | 'scenarios' | 'customers' | 'freelancers';
+
+const MARKET_TABS: { id: MarketTab; label: string }[] = [
+  { id: 'templates', label: 'Шаблоны' },
+  { id: 'scenarios', label: 'Сценарии' },
+  { id: 'customers', label: 'Заказчики' },
+  { id: 'freelancers', label: 'Исполнители' },
+];
 
 interface MarketItem {
   id: number;
@@ -537,124 +545,34 @@ export default function MarketplacePage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--background)', paddingTop: '100px' }}>
-      {/* CSS для темных select/option */}
-      <style>{selectStyles}</style>
+    <>
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div style={{ marginBottom: '32px' }}>
-          <h1
-            style={{
-              fontSize: '36px',
-              fontWeight: 700,
-              color: 'var(--text)',
-              marginBottom: '8px',
-            }}
-          >
-            Маркет
-          </h1>
-          <p style={{ fontSize: '16px', lineHeight: 1.5, color: MARKET_TEXT.subtitle }}>
-            Покупайте и продавайте шаблоны, сценарии, размещайте заказы и находите исполнителей
-          </p>
-        </div>
-
-        {/* Tabs and Content Container */}
-        <div
-          style={{
-            background: 'rgba(22, 28, 36, 0.5)', // Темно-синий полупрозрачный
-            borderRadius: '16px',
-            padding: '24px',
-            backdropFilter: 'blur(10px)',
-          }}
+        <style>{selectStyles}</style>
+        <PageShell
+          testId="market-page-shell"
+          title="Маркет"
+          subtitle="Покупайте и продавайте шаблоны, сценарии, размещайте заказы и находите исполнителей"
+          tabs={MARKET_TABS.map(t => ({
+            id: t.id,
+            label: t.label,
+            testId: `market-tab-${t.id}`,
+          }))}
+          activeTabId={activeTab}
+          onTabChange={id => setActiveTab(id as MarketTab)}
+          tabsAriaLabel="Разделы маркета"
+          tabsTestId="market-tablist"
         >
-          {/* Tabs */}
+          {/* Search and actions */}
           <div
             style={{
+              marginBottom: '24px',
               display: 'flex',
-              gap: '8px',
-              borderBottom: '2px solid var(--border)',
-              marginBottom: '32px',
+              gap: '16px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
             }}
           >
-            <button
-              onClick={() => setActiveTab('templates')}
-              style={{
-                padding: '12px 24px',
-                background: activeTab === 'templates' ? 'rgba(255, 210, 76, 0.1)' : 'transparent',
-                border: 'none',
-                borderBottom:
-                  activeTab === 'templates' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'templates' ? 'var(--primary)' : MARKET_TEXT.tabInactive,
-                fontSize: '15px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              <ShoppingCart size={18} style={{ display: 'inline', marginRight: '8px' }} />
-              Шаблоны
-            </button>
-            <button
-              onClick={() => setActiveTab('scenarios')}
-              style={{
-                padding: '12px 24px',
-                background: activeTab === 'scenarios' ? 'rgba(255, 210, 76, 0.1)' : 'transparent',
-                border: 'none',
-                borderBottom:
-                  activeTab === 'scenarios' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'scenarios' ? 'var(--primary)' : MARKET_TEXT.tabInactive,
-                fontSize: '15px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              <Briefcase size={18} style={{ display: 'inline', marginRight: '8px' }} />
-              Сценарии
-            </button>
-            <button
-              onClick={() => setActiveTab('customers')}
-              style={{
-                padding: '12px 24px',
-                background: activeTab === 'customers' ? 'rgba(255, 210, 76, 0.1)' : 'transparent',
-                border: 'none',
-                borderBottom:
-                  activeTab === 'customers' ? '3px solid var(--primary)' : '3px solid transparent',
-                color: activeTab === 'customers' ? 'var(--primary)' : MARKET_TEXT.tabInactive,
-                fontSize: '15px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              <DollarSign size={18} style={{ display: 'inline', marginRight: '8px' }} />
-              Заказчики
-            </button>
-            <button
-              onClick={() => setActiveTab('freelancers')}
-              style={{
-                padding: '12px 24px',
-                background: activeTab === 'freelancers' ? 'rgba(255, 210, 76, 0.1)' : 'transparent',
-                border: 'none',
-                borderBottom:
-                  activeTab === 'freelancers'
-                    ? '3px solid var(--primary)'
-                    : '3px solid transparent',
-                color: activeTab === 'freelancers' ? 'var(--primary)' : MARKET_TEXT.tabInactive,
-                fontSize: '15px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              <Users size={18} style={{ display: 'inline', marginRight: '8px' }} />
-              Исполнители
-            </button>
-          </div>
-
-          {/* Search and Filters */}
-          <div style={{ marginBottom: '32px', display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <div style={{ position: 'relative', flex: 1, maxWidth: '600px' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '200px', maxWidth: '600px' }}>
               <Search
                 size={20}
                 style={{
@@ -674,16 +592,15 @@ export default function MarketplacePage() {
                 style={{
                   width: '100%',
                   padding: '14px 16px 14px 48px',
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '12px',
+                  background: 'var(--bf-section-bg)',
+                  border: '1px solid var(--bf-section-border)',
+                  borderRadius: 'var(--bf-section-radius)',
                   fontSize: '15px',
                   color: 'var(--text)',
                 }}
               />
             </div>
 
-            {/* Create button */}
             {activeTab === 'templates' ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 {canViewMyTemplates && (
@@ -694,7 +611,7 @@ export default function MarketplacePage() {
                       background: 'transparent',
                       color: 'var(--primary)',
                       border: '1px solid var(--primary)',
-                      borderRadius: '12px',
+                      borderRadius: 'var(--bf-section-radius)',
                       fontSize: '15px',
                       fontWeight: 600,
                       textDecoration: 'none',
@@ -716,7 +633,7 @@ export default function MarketplacePage() {
                       background: 'var(--primary)',
                       color: 'var(--text-on-primary)',
                       border: 'none',
-                      borderRadius: '12px',
+                      borderRadius: 'var(--bf-section-radius)',
                       fontSize: '15px',
                       fontWeight: 600,
                       cursor: 'pointer',
@@ -738,7 +655,7 @@ export default function MarketplacePage() {
                       background: 'transparent',
                       color: MARKET_TEXT.subtitle,
                       border: '1px solid var(--border)',
-                      borderRadius: '12px',
+                      borderRadius: 'var(--bf-section-radius)',
                       fontSize: '15px',
                       fontWeight: 600,
                       textDecoration: 'none',
@@ -755,13 +672,14 @@ export default function MarketplacePage() {
               </div>
             ) : (
               <button
+                type="button"
                 onClick={() => setShowCreateModal(true)}
                 style={{
                   padding: '14px 24px',
                   background: 'var(--primary)',
                   color: 'var(--text-on-primary)',
                   border: 'none',
-                  borderRadius: '12px',
+                  borderRadius: 'var(--bf-section-radius)',
                   fontSize: '15px',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -969,8 +887,7 @@ export default function MarketplacePage() {
               <p>Предлагайте свои услуги по созданию ботов, сценариев и маркетингу</p>
             </div>
           )}
-        </div>
-        {/* End of Tabs and Content Container */}
+        </PageShell>
       </div>
 
       {/* Create Modal */}
@@ -1854,6 +1771,6 @@ export default function MarketplacePage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

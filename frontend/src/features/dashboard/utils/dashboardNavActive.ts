@@ -33,6 +33,12 @@ export const PLATFORM_NAV_PATHS = {
   settings: '/dashboard/platform/settings',
 } as const;
 
+/** Project mode finance section paths (user ЛК). */
+export const PROJECT_FINANCE_NAV = {
+  root: '/dashboard/finance',
+  refunds: '/dashboard/finance/refunds',
+} as const;
+
 export function countActivePlatformNavItems(pathname: string): number {
   return Object.values(PLATFORM_NAV_PATHS).filter(p => isDashboardNavItemActive(pathname, p))
     .length;
