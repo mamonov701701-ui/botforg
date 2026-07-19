@@ -18,6 +18,19 @@ class NormalizedPaymentStatus(str, Enum):
     REFUNDED = "refunded"
 
 
+class NormalizedRefundStatus(str, Enum):
+    """
+    Provider-neutral refund object status (Этап 6.14.5).
+
+    Matches YooKassa refund statuses. Local BotForg states like
+    ``provider_unknown`` are orchestration concerns (6.14.6+), not adapter DTO.
+    """
+
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    CANCELED = "canceled"
+
+
 @dataclass(frozen=True)
 class CreatePaymentRequest:
     amount: Decimal
@@ -70,13 +83,43 @@ class CancelPaymentResult:
 
 
 @dataclass(frozen=True)
+class CreateRefundRequest:
+    """
+    Create a provider refund. Caller MUST supply a stable idempotency_key
+    (ledger/request scoped). Adapters must not invent keys from amount.
+    """
+
+    provider_payment_id: str
+    amount: Decimal
+    currency: str
+    idempotency_key: str
+    description: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class RefundPaymentResult:
     provider: str
     provider_payment_id: str
     refund_id: str
-    status: NormalizedPaymentStatus
+    status: NormalizedRefundStatus
     amount: Decimal | None = None
     currency: str | None = None
+    created_at: datetime | None = None
+    cancellation_details: dict[str, str] | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class RefundStatusResult:
+    provider: str
+    refund_id: str
+    provider_payment_id: str
+    status: NormalizedRefundStatus
+    amount: Decimal | None = None
+    currency: str | None = None
+    created_at: datetime | None = None
+    cancellation_details: dict[str, str] | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
 

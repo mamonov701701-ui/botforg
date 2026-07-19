@@ -22,10 +22,13 @@ from backend.payments.dto import (
     CancelPaymentResult,
     CreatePaymentRequest,
     CreatePaymentResult,
+    CreateRefundRequest,
     NormalizedPaymentStatus,
+    NormalizedRefundStatus,
     ParsedWebhookEvent,
     PaymentStatusResult,
     RefundPaymentResult,
+    RefundStatusResult,
 )
 from backend.settings import settings
 
@@ -58,6 +61,13 @@ _STATUS_MAP = {
     "cancelled": NormalizedPaymentStatus.CANCELLED,
 }
 
+_REFUND_STATUS_MAP = {
+    "pending": NormalizedRefundStatus.PENDING,
+    "succeeded": NormalizedRefundStatus.SUCCEEDED,
+    "canceled": NormalizedRefundStatus.CANCELED,
+    "cancelled": NormalizedRefundStatus.CANCELED,
+}
+
 
 def is_yookassa_webhook_ip(ip: str | None) -> bool:
     if not ip:
@@ -87,6 +97,16 @@ def _map_status(raw: str | None) -> NormalizedPaymentStatus:
     return NormalizedPaymentStatus.PENDING
 
 
+def _map_refund_status(raw: str | None) -> NormalizedRefundStatus:
+    key = (raw or "").strip().lower()
+    if key not in _REFUND_STATUS_MAP:
+        raise PaymentProviderError(
+            f"Unknown YooKassa refund status {raw!r}",
+            code="invalid_provider_response",
+        )
+    return _REFUND_STATUS_MAP[key]
+
+
 def _amount_from_obj(obj: dict[str, Any]) -> tuple[Decimal | None, str | None]:
     amount = obj.get("amount") if isinstance(obj, dict) else None
     if not isinstance(amount, dict):
@@ -98,6 +118,109 @@ def _amount_from_obj(obj: dict[str, Any]) -> tuple[Decimal | None, str | None]:
     except Exception:
         dec = None
     return dec, str(currency).upper() if currency else None
+
+
+def _safe_cancellation_details(obj: dict[str, Any]) -> dict[str, str] | None:
+    details = obj.get("cancellation_details")
+    if not isinstance(details, dict):
+        return None
+    out: dict[str, str] = {}
+    party = details.get("party")
+    reason = details.get("reason")
+    if isinstance(party, str) and party.strip():
+        out["party"] = party.strip()[:128]
+    if isinstance(reason, str) and reason.strip():
+        out["reason"] = reason.strip()[:256]
+    return out or None
+
+
+def _parse_created_at(raw: Any) -> Any:
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    text = raw.strip().replace("Z", "+00:00")
+    try:
+        from datetime import datetime
+
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _sanitize_refund_raw(data: dict[str, Any]) -> dict[str, Any]:
+    """Safe subset only — never credentials or full opaque blobs."""
+    amount = data.get("amount") if isinstance(data.get("amount"), dict) else None
+    safe_amount = None
+    if amount is not None:
+        safe_amount = {
+            "value": str(amount.get("value")) if amount.get("value") is not None else None,
+            "currency": str(amount.get("currency")).upper()
+            if amount.get("currency")
+            else None,
+        }
+    cancel = _safe_cancellation_details(data)
+    return {
+        "id": data.get("id"),
+        "status": data.get("status"),
+        "payment_id": data.get("payment_id"),
+        "amount": safe_amount,
+        "created_at": data.get("created_at"),
+        "cancellation_details": cancel,
+    }
+
+
+def _build_refund_result(
+    *,
+    provider_name: str,
+    data: dict[str, Any],
+    expected_payment_id: str | None = None,
+    expected_amount: Decimal | None = None,
+    expected_currency: str | None = None,
+) -> RefundPaymentResult:
+    refund_id = str(data.get("id") or "").strip()
+    if not refund_id:
+        raise PaymentProviderError(
+            "YooKassa response missing refund id",
+            code="invalid_provider_response",
+        )
+    status = _map_refund_status(str(data.get("status") or ""))
+    payment_id = str(data.get("payment_id") or "").strip()
+    if expected_payment_id and payment_id and payment_id != expected_payment_id:
+        raise PaymentProviderError(
+            "YooKassa refund payment_id mismatch",
+            code="invalid_provider_response",
+        )
+    if expected_payment_id and not payment_id:
+        raise PaymentProviderError(
+            "YooKassa refund missing payment_id",
+            code="invalid_provider_response",
+        )
+
+    amount, currency = _amount_from_obj(data)
+    if expected_amount is not None:
+        if amount is None or amount != expected_amount.quantize(Decimal("0.01")):
+            raise PaymentProviderError(
+                "YooKassa refund amount mismatch",
+                code="invalid_provider_response",
+            )
+    if expected_currency:
+        exp = expected_currency.upper()
+        if not currency or currency.upper() != exp:
+            raise PaymentProviderError(
+                "YooKassa refund currency mismatch",
+                code="invalid_provider_response",
+            )
+
+    return RefundPaymentResult(
+        provider=provider_name,
+        provider_payment_id=payment_id or (expected_payment_id or ""),
+        refund_id=refund_id,
+        status=status,
+        amount=amount,
+        currency=currency,
+        created_at=_parse_created_at(data.get("created_at")),
+        cancellation_details=_safe_cancellation_details(data),
+        raw=_sanitize_refund_raw(data),
+    )
 
 
 class YooKassaPaymentProvider(PaymentProvider):
@@ -350,38 +473,81 @@ class YooKassaPaymentProvider(PaymentProvider):
             raw={"id": data.get("id"), "status": data.get("status")},
         )
 
-    def refund_payment(
-        self,
-        provider_payment_id: str,
-        *,
-        amount: Any | None = None,
-        currency: str | None = None,
-    ) -> RefundPaymentResult:
-        pid = (provider_payment_id or "").strip()
-        if amount is None:
-            raise PaymentProviderError("refund amount required", code="refund_amount_required")
-        cur = (currency or "RUB").upper()
-        dec = Decimal(str(amount)).quantize(Decimal("0.01"))
-        body = {
+    def refund_payment(self, request: CreateRefundRequest) -> RefundPaymentResult:
+        pid = (request.provider_payment_id or "").strip()
+        if not pid:
+            raise PaymentProviderError(
+                "provider_payment_id required",
+                code="payment_id_required",
+            )
+        key = (request.idempotency_key or "").strip()
+        if not key:
+            raise PaymentProviderError(
+                "idempotency_key required",
+                code="idempotency_key_required",
+            )
+        cur = (request.currency or "RUB").upper()
+        try:
+            dec = Decimal(str(request.amount)).quantize(Decimal("0.01"))
+        except Exception as exc:
+            raise PaymentProviderError(
+                "invalid refund amount",
+                code="refund_amount_required",
+            ) from exc
+        if dec <= 0:
+            raise PaymentProviderError(
+                "invalid refund amount",
+                code="refund_amount_required",
+            )
+
+        body: dict[str, Any] = {
             "payment_id": pid,
             "amount": {"value": f"{dec:.2f}", "currency": cur},
         }
+        if request.description:
+            body["description"] = str(request.description)[:250]
+        if request.metadata:
+            # Safe caller metadata only; never inject secrets here.
+            body["metadata"] = {
+                str(k)[:64]: v
+                for k, v in dict(request.metadata).items()
+                if isinstance(v, (str, int, float, bool)) or v is None
+            }
+
+        # Caller-owned Idempotence-Key — never derived from amount inside adapter.
         data = self._request(
             "POST",
             "/refunds",
             json_body=body,
-            idempotency_key=f"refund-{pid}-{dec}-{cur}"[:64],
+            idempotency_key=key,
         )
-        refund_id = str(data.get("id") or "")
-        ref_amount, ref_currency = _amount_from_obj(data)
-        return RefundPaymentResult(
-            provider=self.name,
-            provider_payment_id=pid,
-            refund_id=refund_id,
-            status=_map_status(str(data.get("status") or NormalizedPaymentStatus.SUCCEEDED.value)),
-            amount=ref_amount if ref_amount is not None else dec,
-            currency=ref_currency or cur,
-            raw={"id": refund_id, "status": data.get("status")},
+        return _build_refund_result(
+            provider_name=self.name,
+            data=data,
+            expected_payment_id=pid,
+            expected_amount=dec,
+            expected_currency=cur,
+        )
+
+    def get_refund_status(self, refund_id: str) -> RefundStatusResult:
+        rid = (refund_id or "").strip()
+        if not rid:
+            raise PaymentProviderError(
+                "refund_id required",
+                code="refund_id_required",
+            )
+        data = self._request("GET", f"/refunds/{rid}")
+        created = _build_refund_result(provider_name=self.name, data=data)
+        return RefundStatusResult(
+            provider=created.provider,
+            refund_id=created.refund_id,
+            provider_payment_id=created.provider_payment_id,
+            status=created.status,
+            amount=created.amount,
+            currency=created.currency,
+            created_at=created.created_at,
+            cancellation_details=created.cancellation_details,
+            raw=created.raw,
         )
 
     def __repr__(self) -> str:
