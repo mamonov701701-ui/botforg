@@ -193,6 +193,64 @@ describe('PlatformLegalPage tabs and publish', () => {
     expect(canPublishLegal('lawyer_approved')).toBe(false);
     expect(canCreateNextRevision('archived')).toBe(false);
   });
+
+  it('shows deferred 6.14.9Б-2 notice collapsed with expand and copy', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <MemoryRouter>
+        <PlatformLegalPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('legal-deferred-package-refund-notice')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-notice-title')).toHaveTextContent('6.14.9Б-2');
+    expect(screen.getByTestId('legal-deferred-notice-subtitle')).toHaveTextContent(
+      'пакетным скидкам'
+    );
+    expect(screen.getByTestId('legal-deferred-notice-status')).toHaveTextContent('Отложено');
+    expect(screen.getByTestId('legal-deferred-notice-summary')).toHaveTextContent(
+      'нельзя включать в production'
+    );
+    expect(screen.getByTestId('legal-deferred-notice-toggle')).toHaveTextContent(
+      'Показать подробности'
+    );
+    expect(screen.queryByTestId('legal-deferred-notice-details')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('legal-deferred-notice-toggle'));
+    expect(screen.getByTestId('legal-deferred-notice-details')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-section-context')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-section-why')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-section-prerequisites')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-section-implement')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-section-forbidden')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-section-prepared')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-section-next')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-deferred-notice-toggle')).toHaveTextContent(
+      'Скрыть подробности'
+    );
+
+    fireEvent.click(screen.getByTestId('legal-deferred-notice-copy'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const copied = writeText.mock.calls[0][0] as string;
+    expect(copied).toContain('6.14.9Б-2');
+    expect(copied).toContain('Контекст');
+    expect(copied).toContain('Почему подэтап отложен');
+    expect(copied).toContain('Следующее действие');
+    await waitFor(() =>
+      expect(screen.getByTestId('legal-deferred-notice-copy-hint')).toHaveTextContent(
+        'Контекст скопирован'
+      )
+    );
+
+    // Вкладки продолжают работать рядом с напоминанием.
+    expect(screen.getByTestId('legal-admin-tab-active')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-admin-tab-archive')).toBeInTheDocument();
+  });
 });
 
 describe('AccountLegalPage', () => {
@@ -237,6 +295,7 @@ describe('AccountLegalPage', () => {
       </MemoryRouter>
     );
     await waitFor(() => screen.getByTestId('account-legal-active-list'));
+    expect(screen.queryByTestId('legal-deferred-package-refund-notice')).not.toBeInTheDocument();
     expect(screen.getByTestId('account-legal-read-privacy-policy')).toBeInTheDocument();
     expect(screen.queryByText('Принятые редакции')).not.toBeInTheDocument();
     expect(screen.queryByText('privacy_policy')).not.toBeInTheDocument();
@@ -306,6 +365,7 @@ describe('public legal index tabs', () => {
       </MemoryRouter>
     );
     await waitFor(() => screen.getByTestId('legal-public-link-privacy-policy'));
+    expect(screen.queryByTestId('legal-deferred-package-refund-notice')).not.toBeInTheDocument();
     expect(screen.queryByText('published')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('legal-public-tab-archive'));
     await waitFor(() => screen.getByTestId('legal-public-archive-list'));

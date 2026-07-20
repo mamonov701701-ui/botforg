@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import DeferredPackageRefundNotice from '../legal/DeferredPackageRefundNotice';
 import LegalRevisionsPanel from '../legal/LegalRevisionsPanel';
 import { LEGAL_LIST_TABS, type LegalListTabId } from '../legal/legalHelpers';
 import PageShell from '../../../ui/PageShell';
@@ -43,6 +44,7 @@ export default function PlatformLegalPage() {
       onTabChange={id => setTabAndUrl(id as LegalListTabId)}
       tabsAriaLabel="Действующие и архив"
     >
+      <DeferredPackageRefundNotice />
       <LegalRevisionsPanel mode={tab} />
     </PageShell>
   );
