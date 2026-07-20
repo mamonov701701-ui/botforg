@@ -1,14 +1,15 @@
 """
-Пользовательский refund API (Этап 6.14.3.3 / 6.14.10A).
+Пользовательский refund API (Этап 6.14.3.3 / 6.14.10A / 6.14.10V-1).
 
-POST/GET /me/refund-requests, cancel.
+POST/GET /me/refund-requests, cancel, provide-information.
 status_history — только на detail, из refund_audit_events.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from backend.auth.rate_limit import check_rate_limit
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.refund import (
@@ -19,6 +20,7 @@ from backend.models.refund import (
 from backend.models.user import User
 from backend.schemas.refund import (
     RefundablePurchaseListOut,
+    RefundProvideInformationIn,
     RefundRequestCancelIn,
     RefundRequestCreateIn,
     RefundRequestOut,
@@ -33,9 +35,11 @@ from backend.services.refund_audit_presentation import (
     build_public_status_history,
     extract_public_decision_message,
 )
+from backend.services.refund_notification_producer import RefundNotificationEnqueueError
 from backend.services.refund_revisions import (
     RefundRevisionServiceError,
     cancel_request,
+    provide_user_information,
 )
 from backend.services.refund_submit import RefundSubmitError, create_refund_request
 from backend.services.refundable_purchases import list_refundable_purchases
@@ -178,9 +182,15 @@ def _http_from_revision_error(exc: RefundRevisionServiceError) -> HTTPException:
         "invalid_status_transition",
         "version_conflict",
         "status_not_editable",
+        "invalid_status_for_reply",
     ):
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail={"code": code, "message": exc.message},
+        )
+    if code in ("message_required", "message_too_long"):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": code, "message": exc.message},
         )
     return HTTPException(
@@ -303,4 +313,40 @@ async def cancel_my_refund_request(
         )
     except RefundRevisionServiceError as exc:
         raise _http_from_revision_error(exc) from exc
+    return _request_out(db, updated, include_history=True)
+
+
+@router.post(
+    "/me/refund-requests/{request_id}/provide-information",
+    response_model=RefundRequestOut,
+)
+async def provide_information_for_my_refund_request(
+    request_id: int,
+    body: RefundProvideInformationIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ответ пользователя на needs_information (6.14.10В-1)."""
+    check_rate_limit(
+        request,
+        "refund_provide_information",
+        subject=f"user:{int(current_user.id)}",
+    )
+    req = _get_owned_request(db, user_id=current_user.id, request_id=request_id)
+    try:
+        updated = provide_user_information(
+            db,
+            req.id,
+            expected_version=body.expected_version,
+            actor_user_id=current_user.id,
+            message=body.message,
+        )
+    except RefundRevisionServiceError as exc:
+        raise _http_from_revision_error(exc) from exc
+    except RefundNotificationEnqueueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": exc.code, "message": "Не удалось сохранить ответ"},
+        ) from exc
     return _request_out(db, updated, include_history=True)

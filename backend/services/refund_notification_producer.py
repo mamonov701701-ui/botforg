@@ -87,6 +87,8 @@ def _is_notifiable(event: RefundAuditEvent) -> bool:
 
     if action == RefundAuditAction.CREATED.value:
         return True
+    if action == RefundAuditAction.USER_INFORMATION_PROVIDED.value:
+        return True
     if action == RefundAuditAction.APPROVED_REVISION_SET.value:
         return True
     if action in {
@@ -126,17 +128,51 @@ def build_idempotency_key(
     *,
     refund_id: int,
     audit_event_id: int,
-    user_id: int,
+    recipient_key: str,
     channel: str = NotificationChannel.EMAIL.value,
     template_version: str | None = None,
 ) -> str:
-    if refund_id is None or audit_event_id is None or user_id is None:
+    if refund_id is None or audit_event_id is None or not recipient_key:
         raise RefundNotificationEnqueueError(
             "Missing ids for idempotency key",
             code="idempotency_key_invalid",
         )
     ver = template_version or getattr(settings, "NOTIFICATION_TEMPLATE_VERSION", TEMPLATE_VERSION)
-    return f"refund:{int(refund_id)}:{int(audit_event_id)}:{channel}:{int(user_id)}:{ver}"
+    return f"refund:{int(refund_id)}:{int(audit_event_id)}:{channel}:{recipient_key}:{ver}"
+
+
+def _build_admin_reply_payload(
+    *,
+    request: RefundRequest,
+    audit_event: RefundAuditEvent,
+) -> dict[str, Any]:
+    frontend = (settings.FRONTEND_URL or "").rstrip("/")
+    detail_url = f"{frontend}/dashboard/finance?refund_request_id={int(request.id)}"
+    reply = (audit_event.reason or "").strip()
+    status_value = audit_event.new_status or request.status
+    status_label = status_label_ru(status_value) or status_value
+    description_parts = [
+        f"Пользователь ответил по заявке №{int(request.id)}.",
+        "",
+        "Текст ответа:",
+        reply or "(пусто)",
+        "",
+        f"Статус: {status_label}",
+    ]
+    return {
+        "notification_type": "refund_admin_user_reply",
+        "title": "пользователь ответил по заявке на возврат",
+        "description": "\n".join(description_parts),
+        "category": "information",
+        "status": status_value,
+        "status_label": status_label,
+        "request_id": int(request.id),
+        "detail_url": detail_url,
+        "amount_line": None,
+        "template_version": getattr(
+            settings, "NOTIFICATION_TEMPLATE_VERSION", TEMPLATE_VERSION
+        ),
+    }
 
 
 def enqueue_refund_notification_from_audit(
@@ -164,71 +200,124 @@ def enqueue_refund_notification_from_audit(
             kind=RefundNotificationResultKind.SKIPPED_NOT_REQUIRED
         )
 
-    try:
-        user = db.get(User, int(request.user_id))
-    except Exception as exc:
-        raise RefundNotificationEnqueueError(
-            "Failed to load recipient user",
-            code="recipient_lookup_failed",
-        ) from exc
-
-    if user is None:
-        raise RefundNotificationEnqueueError(
-            "Recipient user not found",
-            code="recipient_user_missing",
-        )
-
-    email = (user.email or "").strip()
-    if not _is_valid_recipient_email(email):
-        logger.info(
-            "refund_notify_skipped_no_recipient refund_id=%s audit_id=%s reason=invalid_or_missing_email",
-            request.id,
-            audit_event.id,
-        )
-        return RefundNotificationResult(
-            kind=RefundNotificationResultKind.SKIPPED_NO_RECIPIENT
-        )
-
-    revision = None
-    if request.current_revision_number:
-        from backend.models.refund import RefundRevision
-
-        revision = (
-            db.query(RefundRevision)
-            .filter(
-                RefundRevision.refund_request_id == request.id,
-                RefundRevision.revision_number == request.current_revision_number,
-            )
-            .first()
-        )
-    undefined = is_proposed_amount_undefined(revision, request)
-    amount = None if undefined else recommended_refund_amount_str(revision, request)
-    currency = revision.currency if revision else None
-
-    ctx = PresentationContext(
-        recommended_refund_amount=amount,
-        currency=currency,
-        proposed_amount_undefined=undefined,
-    )
-    public = present_public_event(audit_event, ctx=ctx)
-    if public is None:
-        raise RefundNotificationEnqueueError(
-            "Required notification presentation returned empty",
-            code="malformed_payload",
-        )
-    title = (public.title or "").strip()
-    description = (public.description or "").strip()
-    if not title or not description:
-        raise RefundNotificationEnqueueError(
-            "Required notification payload missing title/description",
-            code="malformed_payload",
-        )
-
+    action = str(audit_event.action or "")
     channel = NotificationChannel.EMAIL.value
+    recipient_user_id: int | None
+    email: str
+    recipient_key: str
+    payload: dict[str, Any]
+    notification_type: str
+
+    if action == RefundAuditAction.USER_INFORMATION_PROVIDED.value:
+        email = (getattr(settings, "REFUND_ADMIN_NOTIFY_EMAIL", None) or "").strip()
+        if not _is_valid_recipient_email(email):
+            logger.info(
+                "refund_notify_skipped_no_recipient refund_id=%s audit_id=%s reason=admin_email_missing",
+                request.id,
+                audit_event.id,
+            )
+            return RefundNotificationResult(
+                kind=RefundNotificationResultKind.SKIPPED_NO_RECIPIENT
+            )
+        recipient_user_id = None
+        recipient_key = "admin"
+        payload = _build_admin_reply_payload(request=request, audit_event=audit_event)
+        notification_type = "refund_admin_user_reply"
+    else:
+        try:
+            user = db.get(User, int(request.user_id))
+        except Exception as exc:
+            raise RefundNotificationEnqueueError(
+                "Failed to load recipient user",
+                code="recipient_lookup_failed",
+            ) from exc
+
+        if user is None:
+            raise RefundNotificationEnqueueError(
+                "Recipient user not found",
+                code="recipient_user_missing",
+            )
+
+        email = (user.email or "").strip()
+        if not _is_valid_recipient_email(email):
+            logger.info(
+                "refund_notify_skipped_no_recipient refund_id=%s audit_id=%s reason=invalid_or_missing_email",
+                request.id,
+                audit_event.id,
+            )
+            return RefundNotificationResult(
+                kind=RefundNotificationResultKind.SKIPPED_NO_RECIPIENT
+            )
+
+        revision = None
+        if request.current_revision_number:
+            from backend.models.refund import RefundRevision
+
+            revision = (
+                db.query(RefundRevision)
+                .filter(
+                    RefundRevision.refund_request_id == request.id,
+                    RefundRevision.revision_number == request.current_revision_number,
+                )
+                .first()
+            )
+        undefined = is_proposed_amount_undefined(revision, request)
+        amount = None if undefined else recommended_refund_amount_str(revision, request)
+        currency = revision.currency if revision else None
+
+        ctx = PresentationContext(
+            recommended_refund_amount=amount,
+            currency=currency,
+            proposed_amount_undefined=undefined,
+        )
+        public = present_public_event(audit_event, ctx=ctx)
+        if public is None:
+            raise RefundNotificationEnqueueError(
+                "Required notification presentation returned empty",
+                code="malformed_payload",
+            )
+        title = (public.title or "").strip()
+        description = (public.description or "").strip()
+        if not title or not description:
+            raise RefundNotificationEnqueueError(
+                "Required notification payload missing title/description",
+                code="malformed_payload",
+            )
+
+        frontend = (settings.FRONTEND_URL or "").rstrip("/")
+        detail_url = f"{frontend}/dashboard/finance/refunds/{int(request.id)}"
+        amount_line = None
+        if amount and public.category in {
+            "calculation",
+            "decision",
+            "completed",
+            "processing",
+        }:
+            cur = f" {currency}" if currency else ""
+            amount_line = f"Сумма: {amount}{cur}"
+
+        recipient_user_id = int(request.user_id)
+        recipient_key = str(int(request.user_id))
+        notification_type = "refund_status"
+        payload = {
+            "notification_type": notification_type,
+            "title": title,
+            "description": description,
+            "category": public.category,
+            "status": public.status,
+            "status_label": status_label_ru(public.status),
+            "request_id": int(request.id),
+            "detail_url": detail_url,
+            "amount_line": amount_line,
+            "template_version": getattr(
+                settings, "NOTIFICATION_TEMPLATE_VERSION", TEMPLATE_VERSION
+            ),
+        }
+
     key = build_idempotency_key(
         refund_id=int(request.id),
         audit_event_id=int(audit_event.id),
-        user_id=int(request.user_id),
+        recipient_key=recipient_key,
         channel=channel,
     )
     existing = (
@@ -242,33 +331,11 @@ def enqueue_refund_notification_from_audit(
             outbox=existing,
         )
 
-    frontend = (settings.FRONTEND_URL or "").rstrip("/")
-    detail_url = f"{frontend}/dashboard/finance/refunds/{int(request.id)}"
-    amount_line = None
-    if amount and public.category in {"calculation", "decision", "completed", "processing"}:
-        cur = f" {currency}" if currency else ""
-        amount_line = f"Сумма: {amount}{cur}"
-
-    payload: dict[str, Any] = {
-        "notification_type": "refund_status",
-        "title": title,
-        "description": description,
-        "category": public.category,
-        "status": public.status,
-        "status_label": status_label_ru(public.status),
-        "request_id": int(request.id),
-        "detail_url": detail_url,
-        "amount_line": amount_line,
-        "template_version": getattr(
-            settings, "NOTIFICATION_TEMPLATE_VERSION", TEMPLATE_VERSION
-        ),
-    }
-
     now = _utcnow()
     row = NotificationOutbox(
-        notification_type="refund_status",
+        notification_type=notification_type,
         channel=channel,
-        recipient_user_id=int(request.user_id),
+        recipient_user_id=recipient_user_id,
         recipient_email=email,
         aggregate_type=AGGREGATE_TYPE_REFUND,
         aggregate_id=str(int(request.id)),
@@ -296,17 +363,17 @@ def enqueue_refund_notification_from_audit(
                 kind=RefundNotificationResultKind.DUPLICATE,
                 outbox=existing,
             )
-        # Произвольный IntegrityError без записи по ключу — не идемпотентный дубль.
         raise RefundNotificationEnqueueError(
             "Outbox insert integrity error without idempotent row",
             code="enqueue_integrity_error",
         ) from exc
 
     logger.info(
-        "refund_notify_enqueued outbox_id=%s refund_id=%s audit_id=%s",
+        "refund_notify_enqueued outbox_id=%s refund_id=%s audit_id=%s recipient=%s",
         row.id,
         request.id,
         audit_event.id,
+        recipient_key,
     )
     return RefundNotificationResult(
         kind=RefundNotificationResultKind.ENQUEUED,

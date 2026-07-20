@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     SMTP_TIMEOUT_SECONDS: float = 15.0
     EMAIL_FROM: str = "BotForg <noreply@botforg.app>"
+    # Ops/admin recipient for refund user-reply notifications (6.14.10V-1). Empty → skip.
+    REFUND_ADMIN_NOTIFY_EMAIL: str = ""
 
     # Notification outbox worker (6.14.10B)
     NOTIFICATION_OUTBOX_BATCH_SIZE: int = 20

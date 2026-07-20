@@ -177,6 +177,8 @@ class RefundAuditAction(str, Enum):
     LEDGER_ENTRY_CREATED = "ledger_entry_created"
     VERSION_BUMP = "version_bump"
     VALIDATION_REJECTED = "validation_rejected"
+    # Этап 6.14.10В-1 — ответ пользователя на needs_information
+    USER_INFORMATION_PROVIDED = "user_information_provided"
     # Этап 6.14.8 — entitlement after refund
     ENTITLEMENT_APPLY_STARTED = "entitlement_apply_started"
     ENTITLEMENT_APPLIED = "entitlement_applied"

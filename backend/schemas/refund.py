@@ -1,9 +1,9 @@
-"""Схемы пользовательского refund API (Этап 6.14.3.3 / 6.14.4 / 6.14.10A)."""
+"""Схемы пользовательского refund API (Этап 6.14.3.3 / 6.14.4 / 6.14.10A / 6.14.10V-1)."""
 from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class RefundRequestCreateIn(BaseModel):
@@ -17,6 +17,21 @@ class RefundRequestCreateIn(BaseModel):
 class RefundRequestCancelIn(BaseModel):
     expected_version: int = Field(..., ge=1)
     reason: str | None = Field(default=None, max_length=1000)
+
+
+class RefundProvideInformationIn(BaseModel):
+    """Ответ пользователя на needs_information (6.14.10В-1)."""
+
+    message: str = Field(..., min_length=1, max_length=2000)
+    expected_version: int = Field(..., ge=1)
+
+    @field_validator("message")
+    @classmethod
+    def message_must_not_be_blank(cls, value: str) -> str:
+        text = (value or "").strip()
+        if not text:
+            raise ValueError("message must not be blank")
+        return text
 
 
 class RefundStatusHistoryItemOut(BaseModel):

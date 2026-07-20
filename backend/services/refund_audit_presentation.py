@@ -193,6 +193,8 @@ def _admin_title(action: str, new_status: str | None, meta: dict[str, Any]) -> s
     outcome = str(meta.get("outcome") or "")
     if action == RefundAuditAction.CREATED.value:
         return "Заявка создана"
+    if action == RefundAuditAction.USER_INFORMATION_PROVIDED.value:
+        return "Пользователь предоставил дополнительную информацию"
     if action == RefundAuditAction.REVISION_CREATED.value:
         return "Создана ревизия расчёта"
     if action == RefundAuditAction.APPROVED_REVISION_SET.value:
@@ -294,6 +296,20 @@ def present_public_event(
             "Мы получили вашу заявку и начали её рассмотрение.",
             "request",
             new or RefundRequestStatus.SUBMITTED.value,
+        )
+
+    if action == RefundAuditAction.USER_INFORMATION_PROVIDED.value:
+        reply = (reason or "").strip()
+        desc = (
+            "Вы отправили ответ администратору. Заявка возвращена на рассмотрение."
+        )
+        if reply and _is_safe_public_reason(reply):
+            desc = f"{desc}\n\n{reply}"
+        return item(
+            "Дополнительная информация отправлена",
+            desc,
+            "information",
+            new or RefundRequestStatus.AWAITING_ADMIN_REVIEW.value,
         )
 
     if action == RefundAuditAction.REVISION_CREATED.value:

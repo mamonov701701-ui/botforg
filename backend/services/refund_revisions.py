@@ -1120,3 +1120,67 @@ def cancel_request(
     except RefundInvariantError as exc:
         db.rollback()
         raise RefundRevisionServiceError(str(exc), code=exc.code) from exc
+
+
+def provide_user_information(
+    db: Session,
+    request_id: int,
+    *,
+    expected_version: int,
+    actor_user_id: int,
+    message: str,
+    commit: bool = True,
+) -> RefundRequest:
+    """
+    Ответ пользователя на needs_information (6.14.10В-1).
+
+    Один audit event user_information_provided (без отдельного status_changed).
+    Не меняет исходный user_comment.
+    """
+    text = (message or "").strip()
+    if not text:
+        raise RefundRevisionServiceError(
+            "Message is required", code="message_required"
+        )
+    if len(text) > 2000:
+        raise RefundRevisionServiceError(
+            "Message is too long", code="message_too_long"
+        )
+
+    request = _lock_request(db, request_id)
+    if (request.status or "") != RefundRequestStatus.NEEDS_INFORMATION.value:
+        raise RefundRevisionServiceError(
+            "Request is not waiting for user information",
+            code="invalid_status_for_reply",
+        )
+
+    previous = request.status
+    try:
+        _bump_version(request, expected_version=expected_version)
+        validate_status_transition(
+            current=previous,
+            new=RefundRequestStatus.AWAITING_ADMIN_REVIEW.value,
+        )
+        request.status = RefundRequestStatus.AWAITING_ADMIN_REVIEW.value
+        request.updated_at = _utcnow()
+        _write_audit(
+            db,
+            request,
+            actor_type=RefundAuditActorType.USER.value,
+            actor_user_id=int(actor_user_id),
+            action=RefundAuditAction.USER_INFORMATION_PROVIDED.value,
+            previous_status=previous,
+            new_status=request.status,
+            reason=text,
+        )
+        if commit:
+            db.commit()
+            db.refresh(request)
+        return request
+    except RefundInvariantError as exc:
+        db.rollback()
+        raise RefundRevisionServiceError(str(exc), code=exc.code) from exc
+    except Exception:
+        if commit:
+            db.rollback()
+        raise

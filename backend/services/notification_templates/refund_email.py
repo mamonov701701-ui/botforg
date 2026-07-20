@@ -49,6 +49,7 @@ def status_label_ru(status: str | None) -> str | None:
         return None
     mapping = {
         "submitted": "Отправлена",
+        "awaiting_admin_review": "На рассмотрении",
         "needs_information": "Нужна информация",
         "rejected": "Отклонена",
         "approved": "Одобрена",

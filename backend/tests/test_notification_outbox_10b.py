@@ -506,8 +506,8 @@ def test_classify_errors():
 
 
 def test_idempotency_key_stable():
-    k1 = build_idempotency_key(refund_id=5, audit_event_id=9, user_id=3)
-    k2 = build_idempotency_key(refund_id=5, audit_event_id=9, user_id=3)
+    k1 = build_idempotency_key(refund_id=5, audit_event_id=9, recipient_key="3")
+    k2 = build_idempotency_key(refund_id=5, audit_event_id=9, recipient_key="3")
     assert k1 == k2
     assert k1 == "refund:5:9:email:3:v1"
 
@@ -700,7 +700,7 @@ def test_arbitrary_integrity_error_not_treated_as_duplicate(client, db, monkeypa
     key = build_idempotency_key(
         refund_id=int(req.id),
         audit_event_id=int(audit.id),
-        user_id=int(uid),
+        recipient_key=str(int(uid)),
     )
     db.query(NotificationOutbox).filter(NotificationOutbox.idempotency_key == key).delete()
     db.commit()

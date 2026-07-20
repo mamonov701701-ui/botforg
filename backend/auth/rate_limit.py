@@ -10,13 +10,18 @@ MAX_ATTEMPTS = 5
 WINDOW_MINUTES = 10
 
 
-def check_rate_limit(request: Request, action: str):
+def check_rate_limit(
+    request: Request,
+    action: str,
+    *,
+    subject: str | None = None,
+):
     """
-    Check rate limit for IP + action
-    Raises HTTPException 429 if limit exceeded
+    Check rate limit for subject + action (default subject = client IP).
+    Raises HTTPException 429 if limit exceeded.
     """
     ip = request.client.host if request.client else "127.0.0.1"
-    key = f"{ip}:{action}"
+    key = f"{subject or ip}:{action}"
 
     now = datetime.utcnow()
     cutoff = now - timedelta(minutes=WINDOW_MINUTES)
