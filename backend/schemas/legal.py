@@ -134,5 +134,6 @@ class LegalPurchaseSnapshotOut(BaseModel):
 
 class LegalAccountOverviewOut(BaseModel):
     current_documents: list[LegalRevisionListItemOut]
-    accepted: list[LegalConsentAcceptedOut]
-    purchase_snapshots: list[LegalPurchaseSnapshotOut]
+    archived_documents: list[LegalRevisionListItemOut] = []
+    accepted: list[LegalConsentAcceptedOut] = []
+    purchase_snapshots: list[LegalPurchaseSnapshotOut] = []

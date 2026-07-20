@@ -31,6 +31,7 @@ from backend.services.legal_documents import (
     LegalDocumentError,
     get_public_version,
     get_published_by_slug,
+    list_all_archived_documents,
     list_public_archive,
     list_public_documents,
 )
@@ -241,6 +242,12 @@ async def public_list_documents(db: Session = Depends(get_db)):
     return [_list_item(r) for r in list_public_documents(db)]
 
 
+@router.get("/archive", response_model=list[LegalRevisionListItemOut])
+async def public_list_all_archive(db: Session = Depends(get_db)):
+    """Все archived-редакции (публичный архив)."""
+    return [_list_item(r) for r in list_all_archived_documents(db)]
+
+
 @router.get("/documents/{slug}", response_model=LegalRevisionPublicOut)
 async def public_get_current(slug: str, db: Session = Depends(get_db)):
     try:
@@ -310,10 +317,12 @@ async def legal_account_overview(
     db: Session = Depends(get_db),
 ):
     """
-    ЛК: актуальные документы, принятые редакции, legal snapshot покупок.
+    ЛК: действующие и архивные документы, legal snapshot покупок.
+    Consent history остаётся в БД /consent/status; в overview — для совместимости.
     Без IP, user-agent и внутренних служебных полей.
     """
     current_documents = [_list_item(r) for r in list_public_documents(db)]
+    archived_documents = [_list_item(r) for r in list_all_archived_documents(db)]
 
     rows = (
         db.query(Consent)
@@ -397,6 +406,7 @@ async def legal_account_overview(
 
     return LegalAccountOverviewOut(
         current_documents=current_documents,
+        archived_documents=archived_documents,
         accepted=accepted,
         purchase_snapshots=purchase_snapshots,
     )

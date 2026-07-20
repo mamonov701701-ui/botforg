@@ -70,6 +70,7 @@ export interface LegalPurchaseSnapshot {
 
 export interface LegalAccountOverview {
   current_documents: LegalRevisionListItem[];
+  archived_documents?: LegalRevisionListItem[];
   accepted: LegalConsentAccepted[];
   purchase_snapshots: LegalPurchaseSnapshot[];
 }
@@ -93,6 +94,10 @@ export async function getLegalDocumentVersion(
 
 export async function listLegalArchive(slug: string): Promise<LegalRevisionListItem[]> {
   return get(`${LEGAL_DOCUMENTS_API_PATH}/${encodeURIComponent(slug)}/archive`);
+}
+
+export async function listAllLegalArchive(): Promise<LegalRevisionListItem[]> {
+  return get('/legal/archive');
 }
 
 export async function getLegalAccountOverview(): Promise<LegalAccountOverview> {

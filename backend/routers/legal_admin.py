@@ -23,6 +23,7 @@ from backend.services.legal_documents import (
     LegalDocumentError,
     archive_revision,
     create_draft,
+    delete_draft,
     list_admin_revisions,
     mark_lawyer_approved,
     publish_revision,
@@ -46,7 +47,11 @@ def _http(exc: Exception) -> HTTPException:
     status_code = status.HTTP_400_BAD_REQUEST
     if code in {"revision_not_found", "unknown_slug", "unknown_doc_type"}:
         status_code = status.HTTP_404_NOT_FOUND
-    if code in {"revision_immutable", "publish_requires_lawyer_approval"}:
+    if code in {
+        "revision_immutable",
+        "publish_requires_lawyer_approval",
+        "invalid_status_transition",
+    }:
         status_code = status.HTTP_409_CONFLICT
     return HTTPException(
         status_code=status_code,
@@ -215,6 +220,24 @@ async def admin_archive(
     except LegalDocumentError as exc:
         raise _http(exc) from exc
     return _admin_out(rev)
+
+
+@router.delete(
+    "/revisions/{revision_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def admin_delete_draft(
+    revision_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    try:
+        delete_draft(
+            db, revision_id=revision_id, actor_user_id=admin.id, commit=True
+        )
+    except LegalDocumentError as exc:
+        raise _http(exc) from exc
+    return None
 
 
 @router.get("/checklist", response_model=list[LegalChecklistItemOut])

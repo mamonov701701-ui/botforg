@@ -1,7 +1,7 @@
 /**
  * Admin legal API (этап 6.14.9B-1B) — /api/admin/legal
  */
-import { get, patch, post, ApiError } from './client';
+import { del, get, patch, post, ApiError } from './client';
 
 export const ADMIN_LEGAL_API_PATH = '/api/admin/legal';
 
@@ -62,13 +62,53 @@ export interface LegalLaunchStatus {
   missing_doc_types: string[];
 }
 
+/** English / technical API fragments that must never reach the UI. */
+const TECHNICAL_ERROR_RE =
+  /lawyer_approved|ready_for_review|Only\s+draft|Only\s+lawyer|409\s*Conflict|Conflict|invalid_status|revision_immutable|body_required|title_required|HTTPException/i;
+
+function looksTechnical(msg: string): boolean {
+  const t = msg.trim();
+  if (!t) return true;
+  if (TECHNICAL_ERROR_RE.test(t)) return true;
+  // Latin-only technical phrases (no Cyrillic)
+  if (/^[A-Za-z0-9_ '".,:;!?/()-]+$/.test(t) && /[A-Za-z]{4,}/.test(t)) return true;
+  return false;
+}
+
 export function safeLegalAdminErrorMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
     if (err.status === 403) return 'Недостаточно прав для управления юридическими документами';
     if (err.status === 401) return 'Требуется вход в аккаунт';
-    if (err.message) return err.message;
+    if (err.status === 404) {
+      return 'Админ API юридических документов недоступен. Перезапустите backend и повторите попытку.';
+    }
+    if (err.status === 409) {
+      if (err.code === 'body_required') {
+        return 'Перед публикацией заполните текст документа';
+      }
+      if (err.code === 'title_required') {
+        return 'Перед публикацией укажите название документа';
+      }
+      if (
+        err.code === 'invalid_status_transition' ||
+        err.code === 'publish_requires_lawyer_approval'
+      ) {
+        return 'Опубликовать можно только черновик. Откройте черновик и нажмите «Опубликовать».';
+      }
+      if (err.code === 'revision_immutable') {
+        return 'Опубликованные и архивные редакции нельзя изменять';
+      }
+      const msg = (err.message || '').trim();
+      if (msg && !looksTechnical(msg)) return msg;
+      return 'Не удалось выполнить действие. Опубликовать можно только готовый черновик.';
+    }
+    const msg = (err.message || '').trim();
+    if (msg && !looksTechnical(msg)) return msg;
   }
-  if (err instanceof Error && err.message) return err.message;
+  if (err instanceof Error) {
+    const msg = (err.message || '').trim();
+    if (msg && !looksTechnical(msg)) return msg;
+  }
   return fallback;
 }
 
@@ -102,6 +142,10 @@ export async function publishAdminLegalRevision(revisionId: number): Promise<Leg
 
 export async function archiveAdminLegalRevision(revisionId: number): Promise<LegalRevisionAdmin> {
   return post(`${ADMIN_LEGAL_API_PATH}/revisions/${revisionId}/archive`);
+}
+
+export async function deleteAdminLegalDraft(revisionId: number): Promise<void> {
+  await del(`${ADMIN_LEGAL_API_PATH}/revisions/${revisionId}`);
 }
 
 export async function getAdminLegalChecklist(): Promise<LegalChecklistItem[]> {

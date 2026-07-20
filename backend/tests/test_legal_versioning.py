@@ -28,13 +28,10 @@ from backend.services.checkout_pay import CheckoutPayError, start_checkout_payme
 from backend.services.legal_consent import record_consent
 from backend.services.legal_documents import (
     LegalDocumentError,
-    archive_revision,
     create_draft,
     get_published_by_type,
     list_public_documents,
-    mark_lawyer_approved,
     publish_revision,
-    submit_for_review,
     update_draft,
 )
 from backend.services.legal_launch import (
@@ -81,10 +78,6 @@ def _publish_required(db, admin_uid: int):
             body_markdown=f"# {doc_type}\nbody",
             actor_user_id=admin_uid,
             commit=False,
-        )
-        submit_for_review(db, revision_id=rev.id, actor_user_id=admin_uid, commit=False)
-        mark_lawyer_approved(
-            db, revision_id=rev.id, actor_user_id=admin_uid, commit=False
         )
         publish_revision(db, revision_id=rev.id, actor_user_id=admin_uid, commit=False)
     db.commit()
@@ -137,12 +130,7 @@ def test_revision_lifecycle_and_publish_rules(client, db):
     )
     assert rev.status == LegalRevisionStatus.DRAFT.value
 
-    with pytest.raises(LegalDocumentError) as ei:
-        publish_revision(db, revision_id=rev.id, actor_user_id=admin_uid)
-    assert ei.value.code == "publish_requires_lawyer_approval"
-
-    submit_for_review(db, revision_id=rev.id, actor_user_id=admin_uid, commit=True)
-    mark_lawyer_approved(db, revision_id=rev.id, actor_user_id=admin_uid, commit=True)
+    # Direct draft → publish (no ready_for_review / lawyer_approved required).
     published = publish_revision(
         db, revision_id=rev.id, actor_user_id=admin_uid, commit=True
     )
@@ -167,22 +155,118 @@ def test_revision_lifecycle_and_publish_rules(client, db):
         actor_user_id=admin_uid,
         commit=True,
     )
-    submit_for_review(db, revision_id=rev2.id, actor_user_id=admin_uid, commit=True)
-    mark_lawyer_approved(
-        db, revision_id=rev2.id, actor_user_id=admin_uid, commit=True
-    )
     publish_revision(db, revision_id=rev2.id, actor_user_id=admin_uid, commit=True)
     db.refresh(published)
     assert published.status == LegalRevisionStatus.ARCHIVED.value
-    assert (
-        get_published_by_type(db, LegalDocType.PUBLIC_OFFER.value).id == rev2.id
-    )
+    assert get_published_by_type(db, LegalDocType.PUBLIC_OFFER.value).id == rev2.id
 
     pub_list = list_public_documents(db)
     assert all(r.status == LegalRevisionStatus.PUBLISHED.value for r in pub_list)
     # Only one public_offer published
     offers = [r for r in pub_list if r.doc_type == LegalDocType.PUBLIC_OFFER.value]
     assert len(offers) == 1
+    assert published.content_sha256
+    assert published.published_at is not None
+
+    # Re-publish of published is rejected (draft only)
+    with pytest.raises(LegalDocumentError) as ei3:
+        publish_revision(db, revision_id=rev2.id, actor_user_id=admin_uid)
+    assert ei3.value.code == "invalid_status_transition"
+
+    # Legacy statuses (e.g. lawyer_approved) are not publishable in the simplified flow.
+    legacy = create_draft(
+        db,
+        doc_type=LegalDocType.ACCEPTABLE_USE.value,
+        version="1.0",
+        title="Acceptable use",
+        body_markdown="# Acceptable use",
+        actor_user_id=admin_uid,
+        commit=True,
+    )
+    legacy.status = LegalRevisionStatus.LAWYER_APPROVED.value
+    db.commit()
+    with pytest.raises(LegalDocumentError) as ei4:
+        publish_revision(db, revision_id=legacy.id, actor_user_id=admin_uid)
+    assert ei4.value.code == "invalid_status_transition"
+    db.refresh(legacy)
+    assert legacy.status == LegalRevisionStatus.LAWYER_APPROVED.value
+
+
+def test_publish_is_atomic_on_commit_failure(client, db, monkeypatch):
+    """При ошибке commit статусы не должны частично сохраняться."""
+    headers, admin_uid = _admin(client, db)
+    first = create_draft(
+        db,
+        doc_type=LegalDocType.PRIVACY_POLICY.value,
+        version="1.0",
+        title="Privacy",
+        body_markdown="# P1",
+        actor_user_id=admin_uid,
+        commit=True,
+    )
+    publish_revision(db, revision_id=first.id, actor_user_id=admin_uid, commit=True)
+    db.refresh(first)
+    assert first.status == LegalRevisionStatus.PUBLISHED.value
+
+    second = create_draft(
+        db,
+        doc_type=LegalDocType.PRIVACY_POLICY.value,
+        version="2.0",
+        title="Privacy 2",
+        body_markdown="# P2",
+        actor_user_id=admin_uid,
+        commit=True,
+    )
+
+    real_commit = db.commit
+
+    def boom():
+        raise RuntimeError("simulated commit failure")
+
+    monkeypatch.setattr(db, "commit", boom)
+    with pytest.raises(RuntimeError, match="simulated commit failure"):
+        publish_revision(db, revision_id=second.id, actor_user_id=admin_uid, commit=True)
+
+    monkeypatch.setattr(db, "commit", real_commit)
+    db.expire_all()
+    db.refresh(first)
+    db.refresh(second)
+    assert first.status == LegalRevisionStatus.PUBLISHED.value
+    assert second.status == LegalRevisionStatus.DRAFT.value
+    assert get_published_by_type(db, LegalDocType.PRIVACY_POLICY.value).id == first.id
+
+
+def test_publish_does_not_require_manual_archive(client, db):
+    """Публикация сама архивирует предыдущую published — ручной archive не нужен."""
+    _, admin_uid = _admin(client, db)
+    v1 = create_draft(
+        db,
+        doc_type=LegalDocType.COOKIES_POLICY.value,
+        version="1.0",
+        title="Cookies",
+        body_markdown="# C1",
+        actor_user_id=admin_uid,
+        commit=True,
+    )
+    publish_revision(db, revision_id=v1.id, actor_user_id=admin_uid, commit=True)
+
+    v2 = create_draft(
+        db,
+        doc_type=LegalDocType.COOKIES_POLICY.value,
+        version="2.0",
+        title="Cookies 2",
+        body_markdown="# C2",
+        actor_user_id=admin_uid,
+        commit=True,
+    )
+    # Без вызова archive_revision — сразу publish.
+    published = publish_revision(
+        db, revision_id=v2.id, actor_user_id=admin_uid, commit=True
+    )
+    db.refresh(v1)
+    assert published.status == LegalRevisionStatus.PUBLISHED.value
+    assert v1.status == LegalRevisionStatus.ARCHIVED.value
+    assert get_published_by_type(db, LegalDocType.COOKIES_POLICY.value).id == v2.id
 
 
 def test_public_api_hides_drafts_and_notes(client, db):
@@ -211,8 +295,6 @@ def test_public_api_hides_drafts_and_notes(client, db):
         internal_notes="internal",
         commit=True,
     )
-    submit_for_review(db, revision_id=rev.id, actor_user_id=admin_uid, commit=True)
-    mark_lawyer_approved(db, revision_id=rev.id, actor_user_id=admin_uid, commit=True)
     publish_revision(db, revision_id=rev.id, actor_user_id=admin_uid, commit=True)
 
     cur = client.get("/legal/documents/cookies-policy")
@@ -243,8 +325,6 @@ def test_consent_stores_revision_hash_source(client, db):
         actor_user_id=admin_uid,
         commit=True,
     )
-    submit_for_review(db, revision_id=rev.id, actor_user_id=admin_uid, commit=True)
-    mark_lawyer_approved(db, revision_id=rev.id, actor_user_id=admin_uid, commit=True)
     publish_revision(db, revision_id=rev.id, actor_user_id=admin_uid, commit=True)
     db.refresh(rev)
 
@@ -310,10 +390,6 @@ def test_checkout_snapshot_immutable_and_old_intents_untouched(client, db):
         body_markdown="new",
         actor_user_id=admin_uid,
         commit=True,
-    )
-    submit_for_review(db, revision_id=rev2.id, actor_user_id=admin_uid, commit=True)
-    mark_lawyer_approved(
-        db, revision_id=rev2.id, actor_user_id=admin_uid, commit=True
     )
     publish_revision(db, revision_id=rev2.id, actor_user_id=admin_uid, commit=True)
     db.refresh(intent)

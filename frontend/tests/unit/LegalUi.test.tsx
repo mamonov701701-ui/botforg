@@ -2,20 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
-import { ApiError } from '@/api/client';
-import type { LegalRevisionAdmin, LegalLaunchStatus, LegalChecklistItem } from '@/api/legalAdmin';
+import type { LegalRevisionAdmin } from '@/api/legalAdmin';
+import {
+  canCreateNextRevision,
+  canPublishLegal,
+  LEGAL_COLORS,
+  legalPrimaryBtnStyle,
+} from '@/features/dashboard/legal/legalHelpers';
 
-const {
-  listAdminLegalRevisions,
-  createAdminLegalDraft,
-  getAdminLegalChecklist,
-  getAdminLegalLaunchStatus,
-  toast,
-} = vi.hoisted(() => ({
+const { listAdminLegalRevisions, publishAdminLegalRevision, toast } = vi.hoisted(() => ({
   listAdminLegalRevisions: vi.fn(),
-  createAdminLegalDraft: vi.fn(),
-  getAdminLegalChecklist: vi.fn(),
-  getAdminLegalLaunchStatus: vi.fn(),
+  publishAdminLegalRevision: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
 
@@ -24,15 +21,11 @@ vi.mock('@/api/legalAdmin', async () => {
   return {
     ...actual,
     listAdminLegalRevisions,
-    createAdminLegalDraft,
+    createAdminLegalDraft: vi.fn(),
     updateAdminLegalDraft: vi.fn(),
-    submitAdminLegalReview: vi.fn(),
-    approveAdminLegalLawyer: vi.fn(),
-    publishAdminLegalRevision: vi.fn(),
+    publishAdminLegalRevision,
     archiveAdminLegalRevision: vi.fn(),
-    getAdminLegalChecklist,
-    getAdminLegalLaunchStatus,
-    updateAdminLegalChecklistItem: vi.fn(),
+    deleteAdminLegalDraft: vi.fn(),
   };
 });
 
@@ -43,6 +36,7 @@ import { LegalIndexPage } from '@/pages/legal/LegalPublicPages';
 import AccountLegalPage from '@/features/dashboard/pages/AccountLegalPage';
 
 const listLegalDocuments = vi.hoisted(() => vi.fn());
+const listAllLegalArchive = vi.hoisted(() => vi.fn());
 const getLegalAccountOverview = vi.hoisted(() => vi.fn());
 
 vi.mock('@/api/legal', async () => {
@@ -50,6 +44,7 @@ vi.mock('@/api/legal', async () => {
   return {
     ...actual,
     listLegalDocuments,
+    listAllLegalArchive,
     getLegalAccountOverview,
   };
 });
@@ -62,7 +57,7 @@ function adminRevision(overrides: Partial<LegalRevisionAdmin> = {}): LegalRevisi
     version: '1.0',
     status: 'draft',
     title: 'Оферта',
-    body_markdown: '# Offer',
+    body_markdown: '# Offer\n\nТекст',
     content_sha256: 'abc',
     published_at: null,
     archived_at: null,
@@ -78,92 +73,204 @@ function adminRevision(overrides: Partial<LegalRevisionAdmin> = {}): LegalRevisi
   };
 }
 
-function launchStatus(overrides: Partial<LegalLaunchStatus> = {}): LegalLaunchStatus {
-  return {
-    legal_launch_ready: false,
-    environment: 'development',
-    payments_blocked: false,
-    checklist_complete: false,
-    required_docs_published: false,
-    missing_checklist_keys: ['seller_details'],
-    missing_doc_types: ['public_offer'],
-    ...overrides,
-  };
-}
-
-describe('PlatformLegalPage', () => {
+describe('PlatformLegalPage tabs and publish', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listAdminLegalRevisions.mockResolvedValue([adminRevision()]);
-    getAdminLegalChecklist.mockResolvedValue([
-      {
-        id: 1,
-        item_key: 'seller_details',
-        label_ru: 'Реквизиты продавца',
-        is_completed: false,
-        completed_at: null,
-        completed_by_user_id: null,
-        note: null,
-        updated_at: '2026-07-01T10:00:00Z',
-      } satisfies LegalChecklistItem,
+    listAdminLegalRevisions.mockResolvedValue([
+      adminRevision({ id: 1, status: 'draft', title: 'Черновик оферты' }),
+      adminRevision({
+        id: 2,
+        status: 'published',
+        title: 'Оферта',
+        version: '2.0',
+        published_at: '2026-07-01T00:00:00Z',
+      }),
+      adminRevision({
+        id: 3,
+        status: 'archived',
+        title: 'Старая оферта',
+        version: '1.0',
+        published_at: '2026-06-01T00:00:00Z',
+        archived_at: '2026-07-01T00:00:00Z',
+      }),
     ]);
-    getAdminLegalLaunchStatus.mockResolvedValue(launchStatus());
   });
 
-  it('renders documents tab and revision list', async () => {
+  it('shows Действующие and Архив tabs; archive has no Новая редакция', async () => {
     render(
       <MemoryRouter initialEntries={['/dashboard/platform/legal']}>
         <PlatformLegalPage />
       </MemoryRouter>
     );
-    expect(screen.getByTestId('legal-admin-shell')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByTestId('legal-revision-row-1')).toBeInTheDocument();
-    });
+    expect(screen.getByTestId('legal-admin-tab-active')).toBeInTheDocument();
+    expect(screen.getByTestId('legal-admin-tab-archive')).toBeInTheDocument();
+    await waitFor(() => screen.getByTestId('legal-active-drafts'));
+    expect(screen.getByTestId('legal-list-publish-1')).toBeInTheDocument();
+    expect(screen.queryByText('Принятые редакции')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('legal-admin-tab-archive'));
+    await waitFor(() => screen.getByTestId('legal-archive-list'));
+    expect(screen.getByTestId('legal-archive-open-3')).toBeInTheDocument();
+    expect(screen.queryByTestId('legal-new-revision-3')).not.toBeInTheDocument();
+    expect(screen.queryByText('Новая редакция')).not.toBeInTheDocument();
   });
 
-  it('shows readiness tab with legal_launch_ready', async () => {
+  it('publishes draft via single publish endpoint and refreshes active/archive lists', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    publishAdminLegalRevision.mockResolvedValue(
+      adminRevision({
+        id: 1,
+        status: 'published',
+        version: '2.0',
+        published_at: '2026-07-02T00:00:00Z',
+      })
+    );
+    listAdminLegalRevisions
+      .mockResolvedValueOnce([
+        adminRevision({ id: 1, status: 'draft', version: '2.0', title: 'Оферта 2' }),
+        adminRevision({
+          id: 2,
+          status: 'published',
+          version: '1.0',
+          title: 'Оферта',
+          published_at: '2026-06-01T00:00:00Z',
+        }),
+      ])
+      .mockResolvedValue([
+        adminRevision({
+          id: 1,
+          status: 'published',
+          version: '2.0',
+          title: 'Оферта 2',
+          published_at: '2026-07-02T00:00:00Z',
+        }),
+        adminRevision({
+          id: 2,
+          status: 'archived',
+          version: '1.0',
+          title: 'Оферта',
+          published_at: '2026-06-01T00:00:00Z',
+          archived_at: '2026-07-02T00:00:00Z',
+        }),
+      ]);
+
     render(
-      <MemoryRouter initialEntries={['/dashboard/platform/legal?tab=readiness']}>
+      <MemoryRouter>
         <PlatformLegalPage />
       </MemoryRouter>
     );
-    await waitFor(() => {
-      expect(screen.getByTestId('legal-launch-ready-value')).toHaveTextContent('false');
-    });
-    expect(screen.getByTestId('legal-checklist-seller_details')).toBeInTheDocument();
+    await waitFor(() => screen.getByTestId('legal-list-publish-1'));
+    fireEvent.click(screen.getByTestId('legal-list-publish-1'));
+    await waitFor(() => expect(publishAdminLegalRevision).toHaveBeenCalledTimes(1));
+    expect(publishAdminLegalRevision).toHaveBeenCalledWith(1);
+    await waitFor(() => expect(listAdminLegalRevisions.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => screen.getByTestId('legal-new-revision-1'));
+    expect(screen.queryByTestId('legal-list-publish-1')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('legal-admin-tab-archive'));
+    await waitFor(() => screen.getByTestId('legal-archive-open-2'));
+    confirmSpy.mockRestore();
   });
 
-  it('shows forbidden state for non-admin', async () => {
-    listAdminLegalRevisions.mockRejectedValue(new ApiError('forbidden', 403));
-    render(
-      <MemoryRouter initialEntries={['/dashboard/platform/legal']}>
-        <PlatformLegalPage />
-      </MemoryRouter>
+  it('maps technical publish errors to Russian', async () => {
+    const { safeLegalAdminErrorMessage } = await import('@/api/legalAdmin');
+    const { ApiError } = await import('@/api/client');
+    const msg = safeLegalAdminErrorMessage(
+      new ApiError(
+        'Only lawyer_approved revisions can be published',
+        409,
+        'invalid_status_transition'
+      ),
+      'Не удалось опубликовать'
     );
-    await waitFor(() => {
-      expect(screen.getByTestId('legal-revisions-forbidden')).toBeInTheDocument();
-    });
+    expect(msg).not.toMatch(/lawyer_approved|409|Conflict/i);
+    expect(msg).toMatch(/черновик/i);
   });
 
-  it('opens create draft form', async () => {
-    render(
-      <MemoryRouter initialEntries={['/dashboard/platform/legal']}>
-        <PlatformLegalPage />
-      </MemoryRouter>
-    );
-    await waitFor(() => screen.getByTestId('legal-create-toggle'));
-    fireEvent.click(screen.getByTestId('legal-create-toggle'));
-    expect(screen.getByTestId('legal-create-form')).toBeInTheDocument();
+  it('primary buttons use dark text', () => {
+    expect(legalPrimaryBtnStyle.color).toBe(LEGAL_COLORS.dark);
+    expect(canPublishLegal('draft')).toBe(true);
+    expect(canPublishLegal('lawyer_approved')).toBe(false);
+    expect(canCreateNextRevision('archived')).toBe(false);
   });
 });
 
-describe('LegalIndexPage', () => {
+describe('AccountLegalPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getLegalAccountOverview.mockResolvedValue({
+      current_documents: [
+        {
+          id: 1,
+          doc_type: 'privacy_policy',
+          slug: 'privacy-policy',
+          version: '2.0',
+          status: 'published',
+          title: 'Политика конфиденциальности',
+          content_sha256: 'x',
+          published_at: '2026-07-01T00:00:00Z',
+          archived_at: null,
+        },
+      ],
+      archived_documents: [
+        {
+          id: 9,
+          doc_type: 'privacy_policy',
+          slug: 'privacy-policy',
+          version: '1.0',
+          status: 'archived',
+          title: 'Политика конфиденциальности',
+          content_sha256: 'y',
+          published_at: '2026-05-01T00:00:00Z',
+          archived_at: '2026-07-01T00:00:00Z',
+        },
+      ],
+      accepted: [],
+      purchase_snapshots: [],
+    });
   });
 
-  it('lists published documents', async () => {
+  it('shows vertical list; hides tech fields; splits active/archive', async () => {
+    render(
+      <MemoryRouter>
+        <AccountLegalPage />
+      </MemoryRouter>
+    );
+    await waitFor(() => screen.getByTestId('account-legal-active-list'));
+    expect(screen.getByTestId('account-legal-read-privacy-policy')).toBeInTheDocument();
+    expect(screen.queryByText('Принятые редакции')).not.toBeInTheDocument();
+    expect(screen.queryByText('privacy_policy')).not.toBeInTheDocument();
+    expect(screen.queryByText('published')).not.toBeInTheDocument();
+    expect(screen.queryByText('privacy-policy')).not.toBeInTheDocument();
+    expect(screen.getByText('Политика конфиденциальности')).toBeInTheDocument();
+    expect(screen.getByTestId('account-legal-tab-archive')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('account-legal-tab-archive'));
+    await waitFor(() => screen.getByTestId('account-legal-archive-list'));
+    expect(screen.getByTestId('account-legal-archive-9')).toBeInTheDocument();
+    expect(screen.getByText('Открыть')).toBeInTheDocument();
+  });
+
+  it('shows empty archive message', async () => {
+    getLegalAccountOverview.mockResolvedValue({
+      current_documents: [],
+      archived_documents: [],
+      accepted: [],
+      purchase_snapshots: [],
+    });
+    render(
+      <MemoryRouter initialEntries={['/dashboard/account/legal?tab=archive']}>
+        <AccountLegalPage />
+      </MemoryRouter>
+    );
+    await waitFor(() => screen.getByTestId('account-legal-archive-empty'));
+    expect(screen.getByText('Архивных редакций пока нет.')).toBeInTheDocument();
+  });
+});
+
+describe('public legal index tabs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
     listLegalDocuments.mockResolvedValue([
       {
         id: 5,
@@ -177,57 +284,32 @@ describe('LegalIndexPage', () => {
         archived_at: null,
       },
     ]);
+    listAllLegalArchive.mockResolvedValue([
+      {
+        id: 8,
+        doc_type: 'privacy_policy',
+        slug: 'privacy-policy',
+        version: '1.0',
+        status: 'archived',
+        title: 'Политика',
+        content_sha256: 'z',
+        published_at: '2026-05-01T00:00:00Z',
+        archived_at: '2026-07-01T00:00:00Z',
+      },
+    ]);
+  });
+
+  it('separates active and archive without raw codes', async () => {
     render(
       <MemoryRouter>
         <LegalIndexPage />
       </MemoryRouter>
     );
-    await waitFor(() => {
-      expect(screen.getByTestId('legal-public-link-privacy-policy')).toBeInTheDocument();
-    });
-  });
-});
-
-describe('AccountLegalPage', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('renders accepted consents without requiring IP fields', async () => {
-    getLegalAccountOverview.mockResolvedValue({
-      current_documents: [
-        {
-          id: 1,
-          doc_type: 'privacy_policy',
-          slug: 'privacy-policy',
-          version: '2.0',
-          status: 'published',
-          title: 'Политика',
-          content_sha256: 'x',
-          published_at: '2026-07-01T00:00:00Z',
-          archived_at: null,
-        },
-      ],
-      accepted: [
-        {
-          doc_type: 'privacy_policy',
-          doc_version: '2.0',
-          accepted_at: '2026-07-02T00:00:00Z',
-          revision_id: 1,
-          source: 'login',
-        },
-      ],
-      purchase_snapshots: [],
-    });
-    render(
-      <MemoryRouter>
-        <AccountLegalPage />
-      </MemoryRouter>
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId('account-legal-accepted')).toBeInTheDocument();
-    });
-    expect(screen.queryByText(/user.agent/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/10\.0\.0\.1/)).not.toBeInTheDocument();
+    await waitFor(() => screen.getByTestId('legal-public-link-privacy-policy'));
+    expect(screen.queryByText('published')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('legal-public-tab-archive'));
+    await waitFor(() => screen.getByTestId('legal-public-archive-list'));
+    expect(screen.getByText('Открыть')).toBeInTheDocument();
+    expect(screen.queryByText('archived')).not.toBeInTheDocument();
   });
 });

@@ -317,15 +317,33 @@ def publish_revision(
     actor_user_id: int,
     commit: bool = True,
 ) -> LegalDocumentRevision:
+    """
+    Атомарная публикация готового черновика.
+
+    Требует status=draft (ready_for_review / lawyer_approved не в рабочем процессе).
+    В одной транзакции: предыдущая published того же doc_type → archived,
+    draft → published (+ published_at, content_sha256).
+    """
     rev = db.get(LegalDocumentRevision, int(revision_id))
     if rev is None:
         raise LegalDocumentError("Revision not found", code="revision_not_found")
-    if rev.status != LegalRevisionStatus.LAWYER_APPROVED.value:
+    if rev.status != LegalRevisionStatus.DRAFT.value:
         raise LegalDocumentError(
-            "Only lawyer_approved revisions can be published",
-            code="publish_requires_lawyer_approval",
+            "Опубликовать можно только черновик",
+            code="invalid_status_transition",
+        )
+    if not (rev.body_markdown or "").strip():
+        raise LegalDocumentError(
+            "Перед публикацией заполните текст документа",
+            code="body_required",
+        )
+    if not (rev.title or "").strip():
+        raise LegalDocumentError(
+            "Перед публикацией укажите название документа",
+            code="title_required",
         )
 
+    rev.content_sha256 = content_sha256(rev.body_markdown or "")
     now = _utcnow()
     previous = (
         db.query(LegalDocumentRevision)
@@ -361,9 +379,44 @@ def publish_revision(
         new_value=_public_safe_revision_dict(rev),
     )
     if commit:
-        db.commit()
-        db.refresh(rev)
+        try:
+            db.commit()
+            db.refresh(rev)
+        except Exception:
+            db.rollback()
+            raise
+    else:
+        db.flush()
     return rev
+
+
+def delete_draft(
+    db: Session,
+    *,
+    revision_id: int,
+    actor_user_id: int,
+    commit: bool = True,
+) -> None:
+    """Удалить только черновик (published/archived неизменяемы)."""
+    rev = db.get(LegalDocumentRevision, int(revision_id))
+    if rev is None:
+        raise LegalDocumentError("Revision not found", code="revision_not_found")
+    if rev.status != LegalRevisionStatus.DRAFT.value:
+        raise LegalDocumentError(
+            "Only draft revisions can be deleted",
+            code="revision_immutable",
+        )
+    rid = int(rev.id)
+    db.delete(rev)
+    _write_audit(
+        db,
+        admin_user_id=actor_user_id,
+        action="legal_revision_draft_deleted",
+        entity_id=rid,
+        new_value={"deleted": True},
+    )
+    if commit:
+        db.commit()
 
 
 def archive_revision(
@@ -463,19 +516,30 @@ def list_public_documents(db: Session) -> list[LegalDocumentRevision]:
 
 
 def list_public_archive(db: Session, slug: str) -> list[LegalDocumentRevision]:
+    """Архивные редакции одного типа (без текущей published)."""
     doc_type = doc_type_for_slug(slug)
     return (
         db.query(LegalDocumentRevision)
         .filter(
             LegalDocumentRevision.doc_type == doc_type,
-            LegalDocumentRevision.status.in_(
-                [
-                    LegalRevisionStatus.PUBLISHED.value,
-                    LegalRevisionStatus.ARCHIVED.value,
-                ]
-            ),
+            LegalDocumentRevision.status == LegalRevisionStatus.ARCHIVED.value,
         )
         .order_by(LegalDocumentRevision.id.desc())
+        .all()
+    )
+
+
+def list_all_archived_documents(db: Session) -> list[LegalDocumentRevision]:
+    """Все archived-редакции для публичного/ЛК архива."""
+    return (
+        db.query(LegalDocumentRevision)
+        .filter(
+            LegalDocumentRevision.status == LegalRevisionStatus.ARCHIVED.value,
+        )
+        .order_by(
+            LegalDocumentRevision.doc_type.asc(),
+            LegalDocumentRevision.id.desc(),
+        )
         .all()
     )
 

@@ -1,32 +1,36 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Plus, RefreshCw } from 'lucide-react';
 import {
-  archiveAdminLegalRevision,
-  approveAdminLegalLawyer,
   createAdminLegalDraft,
+  deleteAdminLegalDraft,
   listAdminLegalRevisions,
   publishAdminLegalRevision,
   safeLegalAdminErrorMessage,
-  submitAdminLegalReview,
   updateAdminLegalDraft,
   type LegalRevisionAdmin,
 } from '../../../api/legalAdmin';
 import { ApiError } from '../../../api/client';
 import { toast } from '../../../utils/toast';
+import { docMarkdownToSafeHtml } from '../../../pages/features/renderDocMarkdown';
 import {
   LEGAL_COLORS,
   LEGAL_DOC_TYPE_OPTIONS,
-  canArchiveLegal,
+  canDeleteLegalDraft,
   canEditLegalDraft,
-  canLawyerApprove,
   canPublishLegal,
-  canSubmitLegalReview,
   formatLegalDate,
+  formatLegalDateShort,
+  isLegalDraftStatus,
   legalDocTypeLabel,
+  legalPrimaryBtnStyle,
+  legalSecondaryBtnStyle,
   legalStatusLabel,
+  suggestNextVersion,
+  type LegalListTabId,
 } from './legalHelpers';
 
 type LoadState = 'loading' | 'ready' | 'empty' | 'error' | 'forbidden';
+type ViewMode = 'list' | 'edit' | 'preview';
 
 const fieldStyle: React.CSSProperties = {
   width: '100%',
@@ -39,29 +43,12 @@ const fieldStyle: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-const btnBase: React.CSSProperties = {
-  padding: '8px 14px',
-  borderRadius: 8,
-  border: `1px solid ${LEGAL_COLORS.accentBorder}`,
-  background: LEGAL_COLORS.panelBgElevated,
-  color: LEGAL_COLORS.text,
-  fontSize: 14,
-  cursor: 'pointer',
-};
-
-const btnPrimary: React.CSSProperties = {
-  ...btnBase,
-  background: LEGAL_COLORS.accent,
-  borderColor: LEGAL_COLORS.accent,
-  color: '#fff',
-  fontWeight: 600,
-};
-
-export default function LegalRevisionsPanel() {
+export default function LegalRevisionsPanel({ mode }: { mode: LegalListTabId }) {
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [items, setItems] = useState<LegalRevisionAdmin[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -74,6 +61,13 @@ export default function LegalRevisionsPanel() {
 
   const selected = useMemo(() => items.find(i => i.id === selectedId) ?? null, [items, selectedId]);
 
+  const activePublished = useMemo(() => items.filter(i => i.status === 'published'), [items]);
+  const activeDrafts = useMemo(() => items.filter(i => isLegalDraftStatus(i.status)), [items]);
+  const archived = useMemo(() => items.filter(i => i.status === 'archived'), [items]);
+
+  const listEmpty =
+    mode === 'archive' ? archived.length === 0 : activePublished.length + activeDrafts.length === 0;
+
   const load = useCallback(async () => {
     setLoadState('loading');
     setErrorMsg('');
@@ -84,11 +78,10 @@ export default function LegalRevisionsPanel() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         setLoadState('forbidden');
-        setErrorMsg('Недостаточно прав');
         return;
       }
       setLoadState('error');
-      setErrorMsg(safeLegalAdminErrorMessage(err, 'Не удалось загрузить редакции'));
+      setErrorMsg(safeLegalAdminErrorMessage(err, 'Не удалось загрузить документы'));
     }
   }, []);
 
@@ -97,25 +90,58 @@ export default function LegalRevisionsPanel() {
   }, [load]);
 
   useEffect(() => {
+    setSelectedId(null);
+    setViewMode('list');
+    setCreating(false);
+  }, [mode]);
+
+  useEffect(() => {
     if (!selected) return;
     setEditTitle(selected.title);
     setEditBody(selected.body_markdown || '');
     setEditNotes(selected.internal_notes || '');
   }, [selected]);
 
-  const runAction = async (fn: () => Promise<LegalRevisionAdmin>, okMsg: string) => {
+  const openCreateForm = (seed?: { doc_type?: string; version?: string; title?: string }) => {
+    if (seed?.doc_type) setDraftDocType(seed.doc_type);
+    if (seed?.version) setDraftVersion(seed.version);
+    if (seed?.title !== undefined) setDraftTitle(seed.title);
+    setCreating(true);
+    setSelectedId(null);
+    setViewMode('list');
+  };
+
+  const openRevision = (id: number, next: ViewMode) => {
+    setCreating(false);
+    setSelectedId(id);
+    setViewMode(next);
+  };
+
+  const runPublish = async (id: number) => {
+    const row = items.find(i => i.id === id);
+    if (!row || !canPublishLegal(row.status)) return;
+    const ok = window.confirm(
+      `Опубликовать «${row.title}» (версия ${row.version})?\n\n` +
+        'Предыдущая действующая версия этого документа будет переведена в архив.'
+    );
+    if (!ok) return;
     setBusy(true);
     try {
-      const updated = await fn();
-      setItems(prev => {
-        const next = prev.filter(i => i.id !== updated.id);
-        return [updated, ...next].sort((a, b) => b.id - a.id);
-      });
-      setSelectedId(updated.id);
-      toast.success(okMsg);
+      if (viewMode === 'edit' && selectedId === id) {
+        await updateAdminLegalDraft(id, {
+          title: editTitle.trim(),
+          body_markdown: editBody,
+          internal_notes: editNotes.trim() || null,
+          clear_internal_notes: !editNotes.trim(),
+        });
+      }
+      await publishAdminLegalRevision(id);
+      toast.success('Документ опубликован');
       await load();
+      setSelectedId(null);
+      setViewMode('list');
     } catch (err) {
-      toast.error(safeLegalAdminErrorMessage(err, 'Операция не выполнена'));
+      toast.error(safeLegalAdminErrorMessage(err, 'Не удалось опубликовать'));
     } finally {
       setBusy(false);
     }
@@ -123,7 +149,7 @@ export default function LegalRevisionsPanel() {
 
   const onCreate = async () => {
     if (!draftTitle.trim() || !draftVersion.trim()) {
-      toast.error('Укажите версию и заголовок');
+      toast.error('Укажите версию и название');
       return;
     }
     setBusy(true);
@@ -137,27 +163,49 @@ export default function LegalRevisionsPanel() {
       toast.success('Черновик создан');
       setCreating(false);
       setDraftTitle('');
-      setSelectedId(row.id);
       await load();
+      openRevision(row.id, 'edit');
     } catch (err) {
-      toast.error(safeLegalAdminErrorMessage(err, 'Не удалось создать черновик'));
+      toast.error(safeLegalAdminErrorMessage(err, 'Не удалось создать документ'));
     } finally {
       setBusy(false);
     }
   };
 
-  const onSaveDraft = async () => {
+  const onSave = async () => {
     if (!selected || !canEditLegalDraft(selected.status)) return;
-    await runAction(
-      () =>
-        updateAdminLegalDraft(selected.id, {
-          title: editTitle.trim(),
-          body_markdown: editBody,
-          internal_notes: editNotes.trim() || null,
-          clear_internal_notes: !editNotes.trim(),
-        }),
-      'Черновик сохранён'
-    );
+    setBusy(true);
+    try {
+      await updateAdminLegalDraft(selected.id, {
+        title: editTitle.trim(),
+        body_markdown: editBody,
+        internal_notes: editNotes.trim() || null,
+        clear_internal_notes: !editNotes.trim(),
+      });
+      toast.success('Сохранено');
+      await load();
+    } catch (err) {
+      toast.error(safeLegalAdminErrorMessage(err, 'Не удалось сохранить'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onDelete = async () => {
+    if (!selected || !canDeleteLegalDraft(selected.status)) return;
+    if (!window.confirm(`Удалить черновик «${selected.title}»?`)) return;
+    setBusy(true);
+    try {
+      await deleteAdminLegalDraft(selected.id);
+      toast.success('Черновик удалён');
+      setSelectedId(null);
+      setViewMode('list');
+      await load();
+    } catch (err) {
+      toast.error(safeLegalAdminErrorMessage(err, 'Не удалось удалить'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (loadState === 'forbidden') {
@@ -168,19 +216,25 @@ export default function LegalRevisionsPanel() {
     );
   }
 
-  if (selected) {
+  if (selected && viewMode !== 'list') {
+    const editable = canEditLegalDraft(selected.status) && viewMode === 'edit';
+    const html = docMarkdownToSafeHtml(editable ? editBody : selected.body_markdown || '');
+    const archiveOnly = mode === 'archive' || selected.status === 'archived';
     return (
       <div data-testid="legal-revision-detail">
         <button
           type="button"
           style={{
-            ...btnBase,
+            ...legalSecondaryBtnStyle,
             marginBottom: 16,
             display: 'inline-flex',
             alignItems: 'center',
             gap: 8,
           }}
-          onClick={() => setSelectedId(null)}
+          onClick={() => {
+            setSelectedId(null);
+            setViewMode('list');
+          }}
         >
           <ArrowLeft size={16} /> К списку
         </button>
@@ -192,9 +246,9 @@ export default function LegalRevisionsPanel() {
             padding: 20,
           }}
         >
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 16 }}>
             <div>
-              <div style={{ fontSize: 12, color: LEGAL_COLORS.textSecondary }}>Тип</div>
+              <div style={{ fontSize: 12, color: LEGAL_COLORS.textSecondary }}>Документ</div>
               <div>{legalDocTypeLabel(selected.doc_type)}</div>
             </div>
             <div>
@@ -205,16 +259,20 @@ export default function LegalRevisionsPanel() {
               <div style={{ fontSize: 12, color: LEGAL_COLORS.textSecondary }}>Статус</div>
               <div data-testid="legal-revision-status">{legalStatusLabel(selected.status)}</div>
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: LEGAL_COLORS.textSecondary }}>Slug</div>
-              <div>{selected.slug}</div>
-            </div>
+            {selected.published_at ? (
+              <div>
+                <div style={{ fontSize: 12, color: LEGAL_COLORS.textSecondary }}>
+                  Дата публикации
+                </div>
+                <div>{formatLegalDate(selected.published_at)}</div>
+              </div>
+            ) : null}
           </div>
 
-          {canEditLegalDraft(selected.status) ? (
+          {editable ? (
             <>
               <label style={{ display: 'block', marginBottom: 12 }}>
-                <div style={{ fontSize: 12, marginBottom: 4 }}>Заголовок</div>
+                <div style={{ fontSize: 12, marginBottom: 4 }}>Название</div>
                 <input
                   style={fieldStyle}
                   value={editTitle}
@@ -223,9 +281,9 @@ export default function LegalRevisionsPanel() {
                 />
               </label>
               <label style={{ display: 'block', marginBottom: 12 }}>
-                <div style={{ fontSize: 12, marginBottom: 4 }}>Текст (markdown)</div>
+                <div style={{ fontSize: 12, marginBottom: 4 }}>Текст документа</div>
                 <textarea
-                  style={{ ...fieldStyle, minHeight: 220, fontFamily: 'inherit' }}
+                  style={{ ...fieldStyle, minHeight: 260 }}
                   value={editBody}
                   onChange={e => setEditBody(e.target.value)}
                   data-testid="legal-edit-body"
@@ -234,100 +292,98 @@ export default function LegalRevisionsPanel() {
               <label style={{ display: 'block', marginBottom: 16 }}>
                 <div style={{ fontSize: 12, marginBottom: 4 }}>Внутренние заметки</div>
                 <textarea
-                  style={{ ...fieldStyle, minHeight: 80 }}
+                  style={{ ...fieldStyle, minHeight: 72 }}
                   value={editNotes}
                   onChange={e => setEditNotes(e.target.value)}
-                  data-testid="legal-edit-notes"
                 />
               </label>
-              <button
-                type="button"
-                style={{ ...btnPrimary, marginRight: 8 }}
-                disabled={busy}
-                onClick={() => void onSaveDraft()}
-              >
-                Сохранить
-              </button>
             </>
           ) : (
             <>
               <h3 style={{ marginTop: 0 }}>{selected.title}</h3>
-              <pre
+              <div
+                data-testid="legal-preview-body"
+                className="block-doc-md"
                 style={{
-                  whiteSpace: 'pre-wrap',
-                  fontFamily: 'inherit',
-                  fontSize: 14,
                   background: LEGAL_COLORS.fieldBg,
-                  padding: 12,
                   borderRadius: 8,
-                  maxHeight: 360,
+                  padding: 16,
+                  maxHeight: 420,
                   overflow: 'auto',
                 }}
-              >
-                {selected.body_markdown || '—'}
-              </pre>
-              {selected.internal_notes ? (
-                <p style={{ color: LEGAL_COLORS.textSecondary, fontSize: 13 }}>
-                  Внутренние заметки: {selected.internal_notes}
-                </p>
-              ) : null}
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
             </>
           )}
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
-            {canSubmitLegalReview(selected.status) ? (
+            {!archiveOnly && canEditLegalDraft(selected.status) && viewMode === 'preview' ? (
               <button
                 type="button"
-                style={btnPrimary}
-                disabled={busy}
-                data-testid="legal-action-submit"
-                onClick={() =>
-                  void runAction(() => submitAdminLegalReview(selected.id), 'Передано на проверку')
-                }
+                style={legalPrimaryBtnStyle}
+                data-testid="legal-action-edit"
+                onClick={() => setViewMode('edit')}
               >
-                На проверку
+                Редактировать
               </button>
             ) : null}
-            {canLawyerApprove(selected.status) ? (
-              <button
-                type="button"
-                style={btnPrimary}
-                disabled={busy}
-                data-testid="legal-action-lawyer"
-                onClick={() =>
-                  void runAction(
-                    () => approveAdminLegalLawyer(selected.id),
-                    'Отмечено одобрение юриста'
-                  )
-                }
-              >
-                Одобрение юриста
-              </button>
+            {editable ? (
+              <>
+                <button
+                  type="button"
+                  style={legalPrimaryBtnStyle}
+                  disabled={busy}
+                  data-testid="legal-action-save"
+                  onClick={() => void onSave()}
+                >
+                  Сохранить
+                </button>
+                <button
+                  type="button"
+                  style={legalSecondaryBtnStyle}
+                  data-testid="legal-action-preview"
+                  onClick={() => setViewMode('preview')}
+                >
+                  Предпросмотр
+                </button>
+              </>
             ) : null}
-            {canPublishLegal(selected.status) ? (
+            {!archiveOnly && canPublishLegal(selected.status) ? (
               <button
                 type="button"
-                style={btnPrimary}
+                style={legalPrimaryBtnStyle}
                 disabled={busy}
                 data-testid="legal-action-publish"
-                onClick={() =>
-                  void runAction(() => publishAdminLegalRevision(selected.id), 'Опубликовано')
-                }
+                onClick={() => void runPublish(selected.id)}
               >
                 Опубликовать
               </button>
             ) : null}
-            {canArchiveLegal(selected.status) ? (
+            {!archiveOnly && canDeleteLegalDraft(selected.status) ? (
               <button
                 type="button"
-                style={btnBase}
+                style={legalSecondaryBtnStyle}
                 disabled={busy}
-                data-testid="legal-action-archive"
+                data-testid="legal-action-delete"
+                onClick={() => void onDelete()}
+              >
+                Удалить черновик
+              </button>
+            ) : null}
+            {!archiveOnly && selected.status === 'published' ? (
+              <button
+                type="button"
+                style={legalPrimaryBtnStyle}
+                data-testid="legal-action-new-revision"
                 onClick={() =>
-                  void runAction(() => archiveAdminLegalRevision(selected.id), 'В архиве')
+                  openCreateForm({
+                    doc_type: selected.doc_type,
+                    version: suggestNextVersion(selected.version),
+                    title: selected.title,
+                  })
                 }
               >
-                Архивировать
+                Новая редакция
               </button>
             ) : null}
           </div>
@@ -337,27 +393,53 @@ export default function LegalRevisionsPanel() {
   }
 
   return (
-    <div data-testid="legal-revisions-panel">
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          style={{ ...btnPrimary, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-          onClick={() => setCreating(v => !v)}
-          data-testid="legal-create-toggle"
-        >
-          <Plus size={16} /> Новый черновик
-        </button>
-        <button
-          type="button"
-          style={{ ...btnBase, display: 'inline-flex', alignItems: 'center', gap: 8 }}
-          onClick={() => void load()}
-          data-testid="legal-revisions-refresh"
-        >
-          <RefreshCw size={16} /> Обновить
-        </button>
-      </div>
+    <div data-testid="legal-revisions-panel" data-mode={mode}>
+      {mode === 'active' ? (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            style={{
+              ...legalPrimaryBtnStyle,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+            onClick={() => openCreateForm()}
+            data-testid="legal-create-toggle"
+          >
+            <Plus size={16} /> Новый документ
+          </button>
+          <button
+            type="button"
+            style={{
+              ...legalSecondaryBtnStyle,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+            onClick={() => void load()}
+          >
+            <RefreshCw size={16} /> Обновить
+          </button>
+        </div>
+      ) : (
+        <div style={{ marginBottom: 16 }}>
+          <button
+            type="button"
+            style={{
+              ...legalSecondaryBtnStyle,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+            onClick={() => void load()}
+          >
+            <RefreshCw size={16} /> Обновить
+          </button>
+        </div>
+      )}
 
-      {creating ? (
+      {creating && mode === 'active' ? (
         <div
           data-testid="legal-create-form"
           style={{
@@ -374,7 +456,6 @@ export default function LegalRevisionsPanel() {
               style={fieldStyle}
               value={draftDocType}
               onChange={e => setDraftDocType(e.target.value)}
-              data-testid="legal-create-doc-type"
             >
               {LEGAL_DOC_TYPE_OPTIONS.map(o => (
                 <option key={o.value} value={o.value}>
@@ -389,11 +470,10 @@ export default function LegalRevisionsPanel() {
               style={fieldStyle}
               value={draftVersion}
               onChange={e => setDraftVersion(e.target.value)}
-              data-testid="legal-create-version"
             />
           </label>
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <div style={{ fontSize: 12, marginBottom: 4 }}>Заголовок</div>
+            <div style={{ fontSize: 12, marginBottom: 4 }}>Название</div>
             <input
               style={fieldStyle}
               value={draftTitle}
@@ -401,15 +481,20 @@ export default function LegalRevisionsPanel() {
               data-testid="legal-create-title"
             />
           </label>
-          <button
-            type="button"
-            style={btnPrimary}
-            disabled={busy}
-            onClick={() => void onCreate()}
-            data-testid="legal-create-submit"
-          >
-            Создать
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              style={legalPrimaryBtnStyle}
+              disabled={busy}
+              data-testid="legal-create-submit"
+              onClick={() => void onCreate()}
+            >
+              Создать
+            </button>
+            <button type="button" style={legalSecondaryBtnStyle} onClick={() => setCreating(false)}>
+              Отмена
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -421,40 +506,236 @@ export default function LegalRevisionsPanel() {
           {errorMsg}
         </p>
       ) : null}
-      {loadState === 'empty' ? (
-        <p data-testid="legal-revisions-empty" style={{ color: LEGAL_COLORS.textSecondary }}>
-          Редакций пока нет. Создайте черновик.
-        </p>
+
+      {loadState !== 'loading' && listEmpty && !creating ? (
+        <div
+          data-testid="legal-revisions-empty"
+          style={{
+            padding: 16,
+            borderRadius: 12,
+            border: `1px solid ${LEGAL_COLORS.accentBorder}`,
+            background: LEGAL_COLORS.panelBgElevated,
+            color: LEGAL_COLORS.textSecondary,
+          }}
+        >
+          {mode === 'archive'
+            ? 'В архиве пока нет документов.'
+            : 'Действующих документов и черновиков пока нет. Создайте новый документ.'}
+        </div>
       ) : null}
 
-      {loadState === 'ready' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {items.map(item => (
-            <button
+      {mode === 'active' && loadState === 'ready' ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <section data-testid="legal-active-published">
+            <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>Опубликованные</h3>
+            {activePublished.length === 0 ? (
+              <p style={{ color: LEGAL_COLORS.textSecondary, margin: 0 }}>Нет опубликованных</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {activePublished.map(item => (
+                  <ActivePublishedRow
+                    key={item.id}
+                    item={item}
+                    onOpen={() => openRevision(item.id, 'preview')}
+                    onNew={() =>
+                      openCreateForm({
+                        doc_type: item.doc_type,
+                        version: suggestNextVersion(item.version),
+                        title: item.title,
+                      })
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+          <section data-testid="legal-active-drafts">
+            <h3 style={{ margin: '0 0 10px', fontSize: 15 }}>Черновики</h3>
+            {activeDrafts.length === 0 ? (
+              <p style={{ color: LEGAL_COLORS.textSecondary, margin: 0 }}>Нет черновиков</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {activeDrafts.map(item => (
+                  <ActiveDraftRow
+                    key={item.id}
+                    item={item}
+                    busy={busy}
+                    onEdit={() => openRevision(item.id, 'edit')}
+                    onPreview={() => openRevision(item.id, 'preview')}
+                    onPublish={() => void runPublish(item.id)}
+                    onDelete={async () => {
+                      if (!window.confirm(`Удалить черновик «${item.title}»?`)) return;
+                      setBusy(true);
+                      try {
+                        await deleteAdminLegalDraft(item.id);
+                        toast.success('Черновик удалён');
+                        await load();
+                      } catch (err) {
+                        toast.error(safeLegalAdminErrorMessage(err, 'Не удалось удалить'));
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
+
+      {mode === 'archive' && archived.length > 0 ? (
+        <div
+          data-testid="legal-archive-list"
+          style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+        >
+          {archived.map(item => (
+            <div
               key={item.id}
-              type="button"
               data-testid={`legal-revision-row-${item.id}`}
-              onClick={() => setSelectedId(item.id)}
               style={{
-                textAlign: 'left',
-                padding: 14,
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 8,
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: 12,
                 borderRadius: 10,
                 border: `1px solid ${LEGAL_COLORS.accentBorder}`,
                 background: LEGAL_COLORS.panelBgElevated,
-                color: LEGAL_COLORS.text,
-                cursor: 'pointer',
               }}
             >
-              <div style={{ fontWeight: 600 }}>{item.title}</div>
-              <div style={{ fontSize: 13, color: LEGAL_COLORS.textSecondary, marginTop: 4 }}>
-                {legalDocTypeLabel(item.doc_type)} · v{item.version} ·{' '}
-                {legalStatusLabel(item.status)}
-                {item.published_at ? ` · ${formatLegalDate(item.published_at)}` : ''}
+              <div>
+                <div style={{ fontWeight: 600 }}>{item.title}</div>
+                <div style={{ fontSize: 13, color: LEGAL_COLORS.textSecondary }}>
+                  Версия {item.version}
+                  {item.published_at ? ` · ${formatLegalDateShort(item.published_at)}` : ''}
+                </div>
               </div>
-            </button>
+              <button
+                type="button"
+                style={legalPrimaryBtnStyle}
+                data-testid={`legal-archive-open-${item.id}`}
+                onClick={() => openRevision(item.id, 'preview')}
+              >
+                Открыть
+              </button>
+            </div>
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ActivePublishedRow({
+  item,
+  onOpen,
+  onNew,
+}: {
+  item: LegalRevisionAdmin;
+  onOpen: () => void;
+  onNew: () => void;
+}) {
+  return (
+    <div
+      data-testid={`legal-revision-row-${item.id}`}
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+        borderRadius: 10,
+        border: `1px solid ${LEGAL_COLORS.accentBorder}`,
+        background: LEGAL_COLORS.panelBgElevated,
+      }}
+    >
+      <div>
+        <div style={{ fontWeight: 600 }}>{item.title}</div>
+        <div style={{ fontSize: 13, color: LEGAL_COLORS.textSecondary }}>
+          {legalDocTypeLabel(item.doc_type)} · версия {item.version}
+          {item.published_at ? ` · ${formatLegalDateShort(item.published_at)}` : ''}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" style={legalPrimaryBtnStyle} onClick={onOpen}>
+          Открыть
+        </button>
+        <button
+          type="button"
+          style={legalSecondaryBtnStyle}
+          data-testid={`legal-new-revision-${item.id}`}
+          onClick={onNew}
+        >
+          Новая редакция
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ActiveDraftRow({
+  item,
+  busy,
+  onEdit,
+  onPreview,
+  onPublish,
+  onDelete,
+}: {
+  item: LegalRevisionAdmin;
+  busy: boolean;
+  onEdit: () => void;
+  onPreview: () => void;
+  onPublish: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      data-testid={`legal-revision-row-${item.id}`}
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+        borderRadius: 10,
+        border: `1px solid ${LEGAL_COLORS.accentBorder}`,
+        background: LEGAL_COLORS.fieldBg,
+      }}
+    >
+      <div>
+        <div style={{ fontWeight: 600 }}>{item.title}</div>
+        <div style={{ fontSize: 13, color: LEGAL_COLORS.textSecondary }}>
+          {legalDocTypeLabel(item.doc_type)} · версия {item.version} · Черновик
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button type="button" style={legalPrimaryBtnStyle} onClick={onEdit}>
+          Редактировать
+        </button>
+        <button type="button" style={legalSecondaryBtnStyle} onClick={onPreview}>
+          Предпросмотр
+        </button>
+        {item.status === 'draft' ? (
+          <button
+            type="button"
+            style={legalPrimaryBtnStyle}
+            disabled={busy}
+            data-testid={`legal-list-publish-${item.id}`}
+            onClick={onPublish}
+          >
+            Опубликовать
+          </button>
+        ) : null}
+        {item.status === 'draft' ? (
+          <button type="button" style={legalSecondaryBtnStyle} disabled={busy} onClick={onDelete}>
+            Удалить черновик
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
