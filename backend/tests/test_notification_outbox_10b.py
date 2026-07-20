@@ -532,3 +532,62 @@ def test_migration_indexes_exist(db):
     assert "uq_notification_outbox_idempotency" in uniques or any(
         "idempotency" in (n or "") for n in indexes
     )
+
+
+def test_batch_limit_respected(client, db):
+    _, uid = _auth(client, db)
+    for i in range(3):
+        intent = _seed_paid(db, uid, key=f"ob-batch-{i}")
+        create_refund_request(
+            db,
+            user_id=uid,
+            checkout_intent_id=intent.id,
+            reason_category="unused",
+            idempotency_key=f"ob-batch-key-{i}",
+        )
+    claimed = claim_outbox_batch(db, worker_id="batch-w", batch_size=1)
+    assert len(claimed) == 1
+
+
+def test_max_attempts_to_failed_permanent(client, db):
+    from backend.settings import settings
+
+    _, uid = _auth(client, db)
+    intent = _seed_paid(db, uid, key="ob-max")
+    create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="ob-max-key",
+    )
+    row = (
+        db.query(NotificationOutbox)
+        .filter(NotificationOutbox.status == NotificationOutboxStatus.PENDING.value)
+        .order_by(NotificationOutbox.id.desc())
+        .first()
+    )
+    assert row
+    row.attempts = int(settings.NOTIFICATION_OUTBOX_MAX_ATTEMPTS) - 1
+    db.commit()
+    transport = FailOnceTransport(temporary=True)
+    run_outbox_once(db, worker_id="max-w", transport=transport, commit=True)
+    db.refresh(row)
+    assert row.status == NotificationOutboxStatus.FAILED_PERMANENT.value
+
+
+def test_enqueue_rollback_does_not_leave_outbox(client, db):
+    _, uid = _auth(client, db)
+    intent = _seed_paid(db, uid, key="ob-rb")
+    before = db.query(NotificationOutbox).count()
+    create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="ob-rb-key",
+        commit=False,
+    )
+    assert db.query(NotificationOutbox).count() > before
+    db.rollback()
+    assert db.query(NotificationOutbox).count() == before

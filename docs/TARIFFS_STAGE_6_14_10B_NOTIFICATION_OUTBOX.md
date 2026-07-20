@@ -58,10 +58,12 @@ Producer вызывается из `_write_audit` / submit **после** `db.ad
    - **PostgreSQL:** `SELECT id … FOR UPDATE SKIP LOCKED`
    - **SQLite/dev:** select кандидатов + `UPDATE … WHERE status IN (pending,retry)`
 3. Статус → `processing`, `locked_by` / `locked_at`.
-4. Send вне долгого lock на других строках (claim уже сделан).
-5. Успех → `sent`; временная ошибка → `retry` + backoff; постоянная / max attempts → `failed_permanent`.
+4. **Commit claim** — отпускает row locks до SMTP.
+5. Send (SMTP) без удержания `FOR UPDATE`.
+6. Commit результатов: успех → `sent`; временная ошибка → `retry` + backoff; постоянная / max attempts → `failed_permanent`.
 
 Несколько worker-процессов безопасны за счёт SKIP LOCKED / conditional UPDATE.
+Crash во время SMTP → запись остаётся `processing` до lease timeout → recovery.
 
 ## Retry / backoff
 

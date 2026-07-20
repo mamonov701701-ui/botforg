@@ -254,10 +254,35 @@ def run_outbox_once(
     transport: EmailTransport | None = None,
     commit: bool = True,
 ) -> dict[str, Any]:
+    """
+    Claim batch → commit (release row locks) → SMTP → commit results.
+
+    Разделение claim/send: FOR UPDATE SKIP LOCKED не удерживается на время SMTP.
+    """
     worker_id = worker_id or f"worker-{socket.gethostname()}-{uuid.uuid4().hex[:8]}"
     claimed = claim_outbox_batch(db, worker_id=worker_id, batch_size=batch_size)
-    stats = {"claimed": len(claimed), "sent": 0, "retry": 0, "failed_permanent": 0}
-    for row in claimed:
+    claimed_ids = [int(r.id) for r in claimed]
+    stats = {
+        "claimed": len(claimed_ids),
+        "sent": 0,
+        "retry": 0,
+        "failed_permanent": 0,
+    }
+    if not claimed_ids:
+        return stats
+
+    # Зафиксировать claim до SMTP, чтобы не держать DB-lock на время сети.
+    if commit:
+        db.commit()
+
+    for oid in claimed_ids:
+        row = db.get(NotificationOutbox, oid)
+        if row is None:
+            continue
+        if row.status != NotificationOutboxStatus.PROCESSING.value:
+            continue
+        if row.locked_by and row.locked_by != worker_id:
+            continue
         result = process_outbox_row(db, row, transport=transport)
         if result == NotificationOutboxStatus.SENT.value:
             stats["sent"] += 1
