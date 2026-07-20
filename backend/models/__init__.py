@@ -42,7 +42,15 @@ from backend.models.market_access import (
     MarketAccessRequestStatus,
     MarketItemAccessGrant,
 )
-from backend.models.legal import Consent
+from backend.models.legal import (
+    Consent,
+    LegalChecklistItemKey,
+    LegalConsentSource,
+    LegalDocType,
+    LegalDocumentRevision,
+    LegalLaunchChecklistItem,
+    LegalRevisionStatus,
+)
 from backend.models.plan import Plan
 from backend.models.checkout import (
     CheckoutIntent,
@@ -156,6 +164,12 @@ __all__ = [
     "MarketAccessRequestStatus",
     "MarketItemAccessGrant",
     "Consent",
+    "LegalDocumentRevision",
+    "LegalLaunchChecklistItem",
+    "LegalDocType",
+    "LegalRevisionStatus",
+    "LegalConsentSource",
+    "LegalChecklistItemKey",
     "Plan",
     "CheckoutIntent",
     "CheckoutIntentStatus",

@@ -36,12 +36,22 @@ describe('isDashboardNavItemActive / platform menu', () => {
     expect(getActivePlatformNavPaths(path)).toEqual([PLATFORM_NAV_PATHS.analytics]);
   });
 
+  it('on /dashboard/platform/legal activates only legal', () => {
+    const path = PLATFORM_NAV_PATHS.legal;
+    expect(isDashboardNavItemActive(path, PLATFORM_NAV_PATHS.overview)).toBe(false);
+    expect(isDashboardNavItemActive(path, PLATFORM_NAV_PATHS.legal)).toBe(true);
+    expect(isDashboardNavItemActive(path, PLATFORM_NAV_PATHS.finance)).toBe(false);
+    expect(countActivePlatformNavItems(path)).toBe(1);
+    expect(getActivePlatformNavPaths(path)).toEqual([PLATFORM_NAV_PATHS.legal]);
+  });
+
   it('keeps exactly one active item for each platform section URL', () => {
     const urls = [
       PLATFORM_NAV_PATHS.overview,
       PLATFORM_NAV_PATHS.users,
       PLATFORM_NAV_PATHS.analytics,
       PLATFORM_NAV_PATHS.finance,
+      PLATFORM_NAV_PATHS.legal,
       PLATFORM_NAV_PATHS.bfTeam,
       PLATFORM_NAV_PATHS.settings,
       `${PLATFORM_NAV_PATHS.finance}/`,
@@ -54,6 +64,7 @@ describe('isDashboardNavItemActive / platform menu', () => {
   it('does not keep overview active on nested platform routes', () => {
     for (const url of [
       '/dashboard/platform/finance',
+      '/dashboard/platform/legal',
       '/dashboard/platform/analytics',
       '/dashboard/platform/users',
       '/dashboard/platform/settings',

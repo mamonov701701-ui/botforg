@@ -29,6 +29,7 @@ export const PLATFORM_NAV_PATHS = {
   users: '/dashboard/platform/users',
   analytics: '/dashboard/platform/analytics',
   finance: '/dashboard/platform/finance',
+  legal: '/dashboard/platform/legal',
   bfTeam: '/dashboard/bf-team',
   settings: '/dashboard/platform/settings',
 } as const;

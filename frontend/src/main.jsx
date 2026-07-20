@@ -38,8 +38,16 @@ import PlatformOverviewPage from './features/dashboard/pages/PlatformOverviewPag
 import PlatformUsersPage from './features/dashboard/pages/PlatformUsersPage';
 import PlatformAnalyticsPage from './features/dashboard/pages/PlatformAnalyticsPage';
 import PlatformFinancePage from './features/dashboard/pages/PlatformFinancePage';
+import PlatformLegalPage from './features/dashboard/pages/PlatformLegalPage';
+import AccountLegalPage from './features/dashboard/pages/AccountLegalPage';
 import UserDetailPage from './features/dashboard/pages/UserDetailPage';
 import MessagesPage from './features/dashboard/pages/MessagesPage';
+import {
+  LegalArchiveRoute,
+  LegalDocumentRoute,
+  LegalIndexPage,
+  LegalVersionRoute,
+} from './pages/legal/LegalPublicPages';
 import BotCrmLayout from './features/dashboard/crm/BotCrmLayout';
 import BotCrmOverviewPage from './features/dashboard/crm/BotCrmOverviewPage';
 import BotCrmContactsPage from './features/dashboard/crm/BotCrmContactsPage';
@@ -97,6 +105,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             }
           />
           <Route path="features" element={<FeaturesPage />} />
+          <Route path="legal" element={<LegalIndexPage />} />
+          <Route path="legal/:slug" element={<LegalDocumentRoute />} />
+          <Route path="legal/:slug/v/:version" element={<LegalVersionRoute />} />
+          <Route path="legal/:slug/archive" element={<LegalArchiveRoute />} />
           <Route path="auth/verify" element={<VerifyEmail />} />
           <Route path="auth/reset" element={<ResetPassword />} />
           {/* Быстрый вход в редактор:
@@ -158,6 +170,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="messages" element={<MessagesPage />} />
             <Route path="bf-team" element={<BFTeamPage />} />
             <Route path="settings" element={<SettingsPage />} />
+            <Route path="account/legal" element={<AccountLegalPage />} />
             <Route path="help/crm" element={<CrmKnowledgeGuidePage />} />
 
             <Route path="bots/:botId" element={<BotWorkspaceLayout />}>
@@ -186,6 +199,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="platform/users/:userId" element={<UserDetailPage />} />
             <Route path="platform/analytics" element={<PlatformAnalyticsPage />} />
             <Route path="platform/finance" element={<PlatformFinancePage />} />
+            <Route path="platform/legal" element={<PlatformLegalPage />} />
             <Route path="platform/settings" element={<SettingsPage />} />
           </Route>
 

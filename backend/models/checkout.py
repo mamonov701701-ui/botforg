@@ -117,6 +117,29 @@ class CheckoutIntent(Base):
         Integer, ForeignKey("user_addons.id", ondelete="SET NULL"), nullable=True
     )
 
+    # Legal / purchase snapshot (6.14.9B-1A). Nullable — never backfilled onto old rows.
+    product_units = Column(Integer, nullable=True)
+    offer_revision_id = Column(
+        Integer,
+        ForeignKey("legal_document_revisions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    refund_policy_revision_id = Column(
+        Integer,
+        ForeignKey("legal_document_revisions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    tariff_terms_revision_id = Column(
+        Integer,
+        ForeignKey("legal_document_revisions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    purchase_consent_event_ids = Column(JSON, nullable=True)
+    refund_formula_version = Column(String(64), nullable=True)
+    # Placeholder for 6.14.9B price-grid protection (not implemented here).
+    price_grid_snapshot = Column(JSON, nullable=True)
+    legal_snapshot_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=_utcnow, nullable=False)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
 

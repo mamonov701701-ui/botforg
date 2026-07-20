@@ -28,6 +28,7 @@ from backend.services.payment_provider_connections import (
     get_connection,
     resolve_default_connection,
 )
+from backend.services.legal_launch import LegalLaunchError, assert_production_payments_allowed
 from backend.settings import settings
 
 # provider code → (http_status, public_code, safe Russian message). No raw/provider text.
@@ -243,6 +244,16 @@ def start_checkout_payment(
         raise CheckoutPayError("Checkout intent not found", code="intent_not_found", http_status=404)
     if intent.user_id != user_id:
         raise CheckoutPayError("Forbidden", code="intent_forbidden", http_status=403)
+
+    try:
+        assert_production_payments_allowed(db)
+    except LegalLaunchError as exc:
+        raise CheckoutPayError(
+            exc.message,
+            code=exc.code,
+            http_status=403,
+        ) from exc
+
     if intent.status in CHECKOUT_TERMINAL_BLOCKING:
         raise CheckoutPayError(
             "Intent cannot accept payment",

@@ -1,10 +1,11 @@
 """
-Создание checkout intent из публичного каталога (Этап 6.5).
+Создание checkout intent из публичного каталога (Этап 6.5 + 6.14.9B-1A legal gate).
 
 Цена/валюта/описание — только с сервера. Entitlement не создаётся.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -14,8 +15,17 @@ from backend.models.checkout import (
     CheckoutIntentStatus,
     CheckoutProductType,
 )
+from backend.models.legal import (
+    DEFAULT_REFUND_FORMULA_VERSION,
+    LegalDocType,
+)
 from backend.models.plan import Plan
 from backend.models.tariff import AddonPackage
+from backend.services.legal_documents import get_published_by_type
+from backend.services.legal_launch import (
+    LegalLaunchError,
+    assert_production_payments_allowed,
+)
 
 
 class CheckoutIntentError(Exception):
@@ -23,6 +33,10 @@ class CheckoutIntentError(Exception):
         self.message = message
         self.code = code
         super().__init__(message)
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _catalog_tariff(db: Session, code: str) -> Plan:
@@ -105,23 +119,43 @@ def create_checkout_intent(
         else CheckoutProductType(str(product_type))
     )
 
+    try:
+        assert_production_payments_allowed(db)
+    except LegalLaunchError as exc:
+        raise CheckoutIntentError(exc.message, code=exc.code) from exc
+
+    product_units: int | None = None
     if type_val == CheckoutProductType.TARIFF:
         plan = _catalog_tariff(db, code_norm)
         name = (plan.name_ru or plan.name or plan.code).strip()
         description = plan.description_ru
         amount = Decimal(str(plan.price_month))
         currency = (plan.currency or "RUB").strip() or "RUB"
+        # Monthly messages from plan limits when available.
+        limits = plan.limits if isinstance(plan.limits, dict) else {}
+        if limits.get("monthly_messages") is not None:
+            try:
+                product_units = int(limits["monthly_messages"])
+            except (TypeError, ValueError):
+                product_units = None
     elif type_val == CheckoutProductType.ADDON:
         pkg = _catalog_addon(db, code_norm)
         name = (pkg.name_ru or pkg.code).strip()
         description = pkg.description_ru
         amount = Decimal(str(pkg.price))
         currency = (pkg.currency or "RUB").strip() or "RUB"
+        product_units = int(pkg.amount or 0)
     else:
         raise CheckoutIntentError(
             f"Unsupported product_type={type_val!r}",
             code="invalid_product_type",
         )
+
+    offer = get_published_by_type(db, LegalDocType.PUBLIC_OFFER.value)
+    refund_pol = get_published_by_type(db, LegalDocType.REFUND_POLICY.value)
+    tariff_terms = get_published_by_type(db, LegalDocType.TARIFF_TERMS.value)
+    # Snapshot only when published revisions exist — never invent / backfill.
+    has_legal = offer is not None or refund_pol is not None or tariff_terms is not None
 
     intent = CheckoutIntent(
         user_id=user_id,
@@ -133,6 +167,16 @@ def create_checkout_intent(
         currency=currency,
         status=CheckoutIntentStatus.PENDING.value,
         idempotency_key=key,
+        product_units=product_units,
+        offer_revision_id=offer.id if offer else None,
+        refund_policy_revision_id=refund_pol.id if refund_pol else None,
+        tariff_terms_revision_id=tariff_terms.id if tariff_terms else None,
+        purchase_consent_event_ids=None,
+        refund_formula_version=(
+            DEFAULT_REFUND_FORMULA_VERSION if has_legal else None
+        ),
+        price_grid_snapshot=None,
+        legal_snapshot_at=_utcnow() if has_legal else None,
     )
     db.add(intent)
     if commit:

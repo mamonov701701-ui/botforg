@@ -18,6 +18,7 @@ import {
   MessageCircle,
   Landmark,
   Menu,
+  Scale,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ROLE_NAMES, type SectionKey } from '../../constants/roles';
@@ -34,7 +35,9 @@ interface NavItem {
     | 'platform_overview'
     | 'platform_users'
     | 'platform_analytics'
-    | 'platform_finance';
+    | 'platform_finance'
+    | 'platform_legal'
+    | 'account_legal';
   label: string;
   path: string;
   icon: import('../../types/icons').DashboardIcon;
@@ -88,6 +91,13 @@ const PROJECT_NAV_ITEMS: NavItem[] = [
     icon: Settings,
     mode: 'projects',
   },
+  {
+    id: 'account_legal',
+    label: 'Юридические документы',
+    path: '/dashboard/account/legal',
+    icon: Scale,
+    mode: 'projects',
+  },
 ];
 
 // Пункты меню для режима "Управление платформой"
@@ -118,6 +128,13 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     label: 'Финансы',
     path: '/dashboard/platform/finance',
     icon: Landmark,
+    mode: 'platform',
+  },
+  {
+    id: 'platform_legal',
+    label: 'Юридические документы',
+    path: '/dashboard/platform/legal',
+    icon: Scale,
     mode: 'platform',
   },
   {

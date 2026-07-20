@@ -30,6 +30,11 @@ def _intent_out(intent) -> CheckoutIntentOut:
 
 def _http_from_checkout_error(exc: CheckoutIntentError) -> HTTPException:
     code = exc.code
+    if code == "legal_launch_not_ready":
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": code, "message": exc.message},
+        )
     if code in ("product_unavailable", "product_unpriced"):
         return HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

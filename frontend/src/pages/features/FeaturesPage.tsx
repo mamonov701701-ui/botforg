@@ -628,8 +628,13 @@ export default function FeaturesPage() {
               </p>
               <ul className="space-y-3">
                 <li>
+                  <a href="/legal" className="text-[var(--accent)] hover:underline font-medium">
+                    Все юридические документы
+                  </a>
+                </li>
+                <li>
                   <a
-                    href="/legal/doc/privacy_policy"
+                    href="/legal/privacy-policy"
                     className="text-[var(--accent)] hover:underline font-medium"
                   >
                     Политика конфиденциальности
@@ -637,10 +642,10 @@ export default function FeaturesPage() {
                 </li>
                 <li>
                   <a
-                    href="/legal/doc/terms"
+                    href="/legal/public-offer"
                     className="text-[var(--accent)] hover:underline font-medium"
                   >
-                    Пользовательское соглашение
+                    Публичная оферта
                   </a>
                 </li>
               </ul>

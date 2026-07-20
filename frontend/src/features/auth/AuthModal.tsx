@@ -9,10 +9,15 @@ import {
   registerEmail,
   requestPasswordReset,
   getMe,
-  getLegalDocs,
   getConsentStatus,
-  acceptConsent,
 } from '../../api/auth';
+import {
+  acceptPublishedConsent,
+  hasAcceptedRequiredConsents,
+  listLegalDocuments,
+  resolvePublishedConsentTargets,
+  type PublishedConsentTarget,
+} from '../../api/legal';
 import { toast } from '../../utils/toast';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -38,9 +43,9 @@ export default function AuthModal() {
   const [loading, setLoading] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
-  const [consentDocs, setConsentDocs] = useState<{
-    privacy_policy?: { version: string; text: string };
-    terms?: { version: string; text: string };
+  const [consentTargets, setConsentTargets] = useState<{
+    privacy: PublishedConsentTarget | null;
+    terms: PublishedConsentTarget | null;
   } | null>(null);
 
   // Локальные ошибки валидации для каждого поля
@@ -214,8 +219,13 @@ export default function AuthModal() {
         // Если получили токен - автоматически входим и фиксируем согласие
         if (response?.access_token) {
           try {
-            await acceptConsent('privacy_policy', '1.0');
-            await acceptConsent('terms', '1.0');
+            const docs = await listLegalDocuments();
+            const targets = resolvePublishedConsentTargets(docs);
+            if (targets.privacy && targets.terms) {
+              await acceptPublishedConsent(targets.privacy);
+              await acceptPublishedConsent(targets.terms);
+            }
+            // Без published-версий фиктивное согласие не создаём.
           } catch (_) {}
           toast.success('Регистрация успешна! Выполняется вход...');
 
@@ -303,13 +313,14 @@ export default function AuthModal() {
             setUser(user);
             setLoading(false);
             try {
-              const status = await getConsentStatus();
-              const acceptedTypes = new Set(
-                (status.accepted || []).map((a: { doc_type: string }) => a.doc_type)
-              );
-              if (!acceptedTypes.has('privacy_policy') || !acceptedTypes.has('terms')) {
-                const docs = await getLegalDocs();
-                setConsentDocs(docs);
+              const [status, docs] = await Promise.all([getConsentStatus(), listLegalDocuments()]);
+              const targets = resolvePublishedConsentTargets(docs);
+              if (
+                targets.privacy &&
+                targets.terms &&
+                !hasAcceptedRequiredConsents(status.accepted || [], targets)
+              ) {
+                setConsentTargets(targets);
                 setShowConsentModal(true);
                 return;
               }
@@ -935,7 +946,7 @@ export default function AuthModal() {
               <span>
                 Я согласен с{' '}
                 <a
-                  href="/legal/doc/privacy_policy"
+                  href="/legal/privacy-policy"
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--accent)' }}
@@ -944,12 +955,12 @@ export default function AuthModal() {
                 </a>{' '}
                 и{' '}
                 <a
-                  href="/legal/doc/terms"
+                  href="/legal/public-offer"
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--accent)' }}
                 >
-                  Пользовательским соглашением
+                  Публичной офертой
                 </a>
               </span>
             </label>
@@ -1082,7 +1093,11 @@ export default function AuthModal() {
               <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
                 Для продолжения необходимо принять{' '}
                 <a
-                  href="/legal/doc/privacy_policy"
+                  href={
+                    consentTargets?.privacy
+                      ? `/legal/${consentTargets.privacy.slug}`
+                      : '/legal/privacy-policy'
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--accent)' }}
@@ -1091,12 +1106,16 @@ export default function AuthModal() {
                 </a>{' '}
                 и{' '}
                 <a
-                  href="/legal/doc/terms"
+                  href={
+                    consentTargets?.terms
+                      ? `/legal/${consentTargets.terms.slug}`
+                      : '/legal/public-offer'
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--accent)' }}
                 >
-                  Пользовательское соглашение
+                  Публичную оферту
                 </a>
                 .
               </p>
@@ -1104,10 +1123,18 @@ export default function AuthModal() {
                 type="button"
                 onClick={async () => {
                   try {
-                    await acceptConsent('privacy_policy', '1.0');
-                    await acceptConsent('terms', '1.0');
+                    if (!consentTargets?.privacy || !consentTargets?.terms) {
+                      toast.error('Опубликованные версии документов недоступны');
+                      return;
+                    }
+                    const privacyRes = await acceptPublishedConsent(consentTargets.privacy);
+                    const termsRes = await acceptPublishedConsent(consentTargets.terms);
+                    if (!privacyRes?.ok || !termsRes?.ok) {
+                      toast.error('Не удалось сохранить согласие: нет опубликованной версии');
+                      return;
+                    }
                     setShowConsentModal(false);
-                    setConsentDocs(null);
+                    setConsentTargets(null);
                     toast.success('Согласие принято');
                     closeAuth();
                     if (nextPath) navigate(nextPath);
