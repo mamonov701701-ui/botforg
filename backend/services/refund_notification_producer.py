@@ -2,13 +2,17 @@
 Refund → notification outbox producer (Этап 6.14.10Б).
 
 Не отправляет email. Не меняет refund status.
-Использует public presentation из 6.14.10A.
-Идемпотентность: unique idempotency_key.
+Обязательный enqueue атомарен с audit/status transition:
+реальная ошибка producer → exception → rollback транзакции.
+Duplicate idempotency — успех. Нет recipient — контролируемый skip.
 """
 from __future__ import annotations
 
 import logging
+import re
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
@@ -41,6 +45,34 @@ logger = logging.getLogger(__name__)
 
 AGGREGATE_TYPE_REFUND = "refund_request"
 TEMPLATE_VERSION = "v1"
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+class RefundNotificationEnqueueError(Exception):
+    """Системная ошибка обязательного enqueue — должна откатить refund-транзакцию."""
+
+    def __init__(self, message: str, *, code: str = "enqueue_failed") -> None:
+        self.message = message
+        self.code = code
+        super().__init__(message)
+
+
+class RefundNotificationResultKind(str, Enum):
+    ENQUEUED = "enqueued"
+    DUPLICATE = "duplicate"
+    SKIPPED_NOT_REQUIRED = "skipped_not_required"
+    SKIPPED_NO_RECIPIENT = "skipped_no_recipient"
+
+
+@dataclass(frozen=True)
+class RefundNotificationResult:
+    kind: RefundNotificationResultKind
+    outbox: NotificationOutbox | None = None
+
+    @property
+    def ok(self) -> bool:
+        return True
 
 
 def _utcnow() -> datetime:
@@ -83,6 +115,13 @@ def _is_notifiable(event: RefundAuditEvent) -> bool:
     return False
 
 
+def _is_valid_recipient_email(email: str | None) -> bool:
+    value = (email or "").strip()
+    if not value or len(value) > 320:
+        return False
+    return bool(_EMAIL_RE.match(value))
+
+
 def build_idempotency_key(
     *,
     refund_id: int,
@@ -91,6 +130,11 @@ def build_idempotency_key(
     channel: str = NotificationChannel.EMAIL.value,
     template_version: str | None = None,
 ) -> str:
+    if refund_id is None or audit_event_id is None or user_id is None:
+        raise RefundNotificationEnqueueError(
+            "Missing ids for idempotency key",
+            code="idempotency_key_invalid",
+        )
     ver = template_version or getattr(settings, "NOTIFICATION_TEMPLATE_VERSION", TEMPLATE_VERSION)
     return f"refund:{int(refund_id)}:{int(audit_event_id)}:{channel}:{int(user_id)}:{ver}"
 
@@ -100,26 +144,51 @@ def enqueue_refund_notification_from_audit(
     *,
     request: RefundRequest,
     audit_event: RefundAuditEvent,
-) -> NotificationOutbox | None:
+) -> RefundNotificationResult:
     """
-    Создать outbox-запись для ключевого audit event.
-    Вызывать в той же транзакции после db.add(audit) + flush (нужен audit.id).
+    Создать outbox-запись для ключевого audit event в той же транзакции.
+
+    Возвращает типизированный результат (enqueued/duplicate/skipped_*).
+    Системные ошибки — исключение (caller должен rollback).
     """
     if audit_event.id is None:
         db.flush()
-    if not _is_notifiable(audit_event):
-        return None
+    if audit_event.id is None:
+        raise RefundNotificationEnqueueError(
+            "Audit event id missing after flush",
+            code="audit_id_missing",
+        )
 
-    user = db.get(User, int(request.user_id))
-    if user is None or not (user.email or "").strip():
+    if not _is_notifiable(audit_event):
+        return RefundNotificationResult(
+            kind=RefundNotificationResultKind.SKIPPED_NOT_REQUIRED
+        )
+
+    try:
+        user = db.get(User, int(request.user_id))
+    except Exception as exc:
+        raise RefundNotificationEnqueueError(
+            "Failed to load recipient user",
+            code="recipient_lookup_failed",
+        ) from exc
+
+    if user is None:
+        raise RefundNotificationEnqueueError(
+            "Recipient user not found",
+            code="recipient_user_missing",
+        )
+
+    email = (user.email or "").strip()
+    if not _is_valid_recipient_email(email):
         logger.info(
-            "refund_notify_skip_no_email refund_id=%s audit_id=%s",
+            "refund_notify_skipped_no_recipient refund_id=%s audit_id=%s reason=invalid_or_missing_email",
             request.id,
             audit_event.id,
         )
-        return None
+        return RefundNotificationResult(
+            kind=RefundNotificationResultKind.SKIPPED_NO_RECIPIENT
+        )
 
-    # Сумма только из безопасного DTO ревизии заявки (не из metadata).
     revision = None
     if request.current_revision_number:
         from backend.models.refund import RefundRevision
@@ -143,7 +212,17 @@ def enqueue_refund_notification_from_audit(
     )
     public = present_public_event(audit_event, ctx=ctx)
     if public is None:
-        return None
+        raise RefundNotificationEnqueueError(
+            "Required notification presentation returned empty",
+            code="malformed_payload",
+        )
+    title = (public.title or "").strip()
+    description = (public.description or "").strip()
+    if not title or not description:
+        raise RefundNotificationEnqueueError(
+            "Required notification payload missing title/description",
+            code="malformed_payload",
+        )
 
     channel = NotificationChannel.EMAIL.value
     key = build_idempotency_key(
@@ -158,7 +237,10 @@ def enqueue_refund_notification_from_audit(
         .first()
     )
     if existing is not None:
-        return existing
+        return RefundNotificationResult(
+            kind=RefundNotificationResultKind.DUPLICATE,
+            outbox=existing,
+        )
 
     frontend = (settings.FRONTEND_URL or "").rstrip("/")
     detail_url = f"{frontend}/dashboard/finance/refunds/{int(request.id)}"
@@ -169,8 +251,8 @@ def enqueue_refund_notification_from_audit(
 
     payload: dict[str, Any] = {
         "notification_type": "refund_status",
-        "title": public.title,
-        "description": public.description,
+        "title": title,
+        "description": description,
         "category": public.category,
         "status": public.status,
         "status_label": status_label_ru(public.status),
@@ -187,7 +269,7 @@ def enqueue_refund_notification_from_audit(
         notification_type="refund_status",
         channel=channel,
         recipient_user_id=int(request.user_id),
-        recipient_email=str(user.email).strip(),
+        recipient_email=email,
         aggregate_type=AGGREGATE_TYPE_REFUND,
         aggregate_id=str(int(request.id)),
         event_type=str(audit_event.action or "status"),
@@ -203,20 +285,33 @@ def enqueue_refund_notification_from_audit(
         with db.begin_nested():
             db.add(row)
             db.flush()
-    except IntegrityError:
+    except IntegrityError as exc:
         existing = (
             db.query(NotificationOutbox)
             .filter(NotificationOutbox.idempotency_key == key)
             .first()
         )
-        return existing
+        if existing is not None:
+            return RefundNotificationResult(
+                kind=RefundNotificationResultKind.DUPLICATE,
+                outbox=existing,
+            )
+        # Произвольный IntegrityError без записи по ключу — не идемпотентный дубль.
+        raise RefundNotificationEnqueueError(
+            "Outbox insert integrity error without idempotent row",
+            code="enqueue_integrity_error",
+        ) from exc
+
     logger.info(
         "refund_notify_enqueued outbox_id=%s refund_id=%s audit_id=%s",
         row.id,
         request.id,
         audit_event.id,
     )
-    return row
+    return RefundNotificationResult(
+        kind=RefundNotificationResultKind.ENQUEUED,
+        outbox=row,
+    )
 
 
 def after_refund_audit_written(
@@ -224,17 +319,14 @@ def after_refund_audit_written(
     *,
     request: RefundRequest,
     audit_event: RefundAuditEvent,
-) -> None:
-    """Хук после db.add(audit). Ошибки producer не должны ломать refund (кроме Integrity)."""
-    try:
-        db.flush()
-        enqueue_refund_notification_from_audit(
-            db, request=request, audit_event=audit_event
-        )
-    except Exception:
-        # Не откатываем refund: логируем; outbox можно догнать позже по audit (вне scope).
-        logger.exception(
-            "refund_notify_enqueue_failed refund_id=%s audit_id=%s",
-            getattr(request, "id", None),
-            getattr(audit_event, "id", None),
-        )
+) -> RefundNotificationResult:
+    """
+    Хук после db.add(audit), до commit.
+
+    Обязательный enqueue: ошибки поднимаются (rollback caller-транзакции).
+    Duplicate / skipped_* — успех без exception.
+    """
+    db.flush()
+    return enqueue_refund_notification_from_audit(
+        db, request=request, audit_event=audit_event
+    )

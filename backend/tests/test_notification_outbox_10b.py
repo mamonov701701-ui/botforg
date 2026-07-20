@@ -23,6 +23,7 @@ from backend.models.refund import (
     RefundAuditAction,
     RefundAuditActorType,
     RefundAuditEvent,
+    RefundRequest,
     RefundRequestStatus,
 )
 from backend.models.tariff import (
@@ -52,6 +53,9 @@ from backend.services.notification_templates.refund_email import (
     build_refund_email,
 )
 from backend.services.refund_notification_producer import (
+    RefundNotificationEnqueueError,
+    RefundNotificationResultKind,
+    after_refund_audit_written,
     build_idempotency_key,
     enqueue_refund_notification_from_audit,
 )
@@ -235,7 +239,8 @@ def test_idempotent_enqueue_no_duplicate(client, db):
         NotificationOutbox.aggregate_id == str(req.id)
     ).count()
     assert after == before
-    assert again is not None
+    assert again.kind == RefundNotificationResultKind.DUPLICATE
+    assert again.outbox is not None
 
 
 def test_non_key_event_does_not_enqueue(client, db):
@@ -262,7 +267,8 @@ def test_non_key_event_does_not_enqueue(client, db):
     db.flush()
     out = enqueue_refund_notification_from_audit(db, request=req, audit_event=ev)
     db.commit()
-    assert out is None
+    assert out.kind == RefundNotificationResultKind.SKIPPED_NOT_REQUIRED
+    assert out.outbox is None
     assert db.query(NotificationOutbox).count() == before
 
 
@@ -591,3 +597,219 @@ def test_enqueue_rollback_does_not_leave_outbox(client, db):
     assert db.query(NotificationOutbox).count() > before
     db.rollback()
     assert db.query(NotificationOutbox).count() == before
+
+
+def test_required_event_enqueues_atomically(client, db):
+    _, uid = _auth(client, db)
+    intent = _seed_paid(db, uid, key="ob-atom")
+    req = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="ob-atom-key",
+    )
+    assert db.query(RefundRequest).filter(RefundRequest.id == req.id).one()
+    outbox = (
+        db.query(NotificationOutbox)
+        .filter(NotificationOutbox.aggregate_id == str(req.id))
+        .all()
+    )
+    assert outbox
+    audit = (
+        db.query(RefundAuditEvent)
+        .filter(
+            RefundAuditEvent.refund_request_id == req.id,
+            RefundAuditEvent.action == RefundAuditAction.CREATED.value,
+        )
+        .one()
+    )
+    result = after_refund_audit_written(db, request=req, audit_event=audit)
+    assert result.kind == RefundNotificationResultKind.DUPLICATE
+    assert result.ok is True
+
+
+def test_enqueue_db_error_rolls_back_refund(client, db, monkeypatch):
+    _, uid = _auth(client, db)
+    intent = _seed_paid(db, uid, key="ob-dberr")
+    before_req = db.query(RefundRequest).count()
+    before_out = db.query(NotificationOutbox).count()
+    before_audit = db.query(RefundAuditEvent).count()
+
+    def boom(*_a, **_k):
+        raise RefundNotificationEnqueueError("forced db failure", code="enqueue_db")
+
+    monkeypatch.setattr(
+        "backend.services.refund_notification_producer.enqueue_refund_notification_from_audit",
+        boom,
+    )
+    with pytest.raises(RefundNotificationEnqueueError):
+        create_refund_request(
+            db,
+            user_id=uid,
+            checkout_intent_id=intent.id,
+            reason_category="unused",
+            idempotency_key="ob-dberr-key",
+            commit=True,
+        )
+    assert db.query(RefundRequest).count() == before_req
+    assert db.query(NotificationOutbox).count() == before_out
+    assert db.query(RefundAuditEvent).count() == before_audit
+
+
+def test_malformed_payload_rolls_back(client, db, monkeypatch):
+    _, uid = _auth(client, db)
+    intent = _seed_paid(db, uid, key="ob-mal")
+    before_req = db.query(RefundRequest).count()
+
+    monkeypatch.setattr(
+        "backend.services.refund_notification_producer.present_public_event",
+        lambda *_a, **_k: None,
+    )
+    with pytest.raises(RefundNotificationEnqueueError) as ei:
+        create_refund_request(
+            db,
+            user_id=uid,
+            checkout_intent_id=intent.id,
+            reason_category="unused",
+            idempotency_key="ob-mal-key",
+            commit=True,
+        )
+    assert ei.value.code == "malformed_payload"
+    assert db.query(RefundRequest).count() == before_req
+
+
+def test_arbitrary_integrity_error_not_treated_as_duplicate(client, db, monkeypatch):
+    _, uid = _auth(client, db)
+    intent = _seed_paid(db, uid, key="ob-ie")
+    req = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="ob-ie-key",
+    )
+    audit = (
+        db.query(RefundAuditEvent)
+        .filter(
+            RefundAuditEvent.refund_request_id == req.id,
+            RefundAuditEvent.action == RefundAuditAction.CREATED.value,
+        )
+        .one()
+    )
+    key = build_idempotency_key(
+        refund_id=int(req.id),
+        audit_event_id=int(audit.id),
+        user_id=int(uid),
+    )
+    db.query(NotificationOutbox).filter(NotificationOutbox.idempotency_key == key).delete()
+    db.commit()
+
+    class BoomNested:
+        def __enter__(self):
+            raise IntegrityError("stmt", {}, Exception("unrelated constraint"))
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(db, "begin_nested", lambda: BoomNested())
+    with pytest.raises(RefundNotificationEnqueueError) as ei:
+        enqueue_refund_notification_from_audit(db, request=req, audit_event=audit)
+    assert ei.value.code == "enqueue_integrity_error"
+
+
+def test_skipped_no_recipient_does_not_break_refund(client, db):
+    _, uid = _auth(client, db)
+    user = db.get(User, uid)
+    user.email = "not-an-email"
+    db.commit()
+    intent = _seed_paid(db, uid, key="ob-norec")
+    req = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="ob-norec-key",
+    )
+    assert req.id is not None
+    assert (
+        db.query(NotificationOutbox)
+        .filter(NotificationOutbox.aggregate_id == str(req.id))
+        .count()
+        == 0
+    )
+    audit = (
+        db.query(RefundAuditEvent)
+        .filter(
+            RefundAuditEvent.refund_request_id == req.id,
+            RefundAuditEvent.action == RefundAuditAction.CREATED.value,
+        )
+        .one()
+    )
+    result = enqueue_refund_notification_from_audit(db, request=req, audit_event=audit)
+    assert result.kind == RefundNotificationResultKind.SKIPPED_NO_RECIPIENT
+    assert result.outbox is None
+
+
+def test_missing_email_skipped_on_create(client, db):
+    _, uid = _auth(client, db)
+    user = db.get(User, uid)
+    user.email = ""
+    db.commit()
+    intent = _seed_paid(db, uid, key="ob-empty")
+    req = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="ob-empty-key",
+    )
+    assert req.id is not None
+    assert (
+        db.query(NotificationOutbox)
+        .filter(NotificationOutbox.aggregate_id == str(req.id))
+        .count()
+        == 0
+    )
+
+
+def test_reject_enqueues_and_duplicate_safe(client, db):
+    _, uid = _auth(client, db)
+    _, admin_uid = _auth(client, db, role="admin")
+    intent = _seed_paid(db, uid, key="ob-rej")
+    req = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="ob-rej-key",
+    )
+    reject_request(
+        db,
+        req.id,
+        expected_version=int(req.version),
+        actor_user_id=admin_uid,
+        reason="Не подходит под условия возврата.",
+    )
+    rows = (
+        db.query(NotificationOutbox)
+        .filter(NotificationOutbox.aggregate_id == str(req.id))
+        .all()
+    )
+    rejected_rows = [
+        r for r in rows if r.payload_json.get("status") == RefundRequestStatus.REJECTED.value
+    ]
+    assert rejected_rows
+    audit = (
+        db.query(RefundAuditEvent)
+        .filter(
+            RefundAuditEvent.refund_request_id == req.id,
+            RefundAuditEvent.new_status == RefundRequestStatus.REJECTED.value,
+        )
+        .order_by(RefundAuditEvent.id.desc())
+        .first()
+    )
+    assert audit is not None
+    result = after_refund_audit_written(db, request=req, audit_event=audit)
+    assert result.kind == RefundNotificationResultKind.DUPLICATE
+    db.commit()

@@ -43,13 +43,32 @@ refund:{refund_id}:{audit_event_id}:email:{user_id}:{template_version}
 
 ## Transaction boundary
 
-Producer вызывается из `_write_audit` / submit **после** `db.add(audit)` в **той же** Session.
+Producer вызывается из `_write_audit` / submit **после** `db.add(audit)` в **той же** Session, **до** commit.
 
-- `commit=True` на refund API → audit + outbox коммитятся вместе.
-- `rollback` → outbox не остаётся.
-- Email **не** отправляется до commit (только worker после commit).
+### Enqueue vs delivery
 
-Ошибка enqueue логируется и **не** откатывает refund (кроме nested Integrity).
+| Сбой | Эффект |
+|------|--------|
+| **Enqueue failure** (DB, malformed payload, lookup user) | Exception → **rollback** refund transition + audit + outbox |
+| **Duplicate** idempotency_key | Успех: существующая outbox-запись, refund **не** откатывается |
+| **skipped_not_required** | Успех без outbox |
+| **skipped_no_recipient** (нет/невалидный email) | Успех без outbox; refund **не** ломается; structured log |
+| **SMTP / worker delivery failure** | Refund уже закоммичен; retry/backoff/failed_permanent в worker |
+
+Обязательный outbox enqueue **атомарен** с refund transition: audit закоммитился ⇒ outbox тоже (или controlled skip). Silent loss уведомления недопустим.
+
+Email **не** отправляется до commit (только worker после commit). SMTP failure **не** откатывает refund.
+
+### Результаты producer
+
+- `enqueued` — создана pending outbox-запись
+- `duplicate` — запись с тем же idempotency_key уже есть
+- `skipped_not_required` — событие не в списке пользовательских уведомлений
+- `skipped_no_recipient` — нет валидного email у пользователя
+
+Реальные ошибки — `RefundNotificationEnqueueError` (не masked как skipped).
+
+IntegrityError принимается как duplicate **только** если после конфликта найдена строка с тем же `idempotency_key`.
 
 ## Worker locking
 

@@ -746,7 +746,16 @@ def apply_refund_entitlement(
             error_code=exc.code,
             error_message=exc.message,
         )
-    except Exception:
+    except Exception as exc:
+        from backend.services.refund_notification_producer import (
+            RefundNotificationEnqueueError,
+        )
+
+        # Обязательный outbox enqueue не должен silently fail-closed как entitlement error.
+        if isinstance(exc, RefundNotificationEnqueueError):
+            if commit:
+                db.rollback()
+            raise
         # Fail closed: never leave entitlement_processing after unexpected errors.
         fail_prev = _set_status(
             request, RefundRequestStatus.ENTITLEMENT_FAILED.value
