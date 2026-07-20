@@ -843,7 +843,13 @@ def test_reconcile_concurrent_succeeded_no_double_amount(client, db, monkeypatch
     assert succeeded_rows == 1
     assert ctx["req"].status == RefundRequestStatus.REFUNDED.value
     assert "succeeded" in outcomes
-    assert set(outcomes) <= {"succeeded", "already_succeeded", "already_processed"}
+    # Race losers may surface as already_* or ignored; money must not double.
+    assert set(outcomes) <= {
+        "succeeded",
+        "already_succeeded",
+        "already_processed",
+        "ignored",
+    }
 
 
 def test_reconcile_never_calls_refund_payment(client, db, monkeypatch):

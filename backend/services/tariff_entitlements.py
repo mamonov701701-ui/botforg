@@ -346,3 +346,263 @@ def expire_entitlements(
         "addons": len(addon_q),
         "gifts": len(gift_q),
     }
+
+
+def cancel_subscription_immediate(
+    db: Session,
+    *,
+    subscription_id: int,
+    expected_user_id: int,
+    commit: bool = True,
+) -> UserSubscription:
+    """
+    Немедленно отменить целевую UserSubscription (Этап 6.14.8).
+
+    Идемпотентно, если уже CANCELLED/EXPIRED. Не трогает другие подписки.
+    """
+    sub = db.get(UserSubscription, int(subscription_id))
+    if sub is None:
+        raise EntitlementError(
+            f"UserSubscription id={subscription_id} not found",
+            code="subscription_not_found",
+        )
+    if int(sub.user_id) != int(expected_user_id):
+        raise EntitlementError(
+            "Subscription does not belong to refund user",
+            code="subscription_user_mismatch",
+        )
+    now = _utcnow()
+    status_val = _enum_value(sub.status)
+    if status_val in (
+        SubscriptionStatus.CANCELLED.value,
+        SubscriptionStatus.EXPIRED.value,
+    ):
+        if commit:
+            db.commit()
+            db.refresh(sub)
+        return sub
+    sub.status = SubscriptionStatus.CANCELLED
+    sub.cancelled_at = now
+    sub.auto_renew = False
+    sub.updated_at = now
+    if commit:
+        db.commit()
+        db.refresh(sub)
+    else:
+        db.flush()
+    return sub
+
+
+def schedule_subscription_end(
+    db: Session,
+    *,
+    subscription_id: int,
+    expected_user_id: int,
+    effective_at: datetime,
+    commit: bool = True,
+) -> UserSubscription:
+    """
+    Прекратить доступ к целевой подписке с даты effective_at.
+
+    Если effective_at <= now — немедленная отмена.
+    Иначе усечь current_period_end и отключить auto_renew (остаётся ACTIVE до expire).
+    """
+    at = _normalize_dt(effective_at)
+    now = _utcnow()
+    if at <= now:
+        return cancel_subscription_immediate(
+            db,
+            subscription_id=subscription_id,
+            expected_user_id=expected_user_id,
+            commit=commit,
+        )
+
+    sub = db.get(UserSubscription, int(subscription_id))
+    if sub is None:
+        raise EntitlementError(
+            f"UserSubscription id={subscription_id} not found",
+            code="subscription_not_found",
+        )
+    if int(sub.user_id) != int(expected_user_id):
+        raise EntitlementError(
+            "Subscription does not belong to refund user",
+            code="subscription_user_mismatch",
+        )
+    status_val = _enum_value(sub.status)
+    if status_val in (
+        SubscriptionStatus.CANCELLED.value,
+        SubscriptionStatus.EXPIRED.value,
+    ):
+        if commit:
+            db.commit()
+            db.refresh(sub)
+        return sub
+
+    period_start = _normalize_dt(sub.current_period_start)
+    if at <= period_start:
+        raise EntitlementError(
+            "effective_at must be after period_start",
+            code="invalid_effective_at",
+        )
+    # Truncate end; never extend past original end.
+    original_end = _normalize_dt(sub.current_period_end)
+    new_end = at if at < original_end else original_end
+    if new_end <= now:
+        return cancel_subscription_immediate(
+            db,
+            subscription_id=subscription_id,
+            expected_user_id=expected_user_id,
+            commit=commit,
+        )
+    sub.current_period_end = new_end
+    sub.auto_renew = False
+    sub.updated_at = now
+    if commit:
+        db.commit()
+        db.refresh(sub)
+    else:
+        db.flush()
+    return sub
+
+
+def cancel_user_addon(
+    db: Session,
+    *,
+    user_addon_id: int,
+    expected_user_id: int,
+    commit: bool = True,
+) -> UserAddon:
+    """Отменить целевой UserAddon. Идемпотентно для CANCELLED/EXPIRED."""
+    addon = db.get(UserAddon, int(user_addon_id))
+    if addon is None:
+        raise EntitlementError(
+            f"UserAddon id={user_addon_id} not found",
+            code="addon_not_found",
+        )
+    if int(addon.user_id) != int(expected_user_id):
+        raise EntitlementError(
+            "Addon does not belong to refund user",
+            code="addon_user_mismatch",
+        )
+    now = _utcnow()
+    status_val = _enum_value(addon.status)
+    if status_val in (
+        UserAddonStatus.CANCELLED.value,
+        UserAddonStatus.EXPIRED.value,
+    ):
+        if commit:
+            db.commit()
+            db.refresh(addon)
+        return addon
+    addon.status = UserAddonStatus.CANCELLED
+    addon.updated_at = now
+    if commit:
+        db.commit()
+        db.refresh(addon)
+    else:
+        db.flush()
+    return addon
+
+
+def expire_user_addon(
+    db: Session,
+    *,
+    user_addon_id: int,
+    expected_user_id: int,
+    commit: bool = True,
+) -> UserAddon:
+    """Пометить целевой UserAddon как EXPIRED. Идемпотентно."""
+    addon = db.get(UserAddon, int(user_addon_id))
+    if addon is None:
+        raise EntitlementError(
+            f"UserAddon id={user_addon_id} not found",
+            code="addon_not_found",
+        )
+    if int(addon.user_id) != int(expected_user_id):
+        raise EntitlementError(
+            "Addon does not belong to refund user",
+            code="addon_user_mismatch",
+        )
+    now = _utcnow()
+    status_val = _enum_value(addon.status)
+    if status_val in (
+        UserAddonStatus.CANCELLED.value,
+        UserAddonStatus.EXPIRED.value,
+    ):
+        if commit:
+            db.commit()
+            db.refresh(addon)
+        return addon
+    addon.status = UserAddonStatus.EXPIRED
+    addon.updated_at = now
+    if commit:
+        db.commit()
+        db.refresh(addon)
+    else:
+        db.flush()
+    return addon
+
+
+def reduce_user_addon_amount(
+    db: Session,
+    *,
+    user_addon_id: int,
+    expected_user_id: int,
+    revoke_units: int,
+    commit: bool = True,
+) -> UserAddon:
+    """
+    Уменьшить amount целевого addon на revoke_units.
+
+    Запрет отрицательного amount. Не трогает UsageCounter.
+    Идемпотентность полной отмены: если уже CANCELLED/EXPIRED — no-op.
+    """
+    if int(revoke_units) < 0:
+        raise EntitlementError(
+            "revoke_units must be >= 0",
+            code="negative_revoke_units",
+        )
+    addon = db.get(UserAddon, int(user_addon_id))
+    if addon is None:
+        raise EntitlementError(
+            f"UserAddon id={user_addon_id} not found",
+            code="addon_not_found",
+        )
+    if int(addon.user_id) != int(expected_user_id):
+        raise EntitlementError(
+            "Addon does not belong to refund user",
+            code="addon_user_mismatch",
+        )
+    now = _utcnow()
+    status_val = _enum_value(addon.status)
+    if status_val in (
+        UserAddonStatus.CANCELLED.value,
+        UserAddonStatus.EXPIRED.value,
+    ):
+        if commit:
+            db.commit()
+            db.refresh(addon)
+        return addon
+
+    current = int(addon.amount or 0)
+    if int(revoke_units) > current:
+        raise EntitlementError(
+            "Cannot revoke more units than this purchase granted",
+            code="revoke_exceeds_grant",
+        )
+    new_amount = current - int(revoke_units)
+    if new_amount < 0:
+        raise EntitlementError(
+            "Addon amount would become negative",
+            code="negative_addon_amount",
+        )
+    addon.amount = new_amount
+    addon.updated_at = now
+    if new_amount == 0:
+        addon.status = UserAddonStatus.CANCELLED
+    if commit:
+        db.commit()
+        db.refresh(addon)
+    else:
+        db.flush()
+    return addon

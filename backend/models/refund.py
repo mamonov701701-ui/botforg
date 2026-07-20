@@ -177,6 +177,13 @@ class RefundAuditAction(str, Enum):
     LEDGER_ENTRY_CREATED = "ledger_entry_created"
     VERSION_BUMP = "version_bump"
     VALIDATION_REJECTED = "validation_rejected"
+    # Этап 6.14.8 — entitlement after refund
+    ENTITLEMENT_APPLY_STARTED = "entitlement_apply_started"
+    ENTITLEMENT_APPLIED = "entitlement_applied"
+    ENTITLEMENT_ALREADY_APPLIED = "entitlement_already_applied"
+    ENTITLEMENT_NOT_REQUIRED = "entitlement_not_required"
+    ENTITLEMENT_FAILED = "entitlement_failed"
+    ENTITLEMENT_MANUAL_REQUIRED = "entitlement_manual_required"
 
 
 class RefundRequest(Base):

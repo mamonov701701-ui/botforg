@@ -240,3 +240,20 @@ class RefundAdminExecuteOut(BaseModel):
     ledger_entry_id: int | None = None
     already_completed: bool = False
     detail: RefundAdminDetailOut
+
+
+class RefundAdminApplyEntitlementIn(RefundAdminExpectedVersionIn):
+    """Применение изменения доступа после money-confirmed возврата (6.14.8)."""
+
+    pass
+
+
+class RefundAdminApplyEntitlementOut(BaseModel):
+    outcome: str
+    applied_action: str
+    target_type: str | None = None
+    target_id: int | None = None
+    already_applied: bool = False
+    error_code: str | None = None
+    error_message: str | None = None
+    detail: RefundAdminDetailOut

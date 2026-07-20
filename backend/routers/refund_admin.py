@@ -1,8 +1,9 @@
 """
-Админский refund API (Этап 6.14.3.4 read / 6.14.3.5 write / 6.14.6 execute).
+Админский refund API (Этап 6.14.3.4 read / 6.14.3.5 write / 6.14.6 execute / 6.14.8 entitlement).
 
 Write: recalculate, admin revision, needs-information, reject, confirm, approve.
-Execute: provider refund for approved requests (no entitlement / webhook).
+Execute: provider refund for approved requests (no entitlement).
+Entitlement: access change after money-confirmed refund (no provider / no ledger).
 """
 from __future__ import annotations
 
@@ -13,6 +14,8 @@ from backend.database import get_db
 from backend.dependencies.tariff_admin import require_tariff_admin
 from backend.models.user import User
 from backend.schemas.refund_admin import (
+    RefundAdminApplyEntitlementIn,
+    RefundAdminApplyEntitlementOut,
     RefundAdminApproveIn,
     RefundAdminConfirmIn,
     RefundAdminDetailOut,
@@ -28,6 +31,10 @@ from backend.services.refund_admin_read import (
     RefundAdminReadError,
     get_refund_request_admin,
     list_refund_requests_admin,
+)
+from backend.services.refund_entitlement import (
+    RefundEntitlementError,
+    apply_refund_entitlement,
 )
 from backend.services.refund_execution import (
     RefundExecutionError,
@@ -138,6 +145,38 @@ def _http_from_execution_error(exc: RefundExecutionError) -> HTTPException:
     if code in ("provider_unavailable", "connection_error"):
         return HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"code": code, "message": exc.message},
+        )
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": code, "message": exc.message},
+    )
+
+
+def _http_from_entitlement_error(exc: RefundEntitlementError) -> HTTPException:
+    code = exc.code
+    if code in (
+        "request_not_found",
+        "revision_not_found",
+        "intent_not_found",
+        "subscription_not_found",
+        "addon_not_found",
+    ):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": code, "message": exc.message},
+        )
+    if code in (
+        "version_conflict",
+        "apply_not_allowed",
+        "apply_in_progress",
+        "invalid_status_transition",
+        "stale_revision",
+        "revision_ownership",
+        "approved_revision_required",
+    ):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail={"code": code, "message": exc.message},
         )
     return HTTPException(
@@ -368,5 +407,43 @@ async def admin_execute_refund(
         provider_refund_id=result.provider_refund_id,
         ledger_entry_id=ledger_id,
         already_completed=result.already_completed,
+        detail=detail,
+    )
+
+
+@router.post(
+    "/{request_id}/apply-entitlement",
+    response_model=RefundAdminApplyEntitlementOut,
+)
+async def admin_apply_entitlement(
+    request_id: int,
+    body: RefundAdminApplyEntitlementIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """
+    Изменение доступа после money-confirmed возврата (6.14.8).
+
+    Отдельная операция от provider refund. Без вызова платёжного провайдера.
+    """
+    try:
+        result = apply_refund_entitlement(
+            db,
+            request_id,
+            expected_version=body.expected_version,
+            actor_user_id=admin.id,
+        )
+    except RefundEntitlementError as exc:
+        raise _http_from_entitlement_error(exc) from exc
+
+    detail = _detail_out(db, request_id)
+    return RefundAdminApplyEntitlementOut(
+        outcome=result.outcome,
+        applied_action=result.applied_action,
+        target_type=result.target_type,
+        target_id=result.target_id,
+        already_applied=result.already_applied,
+        error_code=result.error_code,
+        error_message=result.error_message,
         detail=detail,
     )
