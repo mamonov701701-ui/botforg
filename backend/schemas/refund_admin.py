@@ -164,11 +164,15 @@ class RefundAdminAuditEventOut(BaseModel):
     actor_user_id: int | None = None
     actor_type: str
     action: str
+    # 6.14.10A — русское название для UI.
+    title: str | None = None
     previous_status: str | None = None
     new_status: str | None = None
     changed_fields: Any = None
     reason: str | None = None
+    # Whitelist-проекция (не полный event_metadata).
     event_metadata: Any = None
+    details: dict[str, Any] | None = None
     created_at: datetime
 
 

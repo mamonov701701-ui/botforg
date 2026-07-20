@@ -1,8 +1,8 @@
 """
-Пользовательский refund API (Этап 6.14.3.3).
+Пользовательский refund API (Этап 6.14.3.3 / 6.14.10A).
 
 POST/GET /me/refund-requests, cancel.
-Без admin API, provider refund и entitlement mutate.
+status_history — только на detail, из refund_audit_events.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.refund import (
+    RefundAuditEvent,
     RefundRequest,
     RefundRevision,
 )
@@ -21,10 +22,16 @@ from backend.schemas.refund import (
     RefundRequestCancelIn,
     RefundRequestCreateIn,
     RefundRequestOut,
+    RefundStatusHistoryItemOut,
 )
 from backend.services.refund_api_presenters import (
     is_proposed_amount_undefined,
     recommended_refund_amount_str,
+)
+from backend.services.refund_audit_presentation import (
+    PresentationContext,
+    build_public_status_history,
+    extract_public_decision_message,
 )
 from backend.services.refund_revisions import (
     RefundRevisionServiceError,
@@ -49,7 +56,24 @@ def _current_revision(db: Session, request: RefundRequest) -> RefundRevision | N
     )
 
 
-def _request_out(db: Session, request: RefundRequest) -> RefundRequestOut:
+def _load_request_audits(db: Session, request_id: int) -> list[RefundAuditEvent]:
+    return (
+        db.query(RefundAuditEvent)
+        .filter(RefundAuditEvent.refund_request_id == int(request_id))
+        .order_by(
+            RefundAuditEvent.created_at.asc(),
+            RefundAuditEvent.id.asc(),
+        )
+        .all()
+    )
+
+
+def _request_out(
+    db: Session,
+    request: RefundRequest,
+    *,
+    include_history: bool = False,
+) -> RefundRequestOut:
     revision = _current_revision(db, request)
     undefined = is_proposed_amount_undefined(revision, request)
     currency = None
@@ -59,6 +83,31 @@ def _request_out(db: Session, request: RefundRequest) -> RefundRequestOut:
         currency = revision.currency
         refund_type = revision.refund_type
         calculation_status = revision.calculation_status
+
+    status_history: list[RefundStatusHistoryItemOut] = []
+    public_decision_message: str | None = None
+    if include_history:
+        audits = _load_request_audits(db, request.id)
+        ctx = PresentationContext(
+            recommended_refund_amount=recommended_refund_amount_str(revision, request),
+            currency=currency,
+            proposed_amount_undefined=undefined,
+        )
+        status_history = [
+            RefundStatusHistoryItemOut(
+                id=item.id,
+                occurred_at=item.occurred_at,
+                title=item.title,
+                description=item.description,
+                category=item.category,
+                status=item.status,
+            )
+            for item in build_public_status_history(audits, ctx=ctx)
+        ]
+        public_decision_message = extract_public_decision_message(
+            audits, current_status=request.status
+        )
+
     return RefundRequestOut(
         id=request.id,
         checkout_intent_id=request.checkout_intent_id,
@@ -77,6 +126,8 @@ def _request_out(db: Session, request: RefundRequest) -> RefundRequestOut:
         updated_at=request.updated_at,
         submitted_at=request.submitted_at,
         completed_at=request.completed_at,
+        status_history=status_history,
+        public_decision_message=public_decision_message,
     )
 
 
@@ -202,7 +253,7 @@ async def create_my_refund_request(
         )
     except RefundSubmitError as exc:
         raise _http_from_submit_error(exc) from exc
-    return _request_out(db, req)
+    return _request_out(db, req, include_history=True)
 
 
 @router.get("/me/refund-requests", response_model=list[RefundRequestOut])
@@ -216,7 +267,8 @@ async def list_my_refund_requests(
         .order_by(RefundRequest.id.desc())
         .all()
     )
-    return [_request_out(db, row) for row in rows]
+    # Список без timeline (масштабирование: не грузим audit для каждой строки).
+    return [_request_out(db, row, include_history=False) for row in rows]
 
 
 @router.get("/me/refund-requests/{request_id}", response_model=RefundRequestOut)
@@ -226,7 +278,7 @@ async def get_my_refund_request(
     current_user: User = Depends(get_current_user),
 ):
     req = _get_owned_request(db, user_id=current_user.id, request_id=request_id)
-    return _request_out(db, req)
+    return _request_out(db, req, include_history=True)
 
 
 @router.post(
@@ -251,4 +303,4 @@ async def cancel_my_refund_request(
         )
     except RefundRevisionServiceError as exc:
         raise _http_from_revision_error(exc) from exc
-    return _request_out(db, updated)
+    return _request_out(db, updated, include_history=True)

@@ -171,6 +171,23 @@ export default function RefundRequestDetailPage() {
                       {statusHint}
                     </p>
                   )}
+                  {item.public_decision_message &&
+                    (item.status === 'needs_information' || item.status === 'rejected') && (
+                      <p
+                        data-testid="refund-detail-public-decision"
+                        style={{
+                          margin: '10px 0 0',
+                          padding: '10px 12px',
+                          borderRadius: 8,
+                          border: '1px solid var(--border)',
+                          background: 'var(--bf-section-bg-elevated, transparent)',
+                          fontSize: '14px',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        {item.public_decision_message}
+                      </p>
+                    )}
                 </div>
 
                 <div>
@@ -246,6 +263,59 @@ export default function RefundRequestDetailPage() {
                     {canceling ? 'Отмена…' : 'Отменить заявку'}
                   </button>
                 </div>
+              )}
+            </Card>
+          </div>
+        )}
+
+        {item && (
+          <div data-testid="refund-detail-history">
+            <Card>
+              <h3
+                style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}
+                data-testid="refund-detail-history-title"
+              >
+                История заявки
+              </h3>
+              {!item.status_history.length ? (
+                <p
+                  data-testid="refund-detail-history-empty"
+                  style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}
+                >
+                  История заявки пока недоступна.
+                </p>
+              ) : (
+                <ul
+                  data-testid="refund-detail-history-list"
+                  style={{ margin: 0, padding: 0, listStyle: 'none' }}
+                >
+                  {item.status_history.map(ev => (
+                    <li
+                      key={ev.id}
+                      data-testid={`refund-history-item-${ev.id}`}
+                      style={{
+                        padding: '12px 0',
+                        borderBottom: '1px solid var(--border)',
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{ev.title}</div>
+                      <div
+                        style={{
+                          fontSize: 14,
+                          color: 'var(--text)',
+                          lineHeight: 1.5,
+                          marginBottom: 6,
+                        }}
+                      >
+                        {ev.description}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                        {formatRefundDate(ev.occurred_at)}
+                        {ev.status ? ` · ${refundStatusLabel(ev.status)}` : ''}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               )}
             </Card>
           </div>

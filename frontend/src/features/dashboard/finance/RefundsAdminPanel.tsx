@@ -37,6 +37,7 @@ import {
   checkoutStatusLabel,
   extractInputFingerprint,
   formatAuditDecisionLine,
+  formatAuditAllowedDetails,
   formatMoneyAmount,
   formatRecommendedOrManual,
   formatRecommendedRefundAmount,
@@ -1153,19 +1154,52 @@ export default function RefundsAdminPanel() {
                       <p>Событий нет</p>
                     ) : (
                       <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
-                        {detail.audit_timeline.map(e => (
-                          <li
-                            key={e.id}
-                            data-testid={`refund-admin-audit-${e.id}`}
-                            style={{
-                              padding: '8px 0',
-                              borderBottom: `1px solid ${FINANCE_COLORS.accentBorder}`,
-                              fontSize: 13,
-                            }}
-                          >
-                            {formatAuditDecisionLine(e)}
-                          </li>
-                        ))}
+                        {detail.audit_timeline.map(e => {
+                          const detailsLine = formatAuditAllowedDetails(
+                            e.details ??
+                              (e.event_metadata &&
+                              typeof e.event_metadata === 'object' &&
+                              !Array.isArray(e.event_metadata)
+                                ? (e.event_metadata as Record<string, unknown>)
+                                : null)
+                          );
+                          return (
+                            <li
+                              key={e.id}
+                              data-testid={`refund-admin-audit-${e.id}`}
+                              style={{
+                                padding: '8px 0',
+                                borderBottom: `1px solid ${FINANCE_COLORS.accentBorder}`,
+                                fontSize: 13,
+                              }}
+                            >
+                              <div>{formatAuditDecisionLine(e)}</div>
+                              {e.action ? (
+                                <div
+                                  style={{
+                                    marginTop: 4,
+                                    fontSize: 11,
+                                    color: FINANCE_COLORS.textSecondary,
+                                  }}
+                                >
+                                  tech: {e.action}
+                                </div>
+                              ) : null}
+                              {detailsLine ? (
+                                <div
+                                  data-testid={`refund-admin-audit-details-${e.id}`}
+                                  style={{
+                                    marginTop: 4,
+                                    fontSize: 12,
+                                    color: FINANCE_COLORS.textSecondary,
+                                  }}
+                                >
+                                  {detailsLine}
+                                </div>
+                              ) : null}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </CollapsibleSection>

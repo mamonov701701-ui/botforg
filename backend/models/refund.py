@@ -394,6 +394,13 @@ class RefundAuditEvent(Base):
     __table_args__ = (
         Index("ix_refund_audit_events_refund_request_id", "refund_request_id"),
         Index("ix_refund_audit_events_created_at", "created_at"),
+        # 6.14.10A: per-request timeline (created_at ASC, id ASC).
+        Index(
+            "ix_refund_audit_events_request_created_id",
+            "refund_request_id",
+            "created_at",
+            "id",
+        ),
         {"extend_existing": True},
     )
 

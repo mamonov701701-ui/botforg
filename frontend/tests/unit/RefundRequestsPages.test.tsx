@@ -64,6 +64,17 @@ function sample(overrides: Partial<RefundRequest> = {}): RefundRequest {
     updated_at: '2026-07-01T10:00:00Z',
     submitted_at: '2026-07-01T10:00:00Z',
     completed_at: null,
+    status_history: [
+      {
+        id: 1,
+        occurred_at: '2026-07-01T10:00:00Z',
+        title: 'Заявка на возврат создана',
+        description: 'Мы получили вашу заявку и начали её рассмотрение.',
+        category: 'request',
+        status: 'submitted',
+      },
+    ],
+    public_decision_message: null,
     ...overrides,
   };
 }
@@ -334,6 +345,53 @@ describe('RefundRequestDetailPage', () => {
     expect(hint).toMatch(/ещё не выполнен/i);
     expect(hint.toLowerCase()).not.toMatch(/деньги возвращены|средства возвращены/);
     expect(screen.queryByTestId('refund-detail-cancel')).toBeNull();
+  });
+
+  it('shows status history with Russian titles and safe decision message', async () => {
+    getMyRefundRequest.mockResolvedValue(
+      sample({
+        status: 'needs_information',
+        public_decision_message: 'Укажите номер заказа в комментарии.',
+        status_history: [
+          {
+            id: 1,
+            occurred_at: '2026-07-01T10:00:00Z',
+            title: 'Заявка на возврат создана',
+            description: 'Мы получили вашу заявку и начали её рассмотрение.',
+            category: 'request',
+            status: 'submitted',
+          },
+          {
+            id: 2,
+            occurred_at: '2026-07-01T11:00:00Z',
+            title: 'Нужна дополнительная информация',
+            description: 'Укажите номер заказа в комментарии.',
+            category: 'information',
+            status: 'needs_information',
+          },
+        ],
+      })
+    );
+    renderDetail();
+    await waitFor(() => screen.getByTestId('refund-detail-history-list'));
+    expect(screen.getByTestId('refund-detail-history-title').textContent).toBe('История заявки');
+    expect(screen.getByTestId('refund-history-item-1').textContent).toMatch(
+      /Заявка на возврат создана/
+    );
+    expect(screen.getByTestId('refund-history-item-2').textContent).toMatch(
+      /Нужна дополнительная информация/
+    );
+    expect(screen.getByTestId('refund-detail-public-decision').textContent).toMatch(/номер заказа/);
+    expect(screen.queryByText('status_changed')).toBeNull();
+    expect(screen.queryByText('event_metadata')).toBeNull();
+    expect(screen.queryByText('provider_refund_id')).toBeNull();
+  });
+
+  it('shows empty history state', async () => {
+    getMyRefundRequest.mockResolvedValue(sample({ status_history: [] }));
+    renderDetail();
+    await waitFor(() => screen.getByTestId('refund-detail-history-empty'));
+    expect(screen.getByText('История заявки пока недоступна.')).toBeTruthy();
   });
 
   it('cancels when allowed', async () => {

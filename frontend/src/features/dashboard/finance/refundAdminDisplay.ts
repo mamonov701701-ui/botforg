@@ -476,16 +476,16 @@ export function formatSnapshotJson(snap: Record<string, unknown> | null | undefi
 export function formatAuditDecisionLine(event: {
   created_at: string;
   action: string;
+  title?: string | null;
   actor_type: string;
   previous_status: string | null;
   new_status: string | null;
   reason: string | null;
+  details?: Record<string, unknown> | null;
+  event_metadata?: unknown;
 }): string {
-  const parts = [
-    formatRefundDate(event.created_at),
-    auditActionLabel(event.action),
-    actorTypeLabel(event.actor_type),
-  ];
+  const title = (event.title || '').trim() || auditActionLabel(event.action);
+  const parts = [formatRefundDate(event.created_at), title, actorTypeLabel(event.actor_type)];
   if (event.previous_status || event.new_status) {
     parts.push(
       `${event.previous_status ? refundStatusLabel(event.previous_status) : '—'} → ${
@@ -495,6 +495,56 @@ export function formatAuditDecisionLine(event: {
   }
   if (event.reason) parts.push(event.reason);
   return parts.join(' · ');
+}
+
+/** Разрешённые admin details для отображения (whitelist). */
+export function formatAuditAllowedDetails(
+  details: Record<string, unknown> | null | undefined
+): string | null {
+  if (!details || typeof details !== 'object') return null;
+  const allowed = [
+    'outcome',
+    'error_code',
+    'provider_refund_id',
+    'applied_action',
+    'entitlement_action',
+    'addon_revoke_units',
+    'units',
+    'revision_number',
+    'revision_id',
+    'refund_revision_id',
+    'proposed_refund_amount',
+    'final_refund_amount',
+    'recovery',
+    'retry',
+    'note',
+  ] as const;
+  const labels: Record<string, string> = {
+    outcome: 'Исход',
+    error_code: 'Код ошибки',
+    provider_refund_id: 'ID возврата провайдера',
+    applied_action: 'Действие entitlement',
+    entitlement_action: 'Entitlement',
+    addon_revoke_units: 'Единицы',
+    units: 'Единицы',
+    revision_number: 'Ревизия',
+    revision_id: 'ID ревизии',
+    refund_revision_id: 'ID ревизии',
+    proposed_refund_amount: 'Сумма',
+    final_refund_amount: 'Итоговая сумма',
+    recovery: 'Recovery',
+    retry: 'Retry',
+    note: 'Заметка',
+  };
+  const chunks: string[] = [];
+  for (const key of allowed) {
+    if (!(key in details)) continue;
+    const val = details[key];
+    if (val === null || val === undefined || val === '') continue;
+    if (typeof val === 'object') continue;
+    chunks.push(`${labels[key] || key}: ${String(val)}`);
+  }
+  return chunks.length ? chunks.join(' · ') : null;
 }
 
 export const ADMIN_STATUS_FILTER_OPTIONS: { value: string; label: string }[] = [

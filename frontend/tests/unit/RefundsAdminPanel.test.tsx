@@ -208,11 +208,13 @@ function detail(overrides: Partial<RefundAdminDetail> = {}): RefundAdminDetail {
         actor_user_id: null,
         actor_type: 'system',
         action: 'created',
+        title: 'Заявка создана',
         previous_status: null,
         new_status: 'submitted',
         changed_fields: null,
         reason: null,
         event_metadata: null,
+        details: null,
         created_at: '2026-07-01T10:00:00Z',
       },
     ],
@@ -408,11 +410,13 @@ describe('RefundsAdminPanel queue', () => {
             actor_user_id: null,
             actor_type: 'system',
             action: 'revision_created',
+            title: 'Создана ревизия расчёта',
             previous_status: 'calculating',
             new_status: 'manual_review_required',
             changed_fields: null,
             reason: null,
-            event_metadata: null,
+            event_metadata: { outcome: 'failed', error_code: 'CALC' },
+            details: { outcome: 'failed', error_code: 'CALC' },
             created_at: '2026-07-01T10:00:00Z',
           },
         ],
@@ -467,12 +471,14 @@ describe('RefundsAdminPanel queue', () => {
     expect(mainText).toContain('Расчёт возврата');
     expect(mainText).toContain('История решений');
     expect(mainText).toContain('Указать сумму возврата');
-    expect(mainText).toContain('Создан новый расчёт');
+    expect(mainText).toContain('Создана ревизия расчёта');
     expect(mainText).toContain('Система');
     expect(mainText).toContain('Требуется ручная проверка');
+    expect(mainText).toContain('Исход: failed');
     expect(mainText).not.toMatch(/manual_required/);
     expect(mainText).not.toMatch(/Audit timeline/i);
     expect(mainText).not.toMatch(/Admin revision/i);
+    expect(mainText).not.toMatch(/raw_provider_payload/);
 
     const tech = screen.getByTestId('refund-admin-tech-details');
     expect(tech).toBeTruthy();

@@ -1,4 +1,4 @@
-"""Схемы пользовательского refund API (Этап 6.14.3.3 / 6.14.4)."""
+"""Схемы пользовательского refund API (Этап 6.14.3.3 / 6.14.4 / 6.14.10A)."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -17,6 +17,17 @@ class RefundRequestCreateIn(BaseModel):
 class RefundRequestCancelIn(BaseModel):
     expected_version: int = Field(..., ge=1)
     reason: str | None = Field(default=None, max_length=1000)
+
+
+class RefundStatusHistoryItemOut(BaseModel):
+    """Безопасный элемент публичной истории (без внутренних action/metadata)."""
+
+    id: int
+    occurred_at: datetime
+    title: str
+    description: str
+    category: str
+    status: str | None = None
 
 
 class RefundRequestOut(BaseModel):
@@ -40,6 +51,10 @@ class RefundRequestOut(BaseModel):
     updated_at: datetime
     submitted_at: datetime
     completed_at: datetime | None = None
+    # 6.14.10A — заполняется только на detail; list отдаёт [].
+    status_history: list[RefundStatusHistoryItemOut] = Field(default_factory=list)
+    # Безопасный текст для needs_information / rejected (если есть).
+    public_decision_message: str | None = None
 
 
 class RefundablePurchaseOut(BaseModel):

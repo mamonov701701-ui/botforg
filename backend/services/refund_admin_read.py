@@ -26,6 +26,7 @@ from backend.services.refund_api_presenters import (
     recommended_refund_amount_str,
     request_has_manual_review_signal,
 )
+from backend.services.refund_audit_presentation import present_admin_event
 
 
 class RefundAdminReadError(Exception):
@@ -33,54 +34,6 @@ class RefundAdminReadError(Exception):
         self.message = message
         self.code = code
         super().__init__(message)
-
-
-_AUDIT_METADATA_KEYS = (
-    "revision_number",
-    "revision_type",
-    "adjustment_comment_present",
-    "checkout_intent_id",
-    "payment_attempt_id",
-    "idempotency_key_present",
-    "note",
-)
-
-_AUDIT_CHANGED_KEYS = (
-    "proposed_refund_amount",
-    "refund_type",
-    "entitlement_action",
-    "addon_revoke_units",
-    "status",
-)
-
-
-def _pick(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any]:
-    return {k: data[k] for k in keys if k in data}
-
-
-def _project_changed_fields(raw: Any) -> dict[str, Any] | None:
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        return None
-    out: dict[str, Any] = {}
-    for key in _AUDIT_CHANGED_KEYS:
-        if key not in raw:
-            continue
-        value = raw[key]
-        if isinstance(value, dict):
-            out[key] = _pick(value, ("from", "to"))
-        else:
-            out[key] = value
-    return out
-
-
-def _project_audit_metadata(raw: Any) -> dict[str, Any] | None:
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        return None
-    return _pick(raw, _AUDIT_METADATA_KEYS)
 
 
 def _user_safe(user: User | None) -> dict[str, Any] | None:
@@ -193,19 +146,24 @@ def _revision_out(
 
 
 def _audit_out(event: RefundAuditEvent) -> dict[str, Any]:
+    """Admin timeline: русское title + whitelist details (не raw metadata)."""
+    presented = present_admin_event(event)
     return {
-        "id": event.id,
-        "refund_request_id": event.refund_request_id,
-        "refund_revision_id": event.refund_revision_id,
-        "actor_user_id": event.actor_user_id,
-        "actor_type": event.actor_type,
-        "action": event.action,
-        "previous_status": event.previous_status,
-        "new_status": event.new_status,
-        "changed_fields": _project_changed_fields(event.changed_fields),
-        "reason": event.reason,
-        "event_metadata": _project_audit_metadata(event.event_metadata),
-        "created_at": event.created_at,
+        "id": presented.id,
+        "refund_request_id": presented.refund_request_id,
+        "refund_revision_id": presented.refund_revision_id,
+        "actor_user_id": presented.actor_user_id,
+        "actor_type": presented.actor_type,
+        "action": presented.action,
+        "title": presented.title,
+        "previous_status": presented.previous_status,
+        "new_status": presented.new_status,
+        "changed_fields": presented.changed_fields,
+        "reason": presented.reason,
+        # Обратная совместимость: event_metadata = whitelist details.
+        "event_metadata": presented.details,
+        "details": presented.details,
+        "created_at": presented.created_at,
     }
 
 
@@ -396,7 +354,10 @@ def get_refund_request_admin(db: Session, *, request_id: int) -> dict[str, Any]:
     audits = (
         db.query(RefundAuditEvent)
         .filter(RefundAuditEvent.refund_request_id == request.id)
-        .order_by(RefundAuditEvent.id.asc())
+        .order_by(
+            RefundAuditEvent.created_at.asc(),
+            RefundAuditEvent.id.asc(),
+        )
         .all()
     )
 

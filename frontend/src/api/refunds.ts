@@ -3,6 +3,15 @@
  */
 import { get, post, ApiError } from './client';
 
+export interface RefundStatusHistoryItem {
+  id: number;
+  occurred_at: string;
+  title: string;
+  description: string;
+  category: string;
+  status: string | null;
+}
+
 export interface RefundRequest {
   id: number;
   checkout_intent_id: number;
@@ -21,6 +30,9 @@ export interface RefundRequest {
   updated_at: string;
   submitted_at: string;
   completed_at: string | null;
+  /** 6.14.10A — только detail; list обычно []. */
+  status_history: RefundStatusHistoryItem[];
+  public_decision_message: string | null;
 }
 
 export interface RefundablePurchase {
@@ -97,6 +109,19 @@ export function normalizeRefundRequest(raw: unknown): RefundRequest {
     recommended = amountRaw.toFixed(2);
   }
 
+  const historyRaw = Array.isArray(o.status_history) ? o.status_history : [];
+  const status_history: RefundStatusHistoryItem[] = historyRaw.map(row => {
+    const h = asRecord(row) ?? {};
+    return {
+      id: asNumber(h.id),
+      occurred_at: asString(h.occurred_at),
+      title: asString(h.title),
+      description: asString(h.description),
+      category: asString(h.category),
+      status: asNullableString(h.status),
+    };
+  });
+
   return {
     id: asNumber(o.id),
     checkout_intent_id: asNumber(o.checkout_intent_id),
@@ -115,6 +140,8 @@ export function normalizeRefundRequest(raw: unknown): RefundRequest {
     updated_at: asString(o.updated_at),
     submitted_at: asString(o.submitted_at),
     completed_at: asNullableString(o.completed_at),
+    status_history,
+    public_decision_message: asNullableString(o.public_decision_message),
   };
 }
 

@@ -146,11 +146,13 @@ export interface RefundAdminAuditEvent {
   actor_user_id: number | null;
   actor_type: string;
   action: string;
+  title: string | null;
   previous_status: string | null;
   new_status: string | null;
   changed_fields: unknown;
   reason: string | null;
   event_metadata: unknown;
+  details: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -284,6 +286,7 @@ function normalizeRevision(raw: unknown): RefundAdminRevision {
 
 function normalizeAudit(raw: unknown): RefundAdminAuditEvent {
   const o = asRecord(raw) ?? {};
+  const detailsRaw = asRecord(o.details) ?? asRecord(o.event_metadata);
   return {
     id: asNumber(o.id),
     refund_request_id: asNumber(o.refund_request_id),
@@ -291,11 +294,13 @@ function normalizeAudit(raw: unknown): RefundAdminAuditEvent {
     actor_user_id: asNullableNumber(o.actor_user_id),
     actor_type: asString(o.actor_type),
     action: asString(o.action),
+    title: asNullableString(o.title),
     previous_status: asNullableString(o.previous_status),
     new_status: asNullableString(o.new_status),
     changed_fields: o.changed_fields ?? null,
     reason: asNullableString(o.reason),
-    event_metadata: o.event_metadata ?? null,
+    event_metadata: detailsRaw,
+    details: detailsRaw,
     created_at: asString(o.created_at),
   };
 }
