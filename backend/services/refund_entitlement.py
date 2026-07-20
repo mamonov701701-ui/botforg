@@ -135,6 +135,9 @@ def _write_audit(
         created_at=_utcnow(),
     )
     db.add(evt)
+    from backend.services.refund_notification_producer import after_refund_audit_written
+
+    after_refund_audit_written(db, request=request, audit_event=evt)
     return evt
 
 

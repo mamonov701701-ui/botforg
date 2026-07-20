@@ -240,26 +240,28 @@ def create_refund_request(
         db.add(request)
         db.flush()
 
-        db.add(
-            RefundAuditEvent(
-                refund_request_id=request.id,
-                refund_revision_id=None,
-                actor_user_id=int(user_id),
-                actor_type=RefundAuditActorType.USER.value,
-                action=RefundAuditAction.CREATED.value,
-                previous_status=None,
-                new_status=RefundRequestStatus.SUBMITTED.value,
-                changed_fields=None,
-                reason=reason,
-                event_metadata={
-                    "checkout_intent_id": intent.id,
-                    "payment_attempt_id": attempt.id,
-                    "idempotency_key_present": True,
-                },
-                created_at=now,
-            )
+        created_evt = RefundAuditEvent(
+            refund_request_id=request.id,
+            refund_revision_id=None,
+            actor_user_id=int(user_id),
+            actor_type=RefundAuditActorType.USER.value,
+            action=RefundAuditAction.CREATED.value,
+            previous_status=None,
+            new_status=RefundRequestStatus.SUBMITTED.value,
+            changed_fields=None,
+            reason=reason,
+            event_metadata={
+                "checkout_intent_id": intent.id,
+                "payment_attempt_id": attempt.id,
+                "idempotency_key_present": True,
+            },
+            created_at=now,
         )
+        db.add(created_evt)
         db.flush()
+        from backend.services.refund_notification_producer import after_refund_audit_written
+
+        after_refund_audit_written(db, request=request, audit_event=created_evt)
 
         create_initial_automatic_revision(
             db,

@@ -70,6 +70,11 @@ from backend.models.refund import (
     RefundRequestStatus,
     RefundRevision,
 )
+from backend.models.notification import (
+    NotificationChannel,
+    NotificationOutbox,
+    NotificationOutboxStatus,
+)
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
@@ -185,6 +190,9 @@ __all__ = [
     "RefundRevision",
     "RefundLedgerEntry",
     "RefundAuditEvent",
+    "NotificationOutbox",
+    "NotificationOutboxStatus",
+    "NotificationChannel",
     "AddonPackage",
     "AddonPackageType",
     "UserSubscription",

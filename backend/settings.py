@@ -43,7 +43,17 @@ class Settings(BaseSettings):
     SMTP_HOST: str = ""
     SMTP_USER: str = ""
     SMTP_PASS: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USE_TLS: bool = True
+    SMTP_TIMEOUT_SECONDS: float = 15.0
     EMAIL_FROM: str = "BotForg <noreply@botforg.app>"
+
+    # Notification outbox worker (6.14.10B)
+    NOTIFICATION_OUTBOX_BATCH_SIZE: int = 20
+    NOTIFICATION_OUTBOX_MAX_ATTEMPTS: int = 8
+    NOTIFICATION_OUTBOX_BASE_RETRY_SECONDS: int = 30
+    NOTIFICATION_OUTBOX_LEASE_SECONDS: int = 300
+    NOTIFICATION_TEMPLATE_VERSION: str = "v1"
 
     # Database (см. _anchor_dev_sqlite_url: дефолт привязывается к корню репозитория)
     DATABASE_URL: str = _DEV_DEFAULT_SQLITE_URL
