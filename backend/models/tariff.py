@@ -64,6 +64,20 @@ class UserAddonSource(str, Enum):
     PROMO = "promo"
 
 
+class AddonUsageSourceType(str, Enum):
+    """Источник единицы в FIFO-журнале (этап 6.14.9A)."""
+    PLAN_BASE = "plan_base"
+    GIFT = "gift"
+    PAID_ADDON = "paid_addon"
+    LEGACY_UNATTRIBUTED = "legacy_unattributed"
+
+
+class AddonUsageOperation(str, Enum):
+    """Тип операции FIFO-журнала."""
+    DEBIT = "debit"
+    COMPENSATION = "compensation"
+
+
 class GiftType(str, Enum):
     """Тип подарочного начисления."""
     PLAN = "plan"
@@ -177,6 +191,8 @@ class UserAddon(Base):
         Integer, ForeignKey("addon_packages.id", ondelete="RESTRICT"), nullable=False
     )
     amount = Column(Integer, nullable=False, default=0)
+    # Units held for approved/pending refund — excluded from FIFO spend (6.14.9A).
+    reserved_units = Column(Integer, nullable=False, default=0)
     period_start = Column(DateTime, nullable=False)
     period_end = Column(DateTime, nullable=False)
     status = Column(
@@ -267,6 +283,118 @@ class GiftGrant(Base):
     granted_by = relationship(
         "User", foreign_keys=[granted_by_user_id], backref="gift_grants_issued"
     )
+
+
+class AddonUsageLedgerEntry(Base):
+    """
+    FIFO-журнал расхода сообщений по источникам лимита (этап 6.14.9A).
+
+    Не хранит provider payload / секреты. Идемпотентность — unique source_event_key.
+    """
+    __tablename__ = "addon_usage_ledger_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "source_event_key",
+            name="uq_addon_usage_ledger_source_event_key",
+        ),
+        Index("ix_addon_usage_ledger_user_id", "user_id"),
+        Index("ix_addon_usage_ledger_user_addon_id", "user_addon_id"),
+        Index("ix_addon_usage_ledger_gift_grant_id", "gift_grant_id"),
+        Index("ix_addon_usage_ledger_period", "period_start", "period_end"),
+        Index("ix_addon_usage_ledger_source_type", "source_type"),
+        {"extend_existing": True},
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    source_type = Column(String(32), nullable=False)
+    user_addon_id = Column(
+        Integer, ForeignKey("user_addons.id", ondelete="SET NULL"), nullable=True
+    )
+    gift_grant_id = Column(
+        Integer, ForeignKey("gift_grants.id", ondelete="SET NULL"), nullable=True
+    )
+    units = Column(Integer, nullable=False, default=1)
+    operation = Column(String(32), nullable=False)
+    source_event_key = Column(String(255), nullable=False)
+    # For compensation: key of the original debit (idempotent reverse).
+    compensates_event_key = Column(String(255), nullable=True)
+    period_start = Column(DateTime, nullable=False)
+    period_end = Column(DateTime, nullable=False)
+    usage_counter_id = Column(
+        Integer, ForeignKey("usage_counters.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    user = relationship("User", foreign_keys=[user_id])
+    user_addon = relationship("UserAddon", foreign_keys=[user_addon_id])
+    gift_grant = relationship("GiftGrant", foreign_keys=[gift_grant_id])
+    usage_counter = relationship("UsageCounter", foreign_keys=[usage_counter_id])
+
+
+class TariffFifoCutover(Base):
+    """Singleton cutover timestamp for FIFO ledger (этап 6.14.9A)."""
+    __tablename__ = "tariff_fifo_cutover"
+    __table_args__ = ({"extend_existing": True},)
+
+    id = Column(Integer, primary_key=True)
+    cutover_at = Column(DateTime, nullable=False)
+    note = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+
+class AddonRefundReservationStatus(str, Enum):
+    """Lifecycle резерва единиц addon под возврат (6.14.9A)."""
+    ACTIVE = "active"
+    RELEASED = "released"
+    CONSUMED = "consumed"
+
+
+class AddonRefundUnitReservation(Base):
+    """
+    Резерв `UserAddon.reserved_units` для конкретной RefundRequest.
+
+    Идемпотентность: unique refund_request_id. Не хранит provider payload.
+    """
+    __tablename__ = "addon_refund_unit_reservations"
+    __table_args__ = (
+        UniqueConstraint(
+            "refund_request_id",
+            name="uq_addon_refund_unit_reservations_request",
+        ),
+        Index("ix_addon_refund_reservations_user_addon_id", "user_addon_id"),
+        Index("ix_addon_refund_reservations_status", "status"),
+        {"extend_existing": True},
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    refund_request_id = Column(
+        Integer,
+        ForeignKey("refund_requests.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    refund_revision_id = Column(
+        Integer,
+        ForeignKey("refund_revisions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    user_addon_id = Column(
+        Integer,
+        ForeignKey("user_addons.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    units = Column(Integer, nullable=False)
+    status = Column(String(32), nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    refund_request = relationship(
+        "RefundRequest", foreign_keys=[refund_request_id]
+    )
+    refund_revision = relationship(
+        "RefundRevision", foreign_keys=[refund_revision_id]
+    )
+    user_addon = relationship("UserAddon", foreign_keys=[user_addon_id])
 
 
 class AdminAuditLog(Base):

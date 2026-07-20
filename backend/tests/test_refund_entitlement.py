@@ -539,7 +539,10 @@ def test_pool_usage_unattributed_blocks_cancel(client, db, monkeypatch):
     _enable_fake(monkeypatch)
     ctx = _create_approved_addon(client, db, key="add-pool")
     ctx["rev"].entitlement_action = RefundEntitlementAction.CANCEL_ADDON.value
-    ctx["rev"].usage_snapshot = {"detectable_pool_usage_after_purchase": True}
+    ctx["rev"].usage_snapshot = {
+        "detectable_pool_usage_after_purchase": True,
+        "legacy_unattributed": True,
+    }
     db.commit()
     _mark_money_done(db, req=ctx["req"], rev=ctx["rev"], attempt=ctx["attempt"])
     db.refresh(ctx["req"])
@@ -644,7 +647,10 @@ def test_retry_after_entitlement_failed(client, db, monkeypatch):
     _enable_fake(monkeypatch)
     ctx = _create_approved_addon(client, db, key="add-retry")
     ctx["rev"].entitlement_action = RefundEntitlementAction.CANCEL_ADDON.value
-    ctx["rev"].usage_snapshot = {"detectable_pool_usage_after_purchase": True}
+    ctx["rev"].usage_snapshot = {
+        "detectable_pool_usage_after_purchase": True,
+        "legacy_unattributed": True,
+    }
     db.commit()
     _mark_money_done(db, req=ctx["req"], rev=ctx["rev"], attempt=ctx["attempt"])
     db.refresh(ctx["req"])
@@ -928,7 +934,10 @@ def test_reduce_blocked_on_unattributed_pool_usage(client, db, monkeypatch):
     ctx["rev"].entitlement_action = RefundEntitlementAction.REDUCE_AMOUNT.value
     ctx["rev"].addon_revoke_units = 400
     ctx["rev"].addon_total_units = 1000
-    ctx["rev"].usage_snapshot = {"detectable_pool_usage_after_purchase": True}
+    ctx["rev"].usage_snapshot = {
+        "detectable_pool_usage_after_purchase": True,
+        "legacy_unattributed": True,
+    }
     db.commit()
     _mark_money_done(db, req=ctx["req"], rev=ctx["rev"], attempt=ctx["attempt"])
     db.refresh(ctx["req"])

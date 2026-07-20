@@ -15,7 +15,11 @@ from backend.channels.base import NormalizedUpdate
 from backend.models.bot import Bot
 from backend.models.bot_channel import BotChannelConnection
 from backend.models.plan import Plan
-from backend.models.tariff import UsageCounter
+from backend.models.tariff import (
+    AddonUsageLedgerEntry,
+    AddonUsageOperation,
+    UsageCounter,
+)
 from backend.models.user import User
 from backend.services.tariff_limits import get_user_tariff_limits
 from backend.services.tariff_message_enforcement import (
@@ -365,6 +369,14 @@ def test_runtime_failure_after_consume_refunds_counter(client, db) -> None:
     assert res.status_code == 500
     summary = get_user_tariff_limits(db, user.id, at=at)
     assert summary.messages_used == 10
+    comp_key = "wh:telegram:{bot_id}:888001:compensation".format(bot_id=bot.id)
+    entry = (
+        db.query(AddonUsageLedgerEntry)
+        .filter(AddonUsageLedgerEntry.source_event_key == comp_key)
+        .first()
+    )
+    assert entry is not None
+    assert entry.operation == AddonUsageOperation.COMPENSATION.value
 
 
 def test_successful_runtime_keeps_consumed_counter(client, db) -> None:

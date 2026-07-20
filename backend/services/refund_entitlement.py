@@ -199,7 +199,37 @@ def _approved_revision(db: Session, request: RefundRequest) -> RefundRevision:
 
 def _pool_usage_unattributed(revision: RefundRevision) -> bool:
     snap = revision.usage_snapshot if isinstance(revision.usage_snapshot, dict) else {}
+    if snap.get("legacy_unattributed"):
+        return True
+    ent = revision.entitlement_snapshot if isinstance(revision.entitlement_snapshot, dict) else {}
+    if ent.get("fifo_precise") is True:
+        return False
     return bool(snap.get("detectable_pool_usage_after_purchase"))
+
+
+def _addon_revocable_units(
+    db: Session, addon: UserAddon, *, refund_request_id: int | None = None
+) -> int:
+    """Units that may still be revoked: amount − fifo_used − reserved (+ this request's reserve)."""
+    from backend.models.tariff import AddonRefundReservationStatus, AddonRefundUnitReservation
+    from backend.services.tariff_addon_usage_ledger import fifo_ledger_used
+
+    used = int(fifo_ledger_used(db, int(addon.id)))
+    reserved = max(0, int(getattr(addon, "reserved_units", 0) or 0))
+    if refund_request_id is not None:
+        row = (
+            db.query(AddonRefundUnitReservation)
+            .filter(
+                AddonRefundUnitReservation.refund_request_id == int(refund_request_id),
+                AddonRefundUnitReservation.user_addon_id == int(addon.id),
+                AddonRefundUnitReservation.status
+                == AddonRefundReservationStatus.ACTIVE.value,
+            )
+            .first()
+        )
+        if row is not None:
+            reserved = max(0, reserved - int(row.units or 0))
+    return max(0, int(addon.amount or 0) - used - reserved)
 
 
 def _assert_limit_after_reduce(
@@ -435,7 +465,14 @@ def _apply_action(
         if _addon_already_terminal(addon):
             return "already_applied", "addon", int(addon.id), True
 
+        revocable = _addon_revocable_units(db, addon, refund_request_id=int(request.id))
+
         if action == RefundEntitlementAction.CANCEL_ADDON.value:
+            if revocable < int(addon.amount or 0):
+                raise RefundEntitlementError(
+                    "Cannot cancel addon with used or reserved units; reduce unused only",
+                    code="cannot_revoke_used_or_reserved",
+                )
             cancel_user_addon(
                 db,
                 user_addon_id=int(addon.id),
@@ -445,6 +482,11 @@ def _apply_action(
             return "applied", "addon", int(addon.id), False
 
         if action == RefundEntitlementAction.EXPIRE_ADDON.value:
+            if revocable < int(addon.amount or 0):
+                raise RefundEntitlementError(
+                    "Cannot expire addon with used or reserved units; reduce unused only",
+                    code="cannot_revoke_used_or_reserved",
+                )
             expire_user_addon(
                 db,
                 user_addon_id=int(addon.id),
@@ -479,6 +521,11 @@ def _apply_action(
             raise RefundEntitlementError(
                 "Cannot revoke more than current addon amount",
                 code="revoke_exceeds_grant",
+            )
+        if revoke_i > revocable:
+            raise RefundEntitlementError(
+                "Cannot revoke used or reserved units",
+                code="cannot_revoke_used_or_reserved",
             )
         if _pool_usage_unattributed(revision) and revoke_i > 0:
             # Partial reduce with unattributed pool usage is unsafe without FIFO.
@@ -798,6 +845,12 @@ def apply_refund_entitlement(
 
     done_prev = _set_status(request, RefundRequestStatus.COMPLETED.value)
     request.completed_at = request.completed_at or _utcnow()
+
+    from backend.services.refund_addon_reservation import (
+        consume_addon_refund_reservation,
+    )
+
+    consume_addon_refund_reservation(db, int(request.id), commit=False)
 
     if outcome_label == "not_required":
         audit_action = RefundAuditAction.ENTITLEMENT_NOT_REQUIRED.value

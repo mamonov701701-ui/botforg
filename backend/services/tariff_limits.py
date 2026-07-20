@@ -92,12 +92,14 @@ class TariffLimitsSummary:
     messages_limit: int | None
     messages_used: int
     messages_remaining: int | None
-    active_bots_limit: int | None
-    active_bots_used: int
-    active_bots_remaining: int | None
-    team_members_limit: int | None
-    team_members_used: int
-    team_members_remaining: int | None
+    # Plan monthly_messages before addon/gift bonuses (FIFO plan_base bucket).
+    messages_plan_base: int | None = None
+    active_bots_limit: int | None = None
+    active_bots_used: int = 0
+    active_bots_remaining: int | None = None
+    team_members_limit: int | None = None
+    team_members_used: int = 0
+    team_members_remaining: int | None = None
     active_addons: list[dict[str, Any]] = field(default_factory=list)
     active_gifts: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[TariffLimitWarning] = field(default_factory=list)
@@ -207,6 +209,7 @@ def get_user_tariff_limits(
         messages_limit=messages_limit,
         messages_used=messages_used,
         messages_remaining=_remaining(messages_limit, messages_used),
+        messages_plan_base=base["monthly_messages"],
         active_bots_limit=active_bots_limit,
         active_bots_used=active_bots_used,
         active_bots_remaining=_remaining(active_bots_limit, active_bots_used),

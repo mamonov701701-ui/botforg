@@ -316,6 +316,30 @@ def test_manual_review_recommended_amount_null(client, db):
             updated_at=paid_at + timedelta(hours=1),
         )
     )
+    from backend.models.tariff import (
+        AddonUsageLedgerEntry,
+        AddonUsageOperation,
+        AddonUsageSourceType,
+        TariffFifoCutover,
+    )
+
+    cut = db.query(TariffFifoCutover).first()
+    cut_at = cut.cutover_at if cut else paid_at
+    if getattr(cut_at, "tzinfo", None) is None:
+        cut_at = cut_at.replace(tzinfo=timezone.utc)
+    addon.created_at = (cut_at - timedelta(days=1)).replace(tzinfo=None)
+    db.add(
+        AddonUsageLedgerEntry(
+            user_id=uid,
+            source_type=AddonUsageSourceType.LEGACY_UNATTRIBUTED.value,
+            units=3,
+            operation=AddonUsageOperation.DEBIT.value,
+            source_event_key="legacy-api-manual",
+            period_start=addon.period_start,
+            period_end=addon.period_end,
+            created_at=cut_at.replace(tzinfo=None),
+        )
+    )
     db.commit()
     db.refresh(intent)
 

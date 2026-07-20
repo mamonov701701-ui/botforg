@@ -527,11 +527,36 @@ def test_addon_no_usage_full(client, db):
 
 
 def test_addon_pool_usage_manual_review(client, db):
+    from backend.models.tariff import (
+        AddonUsageLedgerEntry,
+        AddonUsageOperation,
+        AddonUsageSourceType,
+        TariffFifoCutover,
+    )
+
     token = register_and_get_token(client)
     uid = get_user_id(client, token)
     paid_at = _utc() - timedelta(hours=5)
     intent, attempt, addon = _seed_addon_intent(
         db, uid, key="addon-pool", paid_at=paid_at
+    )
+    # Pre-cutover purchase + legacy pool → manual (not false FIFO attribution).
+    cut = db.query(TariffFifoCutover).first()
+    cut_at = (cut.cutover_at if cut else _utc())
+    if getattr(cut_at, "tzinfo", None) is None:
+        cut_at = cut_at.replace(tzinfo=timezone.utc)
+    addon.created_at = (cut_at - timedelta(days=1)).replace(tzinfo=None)
+    db.add(
+        AddonUsageLedgerEntry(
+            user_id=uid,
+            source_type=AddonUsageSourceType.LEGACY_UNATTRIBUTED.value,
+            units=3,
+            operation=AddonUsageOperation.DEBIT.value,
+            source_event_key="legacy-pool-test",
+            period_start=addon.period_start,
+            period_end=addon.period_end,
+            created_at=cut_at.replace(tzinfo=None),
+        )
     )
     _add_usage(
         db,
@@ -541,6 +566,7 @@ def test_addon_pool_usage_manual_review(client, db):
         messages=3,
         updated_at=paid_at + timedelta(hours=1),
     )
+    db.commit()
     req = _create_request(db, uid, intent, attempt)
     rev = create_initial_automatic_revision(db, req.id, expected_version=1)
     db.refresh(req)
@@ -782,6 +808,30 @@ def test_stale_revision_approval_rejected(client, db):
     assert req.status == RefundRequestStatus.AWAITING_ADMIN_REVIEW.value
 
     # Usage appears after calculation → fingerprint changes.
+    from backend.models.tariff import (
+        AddonUsageLedgerEntry,
+        AddonUsageOperation,
+        AddonUsageSourceType,
+        TariffFifoCutover,
+    )
+
+    cut = db.query(TariffFifoCutover).first()
+    cut_at = cut.cutover_at if cut else _utc()
+    if getattr(cut_at, "tzinfo", None) is None:
+        cut_at = cut_at.replace(tzinfo=timezone.utc)
+    addon.created_at = (cut_at - timedelta(days=1)).replace(tzinfo=None)
+    db.add(
+        AddonUsageLedgerEntry(
+            user_id=uid,
+            source_type=AddonUsageSourceType.LEGACY_UNATTRIBUTED.value,
+            units=1,
+            operation=AddonUsageOperation.DEBIT.value,
+            source_event_key="legacy-stale-test",
+            period_start=addon.period_start,
+            period_end=addon.period_end,
+            created_at=cut_at.replace(tzinfo=None),
+        )
+    )
     _add_usage(
         db,
         uid,
@@ -790,6 +840,7 @@ def test_stale_revision_approval_rejected(client, db):
         messages=1,
         updated_at=_utc(),
     )
+    db.commit()
 
     result = approve_revision(
         db,

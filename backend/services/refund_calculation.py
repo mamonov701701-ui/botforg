@@ -214,6 +214,12 @@ def load_prior_refunded_amount(
 
 
 def load_usage_snapshot(db: Session, *, user_id: int, paid_at: datetime | None) -> dict[str, Any]:
+    from backend.services.tariff_addon_usage_ledger import (
+        AddonUsageSourceType,
+        has_legacy_unattributed,
+        net_units_for_filter,
+    )
+
     paid_at_aware = ensure_aware(paid_at)
     counters = (
         db.query(UsageCounter).filter(UsageCounter.user_id == int(user_id)).all()
@@ -249,15 +255,33 @@ def load_usage_snapshot(db: Session, *, user_id: int, paid_at: datetime | None) 
             }
         )
 
+    legacy = has_legacy_unattributed(db, user_id=int(user_id))
+    fifo_attributed = net_units_for_filter(
+        db,
+        user_id=int(user_id),
+        source_type=AddonUsageSourceType.PAID_ADDON.value,
+    ) + net_units_for_filter(
+        db,
+        user_id=int(user_id),
+        source_type=AddonUsageSourceType.GIFT.value,
+    ) + net_units_for_filter(
+        db,
+        user_id=int(user_id),
+        source_type=AddonUsageSourceType.PLAN_BASE.value,
+    )
+
     return {
         "counters": items,
         "messages_used_total": messages_total,
         "active_bots_used_total": bots_total,
         "team_members_used_total": team_total,
         "detectable_pool_usage_after_purchase": detectable_pool_usage,
+        "legacy_unattributed": legacy,
+        "fifo_attributed_units_total": fifo_attributed,
         "usage_updated_at_max": _iso(max_updated),
         "note": (
-            "Pool aggregate only; no per-addon attribution until FIFO ledger. "
+            "Pool aggregate + FIFO ledger (6.14.9A). "
+            "legacy_unattributed marks pre-cutover pool without per-addon fiction. "
             "Post-purchase heuristic: counter.updated_at >= paid_at and used > 0."
         ),
     }
@@ -877,35 +901,33 @@ def _calc_addon(
     }
 
     pool_used = bool(usage["detectable_pool_usage_after_purchase"])
+    legacy = bool(usage.get("legacy_unattributed"))
 
-    if pool_used:
-        return _result_with_balance(
-            balance=balance,
-            currency=currency,
-            proposed=ZERO,
-            calculation_status=RefundCalculationStatus.MANUAL_REQUIRED.value,
-            refund_type=RefundType.PARTIAL.value,
-            calc_at=calc_at,
-            period_start=period_start,
-            period_end=period_end,
-            used_time_seconds=None,
-            total_time_seconds=None,
-            addon_total_units=units,
-            addon_used_units=None,
-            addon_revoke_units=None,
-            entitlement_action=RefundEntitlementAction.NONE.value,
-            entitlement_effective_at=None,
-            calculation_snapshot=_manual_addon_placeholder_snapshot(
-                formula="addon_pool_usage_manual_review",
-                reason="detectable_pool_usage_after_purchase",
-                calculation_at=_iso(calc_at),
-                extra_note="No per-addon attribution until FIFO ledger.",
-            ),
-            entitlement_snapshot=entitlement_snapshot,
-            usage_snapshot=usage,
-            input_fingerprint=fp,
-            request_status_after=RefundRequestStatus.MANUAL_REVIEW_REQUIRED.value,
+    from backend.services.tariff_addon_usage_ledger import (
+        addon_has_pre_cutover_uncertainty,
+        fifo_ledger_remaining,
+        fifo_ledger_used,
+    )
+
+    fifo_used = 0
+    fifo_remaining = None
+    reserved = 0
+    fifo_precise = False
+    if addon is not None and exists:
+        fifo_used = int(fifo_ledger_used(db, int(addon.id)))
+        reserved = max(0, int(getattr(addon, "reserved_units", 0) or 0))
+        fifo_remaining = fifo_ledger_remaining(db, int(addon.id))
+        fifo_precise = not addon_has_pre_cutover_uncertainty(
+            db, addon=addon, paid_at=paid_at
         )
+
+    entitlement_snapshot = {
+        **entitlement_snapshot,
+        "fifo_used_units": fifo_used,
+        "fifo_remaining_units": fifo_remaining,
+        "reserved_units": reserved,
+        "fifo_precise": fifo_precise,
+    }
 
     if not exists:
         return _result_with_balance(
@@ -934,14 +956,72 @@ def _calc_addon(
             request_status_after=RefundRequestStatus.MANUAL_REVIEW_REQUIRED.value,
         )
 
-    # No detectable pool usage → remaining available + revoke full units.
-    proposed = available
+    # Pre-cutover / legacy uncertainty with any pool activity → manual.
+    if not fifo_precise and (pool_used or legacy):
+        return _result_with_balance(
+            balance=balance,
+            currency=currency,
+            proposed=ZERO,
+            calculation_status=RefundCalculationStatus.MANUAL_REQUIRED.value,
+            refund_type=RefundType.PARTIAL.value,
+            calc_at=calc_at,
+            period_start=period_start,
+            period_end=period_end,
+            used_time_seconds=None,
+            total_time_seconds=None,
+            addon_total_units=units,
+            addon_used_units=None,
+            addon_revoke_units=None,
+            entitlement_action=RefundEntitlementAction.NONE.value,
+            entitlement_effective_at=None,
+            calculation_snapshot=_manual_addon_placeholder_snapshot(
+                formula="addon_legacy_or_unattributed_usage",
+                reason="legacy_unattributed_or_pre_cutover",
+                calculation_at=_iso(calc_at),
+                extra_note=(
+                    "Legacy or pre-cutover pool usage cannot be attributed "
+                    "to this addon; manual review required."
+                ),
+            ),
+            entitlement_snapshot=entitlement_snapshot,
+            usage_snapshot=usage,
+            input_fingerprint=fp,
+            request_status_after=RefundRequestStatus.MANUAL_REVIEW_REQUIRED.value,
+        )
+
+    total_units = max(int(units or 0), 0)
+    used_units = fifo_used if fifo_precise else 0
+    unused_units = max(total_units - used_units - reserved, 0)
+
+    if total_units <= 0:
+        proposed = ZERO
+        revoke_units = 0
+        action = RefundEntitlementAction.NONE.value
+    elif unused_units <= 0:
+        proposed = ZERO
+        revoke_units = 0
+        action = RefundEntitlementAction.NONE.value
+    elif used_units == 0 and reserved == 0:
+        proposed = available
+        revoke_units = total_units
+        action = RefundEntitlementAction.CANCEL_ADDON.value
+    else:
+        # Partial: unused share of paid amount.
+        unused_ratio = Decimal(unused_units) / Decimal(total_units)
+        proposed = round_money(paid * unused_ratio)
+        proposed = round_money(proposed - confirmed)
+        if proposed < ZERO:
+            proposed = ZERO
+        if proposed > available:
+            proposed = available
+        revoke_units = unused_units
+        action = RefundEntitlementAction.REDUCE_AMOUNT.value
+
     validate_refund_amount_bounds(
         refund_amount=proposed,
         paid_amount=paid,
         prior_refunded_amount=allocated,
     )
-    revoke_units = max(int(units or 0), 0)
 
     grace_window = False
     if paid_at is not None:
@@ -954,7 +1034,7 @@ def _calc_addon(
         calculation_status=RefundCalculationStatus.OK.value,
         refund_type=(
             RefundType.FULL.value
-            if proposed == available and confirmed == ZERO
+            if proposed == available and confirmed == ZERO and proposed > ZERO
             else RefundType.PARTIAL.value
         ),
         calc_at=calc_at,
@@ -962,19 +1042,34 @@ def _calc_addon(
         period_end=period_end,
         used_time_seconds=None,
         total_time_seconds=None,
-        addon_total_units=units,
-        addon_used_units=0,
+        addon_total_units=total_units,
+        addon_used_units=used_units,
         addon_revoke_units=revoke_units,
-        entitlement_action=RefundEntitlementAction.CANCEL_ADDON.value,
-        entitlement_effective_at=calc_at,
+        entitlement_action=action,
+        entitlement_effective_at=calc_at if revoke_units > 0 else None,
         calculation_snapshot={
-            "formula": "addon_full_no_pool_usage",
+            "formula": (
+                "addon_fifo_unused_share"
+                if fifo_precise and used_units > 0
+                else (
+                    "addon_fifo_full_unused"
+                    if fifo_precise
+                    else "addon_full_no_pool_usage"
+                )
+            ),
             "basis": (
                 "grace_period_full_refund"
-                if grace_window and confirmed == ZERO and not revoked
-                else "addon_no_detectable_pool_usage"
+                if grace_window and confirmed == ZERO and not revoked and used_units == 0
+                else (
+                    "fifo_ledger_used"
+                    if fifo_precise
+                    else "addon_no_detectable_pool_usage"
+                )
             ),
             "grace_window": grace_window,
+            "fifo_used_units": used_units,
+            "reserved_units": reserved,
+            "unused_units": unused_units,
             "calculation_at": _iso(calc_at),
         },
         entitlement_snapshot=entitlement_snapshot,

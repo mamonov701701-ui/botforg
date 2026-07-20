@@ -106,7 +106,10 @@ def _dispatch_channel_update(
 
     limit_result = None
     if is_webhook_message_billable(normalized, external_id):
-        limit_result = check_and_consume_message_unit(db, bot.owner_id)
+        event_key = f"wh:{channel_key}:{bot_id}:{external_id}"
+        limit_result = check_and_consume_message_unit(
+            db, bot.owner_id, source_event_key=event_key
+        )
         if limit_result.blocked:
             return {
                 "ok": True,

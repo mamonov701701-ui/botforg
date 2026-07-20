@@ -141,6 +141,20 @@ def _seed_paid(
     )
     db.add(attempt)
     if with_usage:
+        from backend.models.tariff import (
+            AddonUsageLedgerEntry,
+            AddonUsageOperation,
+            AddonUsageSourceType,
+            TariffFifoCutover,
+        )
+
+        cut = db.query(TariffFifoCutover).first()
+        cut_at = cut.cutover_at if cut else paid_at
+        if getattr(cut_at, "tzinfo", None) is None:
+            from datetime import timezone as _tz
+
+            cut_at = cut_at.replace(tzinfo=_tz.utc)
+        addon.created_at = (cut_at - timedelta(days=1)).replace(tzinfo=None)
         db.add(
             UsageCounter(
                 user_id=user_id,
@@ -151,6 +165,18 @@ def _seed_paid(
                 team_members_used=0,
                 created_at=paid_at + timedelta(hours=1),
                 updated_at=paid_at + timedelta(hours=1),
+            )
+        )
+        db.add(
+            AddonUsageLedgerEntry(
+                user_id=user_id,
+                source_type=AddonUsageSourceType.LEGACY_UNATTRIBUTED.value,
+                units=3,
+                operation=AddonUsageOperation.DEBIT.value,
+                source_event_key=f"legacy-admin-{key}",
+                period_start=addon.period_start,
+                period_end=addon.period_end,
+                created_at=cut_at.replace(tzinfo=None),
             )
         )
     db.commit()

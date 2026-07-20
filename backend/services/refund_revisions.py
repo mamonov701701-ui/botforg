@@ -721,6 +721,11 @@ def create_admin_revision(
                 new_status=item.get("new_status"),
                 refund_revision_id=rev.id,
             )
+        from backend.services.refund_addon_reservation import (
+            release_addon_refund_reservation,
+        )
+
+        release_addon_refund_reservation(db, int(request.id), commit=False)
         _write_audit(
             db,
             request,
@@ -956,6 +961,11 @@ def approve_revision(
                 "final_refund_amount": str(round_money(revision.proposed_refund_amount)),
             },
         )
+        from backend.services.refund_addon_reservation import (
+            ensure_addon_refund_reservation,
+        )
+
+        ensure_addon_refund_reservation(db, request, revision, commit=False)
         if commit:
             db.commit()
             db.refresh(request)
@@ -1042,6 +1052,11 @@ def reject_request(
                 new_status=item.get("new_status"),
                 reason=reason,
             )
+        from backend.services.refund_addon_reservation import (
+            release_addon_refund_reservation,
+        )
+
+        release_addon_refund_reservation(db, int(request.id), commit=False)
         if commit:
             db.commit()
             db.refresh(request)
@@ -1065,11 +1080,6 @@ def cancel_request(
     if request.status in REFUND_TERMINAL_STATUSES:
         raise RefundRevisionServiceError(
             "Request is already terminal", code="request_terminal"
-        )
-    if request.status == RefundRequestStatus.APPROVED.value:
-        raise RefundRevisionServiceError(
-            "Cannot cancel approved request in 6.14.2",
-            code="approved_terminal",
         )
     if (request.status or "") in REFUND_FINANCIAL_FROZEN_STATUSES:
         raise RefundRevisionServiceError(
@@ -1095,6 +1105,11 @@ def cancel_request(
                 new_status=item.get("new_status"),
                 reason=reason,
             )
+        from backend.services.refund_addon_reservation import (
+            release_addon_refund_reservation,
+        )
+
+        release_addon_refund_reservation(db, int(request.id), commit=False)
         if commit:
             db.commit()
             db.refresh(request)

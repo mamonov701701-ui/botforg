@@ -415,6 +415,11 @@ def _apply_provider_result(
                     "cancellation_details": result.cancellation_details,
                 },
             )
+        from backend.services.refund_addon_reservation import (
+            release_addon_refund_reservation,
+        )
+
+        release_addon_refund_reservation(db, int(request.id), commit=False)
         return "canceled"
 
     raise RefundExecutionError(
@@ -475,6 +480,11 @@ def _mark_failed(
             refund_revision_id=revision_id,
             metadata={"outcome": "failed", "error_code": error_code},
         )
+    from backend.services.refund_addon_reservation import (
+        release_addon_refund_reservation,
+    )
+
+    release_addon_refund_reservation(db, int(request.id), commit=False)
     return "failed"
 
 
@@ -528,6 +538,11 @@ def execute_approved_refund(
         )
 
     revision = _approved_revision(db, request)
+    from backend.services.refund_addon_reservation import (
+        ensure_addon_refund_reservation,
+    )
+
+    ensure_addon_refund_reservation(db, request, revision, commit=False)
     amount = _refund_amount(revision)
     currency = (revision.currency or "RUB").upper()
 
