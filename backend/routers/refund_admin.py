@@ -40,6 +40,7 @@ from backend.services.refund_execution import (
     RefundExecutionError,
     execute_approved_refund,
 )
+from backend.services.refund_notification_producer import RefundNotificationEnqueueError
 from backend.services.refund_revisions import (
     RefundRevisionServiceError,
     approve_revision,
@@ -54,6 +55,17 @@ router = APIRouter(
     prefix="/api/admin/refunds",
     tags=["Refund Admin"],
 )
+
+
+def _http_from_enqueue_error(exc: RefundNotificationEnqueueError) -> HTTPException:
+    """Controlled response — never expose raw exception text to the client."""
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": exc.code or "enqueue_failed",
+            "message": "Не удалось сохранить изменение заявки. Повторите попытку.",
+        },
+    )
 
 
 def _http_from_revision_error(exc: RefundRevisionServiceError) -> HTTPException:
@@ -255,6 +267,8 @@ async def admin_recalculate_refund(
         )
     except RefundRevisionServiceError as exc:
         raise _http_from_revision_error(exc) from exc
+    except RefundNotificationEnqueueError as exc:
+        raise _http_from_enqueue_error(exc) from exc
     return _detail_out(db, request_id)
 
 
@@ -282,6 +296,8 @@ async def admin_create_refund_revision(
         )
     except RefundRevisionServiceError as exc:
         raise _http_from_revision_error(exc) from exc
+    except RefundNotificationEnqueueError as exc:
+        raise _http_from_enqueue_error(exc) from exc
     return _detail_out(db, request_id)
 
 
@@ -302,6 +318,8 @@ async def admin_mark_needs_information(
         )
     except RefundRevisionServiceError as exc:
         raise _http_from_revision_error(exc) from exc
+    except RefundNotificationEnqueueError as exc:
+        raise _http_from_enqueue_error(exc) from exc
     return _detail_out(db, request_id)
 
 
@@ -322,6 +340,8 @@ async def admin_reject_refund(
         )
     except RefundRevisionServiceError as exc:
         raise _http_from_revision_error(exc) from exc
+    except RefundNotificationEnqueueError as exc:
+        raise _http_from_enqueue_error(exc) from exc
     return _detail_out(db, request_id)
 
 
@@ -342,6 +362,8 @@ async def admin_confirm_refund_revision(
         )
     except RefundRevisionServiceError as exc:
         raise _http_from_revision_error(exc) from exc
+    except RefundNotificationEnqueueError as exc:
+        raise _http_from_enqueue_error(exc) from exc
     return _detail_out(db, request_id)
 
 
@@ -362,6 +384,8 @@ async def admin_approve_refund_revision(
         )
     except RefundRevisionServiceError as exc:
         raise _http_from_revision_error(exc) from exc
+    except RefundNotificationEnqueueError as exc:
+        raise _http_from_enqueue_error(exc) from exc
 
     if result.stale or not result.approved:
         new_id = result.new_revision.id if result.new_revision is not None else None

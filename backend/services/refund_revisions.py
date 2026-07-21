@@ -1044,6 +1044,8 @@ def reject_request(
             audit_events=audit_buf,
         )
         request.completed_at = _utcnow()
+        # Drop stale approve pointer (e.g. orphan after interrupted approve).
+        request.approved_revision_id = None
         for item in audit_buf:
             _write_audit(
                 db,
@@ -1097,6 +1099,7 @@ def cancel_request(
             audit_events=audit_buf,
         )
         request.completed_at = _utcnow()
+        request.approved_revision_id = None
         for item in audit_buf:
             _write_audit(
                 db,

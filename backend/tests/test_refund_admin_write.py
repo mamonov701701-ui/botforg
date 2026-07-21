@@ -497,3 +497,73 @@ def test_provider_and_entitlement_not_invoked(client, db):
     assert addon_after.amount == addon_amount_before
     row = db.query(RefundRequest).filter(RefundRequest.id == req.id).one()
     assert row.status == RefundRequestStatus.APPROVED.value
+
+
+def test_reject_with_orphan_approved_revision_id(client, db):
+    """awaiting_admin_review + stale approved_revision_id must still reject cleanly."""
+    ctx = _create_open(client, db, key="aw-orphan-appr")
+    req = ctx["req"]
+    rev = _current_revision(db, req)
+    req.approved_revision_id = rev.id
+    db.commit()
+    db.refresh(req)
+    assert req.status == RefundRequestStatus.AWAITING_ADMIN_REVIEW.value
+    assert req.approved_revision_id == rev.id
+
+    res = client.post(
+        f"/api/admin/refunds/{req.id}/reject",
+        json={"expected_version": req.version, "reason": "sandbox prep free slot"},
+        headers=ctx["admin_headers"],
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["request"]["status"] == RefundRequestStatus.REJECTED.value
+    assert body["request"]["approved_revision_id"] is None
+    assert "traceback" not in res.text.lower()
+    assert "RefundNotificationEnqueueError" not in res.text
+
+    db.expire_all()
+    row = db.get(RefundRequest, req.id)
+    assert row.status == RefundRequestStatus.REJECTED.value
+    assert row.approved_revision_id is None
+    events = (
+        db.query(RefundAuditEvent)
+        .filter(RefundAuditEvent.refund_request_id == req.id)
+        .order_by(RefundAuditEvent.id.desc())
+        .all()
+    )
+    assert events[0].action == RefundAuditAction.STATUS_CHANGED.value
+    assert events[0].new_status == RefundRequestStatus.REJECTED.value
+
+
+def test_reject_enqueue_failure_returns_controlled_error(client, db, monkeypatch):
+    from backend.services.refund_notification_producer import (
+        RefundNotificationEnqueueError,
+    )
+
+    ctx = _create_open(client, db, key="aw-rej-enq")
+    req = ctx["req"]
+    before_ver = req.version
+
+    def _boom(*_a, **_k):
+        raise RefundNotificationEnqueueError("forced", code="enqueue_db")
+
+    monkeypatch.setattr(
+        "backend.services.refund_notification_producer.enqueue_refund_notification_from_audit",
+        _boom,
+    )
+    res = client.post(
+        f"/api/admin/refunds/{req.id}/reject",
+        json={"expected_version": before_ver, "reason": "should roll back"},
+        headers=ctx["admin_headers"],
+    )
+    assert res.status_code == 503, res.text
+    detail = res.json()["detail"]
+    assert detail["code"] == "enqueue_db"
+    assert "forced" not in str(detail).lower()
+    assert "traceback" not in res.text.lower()
+
+    db.expire_all()
+    row = db.get(RefundRequest, req.id)
+    assert row.status != RefundRequestStatus.REJECTED.value
+    assert row.version == before_ver
