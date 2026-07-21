@@ -43,6 +43,7 @@ import {
   formatRecommendedRefundAmount,
   formatRefundDate,
   formatSnapshotJson,
+  isUserInformationProvidedAudit,
   MANUAL_AMOUNT_LABEL,
   MANUAL_REVIEW_GUIDANCE,
   parseRefundCalcDisplay,
@@ -1163,6 +1164,7 @@ export default function RefundsAdminPanel() {
                                 ? (e.event_metadata as Record<string, unknown>)
                                 : null)
                           );
+                          const isUserReply = isUserInformationProvidedAudit(e.action);
                           return (
                             <li
                               key={e.id}
@@ -1173,8 +1175,25 @@ export default function RefundsAdminPanel() {
                                 fontSize: 13,
                               }}
                             >
-                              <div>{formatAuditDecisionLine(e)}</div>
-                              {e.action ? (
+                              <div data-testid={`refund-admin-audit-line-${e.id}`}>
+                                {formatAuditDecisionLine(e)}
+                              </div>
+                              {isUserReply && e.reason ? (
+                                <div
+                                  data-testid={`refund-admin-audit-reply-${e.id}`}
+                                  style={{
+                                    marginTop: 8,
+                                    padding: '8px 10px',
+                                    borderRadius: 8,
+                                    border: `1px solid ${FINANCE_COLORS.accentBorder}`,
+                                    whiteSpace: 'pre-wrap',
+                                    lineHeight: 1.45,
+                                  }}
+                                >
+                                  {e.reason}
+                                </div>
+                              ) : null}
+                              {!isUserReply && e.action ? (
                                 <div
                                   style={{
                                     marginTop: 4,

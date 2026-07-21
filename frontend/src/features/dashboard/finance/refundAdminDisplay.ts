@@ -217,6 +217,7 @@ export function auditActionLabel(action: string): string {
     revision_created: 'Создан новый расчёт',
     admin_edited: 'Правка администратора',
     needs_information: 'Запрос сведений',
+    user_information_provided: 'Пользователь предоставил дополнительную информацию',
     rejected: 'Отклонена',
     confirmed: 'Подтверждена',
     approved: 'Одобрена',
@@ -493,8 +494,15 @@ export function formatAuditDecisionLine(event: {
       }`
     );
   }
-  if (event.reason) parts.push(event.reason);
+  // Многострочный ответ пользователя показываем отдельно в UI.
+  if (event.action !== 'user_information_provided' && event.reason) {
+    parts.push(event.reason);
+  }
   return parts.join(' · ');
+}
+
+export function isUserInformationProvidedAudit(action: string): boolean {
+  return action === 'user_information_provided';
 }
 
 /** Разрешённые admin details для отображения (whitelist). */

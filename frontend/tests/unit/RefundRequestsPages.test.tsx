@@ -12,6 +12,7 @@ const {
   createMyRefundRequest,
   getMyRefundRequest,
   cancelMyRefundRequest,
+  provideRefundInformation,
   toast,
 } = vi.hoisted(() => ({
   listMyRefundRequests: vi.fn(),
@@ -19,6 +20,7 @@ const {
   createMyRefundRequest: vi.fn(),
   getMyRefundRequest: vi.fn(),
   cancelMyRefundRequest: vi.fn(),
+  provideRefundInformation: vi.fn(),
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -36,6 +38,7 @@ vi.mock('@/api/refunds', async () => {
     createMyRefundRequest,
     getMyRefundRequest,
     cancelMyRefundRequest,
+    provideRefundInformation,
   };
 });
 
@@ -279,6 +282,7 @@ describe('RefundRequestDetailPage', () => {
   beforeEach(() => {
     getMyRefundRequest.mockReset();
     cancelMyRefundRequest.mockReset();
+    provideRefundInformation.mockReset();
     toast.success.mockReset();
     toast.error.mockReset();
   });
@@ -406,6 +410,162 @@ describe('RefundRequestDetailPage', () => {
       expect(cancelMyRefundRequest).toHaveBeenCalledWith(12, { expected_version: 2 });
     });
     expect(toast.success).toHaveBeenCalled();
+  });
+
+  it('shows reply form only for needs_information and hides support hint', async () => {
+    getMyRefundRequest.mockResolvedValue(
+      sample({
+        status: 'needs_information',
+        public_decision_message: 'Укажите дату покупки.',
+      })
+    );
+    renderDetail();
+    await waitFor(() => expect(screen.getByTestId('refund-detail-reply')).toBeTruthy());
+    expect(screen.getByTestId('refund-detail-reply-title').textContent).toBe(
+      'Ответить администратору'
+    );
+    expect(screen.getByTestId('refund-detail-public-decision').textContent).toMatch(/дату покупки/);
+    expect(screen.getByTestId('refund-detail-status-hint').textContent).not.toMatch(/поддержк/i);
+    expect(screen.getByTestId('refund-detail-reply-submit')).toBeDisabled();
+  });
+
+  it('hides reply form for other statuses', async () => {
+    getMyRefundRequest.mockResolvedValue(sample({ status: 'awaiting_admin_review' }));
+    renderDetail();
+    await waitFor(() => expect(screen.getByTestId('refund-detail-card')).toBeTruthy());
+    expect(screen.queryByTestId('refund-detail-reply')).toBeNull();
+  });
+
+  it('does not submit blank or whitespace-only reply', async () => {
+    getMyRefundRequest.mockResolvedValue(sample({ status: 'needs_information' }));
+    renderDetail();
+    await waitFor(() => screen.getByTestId('refund-detail-reply-textarea'));
+    fireEvent.change(screen.getByTestId('refund-detail-reply-textarea'), {
+      target: { value: '   ' },
+    });
+    expect(screen.getByTestId('refund-detail-reply-submit')).toBeDisabled();
+    fireEvent.click(screen.getByTestId('refund-detail-reply-submit'));
+    expect(provideRefundInformation).not.toHaveBeenCalled();
+  });
+
+  it('submits reply with expected_version and updates UI', async () => {
+    getMyRefundRequest.mockResolvedValue(
+      sample({
+        status: 'needs_information',
+        version: 4,
+        user_comment: 'Исходный комментарий',
+        public_decision_message: 'Нужны детали.',
+      })
+    );
+    provideRefundInformation.mockResolvedValue(
+      sample({
+        status: 'awaiting_admin_review',
+        version: 5,
+        user_comment: 'Исходный комментарий',
+        public_decision_message: null,
+        status_history: [
+          {
+            id: 1,
+            occurred_at: '2026-07-01T10:00:00Z',
+            title: 'Заявка на возврат создана',
+            description: 'Мы получили вашу заявку и начали её рассмотрение.',
+            category: 'request',
+            status: 'submitted',
+          },
+          {
+            id: 3,
+            occurred_at: '2026-07-01T12:00:00Z',
+            title: 'Дополнительная информация отправлена',
+            description:
+              'Вы отправили ответ администратору. Заявка возвращена на рассмотрение.\n\nПокупка была 12 мая.',
+            category: 'information',
+            status: 'awaiting_admin_review',
+          },
+        ],
+      })
+    );
+    renderDetail();
+    await waitFor(() => screen.getByTestId('refund-detail-reply-textarea'));
+    fireEvent.change(screen.getByTestId('refund-detail-reply-textarea'), {
+      target: { value: 'Покупка была 12 мая.' },
+    });
+    fireEvent.click(screen.getByTestId('refund-detail-reply-submit'));
+    await waitFor(() => {
+      expect(provideRefundInformation).toHaveBeenCalledTimes(1);
+    });
+    expect(provideRefundInformation).toHaveBeenCalledWith(12, {
+      message: 'Покупка была 12 мая.',
+      expected_version: 4,
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('refund-detail-reply')).toBeNull();
+    });
+    expect(screen.getByTestId('refund-detail-status').textContent).toMatch(/проверке/i);
+    expect(screen.getByTestId('refund-history-item-3').textContent).toMatch(
+      /Дополнительная информация отправлена/
+    );
+    expect(screen.getByTestId('refund-detail-user-comment').textContent).toBe(
+      'Исходный комментарий'
+    );
+    expect(toast.success).toHaveBeenCalledWith(
+      'Ответ отправлен. Заявка возвращена на рассмотрение.'
+    );
+    expect(screen.queryByText('user_information_provided')).toBeNull();
+  });
+
+  it('guards double submit while pending', async () => {
+    getMyRefundRequest.mockResolvedValue(sample({ status: 'needs_information', version: 2 }));
+    let resolveFn: (v: RefundRequest) => void = () => undefined;
+    provideRefundInformation.mockImplementation(
+      () =>
+        new Promise<RefundRequest>(resolve => {
+          resolveFn = resolve;
+        })
+    );
+    renderDetail();
+    await waitFor(() => screen.getByTestId('refund-detail-reply-textarea'));
+    fireEvent.change(screen.getByTestId('refund-detail-reply-textarea'), {
+      target: { value: 'Ответ' },
+    });
+    fireEvent.click(screen.getByTestId('refund-detail-reply-submit'));
+    fireEvent.click(screen.getByTestId('refund-detail-reply-submit'));
+    await waitFor(() => expect(provideRefundInformation).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('refund-detail-reply-submit')).toBeDisabled();
+    resolveFn(sample({ status: 'awaiting_admin_review', version: 3 }));
+    await waitFor(() => expect(screen.queryByTestId('refund-detail-reply')).toBeNull());
+  });
+
+  it('handles 409 without raw API payload', async () => {
+    getMyRefundRequest
+      .mockResolvedValueOnce(sample({ status: 'needs_information', version: 2 }))
+      .mockResolvedValueOnce(sample({ status: 'awaiting_admin_review', version: 3 }));
+    provideRefundInformation.mockRejectedValue(new ApiError('conflict', 409, 'version_conflict'));
+    renderDetail();
+    await waitFor(() => screen.getByTestId('refund-detail-reply-textarea'));
+    fireEvent.change(screen.getByTestId('refund-detail-reply-textarea'), {
+      target: { value: 'Ответ' },
+    });
+    fireEvent.click(screen.getByTestId('refund-detail-reply-submit'));
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(String(toast.error.mock.calls[0][0])).toMatch(/уже была изменена/i);
+    expect(String(toast.error.mock.calls[0][0])).not.toMatch(/version_conflict|\{/);
+    await waitFor(() => expect(screen.queryByTestId('refund-detail-reply')).toBeNull());
+  });
+
+  it('handles 422 with validation message', async () => {
+    getMyRefundRequest.mockResolvedValue(sample({ status: 'needs_information', version: 2 }));
+    provideRefundInformation.mockRejectedValue(new ApiError('bad', 422, 'message_too_long'));
+    renderDetail();
+    await waitFor(() => screen.getByTestId('refund-detail-reply-textarea'));
+    fireEvent.change(screen.getByTestId('refund-detail-reply-textarea'), {
+      target: { value: 'Ответ' },
+    });
+    fireEvent.click(screen.getByTestId('refund-detail-reply-submit'));
+    await waitFor(() => expect(screen.getByTestId('refund-detail-reply-error')).toBeTruthy());
+    expect(screen.getByTestId('refund-detail-reply-error').textContent).toMatch(/2000/);
+    expect(screen.getByTestId('refund-detail-reply-error').textContent).not.toMatch(
+      /message_too_long|\{/
+    );
   });
 });
 

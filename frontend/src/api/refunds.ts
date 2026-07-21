@@ -70,6 +70,11 @@ export interface CancelRefundInput {
   reason?: string | null;
 }
 
+export interface ProvideRefundInformationInput {
+  message: string;
+  expected_version: number;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -220,6 +225,17 @@ export async function cancelMyRefundRequest(
   return normalizeRefundRequest(raw);
 }
 
+export async function provideRefundInformation(
+  id: number,
+  body: ProvideRefundInformationInput
+): Promise<RefundRequest> {
+  const raw = await post(`/me/refund-requests/${id}/provide-information`, {
+    message: body.message,
+    expected_version: body.expected_version,
+  });
+  return normalizeRefundRequest(raw);
+}
+
 export function safeRefundErrorMessage(err: unknown): string {
   if (err instanceof ApiError) {
     if (err.status === 401) {
@@ -234,8 +250,29 @@ export function safeRefundErrorMessage(err: unknown): string {
       }
       return 'Не удалось загрузить данные. Обновите страницу или попробуйте позже.';
     }
+    if (err.status === 409) {
+      if (err.code === 'duplicate_open_request') {
+        return 'По этой покупке уже есть активная заявка на возврат.';
+      }
+      if (err.code === 'version_conflict') {
+        return 'Заявка уже была изменена. Данные обновлены.';
+      }
+      if (err.code === 'invalid_status_for_reply') {
+        return 'Дополнительные сведения больше не требуются. Данные обновлены.';
+      }
+      if (err.code === 'request_terminal' || err.code === 'approved_terminal') {
+        return 'Эту заявку уже нельзя отменить.';
+      }
+      return 'Заявка уже была изменена. Данные обновлены.';
+    }
+    if (err.status === 422) {
+      if (err.code === 'message_required' || err.code === 'message_too_long') {
+        return 'Проверьте текст ответа: он должен быть от 1 до 2000 символов.';
+      }
+      return 'Проверьте введённые данные и попробуйте снова.';
+    }
     if (err.code === 'version_conflict') {
-      return 'Заявка изменилась. Обновите страницу и повторите действие.';
+      return 'Заявка уже была изменена. Данные обновлены.';
     }
     if (err.code === 'request_terminal' || err.code === 'approved_terminal') {
       return 'Эту заявку уже нельзя отменить.';
@@ -246,7 +283,7 @@ export function safeRefundErrorMessage(err: unknown): string {
     if (err.code === 'reason_required') {
       return 'Выберите причину возврата.';
     }
-    if (err.message && err.message.trim()) {
+    if (err.message && err.message.trim() && !/^[{[]/.test(err.message.trim())) {
       return err.message;
     }
   }

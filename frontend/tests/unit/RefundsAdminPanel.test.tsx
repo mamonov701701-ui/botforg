@@ -623,4 +623,60 @@ describe('RefundsAdminPanel queue', () => {
     expect(canAdminApprove('approved')).toBe(false);
     expect(canAdminConfirm('admin_edited')).toBe(true);
   });
+
+  it('shows user information reply in audit timeline without replacing user_comment', async () => {
+    listAdminRefunds.mockResolvedValue({
+      items: [listItem({ status: 'awaiting_admin_review' })],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    getAdminRefund.mockResolvedValue(
+      detail({
+        request: {
+          ...detail().request,
+          status: 'awaiting_admin_review',
+          user_comment: 'Комментарий при создании заявки',
+        },
+        audit_timeline: [
+          {
+            id: 1,
+            refund_request_id: 10,
+            refund_revision_id: null,
+            actor_user_id: 1,
+            actor_type: 'user',
+            action: 'user_information_provided',
+            title: 'Пользователь предоставил дополнительную информацию',
+            previous_status: 'needs_information',
+            new_status: 'awaiting_admin_review',
+            changed_fields: null,
+            reason: 'Покупка была\n12 мая.',
+            event_metadata: null,
+            details: null,
+            created_at: '2026-07-01T12:00:00Z',
+          },
+        ],
+      })
+    );
+    render(<RefundsAdminPanel />);
+    await waitFor(() => fireEvent.click(screen.getByTestId('refund-admin-open-10')));
+    await waitFor(() => expect(screen.getByTestId('refund-admin-audit')).toBeTruthy());
+    const audit = screen.getByTestId('refund-admin-audit') as HTMLDetailsElement;
+    if (!audit.open) {
+      fireEvent.click(audit.querySelector('summary') || audit);
+    }
+    await waitFor(() => expect(screen.getByTestId('refund-admin-audit-1')).toBeTruthy());
+    const line = screen.getByTestId('refund-admin-audit-line-1').textContent || '';
+    expect(line).toMatch(/Пользователь предоставил дополнительную информацию/);
+    expect(line).toMatch(/Нужны дополнительные сведения|needs_information/i);
+    expect(line).toMatch(/На проверке|awaiting_admin_review/i);
+    expect(line).not.toMatch(/user_information_provided/);
+    const reply = screen.getByTestId('refund-admin-audit-reply-1').textContent || '';
+    expect(reply).toContain('Покупка была');
+    expect(reply).toContain('12 мая.');
+    expect(screen.getByTestId('refund-admin-user-comment').textContent).toContain(
+      'Комментарий при создании заявки'
+    );
+    expect(screen.queryByText(/\{.*"action"/)).toBeNull();
+  });
 });

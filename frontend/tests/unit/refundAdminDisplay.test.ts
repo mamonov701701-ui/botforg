@@ -20,6 +20,7 @@ describe('refundAdminDisplay helpers', () => {
     expect(actorTypeLabel('system')).toBe('Система');
     expect(auditActionLabel('revision_created')).toBe('Создан новый расчёт');
     expect(auditActionLabel('status_changed')).toBe('Смена статуса');
+    expect(auditActionLabel('user_information_provided')).toMatch(/дополнительную информацию/i);
     expect(calculationStatusLabel('manual_required')).toBe('Требуется ручная проверка');
   });
 

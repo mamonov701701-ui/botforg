@@ -6,9 +6,11 @@ import Card from '../components/Card';
 import {
   cancelMyRefundRequest,
   getMyRefundRequest,
+  provideRefundInformation,
   safeRefundErrorMessage,
   type RefundRequest,
 } from '../../../api/refunds';
+import { ApiError } from '../../../api/client';
 import {
   canUserCancelRefund,
   formatRecommendedRefundAmount,
@@ -19,6 +21,8 @@ import {
 } from '../refunds/refundDisplay';
 import { toast } from '../../../utils/toast';
 
+const REPLY_MAX_LENGTH = 2000;
+
 export default function RefundRequestDetailPage() {
   const { refundId } = useParams<{ refundId: string }>();
   const id = Number(refundId);
@@ -27,6 +31,9 @@ export default function RefundRequestDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [canceling, setCanceling] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [submittingReply, setSubmittingReply] = useState(false);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(id) || id < 1) {
@@ -66,6 +73,50 @@ export default function RefundRequestDetailPage() {
       await load();
     } finally {
       setCanceling(false);
+    }
+  };
+
+  const trimmedReply = replyText.trim();
+  const canSubmitReply =
+    Boolean(item) &&
+    item?.status === 'needs_information' &&
+    trimmedReply.length > 0 &&
+    trimmedReply.length <= REPLY_MAX_LENGTH &&
+    !submittingReply;
+
+  const onSubmitReply = async () => {
+    if (!item || item.status !== 'needs_information' || submittingReply) return;
+    const message = replyText.trim();
+    if (!message) {
+      setReplyError('Введите текст ответа.');
+      return;
+    }
+    if (message.length > REPLY_MAX_LENGTH) {
+      setReplyError(`Сообщение не должно превышать ${REPLY_MAX_LENGTH} символов.`);
+      return;
+    }
+    setSubmittingReply(true);
+    setReplyError(null);
+    try {
+      const updated = await provideRefundInformation(item.id, {
+        message,
+        expected_version: item.version,
+      });
+      setItem(updated);
+      setReplyText('');
+      toast.success('Ответ отправлен. Заявка возвращена на рассмотрение.');
+    } catch (e) {
+      const msg = safeRefundErrorMessage(e);
+      if (e instanceof ApiError && (e.status === 409 || e.code === 'invalid_status_for_reply')) {
+        await load();
+        toast.error(msg);
+      } else if (e instanceof ApiError && e.status === 422) {
+        setReplyError(msg);
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setSubmittingReply(false);
     }
   };
 
@@ -183,6 +234,7 @@ export default function RefundRequestDetailPage() {
                           background: 'var(--bf-section-bg-elevated, transparent)',
                           fontSize: '14px',
                           lineHeight: 1.5,
+                          whiteSpace: 'pre-wrap',
                         }}
                       >
                         {item.public_decision_message}
@@ -211,7 +263,12 @@ export default function RefundRequestDetailPage() {
                     <dt style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 4 }}>
                       Комментарий
                     </dt>
-                    <dd style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{item.user_comment}</dd>
+                    <dd
+                      style={{ margin: 0, whiteSpace: 'pre-wrap' }}
+                      data-testid="refund-detail-user-comment"
+                    >
+                      {item.user_comment}
+                    </dd>
                   </div>
                 )}
 
@@ -268,6 +325,99 @@ export default function RefundRequestDetailPage() {
           </div>
         )}
 
+        {item?.status === 'needs_information' && (
+          <div data-testid="refund-detail-reply">
+            <Card>
+              <h3
+                style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 600 }}
+                data-testid="refund-detail-reply-title"
+              >
+                Ответить администратору
+              </h3>
+              <p
+                data-testid="refund-detail-reply-hint"
+                style={{
+                  margin: '0 0 14px',
+                  color: 'var(--text-muted)',
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                }}
+              >
+                Укажите сведения, которые запросил администратор. После отправки заявка вернётся на
+                рассмотрение.
+              </p>
+              <textarea
+                data-testid="refund-detail-reply-textarea"
+                value={replyText}
+                maxLength={REPLY_MAX_LENGTH}
+                rows={5}
+                disabled={submittingReply}
+                onChange={e => {
+                  setReplyText(e.target.value);
+                  if (replyError) setReplyError(null);
+                }}
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  padding: '12px 14px',
+                  borderRadius: 8,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg, transparent)',
+                  color: 'var(--text)',
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  resize: 'vertical',
+                  minHeight: 120,
+                }}
+              />
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginTop: 8,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <span
+                  data-testid="refund-detail-reply-counter"
+                  style={{ fontSize: 12, color: 'var(--text-muted)' }}
+                >
+                  {replyText.length} / {REPLY_MAX_LENGTH}
+                </span>
+                <button
+                  type="button"
+                  data-testid="refund-detail-reply-submit"
+                  disabled={!canSubmitReply}
+                  onClick={() => void onSubmitReply()}
+                  style={{
+                    padding: '12px 18px',
+                    borderRadius: 8,
+                    border: 'none',
+                    background: canSubmitReply ? 'var(--primary)' : 'var(--border)',
+                    color: canSubmitReply ? '#fff' : 'var(--text-muted)',
+                    fontWeight: 600,
+                    fontSize: 14,
+                    cursor: canSubmitReply ? 'pointer' : 'not-allowed',
+                    minHeight: 44,
+                  }}
+                >
+                  {submittingReply ? 'Отправка…' : 'Отправить ответ'}
+                </button>
+              </div>
+              {replyError && (
+                <p
+                  data-testid="refund-detail-reply-error"
+                  style={{ margin: '10px 0 0', color: '#ef4444', fontSize: 14 }}
+                >
+                  {replyError}
+                </p>
+              )}
+            </Card>
+          </div>
+        )}
+
         {item && (
           <div data-testid="refund-detail-history">
             <Card>
@@ -305,6 +455,7 @@ export default function RefundRequestDetailPage() {
                           color: 'var(--text)',
                           lineHeight: 1.5,
                           marginBottom: 6,
+                          whiteSpace: 'pre-wrap',
                         }}
                       >
                         {ev.description}

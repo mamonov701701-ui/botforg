@@ -107,7 +107,7 @@ describe('refunds api normalize', () => {
     );
     expect(safeRefundErrorMessage(new ApiError('x', 404))).toMatch(/не удалось загрузить/i);
     expect(safeRefundErrorMessage(new ApiError('conflict', 409, 'version_conflict'))).toMatch(
-      /изменилась/i
+      /уже была изменена/i
     );
     expect(safeRefundErrorMessage(new ApiError('dup', 409, 'duplicate_open_request'))).toMatch(
       /активн/i
