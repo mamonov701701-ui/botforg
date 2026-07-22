@@ -109,6 +109,16 @@ def ensure_dev_sqlite_migrations_applied() -> None:
         cfg = Config(str(alembic_ini))
         command.upgrade(cfg, "head")
         logger.info("ensure_migrations: alembic upgrade head завершён успешно")
+        try:
+            from alembic.runtime.migration import MigrationContext
+            from backend.database import engine
+
+            with engine.connect() as conn:
+                ctx = MigrationContext.configure(conn)
+                current = ctx.get_current_revision()
+            logger.info("ensure_migrations: alembic current revision=%s", current)
+        except Exception:
+            logger.exception("ensure_migrations: не удалось прочитать текущую revision")
     except Exception:
         logger.exception(
             "ensure_migrations: ошибка alembic upgrade head; из корня репозитория: python -m alembic upgrade head"

@@ -90,7 +90,7 @@ const mockTariffs: PublicTariff[] = [
     limits: {
       active_bots: 3,
       monthly_messages: 10000,
-      team_members: 2,
+      team_members: 3,
       analytics_history_days: 90,
       export_reports: true,
       priority_support: true,
@@ -287,6 +287,7 @@ describe('Pricing page', () => {
     expect(features.textContent).toMatch(/Активные боты/);
     expect(features.textContent).toMatch(/Сообщений в месяц/);
     expect(features.textContent).toMatch(/Участников команды/);
+    expect(features.textContent).toMatch(/Участников команды:\s*3/);
     expect(features.textContent).toMatch(/История аналитики/);
     // extras capped; full publish flags must not all dump as long list
     const liCount = features.querySelectorAll('li').length;

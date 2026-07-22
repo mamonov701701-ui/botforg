@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import './crm/crmUi.css';
 import '../../styles/shell.css';
 import {
@@ -23,6 +23,7 @@ import {
 import { useAuthStore } from '../../stores/authStore';
 import { ROLE_NAMES, type SectionKey } from '../../constants/roles';
 import { logout } from '../../api/auth';
+import { getTariffSummary } from '../../api/tariff';
 import { isDashboardNavItemActive } from './utils/dashboardNavActive';
 
 const MOBILE_MQ = '(max-width: 768px)';
@@ -165,6 +166,7 @@ function hasPlatformAccess(user: { role: string } | null | undefined): boolean {
 
 export default function DashboardLayout() {
   const { user, loading, clearUser } = useAuthStore();
+  const [effectivePlanName, setEffectivePlanName] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const isCrmSurface = /\/dashboard\/bots\/\d+\/crm/.test(location.pathname);
@@ -197,6 +199,26 @@ export default function DashboardLayout() {
   useEffect(() => {
     setMobileNavOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setEffectivePlanName(null);
+      return;
+    }
+    let cancelled = false;
+    getTariffSummary()
+      .then(summary => {
+        if (cancelled) return;
+        const name = (summary.current_plan?.name || '').trim();
+        setEffectivePlanName(name || null);
+      })
+      .catch(() => {
+        if (!cancelled) setEffectivePlanName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!mobileNavOpen) return;
@@ -468,23 +490,58 @@ export default function DashboardLayout() {
                     </h2>
                     <div
                       style={{
-                        display: 'inline-block',
-                        padding: '3px 8px',
-                        background: 'rgba(255, 210, 76, 0.2)',
-                        borderRadius: '6px',
-                        marginBottom: '8px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: 6,
+                        marginBottom: 8,
                       }}
                     >
-                      <p
+                      <div
                         style={{
-                          fontSize: '11px',
-                          fontWeight: 600,
-                          color: 'var(--primary)',
-                          margin: 0,
+                          display: 'inline-block',
+                          padding: '3px 8px',
+                          background: 'rgba(255, 210, 76, 0.2)',
+                          borderRadius: '6px',
                         }}
+                        data-testid="dashboard-user-role"
                       >
-                        {ROLE_NAMES[user.role as keyof typeof ROLE_NAMES] || user.role}
-                      </p>
+                        <p
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: 'var(--primary)',
+                            margin: 0,
+                          }}
+                        >
+                          {ROLE_NAMES[user.role as keyof typeof ROLE_NAMES] || user.role}
+                        </p>
+                      </div>
+                      {effectivePlanName ? (
+                        <Link
+                          to="/dashboard/finance"
+                          data-testid="dashboard-user-tariff"
+                          style={{
+                            display: 'inline-block',
+                            padding: '3px 8px',
+                            background: 'rgba(59, 130, 246, 0.14)',
+                            borderRadius: '6px',
+                            textDecoration: 'none',
+                            border: '1px solid rgba(59, 130, 246, 0.28)',
+                          }}
+                          title="Финансы и лимиты"
+                        >
+                          <span
+                            style={{
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              color: 'var(--text)',
+                            }}
+                          >
+                            Тариф: {effectivePlanName}
+                          </span>
+                        </Link>
+                      ) : null}
                     </div>
                     <p
                       style={{

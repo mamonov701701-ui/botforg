@@ -46,7 +46,10 @@ export interface RefundAdminUser {
   email: string;
   name: string | null;
   role: string | null;
+  /** Legacy users.plan_code — not current effective tariff. */
   plan_code: string | null;
+  effective_plan_code: string | null;
+  effective_plan_name: string | null;
   is_suspended: boolean;
   created_at: string | null;
 }
@@ -343,6 +346,8 @@ export function normalizeAdminDetail(raw: unknown): RefundAdminDetail {
           name: asNullableString(user.name),
           role: asNullableString(user.role),
           plan_code: asNullableString(user.plan_code),
+          effective_plan_code: asNullableString(user.effective_plan_code),
+          effective_plan_name: asNullableString(user.effective_plan_name),
           is_suspended: asBool(user.is_suspended, false),
           created_at: asNullableString(user.created_at),
         }

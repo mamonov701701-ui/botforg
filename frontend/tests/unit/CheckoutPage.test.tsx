@@ -28,6 +28,16 @@ const mockTariffs: PublicTariff[] = [
     limits: { active_bots: 1, monthly_messages: 3000, team_members: 0 },
   },
   {
+    code: 'business_pro',
+    name: 'Бизнес PRO',
+    description_ru: null,
+    price_month: 1990,
+    currency: 'RUB',
+    is_recommended: true,
+    sort_order: 30,
+    limits: { active_bots: 3, monthly_messages: 10000, team_members: 3 },
+  },
+  {
     code: 'corporate',
     name: 'Корпоративный',
     description_ru: null,
@@ -220,6 +230,15 @@ describe('CheckoutPage', () => {
     });
     expect(createCheckoutIntent).not.toHaveBeenCalled();
     expect(startCheckoutPayment).not.toHaveBeenCalled();
+  });
+
+  it('renders Business PRO team_members from public tariff limits', async () => {
+    vi.mocked(getPublicTariffs).mockResolvedValue(mockTariffs);
+    renderCheckout('/checkout?plan=business_pro');
+    await waitFor(() => {
+      expect(screen.getByTestId('checkout-summary')).toBeTruthy();
+    });
+    expect(screen.getByTestId('checkout-summary').textContent).toMatch(/Участников команды:\s*3/);
   });
 
   it('current tariff from summary: no create/pay, shows Ваш тариф and dashboard CTA', async () => {

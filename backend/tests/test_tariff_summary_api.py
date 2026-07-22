@@ -223,7 +223,24 @@ def test_tariff_summary_message_warnings(client, db):
     assert [w["threshold"] for w in msg_full] == [70, 85, 95, 100]
 
 
-def test_tariff_summary_plan_gift_source(client, db):
+def test_tariff_summary_business_pro_team_members_limit(client, db):
+    from backend.models.plan import Plan
+    from backend.models.user import User
+
+    auth = _auth_on_start(client)
+    me = client.get("/me", headers={"Authorization": auth}).json()
+    user = db.query(User).filter(User.id == me["id"]).one()
+    user.plan_code = "business_pro"
+    db.commit()
+
+    pro = db.query(Plan).filter(Plan.code == "business_pro").one()
+    assert dict(pro.limits or {}).get("team_members") == 3
+
+    res = client.get("/me/tariff/summary", headers={"Authorization": auth})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["current_plan"]["code"] == "business_pro"
+    assert data["team_members"]["limit"] == 3
     auth = _auth_on_start(client)
     me = client.get("/me", headers={"Authorization": auth}).json()
     from backend.models.plan import Plan

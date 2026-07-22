@@ -30,6 +30,8 @@ import ScenariosPage from './features/dashboard/pages/ScenariosPage';
 import ScenarioDetailPage from './features/dashboard/pages/ScenarioDetailPage';
 import TemplatesPage from './features/dashboard/pages/TemplatesPage';
 import TariffLimitsPage from './features/dashboard/pages/TariffLimitsPage';
+import MyPurchasesPage from './features/dashboard/pages/MyPurchasesPage';
+import PurchaseDetailPage from './features/dashboard/pages/PurchaseDetailPage';
 import RefundRequestsPage from './features/dashboard/pages/RefundRequestsPage';
 import RefundRequestDetailPage from './features/dashboard/pages/RefundRequestDetailPage';
 import AnalyticsPage from './features/dashboard/pages/AnalyticsPage';
@@ -173,6 +175,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="scenarios/:scenarioId" element={<ScenarioDetailPage />} />
             <Route path="templates" element={<TemplatesPage />} />
             <Route path="finance" element={<TariffLimitsPage />} />
+            <Route path="finance/purchases" element={<MyPurchasesPage />} />
+            <Route path="finance/purchases/:purchaseId" element={<PurchaseDetailPage />} />
             <Route path="finance/refunds" element={<RefundRequestsPage />} />
             <Route path="finance/refunds/:refundId" element={<RefundRequestDetailPage />} />
             {/* Legacy redirects: Баланс / Финансы и лимиты → Финансы */}

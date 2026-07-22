@@ -109,32 +109,6 @@ const btnBase: React.CSSProperties = {
   cursor: 'pointer',
 };
 
-function Section({
-  title,
-  children,
-  testId,
-}: {
-  title: string;
-  children: React.ReactNode;
-  testId?: string;
-}) {
-  return (
-    <div
-      data-testid={testId}
-      style={{
-        background: FINANCE_COLORS.panelBgElevated,
-        border: `1px solid ${FINANCE_COLORS.accentBorder}`,
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
-      }}
-    >
-      <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>{title}</h3>
-      {children}
-    </div>
-  );
-}
-
 function CollapsibleSection({
   title,
   children,
@@ -146,10 +120,14 @@ function CollapsibleSection({
   testId?: string;
   defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <details
       data-testid={testId}
-      open={defaultOpen || undefined}
+      open={open}
+      onToggle={e => {
+        setOpen((e.currentTarget as HTMLDetailsElement).open);
+      }}
       style={{
         background: FINANCE_COLORS.panelBgElevated,
         border: `1px solid ${FINANCE_COLORS.accentBorder}`,
@@ -176,38 +154,20 @@ function CollapsibleSection({
 
 function Kv({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 8, fontSize: 14 }}>
-      <div style={{ color: FINANCE_COLORS.textSecondary, marginBottom: 2 }}>{label}</div>
-      <div style={{ color: FINANCE_COLORS.text, wordBreak: 'break-word' }}>{value}</div>
-    </div>
-  );
-}
-
-function TechAccordion({ children }: { children: React.ReactNode }) {
-  return (
-    <details
-      data-testid="refund-admin-tech-details"
+    <div
       style={{
-        background: FINANCE_COLORS.panelBgElevated,
-        border: `1px solid ${FINANCE_COLORS.accentBorder}`,
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 12,
+        display: 'grid',
+        gridTemplateColumns: 'minmax(120px, 40%) 1fr',
+        gap: 8,
+        alignItems: 'start',
+        padding: '5px 0',
+        borderBottom: `1px solid ${FINANCE_COLORS.accentBorder}`,
+        fontSize: 13,
       }}
     >
-      <summary
-        style={{
-          cursor: 'pointer',
-          fontSize: 16,
-          fontWeight: 700,
-          color: FINANCE_COLORS.text,
-          listStyle: 'revert',
-        }}
-      >
-        Технические детали
-      </summary>
-      <div style={{ marginTop: 14 }}>{children}</div>
-    </details>
+      <div style={{ color: FINANCE_COLORS.textSecondary }}>{label}</div>
+      <div style={{ color: FINANCE_COLORS.text, wordBreak: 'break-word' }}>{value}</div>
+    </div>
   );
 }
 
@@ -555,9 +515,6 @@ export default function RefundsAdminPanel() {
                 calc.paid ?? detail.product?.amount ?? detail.payment_attempt?.amount,
                 currency
               );
-              const usedLabel = usage.hasData
-                ? `${usage.messagesUsed} сообщ. · ${usage.activeBots} бот. · ${usage.teamMembers} уч.`
-                : formatMoneyAmount(calc.alreadyRefunded ?? '0.00', currency);
               const showApprove =
                 nextStep.primaryAction === 'approve' && canAdminApprove(detail.request.status);
               const showConfirm =
@@ -575,84 +532,93 @@ export default function RefundsAdminPanel() {
 
               return (
                 <>
-                  <Section title="Сводка решения" testId="refund-admin-detail-card">
+                  <CollapsibleSection
+                    title="Сводка решения"
+                    testId="refund-admin-detail-card"
+                    defaultOpen
+                  >
                     <p
                       style={{
-                        margin: '0 0 10px',
+                        margin: '0 0 8px',
                         fontSize: 13,
                         color: FINANCE_COLORS.textSecondary,
                       }}
                     >
                       Заявка №{detail.request.id}
                     </p>
-                    <Kv
-                      label="Статус"
-                      value={
-                        <span data-testid="refund-admin-detail-status">
-                          {refundStatusLabel(detail.request.status)}
-                        </span>
-                      }
-                    />
-                    {statusHint && (
-                      <p
-                        data-testid="refund-admin-detail-status-hint"
-                        style={{ color: FINANCE_COLORS.textSecondary, fontSize: 14 }}
-                      >
-                        {statusHint}
-                      </p>
-                    )}
-                    {nextStep.blockedNotes.length > 0 && (
-                      <ul
-                        data-testid="refund-admin-blocked-notes"
-                        style={{
-                          margin: '0 0 10px',
-                          paddingLeft: 18,
-                          color: FINANCE_COLORS.textSecondary,
-                          fontSize: 13,
-                        }}
-                      >
-                        {nextStep.blockedNotes.map(note => (
-                          <li key={note}>{note}</li>
-                        ))}
-                      </ul>
-                    )}
-                    <Kv label="Покупка" value={purchaseLabel} />
-                    <Kv label="Оплачено" value={paidLabel} />
-                    <Kv label="Использовано" value={usedLabel} />
-                    <Kv
-                      label="Доступно к возврату"
-                      value={formatMoneyAmount(calc.available, currency)}
-                    />
-                    <Kv
-                      label="Рекомендуемая сумма"
-                      value={
-                        <span data-testid="refund-admin-detail-amount">{recommendedLabel}</span>
-                      }
-                    />
-                    <Kv
-                      label="Причина"
-                      value={
-                        <span data-testid="refund-admin-reason">
-                          {reasonCategoryLabel(detail.request.reason_category)}
-                        </span>
-                      }
-                    />
-                    <Kv
-                      label="Требуется ручная проверка"
-                      value={yesNoRu(detail.request.manual_review_required)}
-                    />
-                    <Kv
-                      label="Следующее необходимое действие"
-                      value={
-                        <span data-testid="refund-admin-next-action">
-                          {nextStep.nextActionText}
-                        </span>
-                      }
-                    />
+                    <div data-testid="refund-admin-summary-table">
+                      <Kv
+                        label="Статус"
+                        value={
+                          <span data-testid="refund-admin-detail-status">
+                            {refundStatusLabel(detail.request.status)}
+                          </span>
+                        }
+                      />
+                      {statusHint && (
+                        <p
+                          data-testid="refund-admin-detail-status-hint"
+                          style={{
+                            color: FINANCE_COLORS.textSecondary,
+                            fontSize: 13,
+                            margin: '6px 0',
+                          }}
+                        >
+                          {statusHint}
+                        </p>
+                      )}
+                      {nextStep.blockedNotes.length > 0 && (
+                        <ul
+                          data-testid="refund-admin-blocked-notes"
+                          style={{
+                            margin: '0 0 8px',
+                            paddingLeft: 18,
+                            color: FINANCE_COLORS.textSecondary,
+                            fontSize: 13,
+                          }}
+                        >
+                          {nextStep.blockedNotes.map(note => (
+                            <li key={note}>{note}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <Kv label="Покупка" value={purchaseLabel} />
+                      <Kv label="Оплачено" value={paidLabel} />
+                      <Kv
+                        label="Доступно к возврату"
+                        value={formatMoneyAmount(calc.available, currency)}
+                      />
+                      <Kv
+                        label="Рекомендуемая сумма"
+                        value={
+                          <span data-testid="refund-admin-detail-amount">{recommendedLabel}</span>
+                        }
+                      />
+                      <Kv
+                        label="Причина"
+                        value={
+                          <span data-testid="refund-admin-reason">
+                            {reasonCategoryLabel(detail.request.reason_category)}
+                          </span>
+                        }
+                      />
+                      <Kv
+                        label="Требуется ручная проверка"
+                        value={yesNoRu(detail.request.manual_review_required)}
+                      />
+                      <Kv
+                        label="Следующее необходимое действие"
+                        value={
+                          <span data-testid="refund-admin-next-action">
+                            {nextStep.nextActionText}
+                          </span>
+                        }
+                      />
+                    </div>
                     {detail.request.manual_review_required && (
                       <p
                         data-testid="refund-admin-manual-review"
-                        style={{ color: '#f59e0b', fontSize: 14, margin: '8px 0 0' }}
+                        style={{ color: '#f59e0b', fontSize: 13, margin: '8px 0 0' }}
                       >
                         {MANUAL_REVIEW_GUIDANCE}
                       </p>
@@ -660,32 +626,20 @@ export default function RefundsAdminPanel() {
                     <p
                       data-testid="refund-admin-stage-no-payout"
                       style={{
-                        margin: '12px 0 0',
-                        fontSize: 13,
+                        margin: '10px 0 0',
+                        fontSize: 12,
                         color: FINANCE_COLORS.textSecondary,
                       }}
                     >
                       {ADMIN_STAGE_NO_PAYOUT}
                     </p>
-                  </Section>
+                  </CollapsibleSection>
 
-                  <div
-                    data-testid="refund-admin-actions"
-                    style={{
-                      position: 'sticky',
-                      top: 0,
-                      zIndex: 5,
-                      background: FINANCE_COLORS.panelBgElevated,
-                      border: `1px solid ${FINANCE_COLORS.accentBorder}`,
-                      borderRadius: 12,
-                      padding: 16,
-                      marginBottom: 12,
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-                    }}
+                  <CollapsibleSection
+                    title="Действия администратора"
+                    testId="refund-admin-actions"
+                    defaultOpen
                   >
-                    <h3 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>
-                      Действия администратора
-                    </h3>
                     <div
                       style={{
                         display: 'flex',
@@ -940,9 +894,9 @@ export default function RefundsAdminPanel() {
                         </div>
                       </div>
                     )}
-                  </div>
+                  </CollapsibleSection>
 
-                  <Section title="Расчёт возврата" testId="refund-admin-calc">
+                  <CollapsibleSection title="Расчёт возврата" testId="refund-admin-calc">
                     <Kv label="Оплачено" value={formatMoneyAmount(calc.paid, currency)} />
                     <Kv
                       label="Уже возвращено"
@@ -986,44 +940,63 @@ export default function RefundsAdminPanel() {
                         )}
                       />
                     )}
-                  </Section>
+                  </CollapsibleSection>
 
                   <CollapsibleSection
                     title="Пользователь и покупка"
                     testId="refund-admin-user-purchase"
                   >
-                    <div data-testid="refund-admin-user">
-                      {detail.user ? (
-                        <>
-                          <Kv label="Email" value={detail.user.email} />
-                          <Kv label="Имя" value={detail.user.name || '—'} />
-                          <Kv label="ID" value={detail.user.id} />
-                          <Kv label="Тариф" value={detail.user.plan_code || '—'} />
-                        </>
-                      ) : (
-                        <p style={{ color: FINANCE_COLORS.textSecondary }}>
-                          Нет данных о пользователе
-                        </p>
-                      )}
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                        gap: 12,
+                      }}
+                    >
+                      <div data-testid="refund-admin-user">
+                        {detail.user ? (
+                          <>
+                            <Kv label="Email" value={detail.user.email} />
+                            <Kv label="Имя" value={detail.user.name || '—'} />
+                            <Kv label="ID" value={detail.user.id} />
+                            <Kv
+                              label="Текущий тариф"
+                              value={
+                                <span data-testid="refund-admin-effective-plan">
+                                  {detail.user.effective_plan_name ||
+                                    detail.user.effective_plan_code ||
+                                    '—'}
+                                </span>
+                              }
+                            />
+                          </>
+                        ) : (
+                          <p style={{ color: FINANCE_COLORS.textSecondary }}>
+                            Нет данных о пользователе
+                          </p>
+                        )}
+                      </div>
+                      <div data-testid="refund-admin-purchase">
+                        {detail.product ? (
+                          <>
+                            <Kv label="Название" value={detail.product.product_name} />
+                            <Kv label="Тип" value={productTypeLabel(detail.product.product_type)} />
+                            <Kv
+                              label="Сумма покупки"
+                              value={formatMoneyAmount(
+                                detail.product.amount,
+                                detail.product.currency
+                              )}
+                            />
+                          </>
+                        ) : (
+                          <p style={{ color: FINANCE_COLORS.textSecondary }}>
+                            Нет данных о покупке
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div data-testid="refund-admin-purchase" style={{ marginTop: 8 }}>
-                      {detail.product ? (
-                        <>
-                          <Kv label="Название" value={detail.product.product_name} />
-                          <Kv label="Тип" value={productTypeLabel(detail.product.product_type)} />
-                          <Kv
-                            label="Сумма покупки"
-                            value={formatMoneyAmount(
-                              detail.product.amount,
-                              detail.product.currency
-                            )}
-                          />
-                        </>
-                      ) : (
-                        <p style={{ color: FINANCE_COLORS.textSecondary }}>Нет данных о покупке</p>
-                      )}
-                    </div>
-                    <div data-testid="refund-admin-user-comment" style={{ marginTop: 8 }}>
+                    <div data-testid="refund-admin-user-comment" style={{ marginTop: 4 }}>
                       <Kv
                         label="Комментарий пользователя"
                         value={detail.request.user_comment?.trim() || '—'}
@@ -1074,11 +1047,11 @@ export default function RefundsAdminPanel() {
                   <CollapsibleSection title="Использование" testId="refund-admin-usage">
                     {usage.hasData ? (
                       <>
-                        <Kv label="Сообщений использовано" value={usage.messagesUsed} />
-                        <Kv label="Активных ботов" value={usage.activeBots} />
-                        <Kv label="Участников команды" value={usage.teamMembers} />
+                        <Kv label="Сообщения" value={usage.messagesUsed} />
+                        <Kv label="Активные боты" value={usage.activeBots} />
+                        <Kv label="Участники команды" value={usage.teamMembers} />
                         <Kv
-                          label="Была ли активность после покупки"
+                          label="Активность после покупки"
                           value={
                             usage.activityAfterPurchase == null
                               ? 'Нет данных'
@@ -1223,9 +1196,19 @@ export default function RefundsAdminPanel() {
                     )}
                   </CollapsibleSection>
 
-                  <TechAccordion>
+                  <CollapsibleSection title="Технические детали" testId="refund-admin-tech-details">
                     <Kv label="Версия записи" value={detail.request.version} />
                     <Kv label="ID заявки" value={detail.request.id} />
+                    {detail.user ? (
+                      <Kv
+                        label="users.plan_code (legacy)"
+                        value={
+                          <span data-testid="refund-admin-legacy-plan-code">
+                            {detail.user.plan_code || '—'}
+                          </span>
+                        }
+                      />
+                    ) : null}
                     {detail.product && (
                       <Kv
                         label="Код продукта"
@@ -1256,6 +1239,7 @@ export default function RefundsAdminPanel() {
                           label="entitlement_action (raw)"
                           value={detail.current_revision.entitlement_action}
                         />
+                        <Kv label="revision id" value={detail.current_revision.id} />
                       </>
                     )}
 
@@ -1334,7 +1318,7 @@ export default function RefundsAdminPanel() {
                         </ul>
                       )}
                     </div>
-                  </TechAccordion>
+                  </CollapsibleSection>
                 </>
               );
             })()}

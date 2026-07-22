@@ -75,16 +75,69 @@ describe('TariffLimitsPage', () => {
       expect(screen.getByText('Старт')).toBeTruthy();
     });
     expect(screen.getByText('Финансы и лимиты')).toBeTruthy();
+    expect(screen.getByTestId('tariff-accruals-title').textContent).toMatch(/Тариф и начисления/);
     expect(screen.getByTestId('tariff-current-plan')).toBeTruthy();
     expect(screen.getByTestId('tariff-usage-messages')).toBeTruthy();
     expect(screen.getByTestId('tariff-active-addons').textContent).toMatch(/Активных пакетов нет/);
+    expect(screen.getByTestId('tariff-gifts-empty').textContent).toMatch(/Нет активных подарков/);
     expect(screen.queryByTestId('tariff-addons-catalog')).toBeNull();
     expect(getPublicAddons).not.toHaveBeenCalled();
     expect(screen.getByTestId('tariff-buy-addons-link').getAttribute('href')).toBe(
       '/pricing?tab=addons'
     );
+    expect(screen.getByTestId('tariff-buy-addons-link').textContent).toMatch(/Купить доп\. пакет/);
+    expect(screen.getByTestId('tariff-change-plan-link').getAttribute('href')).toBe(
+      '/pricing?tab=tariffs'
+    );
+    expect(screen.getByTestId('tariff-bots-increase-limit').getAttribute('href')).toBe(
+      '/pricing?tab=addons'
+    );
+    expect(screen.getByTestId('tariff-messages-increase-limit').getAttribute('href')).toBe(
+      '/pricing?tab=addons'
+    );
+    expect(screen.getByTestId('tariff-team-choose-plan').getAttribute('href')).toBe(
+      '/pricing?tab=tariffs'
+    );
+    expect(screen.queryByTestId('tariff-team-manage')).toBeNull();
+    expect(screen.getByTestId('tariff-usage-team-action-note').textContent).toMatch(
+      /Команда недоступна/
+    );
+    for (const id of [
+      'tariff-change-plan-link',
+      'tariff-buy-addons-link',
+      'tariff-messages-increase-limit',
+      'tariff-bots-increase-limit',
+      'tariff-team-choose-plan',
+    ]) {
+      const el = screen.getByTestId(id);
+      expect(el.className).toMatch(/bf-primary-cta/);
+      expect((el as HTMLElement).style.background).toMatch(/var\(--primary/);
+      expect((el as HTMLElement).style.color).toMatch(/#000|#000000|rgb\(0,\s*0,\s*0\)/i);
+    }
+    expect(
+      screen.getByTestId('tariff-plan-zone').contains(screen.getByTestId('tariff-change-plan-link'))
+    ).toBe(true);
+    expect(
+      screen
+        .getByTestId('tariff-active-addons')
+        .contains(screen.getByTestId('tariff-buy-addons-link'))
+    ).toBe(true);
     const refundsLink = screen.getByRole('link', { name: /Открыть возвраты/i });
     expect(refundsLink.getAttribute('href')).toBe('/dashboard/finance/refunds');
+    const purchasesLink = screen.getByTestId('tariff-open-purchases');
+    expect(purchasesLink.getAttribute('href')).toBe('/dashboard/finance/purchases');
+    expect(purchasesLink.textContent).toMatch(/Мои покупки/);
+
+    // Order: accruals → limits → purchases/refunds → capabilities
+    const accruals = screen.getByTestId('tariff-current-plan');
+    const limits = screen.getByTestId('tariff-limits-grid');
+    const actions = screen.getByTestId('tariff-finance-actions');
+    const caps = screen.getByTestId('tariff-capabilities');
+    expect(
+      accruals.compareDocumentPosition(limits) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(limits.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions.compareDocumentPosition(caps) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('shows owned UserAddon from summary (e.g. msg_1000)', async () => {

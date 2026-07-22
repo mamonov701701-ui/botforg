@@ -76,8 +76,14 @@ describe('isDashboardNavItemActive / platform menu', () => {
 });
 
 describe('project finance nav active', () => {
-  it('keeps Финансы active on finance root and refunds', () => {
+  it('keeps Финансы active on finance root, purchases and refunds', () => {
     expect(isDashboardNavItemActive(PROJECT_FINANCE_NAV.root, PROJECT_FINANCE_NAV.root)).toBe(true);
+    expect(isDashboardNavItemActive(PROJECT_FINANCE_NAV.purchases, PROJECT_FINANCE_NAV.root)).toBe(
+      true
+    );
+    expect(
+      isDashboardNavItemActive(`${PROJECT_FINANCE_NAV.purchases}/9`, PROJECT_FINANCE_NAV.root)
+    ).toBe(true);
     expect(isDashboardNavItemActive(PROJECT_FINANCE_NAV.refunds, PROJECT_FINANCE_NAV.root)).toBe(
       true
     );

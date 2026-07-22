@@ -92,7 +92,7 @@ describe('buildPricingCardLines', () => {
     const lines = buildPricingCardLines({
       active_bots: 3,
       monthly_messages: 10000,
-      team_members: 2,
+      team_members: 3,
       analytics_history_days: 90,
       export_reports: true,
       priority_support: true,
@@ -102,7 +102,7 @@ describe('buildPricingCardLines', () => {
     });
     expect(lines.some(l => l.includes('Активные боты: 3'))).toBe(true);
     expect(lines.some(l => l.includes('Сообщений в месяц: 10000'))).toBe(true);
-    expect(lines.some(l => l.includes('Участников команды: 2'))).toBe(true);
+    expect(lines.some(l => l.includes('Участников команды: 3'))).toBe(true);
     expect(lines.some(l => l.includes('История аналитики: 90 дн.'))).toBe(true);
     expect(lines.length).toBeLessThanOrEqual(7);
     expect(lines.filter(l => !l.includes(':')).length).toBeLessThanOrEqual(3);
@@ -112,7 +112,7 @@ describe('buildPricingCardLines', () => {
     const limits = {
       active_bots: 3,
       monthly_messages: 10000,
-      team_members: 2,
+      team_members: 3,
       analytics_history_days: 90,
       export_reports: true,
       priority_support: true,

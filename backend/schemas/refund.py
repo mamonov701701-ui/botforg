@@ -70,6 +70,12 @@ class RefundRequestOut(BaseModel):
     status_history: list[RefundStatusHistoryItemOut] = Field(default_factory=list)
     # Безопасный текст для needs_information / rejected (если есть).
     public_decision_message: str | None = None
+    # 8.3.5 — покупка для user UI (без «Intent #»).
+    product_type: str | None = None
+    product_code: str | None = None
+    product_name: str | None = None
+    amount: str | None = None
+    paid_at: datetime | None = None
 
 
 class RefundablePurchaseOut(BaseModel):

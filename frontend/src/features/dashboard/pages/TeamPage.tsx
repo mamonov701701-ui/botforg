@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Trash2, Search, Settings, X, Edit, Clock } from 'lucide-react';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
@@ -24,6 +25,9 @@ import {
 } from '../../../api/platformAdmin';
 import { ROLES } from '../../../constants/roles';
 import { toast } from '../../../utils/toast';
+import { getTariffSummary, type TariffSummary } from '../../../api/tariff';
+import { formatUsageLine } from '../tariff/tariffDisplay';
+import { ApiError } from '../../../api/client';
 
 function ConfirmModal({
   title,
@@ -392,6 +396,8 @@ export default function TeamPage() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const [tariffSummary, setTariffSummary] = useState<TariffSummary | null>(null);
+  const [tariffLoading, setTariffLoading] = useState(true);
 
   // Загрузка данных команды
   const loadTeamData = async () => {
@@ -408,12 +414,40 @@ export default function TeamPage() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setTariffLoading(true);
+      try {
+        const summary = await getTariffSummary();
+        if (!cancelled) setTariffSummary(summary);
+      } catch (e) {
+        if (!cancelled) {
+          setTariffSummary(null);
+          if (!(e instanceof ApiError && e.status === 401)) {
+            console.error('Failed to load tariff summary for team page', e);
+          }
+        }
+      } finally {
+        if (!cancelled) setTariffLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     loadTeamData();
   }, [searchQuery]);
 
-  const canInvite = hasAccessToAction(user?.role as RoleValue, 'team_invite');
-  const canEditRole = hasAccessToAction(user?.role as RoleValue, 'team_edit_role');
-  const canRemove = hasAccessToAction(user?.role as RoleValue, 'team_remove');
+  const teamLimit = tariffSummary?.team_members.limit;
+  const teamUnavailable = teamLimit != null && teamLimit <= 0;
+  const teamUsageLabel = tariffSummary ? formatUsageLine(tariffSummary.team_members) : null;
+
+  const canInvite = !teamUnavailable && hasAccessToAction(user?.role as RoleValue, 'team_invite');
+  const canEditRole =
+    !teamUnavailable && hasAccessToAction(user?.role as RoleValue, 'team_edit_role');
+  const canRemove = !teamUnavailable && hasAccessToAction(user?.role as RoleValue, 'team_remove');
 
   // Функция для получения активной базовой роли участника
   const getActiveBaseRole = (member: TeamMember): string => {
@@ -435,6 +469,10 @@ export default function TeamPage() {
   };
 
   const handleAddById = async (userId: number, role: RoleValue, expiresInDays?: number) => {
+    if (teamUnavailable) {
+      toast.error('Команда недоступна на вашем текущем тарифе.');
+      return;
+    }
     try {
       console.log('Adding team member:', { userId, role, expiresInDays });
       const result = await addTeamMember({ user_id: userId, role }, expiresInDays);
@@ -487,8 +525,48 @@ export default function TeamPage() {
   };
 
   return (
-    <DashboardPage title="Команда" subtitle={`Участников: ${teamMembers.length}`}>
-      {!canInvite && (
+    <DashboardPage
+      title="Команда"
+      subtitle={
+        teamUnavailable
+          ? 'Команда недоступна на вашем текущем тарифе'
+          : teamUsageLabel
+            ? `Участники: ${teamUsageLabel}`
+            : `Участников: ${teamMembers.length}`
+      }
+    >
+      {!tariffLoading && teamUnavailable && (
+        <div data-testid="team-entitlement-locked">
+          <Card>
+            <p style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600 }}>
+              Команда недоступна на вашем текущем тарифе.
+            </p>
+            <p style={{ margin: '0 0 14px', color: 'var(--text-muted)', fontSize: 14 }}>
+              На вашем текущем тарифе участники команды не доступны. Выберите тариф с поддержкой
+              команды — например Business PRO или Команда.
+            </p>
+            <Link
+              to="/pricing?tab=tariffs"
+              data-testid="team-choose-plan-cta"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '10px 16px',
+                borderRadius: 8,
+                background: 'var(--primary, #ffd24c)',
+                color: '#000',
+                fontWeight: 600,
+                fontSize: 14,
+                textDecoration: 'none',
+              }}
+            >
+              Выбрать тариф с командой
+            </Link>
+          </Card>
+        </div>
+      )}
+
+      {!teamUnavailable && !canInvite && (
         <div style={{ marginBottom: '20px' }}>
           <DemoModeBanner
             message="Просмотр без возможности приглашения и управления участниками"
@@ -497,82 +575,84 @@ export default function TeamPage() {
         </div>
       )}
       {/* Toolbar с поиском и кнопкой пригласить */}
-      <div
-        style={{
-          display: 'flex',
-          gap: '16px',
-          marginBottom: '24px',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-        }}
-      >
-        {/* Поиск */}
-        <div style={{ position: 'relative', flex: 1, maxWidth: '400px', minWidth: '250px' }}>
-          <Search
-            size={20}
-            style={{
-              position: 'absolute',
-              left: '12px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--text-muted)',
-            }}
-          />
-          <input
-            type="text"
-            placeholder="Поиск по email или имени..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px 12px 12px 44px',
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
-              color: 'var(--text)',
-              fontSize: '14px',
-            }}
-            onFocus={e => (e.currentTarget.style.borderColor = 'var(--primary)')}
-            onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
-          />
-        </div>
-
-        {/* Кнопка пригласить */}
-        <AccessLocked
-          hasAccess={canInvite}
-          actionKey="team_invite"
-          onClick={() => setShowAddByIdModal(true)}
+      {!teamUnavailable && (
+        <div
+          style={{
+            display: 'flex',
+            gap: '16px',
+            marginBottom: '24px',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
         >
-          <button
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '12px 24px',
-              background: 'var(--primary)',
-              color: '#000',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '15px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'var(--primary-hover)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'var(--primary)';
-              e.currentTarget.style.transform = 'translateY(0)';
-            }}
+          {/* Поиск */}
+          <div style={{ position: 'relative', flex: 1, maxWidth: '400px', minWidth: '250px' }}>
+            <Search
+              size={20}
+              style={{
+                position: 'absolute',
+                left: '12px',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: 'var(--text-muted)',
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Поиск по email или имени..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 12px 12px 44px',
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                color: 'var(--text)',
+                fontSize: '14px',
+              }}
+              onFocus={e => (e.currentTarget.style.borderColor = 'var(--primary)')}
+              onBlur={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+            />
+          </div>
+
+          {/* Кнопка пригласить */}
+          <AccessLocked
+            hasAccess={canInvite}
+            actionKey="team_invite"
+            onClick={() => setShowAddByIdModal(true)}
           >
-            <Plus size={18} />
-            Пригласить
-          </button>
-        </AccessLocked>
-      </div>
+            <button
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 24px',
+                background: 'var(--primary)',
+                color: '#000',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '15px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'var(--primary-hover)';
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'var(--primary)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <Plus size={18} />
+              Пригласить
+            </button>
+          </AccessLocked>
+        </div>
+      )}
 
       {/* Таблица участников */}
       <Card style={{ marginBottom: '32px' }}>
@@ -582,6 +662,13 @@ export default function TeamPage() {
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
             Загрузка...
           </div>
+        ) : teamUnavailable ? (
+          <p
+            data-testid="team-members-locked-hint"
+            style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}
+          >
+            Добавление участников недоступно на текущем тарифе.
+          </p>
         ) : teamMembers.length === 0 ? (
           <EmptyState
             icon="👥"

@@ -636,7 +636,7 @@ def test_migration_head_includes_legal_versioning(db):
     )
     script = ScriptDirectory.from_config(cfg)
     heads = set(script.get_heads())
-    assert "addon_purchase_flag_032" in heads
-    assert rev == "addon_purchase_flag_032"
+    assert "business_pro_team_members_034" in heads
+    assert rev == "business_pro_team_members_034"
     all_revs = {r.revision for r in script.walk_revisions()}
     assert "legal_versioning_029" in all_revs

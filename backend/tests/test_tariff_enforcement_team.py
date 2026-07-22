@@ -119,6 +119,38 @@ def test_limit_zero_blocks(db, client):
     assert MSG_TEAM_NOT_AVAILABLE in exc.value.message
 
 
+def test_business_team_members_zero_blocks(db, client):
+    owner = _create_user(db, plan_code="business", suffix="biz_zero")
+    summary = get_user_tariff_limits(db, owner.id, at=_utc(2026, 6, 15))
+    assert summary.team_members_limit == 0
+    with pytest.raises(TariffLimitExceeded) as exc:
+        ensure_can_add_team_member(db, owner.id, at=_utc(2026, 6, 15))
+    assert exc.value.code == "team_members_unavailable"
+
+
+def test_business_pro_team_members_is_three(db, client):
+    owner = _create_user(db, plan_code="business_pro", suffix="bpro")
+    summary = get_user_tariff_limits(db, owner.id, at=_utc(2026, 6, 15))
+    assert summary.team_members_limit == 3
+    for i in range(2):
+        m = _create_user(db, plan_code="free", suffix=f"bpro_m_{i}")
+        db.add(TeamMember(owner_id=owner.id, user_id=m.id, role="observer"))
+    db.commit()
+    ensure_can_add_team_member(db, owner.id, at=_utc(2026, 6, 15))
+    m3 = _create_user(db, plan_code="free", suffix="bpro_m_2")
+    db.add(TeamMember(owner_id=owner.id, user_id=m3.id, role="observer"))
+    db.commit()
+    with pytest.raises(TariffLimitExceeded) as exc:
+        ensure_can_add_team_member(db, owner.id, at=_utc(2026, 6, 15))
+    assert exc.value.code == "team_members_limit_exceeded"
+
+
+def test_team_plan_team_members_is_five(db, client):
+    owner = _create_user(db, plan_code="team", suffix="team_five")
+    summary = get_user_tariff_limits(db, owner.id, at=_utc(2026, 6, 15))
+    assert summary.team_members_limit == 5
+
+
 def test_used_below_limit_allows(db, client):
     owner = _create_user(db, plan_code="team", suffix="below_limit")
     member = _create_user(db, plan_code="free", suffix="member_one")

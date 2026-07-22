@@ -24,9 +24,21 @@ describe('refundDisplay', () => {
   });
 
   it('does not claim money returned on approved', () => {
-    const hint = refundStatusHint('approved') || '';
-    expect(hint.toLowerCase()).not.toMatch(/уже возвращ|деньги возвращены|средства возвращены/);
-    expect(hint).toMatch(/ещё не выполнен|ожидает/i);
+    const hint = refundStatusHint('approved', { amountLabel: '590.00 ₽' }) || '';
+    expect(hint).toMatch(/Сумма возврата:\s*590\.00 ₽/);
+    expect(hint.toLowerCase()).not.toMatch(
+      /деньги возвращены|средства возвращены|подтвердила возврат/
+    );
+    expect(hint).toMatch(/ещё не отправлены|следующий этап/i);
+  });
+
+  it('processing and refunded stages are distinct', () => {
+    expect(refundStatusLabel('refund_processing')).toMatch(/выполняется/i);
+    expect(refundStatusHint('refund_processing') || '').toMatch(/платёжную систему/i);
+    expect(refundStatusLabel('refunded')).toMatch(/деньги возвращены/i);
+    expect(refundStatusHint('refunded', { amountLabel: '100 ₽' }) || '').toMatch(
+      /подтвердила возврат 100 ₽/i
+    );
   });
 
   it('shows admin-determined amount for null / undefined flags', () => {

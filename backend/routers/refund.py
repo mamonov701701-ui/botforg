@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend.auth.rate_limit import check_rate_limit
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
+from backend.models.checkout import CheckoutIntent
 from backend.models.refund import (
     RefundAuditEvent,
     RefundRequest,
@@ -27,6 +28,7 @@ from backend.schemas.refund import (
     RefundStatusHistoryItemOut,
 )
 from backend.services.refund_api_presenters import (
+    format_money,
     is_proposed_amount_undefined,
     recommended_refund_amount_str,
 )
@@ -77,6 +79,7 @@ def _request_out(
     request: RefundRequest,
     *,
     include_history: bool = False,
+    intent: CheckoutIntent | None = None,
 ) -> RefundRequestOut:
     revision = _current_revision(db, request)
     undefined = is_proposed_amount_undefined(revision, request)
@@ -112,6 +115,15 @@ def _request_out(
             audits, current_status=request.status
         )
 
+    if intent is None:
+        intent = db.get(CheckoutIntent, int(request.checkout_intent_id))
+
+    product_currency = None
+    if intent is not None:
+        product_currency = intent.currency
+    if currency is None:
+        currency = product_currency
+
     return RefundRequestOut(
         id=request.id,
         checkout_intent_id=request.checkout_intent_id,
@@ -132,6 +144,11 @@ def _request_out(
         completed_at=request.completed_at,
         status_history=status_history,
         public_decision_message=public_decision_message,
+        product_type=intent.product_type if intent else None,
+        product_code=intent.product_code if intent else None,
+        product_name=intent.product_name if intent else None,
+        amount=format_money(intent.amount) if intent is not None else None,
+        paid_at=intent.paid_at if intent else None,
     )
 
 
@@ -277,8 +294,25 @@ async def list_my_refund_requests(
         .order_by(RefundRequest.id.desc())
         .all()
     )
+    intent_ids = {int(r.checkout_intent_id) for r in rows if r.checkout_intent_id}
+    intents: dict[int, CheckoutIntent] = {}
+    if intent_ids:
+        for intent in (
+            db.query(CheckoutIntent)
+            .filter(CheckoutIntent.id.in_(tuple(intent_ids)))
+            .all()
+        ):
+            intents[int(intent.id)] = intent
     # Список без timeline (масштабирование: не грузим audit для каждой строки).
-    return [_request_out(db, row, include_history=False) for row in rows]
+    return [
+        _request_out(
+            db,
+            row,
+            include_history=False,
+            intent=intents.get(int(row.checkout_intent_id)),
+        )
+        for row in rows
+    ]
 
 
 @router.get("/me/refund-requests/{request_id}", response_model=RefundRequestOut)

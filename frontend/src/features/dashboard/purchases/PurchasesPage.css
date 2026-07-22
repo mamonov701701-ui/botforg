@@ -1,0 +1,171 @@
+.purchases-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.purchases-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.purchases-filter label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.purchases-filter select {
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.purchases-table-wrap {
+  display: none;
+  overflow-x: auto;
+}
+
+.purchases-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.purchases-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.purchases-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.purchases-table tr:last-child td {
+  border-bottom: none;
+}
+
+.purchases-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.purchases-type {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.purchases-amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.purchases-status {
+  white-space: nowrap;
+}
+
+.purchases-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.purchases-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg);
+}
+
+.purchases-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.purchases-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.purchases-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.purchases-pagination-range {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.purchases-pagination-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.purchases-btn {
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.purchases-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.purchases-link {
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.purchases-link:hover {
+  text-decoration: underline;
+}
+
+@media (min-width: 768px) {
+  .purchases-table-wrap {
+    display: block;
+  }
+
+  .purchases-cards {
+    display: none;
+  }
+}

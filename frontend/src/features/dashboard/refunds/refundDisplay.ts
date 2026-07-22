@@ -21,13 +21,13 @@ const STATUS_LABELS: Record<string, string> = {
   manual_review_required: 'Требуется ручная проверка',
   admin_edited: 'Скорректирована администратором',
   awaiting_final_confirmation: 'Ожидает подтверждения',
-  approved: 'Одобрена',
+  approved: 'Возврат одобрен',
   needs_information: 'Нужны дополнительные сведения',
   rejected: 'Отклонена',
   canceled: 'Отменена',
   calculation_failed: 'Ошибка расчёта',
-  refund_processing: 'Обработка возврата',
-  refunded: 'Средства возвращены',
+  refund_processing: 'Возврат выполняется',
+  refunded: 'Деньги возвращены',
   completed: 'Завершена',
 };
 
@@ -36,7 +36,10 @@ const STATUS_HINTS: Record<string, string> = {
     'Автоматический расчёт не определил сумму. Администратор рассмотрит заявку вручную.',
   needs_information: 'Администратору нужны дополнительные сведения. Отправьте ответ в форме ниже.',
   rejected: 'Заявка отклонена. Возврат средств по этой заявке не выполняется.',
-  approved: 'Заявка одобрена. Возврат средств ещё не выполнен — ожидает дальнейшей обработки.',
+  approved:
+    'Деньги ещё не отправлены через платёжную систему. Следующий этап — выполнение возврата.',
+  refund_processing: 'Запрос на возврат передан в платёжную систему.',
+  refunded: 'Платёжная система подтвердила возврат.',
   canceled: 'Вы отменили эту заявку.',
   awaiting_admin_review: 'Заявка ожидает решения администратора.',
 };
@@ -47,7 +50,21 @@ export function refundStatusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
 
-export function refundStatusHint(status: string): string | null {
+export function refundStatusHint(
+  status: string,
+  options?: { amountLabel?: string | null }
+): string | null {
+  const amount = (options?.amountLabel || '').trim();
+  if (status === 'approved') {
+    const amountPart = amount ? `Сумма возврата: ${amount}. ` : '';
+    return `${amountPart}Деньги ещё не отправлены через платёжную систему. Следующий этап — выполнение возврата.`;
+  }
+  if (status === 'refund_processing') {
+    return STATUS_HINTS.refund_processing;
+  }
+  if (status === 'refunded') {
+    return amount ? `Платёжная система подтвердила возврат ${amount}.` : STATUS_HINTS.refunded;
+  }
   return STATUS_HINTS[status] ?? null;
 }
 
@@ -114,4 +131,27 @@ export function unavailableReasonLabel(reason: string | null | undefined): strin
     purchase_refunded: 'Покупка уже возвращена',
   };
   return map[reason] ?? reason;
+}
+
+/** User-facing purchase line for refund list/detail (без Intent #). */
+export function refundPurchaseTitle(input: {
+  product_name?: string | null;
+  product_type?: string | null;
+}): string {
+  const name = (input.product_name || '').trim();
+  return name || 'Покупка';
+}
+
+export function refundPurchaseSubtitle(input: {
+  product_type?: string | null;
+  amount?: string | null;
+  currency?: string | null;
+}): string {
+  const typeKey = (input.product_type || '').trim().toLowerCase();
+  const typeLabel =
+    typeKey === 'tariff' ? 'Тариф' : typeKey === 'addon' ? 'Доп. пакет' : typeKey || 'Покупка';
+  const amount = (input.amount || '').trim();
+  if (!amount) return typeLabel;
+  const currency = (input.currency || 'RUB').toUpperCase() === 'RUB' ? '₽' : input.currency;
+  return `${typeLabel} · ${amount} ${currency}`.trim();
 }

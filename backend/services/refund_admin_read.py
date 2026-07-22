@@ -27,6 +27,7 @@ from backend.services.refund_api_presenters import (
     request_has_manual_review_signal,
 )
 from backend.services.refund_audit_presentation import present_admin_event
+from backend.services.tariff_limits import get_user_tariff_limits
 
 
 class RefundAdminReadError(Exception):
@@ -36,16 +37,29 @@ class RefundAdminReadError(Exception):
         super().__init__(message)
 
 
-def _user_safe(user: User | None) -> dict[str, Any] | None:
+def _user_safe(db: Session, user: User | None) -> dict[str, Any] | None:
     if user is None:
         return None
+    effective_plan_code: str | None = None
+    effective_plan_name: str | None = None
+    try:
+        summary = get_user_tariff_limits(db, int(user.id))
+        effective_plan_code = summary.plan_code
+        effective_plan_name = summary.plan_name
+    except Exception:
+        # Read path must not fail the whole admin detail on tariff resolution.
+        effective_plan_code = None
+        effective_plan_name = None
     return {
         "id": user.id,
         "public_id": user.public_id,
         "email": user.email,
         "name": user.name,
         "role": user.role,
+        # Legacy column — keep for diagnostics; UI must not treat as current tariff.
         "plan_code": user.plan_code,
+        "effective_plan_code": effective_plan_code,
+        "effective_plan_name": effective_plan_name,
         "is_suspended": bool(user.is_suspended),
         "created_at": user.created_at,
     }
@@ -373,7 +387,7 @@ def get_refund_request_admin(db: Session, *, request_id: int) -> dict[str, Any]:
 
     return {
         "request": _request_core(request, current),
-        "user": _user_safe(user),
+        "user": _user_safe(db, user),
         "checkout_intent": _intent_out(intent),
         "payment_attempt": _attempt_out(attempt),
         "product": product,

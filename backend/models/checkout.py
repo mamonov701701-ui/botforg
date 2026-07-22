@@ -82,6 +82,12 @@ class CheckoutIntent(Base):
             name="uq_checkout_intents_user_idempotency",
         ),
         Index("ix_checkout_intents_user_id", "user_id"),
+        Index(
+            "ix_checkout_intents_user_created_id",
+            "user_id",
+            "created_at",
+            "id",
+        ),
         Index("ix_checkout_intents_status", "status"),
         Index("ix_checkout_intents_product", "product_type", "product_code"),
         Index("ix_checkout_intents_provider_payment_id", "provider_payment_id"),

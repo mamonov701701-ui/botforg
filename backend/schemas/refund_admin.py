@@ -51,7 +51,10 @@ class RefundAdminUserOut(BaseModel):
     email: str
     name: str | None = None
     role: str | None = None
+    # Legacy users.plan_code — не путать с текущим effective тарифом.
     plan_code: str | None = None
+    effective_plan_code: str | None = None
+    effective_plan_name: str | None = None
     is_suspended: bool = False
     created_at: datetime | None = None
 

@@ -78,6 +78,11 @@ function sample(overrides: Partial<RefundRequest> = {}): RefundRequest {
       },
     ],
     public_decision_message: null,
+    product_type: 'addon',
+    product_code: 'msg_1000',
+    product_name: 'Пакет 1000 сообщений',
+    amount: '190.00',
+    paid_at: '2026-07-01T09:00:00Z',
     ...overrides,
   };
 }
@@ -110,7 +115,7 @@ describe('RefundRequestsPage', () => {
     listMyRefundablePurchases.mockResolvedValue({
       items: [purchase()],
       total: 1,
-      limit: 50,
+      limit: 20,
       offset: 0,
     });
   });
@@ -126,7 +131,10 @@ describe('RefundRequestsPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('refund-list')).toBeTruthy();
     });
-    expect(screen.getByText(/Заявка №12/)).toBeTruthy();
+    expect(screen.getByTestId('refund-list-row-12').textContent).toMatch(/№12/);
+    expect(screen.getByTestId('refund-list-row-12').textContent).toMatch(/Пакет 1000 сообщений/);
+    expect(screen.getByTestId('refund-list-row-12').textContent).not.toMatch(/Intent\s*#/i);
+    expect(screen.getByTestId('refund-open-12').textContent).toMatch(/Подробнее/);
     expect(screen.getByTestId('refund-create-form')).toBeTruthy();
     expect(screen.queryByTestId('refund-create-empty')).toBeNull();
     expect(screen.getByTestId('refund-create-purchase')).toBeTruthy();
@@ -187,9 +195,16 @@ describe('RefundRequestsPage', () => {
       expect(optionTexts).toContain(opt.label);
       expect(opt.label).toMatch(/[А-Яа-яЁё]/);
     }
-    fireEvent.change(screen.getByTestId('refund-create-purchase'), {
-      target: { value: '5' },
+
+    fireEvent.click(screen.getByTestId('refund-create-purchase'));
+    await waitFor(() => {
+      expect(screen.getByTestId('refund-picker-select-5')).toBeTruthy();
     });
+    fireEvent.click(screen.getByTestId('refund-picker-select-5'));
+    await waitFor(() => {
+      expect(screen.getByTestId('refund-selected-purchase')).toBeTruthy();
+    });
+
     expect(screen.getByTestId('refund-create-submit').getAttribute('data-state')).toBe('disabled');
     expect((screen.getByTestId('refund-create-submit') as HTMLButtonElement).disabled).toBe(true);
 
@@ -254,8 +269,13 @@ describe('RefundRequestsPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('refund-create-purchase')).toBeTruthy();
     });
-    fireEvent.change(screen.getByTestId('refund-create-purchase'), {
-      target: { value: '5' },
+    fireEvent.click(screen.getByTestId('refund-create-purchase'));
+    await waitFor(() => {
+      expect(screen.getByTestId('refund-picker-select-5')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('refund-picker-select-5'));
+    await waitFor(() => {
+      expect(screen.getByTestId('refund-selected-purchase')).toBeTruthy();
     });
     fireEvent.change(screen.getByTestId('refund-create-reason'), {
       target: { value: 'unused' },
@@ -275,6 +295,90 @@ describe('RefundRequestsPage', () => {
     expect(typeof arg.idempotency_key).toBe('string');
     expect(arg.idempotency_key.length).toBeGreaterThan(8);
     expect(toast.success).toHaveBeenCalled();
+  });
+
+  it('preselects purchase from ?intent= and hides native dropdown', async () => {
+    listMyRefundRequests.mockResolvedValue([]);
+    listMyRefundablePurchases.mockResolvedValue({
+      items: [purchase({ checkout_intent_id: 5 })],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    render(
+      <MemoryRouter initialEntries={['/dashboard/finance/refunds?intent=5']}>
+        <Routes>
+          <Route path="/dashboard/finance/refunds" element={<RefundRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('refund-selected-purchase')).toBeTruthy();
+    });
+    expect(screen.getByTestId('refund-selected-name').textContent).toMatch(/1 000/);
+    expect(screen.queryByRole('combobox', { name: /Покупка/i })).toBeNull();
+    expect(screen.getByTestId('refund-change-purchase')).toBeTruthy();
+  });
+
+  it('shows safe error for unavailable intent without substituting another purchase', async () => {
+    listMyRefundRequests.mockResolvedValue([]);
+    listMyRefundablePurchases.mockResolvedValue({
+      items: [
+        purchase({
+          checkout_intent_id: 5,
+          can_request_refund: false,
+          unavailable_reason: 'active_refund_request',
+        }),
+      ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    render(
+      <MemoryRouter initialEntries={['/dashboard/finance/refunds?intent=5']}>
+        <Routes>
+          <Route path="/dashboard/finance/refunds" element={<RefundRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('refund-intent-error')).toBeTruthy();
+    });
+    expect(screen.getByTestId('refund-intent-error').textContent).toMatch(
+      /нельзя оформить возврат/i
+    );
+    expect(screen.queryByTestId('refund-selected-purchase')).toBeNull();
+  });
+
+  it('paginates purchase picker without loading all at once', async () => {
+    listMyRefundRequests.mockResolvedValue([]);
+    const page1 = Array.from({ length: 20 }, (_, i) =>
+      purchase({
+        checkout_intent_id: i + 1,
+        product_name: `P${i + 1}`,
+      })
+    );
+    const page2 = [purchase({ checkout_intent_id: 21, product_name: 'P21' })];
+    listMyRefundablePurchases
+      .mockResolvedValueOnce({ items: page1, total: 21, limit: 20, offset: 0 }) // hint
+      .mockResolvedValueOnce({ items: page1, total: 21, limit: 20, offset: 0 }) // picker open
+      .mockResolvedValueOnce({ items: page2, total: 21, limit: 20, offset: 20 }); // next
+
+    render(
+      <MemoryRouter>
+        <RefundRequestsPage />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByTestId('refund-create-purchase')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('refund-create-purchase'));
+    await waitFor(() => {
+      expect(screen.getByTestId('refund-picker-range').textContent).toBe('1–20 из 21');
+    });
+    fireEvent.click(screen.getByTestId('refund-picker-next'));
+    await waitFor(() => {
+      expect(screen.getByTestId('refund-picker-range').textContent).toBe('21–21 из 21');
+    });
+    expect(listMyRefundablePurchases.mock.calls.some(c => c[0]?.offset === 20)).toBe(true);
   });
 });
 
@@ -336,19 +440,29 @@ describe('RefundRequestDetailPage', () => {
       );
     });
     expect(screen.getByTestId('refund-detail-status-hint').textContent).toMatch(/вручную/i);
-    expect(screen.queryByText(/0 ₽/)).toBeNull();
+    expect(screen.queryByText(/^0(\.00)?\s*₽$/)).toBeNull();
+    expect(screen.getByTestId('refund-detail-amount').textContent).not.toMatch(/^0/);
   });
 
   it('shows approved without claiming money returned', async () => {
     getMyRefundRequest.mockResolvedValue(sample({ status: 'approved' }));
     renderDetail();
     await waitFor(() => {
-      expect(screen.getByTestId('refund-detail-status').textContent).toMatch(/Одобрена/);
+      expect(screen.getByTestId('refund-detail-status').textContent).toMatch(/Возврат одобрен/);
     });
     const hint = screen.getByTestId('refund-detail-status-hint').textContent || '';
-    expect(hint).toMatch(/ещё не выполнен/i);
-    expect(hint.toLowerCase()).not.toMatch(/деньги возвращены|средства возвращены/);
+    expect(hint).toMatch(/ещё не отправлены|следующий этап/i);
+    expect(hint.toLowerCase()).not.toMatch(
+      /деньги возвращены|средства возвращены|подтвердила возврат/
+    );
     expect(screen.queryByTestId('refund-detail-cancel')).toBeNull();
+    expect(screen.getByTestId('refund-detail-back').getAttribute('href')).toBe(
+      '/dashboard/finance/refunds'
+    );
+    expect(screen.getByTestId('refund-detail-purchase-name').textContent).toMatch(
+      /Пакет 1000 сообщений/
+    );
+    expect(screen.getByTestId('refund-detail-card').textContent || '').not.toMatch(/Intent\s*#/i);
   });
 
   it('shows status history with Russian titles and safe decision message', async () => {

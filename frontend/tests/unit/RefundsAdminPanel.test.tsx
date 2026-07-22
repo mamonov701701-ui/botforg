@@ -138,6 +138,8 @@ function detail(overrides: Partial<RefundAdminDetail> = {}): RefundAdminDetail {
       name: 'User',
       role: 'user',
       plan_code: 'start',
+      effective_plan_code: 'start',
+      effective_plan_name: 'Старт',
       is_suspended: false,
       created_at: '2026-01-01T00:00:00Z',
     },
@@ -457,11 +459,22 @@ describe('RefundsAdminPanel queue', () => {
     expect(screen.getByTestId('refund-admin-approved-revision')).toBeTruthy();
     expect(screen.getByTestId('refund-admin-audit')).toBeTruthy();
     expect(screen.getByTestId('refund-admin-actions')).toBeTruthy();
+    expect(screen.getByTestId('refund-admin-summary-table')).toBeTruthy();
+    expect(screen.getByTestId('refund-admin-effective-plan').textContent).toMatch(/Старт/);
 
+    expect((screen.getByTestId('refund-admin-detail-card') as HTMLDetailsElement).open).toBe(true);
+    expect((screen.getByTestId('refund-admin-actions') as HTMLDetailsElement).open).toBe(true);
+    expect((screen.getByTestId('refund-admin-calc') as HTMLDetailsElement).open).toBe(false);
+    expect((screen.getByTestId('refund-admin-user-purchase') as HTMLDetailsElement).open).toBe(
+      false
+    );
     expect((screen.getByTestId('refund-admin-payment') as HTMLDetailsElement).open).toBe(false);
     expect((screen.getByTestId('refund-admin-usage') as HTMLDetailsElement).open).toBe(false);
+    expect((screen.getByTestId('refund-admin-current-revision') as HTMLDetailsElement).open).toBe(
+      false
+    );
     expect((screen.getByTestId('refund-admin-audit') as HTMLDetailsElement).open).toBe(false);
-    expect((screen.getByTestId('refund-admin-user-purchase') as HTMLDetailsElement).open).toBe(
+    expect((screen.getByTestId('refund-admin-tech-details') as HTMLDetailsElement).open).toBe(
       false
     );
 
@@ -678,5 +691,36 @@ describe('RefundsAdminPanel queue', () => {
       'Комментарий при создании заявки'
     );
     expect(screen.queryByText(/\{.*"action"/)).toBeNull();
+  });
+
+  it('shows effective tariff, not stale users.plan_code', async () => {
+    listAdminRefunds.mockResolvedValue({ items: [listItem()], total: 1, limit: 20, offset: 0 });
+    getAdminRefund.mockResolvedValue(
+      detail({
+        user: {
+          id: 3,
+          public_id: 3,
+          email: 'u@example.com',
+          name: 'User',
+          role: 'user',
+          plan_code: 'pro',
+          effective_plan_code: 'business',
+          effective_plan_name: 'Бизнес',
+          is_suspended: false,
+          created_at: '2026-01-01T00:00:00Z',
+        },
+      })
+    );
+    render(<RefundsAdminPanel />);
+    await waitFor(() => fireEvent.click(screen.getByTestId('refund-admin-open-10')));
+    await waitFor(() => expect(screen.getByTestId('refund-admin-effective-plan')).toBeTruthy());
+    expect(screen.getByTestId('refund-admin-effective-plan').textContent).toBe('Бизнес');
+    const userBlock = screen.getByTestId('refund-admin-user').textContent || '';
+    expect(userBlock).not.toMatch(/\bpro\b/);
+    const tech = screen.getByTestId('refund-admin-tech-details') as HTMLDetailsElement;
+    if (!tech.open) {
+      fireEvent.click(tech.querySelector('summary') || tech);
+    }
+    expect(screen.getByTestId('refund-admin-legacy-plan-code').textContent).toBe('pro');
   });
 });

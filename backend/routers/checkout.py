@@ -1,25 +1,33 @@
 """
-Checkout intent API (Этап 6.5).
+Checkout intent API (Этап 6.5 + 8.3.1).
 
 POST /me/checkout-intents — создать pending intent из публичного каталога.
+GET  /me/checkout-intents — история покупок (paginated).
 GET  /me/checkout-intents/{id} — только свои intents.
 Без платёжного провайдера и без выдачи entitlement.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.dependencies.auth import get_current_user
-from backend.models.checkout import CheckoutProductType
+from backend.models.checkout import CheckoutIntentStatus, CheckoutProductType
 from backend.models.user import User
-from backend.schemas.checkout import CheckoutIntentCreateIn, CheckoutIntentOut
+from backend.schemas.checkout import (
+    CheckoutIntentCreateIn,
+    CheckoutIntentOut,
+    CheckoutPurchaseListOut,
+)
 from backend.services.checkout_intents import (
     CheckoutIntentError,
     create_checkout_intent,
     get_user_checkout_intent,
 )
+from backend.services.checkout_purchase_history import list_user_checkout_intents
 
 router = APIRouter(tags=["checkout"])
 
@@ -59,6 +67,50 @@ def _http_from_checkout_error(exc: CheckoutIntentError) -> HTTPException:
         status_code=status.HTTP_400_BAD_REQUEST,
         detail={"code": code, "message": exc.message},
     )
+
+
+@router.get("/me/checkout-intents", response_model=CheckoutPurchaseListOut)
+async def list_my_checkout_intents(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    product_type: Literal["tariff", "addon"] | None = Query(None),
+    status_filter: str | None = Query(
+        None,
+        alias="status",
+        min_length=1,
+        max_length=32,
+        description="CheckoutIntent status",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    История собственных CheckoutIntent (все статусы, не refundable-only).
+
+    Сортировка: created_at DESC, id DESC. Без live-запросов к провайдеру.
+    """
+    if status_filter is not None:
+        st = status_filter.strip().lower()
+        valid = {s.value for s in CheckoutIntentStatus}
+        if st not in valid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "invalid_status",
+                    "message": f"Unknown checkout intent status: {status_filter}",
+                },
+            )
+        status_filter = st
+
+    data = list_user_checkout_intents(
+        db,
+        user_id=current_user.id,
+        limit=limit,
+        offset=offset,
+        product_type=product_type,
+        status=status_filter,
+    )
+    return CheckoutPurchaseListOut.model_validate(data)
 
 
 @router.post(

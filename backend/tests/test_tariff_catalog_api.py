@@ -113,6 +113,47 @@ def test_tariffs_serializes_price_and_limits(client, db):
     assert business["is_recommended"] is False
 
 
+def test_tariffs_team_members_contract_business_pro_team(client, db):
+    """Canonical public catalog: Business=0, Business PRO=3, Team=5 (8.3.5 / mig 034)."""
+    res = client.get("/tariffs")
+    assert res.status_code == 200
+    by_code = {item["code"]: item for item in res.json()}
+
+    assert by_code["business"]["limits"]["team_members"] == 0
+    assert by_code["business_pro"]["limits"]["team_members"] == 3
+    assert by_code["team"]["limits"]["team_members"] == 5
+
+    # DB row must match catalog (no FE hardcode / no stale seed).
+    pro = db.query(Plan).filter(Plan.code == "business_pro").one()
+    limits = dict(pro.limits or {})
+    assert limits.get("team_members") == 3
+    assert limits.get("max_team_members") == 3
+
+    business = db.query(Plan).filter(Plan.code == "business").one()
+    assert dict(business.limits or {}).get("team_members") == 0
+
+    team = db.query(Plan).filter(Plan.code == "team").one()
+    assert dict(team.limits or {}).get("team_members") == 5
+
+
+def test_tariff_system_007_seed_business_pro_team_members_aligned():
+    """Historical seed must match product so re-apply/new installs do not reset PRO to 0."""
+    from pathlib import Path
+
+    src = (
+        Path(__file__).resolve().parents[1]
+        / "migrations"
+        / "versions"
+        / "tariff_system_007.py"
+    ).read_text(encoding="utf-8")
+    marker = '"code": "business_pro"'
+    assert marker in src
+    chunk = src[src.index(marker) : src.index(marker) + 900]
+    assert '"team_members": 3' in chunk
+    assert '"max_team_members": 3' in chunk
+    assert '"team_members": 0' not in chunk
+
+
 def test_tariffs_empty_list_when_none_public(client, db):
     plans = db.query(Plan).all()
     for plan in plans:

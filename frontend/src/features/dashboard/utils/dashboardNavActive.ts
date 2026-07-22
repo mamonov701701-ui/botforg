@@ -37,6 +37,7 @@ export const PLATFORM_NAV_PATHS = {
 /** Project mode finance section paths (user ЛК). */
 export const PROJECT_FINANCE_NAV = {
   root: '/dashboard/finance',
+  purchases: '/dashboard/finance/purchases',
   refunds: '/dashboard/finance/refunds',
 } as const;
 

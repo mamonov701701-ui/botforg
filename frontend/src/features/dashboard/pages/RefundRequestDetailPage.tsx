@@ -16,6 +16,8 @@ import {
   formatRecommendedRefundAmount,
   formatRefundDate,
   reasonCategoryLabel,
+  refundPurchaseSubtitle,
+  refundPurchaseTitle,
   refundStatusHint,
   refundStatusLabel,
 } from '../refunds/refundDisplay';
@@ -145,12 +147,14 @@ export default function RefundRequestDetailPage() {
     </button>
   );
 
-  const statusHint = item ? refundStatusHint(item.status) : null;
   const amountLabel = item
     ? formatRecommendedRefundAmount(item.recommended_refund_amount, {
         proposedAmountUndefined: item.proposed_amount_undefined,
         currency: item.currency,
       })
+    : null;
+  const statusHint = item
+    ? refundStatusHint(item.status, { amountLabel: amountLabel ?? undefined })
     : null;
 
   return (
@@ -164,13 +168,14 @@ export default function RefundRequestDetailPage() {
       ]}
       actions={refreshButton}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div>
           <Link
             to="/dashboard/finance/refunds"
+            data-testid="refund-detail-back"
             style={{ color: 'var(--primary)', fontSize: '14px', textDecoration: 'none' }}
           >
-            ← К списку заявок
+            ← Назад к заявкам на возврат
           </Link>
         </div>
 
@@ -199,25 +204,31 @@ export default function RefundRequestDetailPage() {
         {item && (
           <div data-testid="refund-detail-card">
             <Card>
-              <dl
+              <div
                 style={{
                   margin: 0,
                   display: 'grid',
-                  gap: '14px',
-                  fontSize: '15px',
+                  gap: 8,
+                  fontSize: 14,
                 }}
               >
-                <div>
-                  <dt style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 4 }}>
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 8,
+                    background: 'rgba(148, 163, 184, 0.12)',
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 2 }}>
                     Статус
-                  </dt>
-                  <dd style={{ margin: 0, fontWeight: 600 }} data-testid="refund-detail-status">
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }} data-testid="refund-detail-status">
                     {refundStatusLabel(item.status)}
-                  </dd>
+                  </div>
                   {statusHint && (
                     <p
                       data-testid="refund-detail-status-hint"
-                      style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: '14px' }}
+                      style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: 13 }}
                     >
                       {statusHint}
                     </p>
@@ -227,13 +238,13 @@ export default function RefundRequestDetailPage() {
                       <p
                         data-testid="refund-detail-public-decision"
                         style={{
-                          margin: '10px 0 0',
-                          padding: '10px 12px',
+                          margin: '8px 0 0',
+                          padding: '8px 10px',
                           borderRadius: 8,
                           border: '1px solid var(--border)',
                           background: 'var(--bf-section-bg-elevated, transparent)',
-                          fontSize: '14px',
-                          lineHeight: 1.5,
+                          fontSize: 13,
+                          lineHeight: 1.45,
                           whiteSpace: 'pre-wrap',
                         }}
                       >
@@ -242,71 +253,85 @@ export default function RefundRequestDetailPage() {
                     )}
                 </div>
 
-                <div>
-                  <dt style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 4 }}>
-                    Рекомендуемая сумма возврата
-                  </dt>
-                  <dd style={{ margin: 0, fontWeight: 600 }} data-testid="refund-detail-amount">
-                    {amountLabel}
-                  </dd>
-                </div>
-
-                <div>
-                  <dt style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 4 }}>
-                    Причина
-                  </dt>
-                  <dd style={{ margin: 0 }}>{reasonCategoryLabel(item.reason_category)}</dd>
-                </div>
-
-                {item.user_comment && (
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    gap: '8px 12px',
+                  }}
+                >
                   <div>
-                    <dt style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 4 }}>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 2 }}>
+                      Покупка
+                    </div>
+                    <div data-testid="refund-detail-purchase-name" style={{ fontWeight: 600 }}>
+                      {refundPurchaseTitle(item)}
+                    </div>
+                    <div
+                      data-testid="refund-detail-purchase-meta"
+                      style={{ color: 'var(--text-muted)', fontSize: 13 }}
+                    >
+                      {refundPurchaseSubtitle({
+                        product_type: item.product_type,
+                        amount: item.amount,
+                        currency: item.currency,
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 2 }}>
+                      Сумма
+                    </div>
+                    <div data-testid="refund-detail-amount" style={{ fontWeight: 600 }}>
+                      {amountLabel}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 2 }}>
+                      Причина
+                    </div>
+                    <div>{reasonCategoryLabel(item.reason_category)}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 2 }}>
+                      Создана
+                    </div>
+                    <div>{formatRefundDate(item.submitted_at || item.created_at)}</div>
+                  </div>
+                  {item.completed_at ? (
+                    <div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 2 }}>
+                        Завершена
+                      </div>
+                      <div>{formatRefundDate(item.completed_at)}</div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {item.user_comment ? (
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 12, marginBottom: 2 }}>
                       Комментарий
-                    </dt>
-                    <dd
-                      style={{ margin: 0, whiteSpace: 'pre-wrap' }}
+                    </div>
+                    <div
+                      style={{ whiteSpace: 'pre-wrap' }}
                       data-testid="refund-detail-user-comment"
                     >
                       {item.user_comment}
-                    </dd>
+                    </div>
                   </div>
-                )}
-
-                <div>
-                  <dt style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 4 }}>
-                    Покупка (CheckoutIntent)
-                  </dt>
-                  <dd style={{ margin: 0 }}>№{item.checkout_intent_id}</dd>
-                </div>
-
-                <div>
-                  <dt style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 4 }}>
-                    Создана
-                  </dt>
-                  <dd style={{ margin: 0 }}>
-                    {formatRefundDate(item.submitted_at || item.created_at)}
-                  </dd>
-                </div>
-
-                {item.completed_at && (
-                  <div>
-                    <dt style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: 4 }}>
-                      Завершена
-                    </dt>
-                    <dd style={{ margin: 0 }}>{formatRefundDate(item.completed_at)}</dd>
-                  </div>
-                )}
-              </dl>
+                ) : null}
+              </div>
 
               {canUserCancelRefund(item.status) && (
-                <div style={{ marginTop: '24px' }}>
+                <div style={{ marginTop: 14 }}>
                   <button
                     type="button"
                     data-testid="refund-detail-cancel"
                     disabled={canceling}
                     onClick={() => void onCancel()}
                     style={{
-                      padding: '12px 18px',
+                      padding: '10px 14px',
                       borderRadius: '8px',
                       border: '1px solid rgba(239, 68, 68, 0.5)',
                       background: 'transparent',
@@ -314,7 +339,7 @@ export default function RefundRequestDetailPage() {
                       fontWeight: 600,
                       fontSize: '14px',
                       cursor: canceling ? 'wait' : 'pointer',
-                      minHeight: 44,
+                      minHeight: 40,
                     }}
                   >
                     {canceling ? 'Отмена…' : 'Отменить заявку'}
@@ -420,55 +445,70 @@ export default function RefundRequestDetailPage() {
 
         {item && (
           <div data-testid="refund-detail-history">
-            <Card>
-              <h3
-                style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 600 }}
+            <details
+              data-testid="refund-detail-history-details"
+              style={{
+                background: 'var(--card, transparent)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: 14,
+              }}
+            >
+              <summary
                 data-testid="refund-detail-history-title"
+                style={{
+                  cursor: 'pointer',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  listStyle: 'revert',
+                }}
               >
                 История заявки
-              </h3>
-              {!item.status_history.length ? (
-                <p
-                  data-testid="refund-detail-history-empty"
-                  style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}
-                >
-                  История заявки пока недоступна.
-                </p>
-              ) : (
-                <ul
-                  data-testid="refund-detail-history-list"
-                  style={{ margin: 0, padding: 0, listStyle: 'none' }}
-                >
-                  {item.status_history.map(ev => (
-                    <li
-                      key={ev.id}
-                      data-testid={`refund-history-item-${ev.id}`}
-                      style={{
-                        padding: '12px 0',
-                        borderBottom: '1px solid var(--border)',
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, marginBottom: 4 }}>{ev.title}</div>
-                      <div
+              </summary>
+              <div style={{ marginTop: 10 }}>
+                {!item.status_history.length ? (
+                  <p
+                    data-testid="refund-detail-history-empty"
+                    style={{ margin: 0, color: 'var(--text-muted)', fontSize: 14 }}
+                  >
+                    История заявки пока недоступна.
+                  </p>
+                ) : (
+                  <ul
+                    data-testid="refund-detail-history-list"
+                    style={{ margin: 0, padding: 0, listStyle: 'none' }}
+                  >
+                    {item.status_history.map(ev => (
+                      <li
+                        key={ev.id}
+                        data-testid={`refund-history-item-${ev.id}`}
                         style={{
-                          fontSize: 14,
-                          color: 'var(--text)',
-                          lineHeight: 1.5,
-                          marginBottom: 6,
-                          whiteSpace: 'pre-wrap',
+                          padding: '10px 0',
+                          borderBottom: '1px solid var(--border)',
                         }}
                       >
-                        {ev.description}
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                        {formatRefundDate(ev.occurred_at)}
-                        {ev.status ? ` · ${refundStatusLabel(ev.status)}` : ''}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>{ev.title}</div>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            color: 'var(--text)',
+                            lineHeight: 1.45,
+                            marginBottom: 4,
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {ev.description}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                          {formatRefundDate(ev.occurred_at)}
+                          {ev.status ? ` · ${refundStatusLabel(ev.status)}` : ''}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </details>
           </div>
         )}
       </div>

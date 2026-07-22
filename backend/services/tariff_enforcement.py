@@ -21,7 +21,7 @@ from backend.services.team_usage import count_team_members_for_owner
 
 MSG_ACTIVE_BOTS_EXCEEDED = "Лимит активных ботов по вашему тарифу исчерпан."
 MSG_ONE_BOT_ONE_CHANNEL = "Один бот может быть подключён только к одному каналу."
-MSG_TEAM_NOT_AVAILABLE = "Команда недоступна на текущем тарифе."
+MSG_TEAM_NOT_AVAILABLE = "Команда недоступна на вашем текущем тарифе."
 MSG_TEAM_MEMBERS_EXCEEDED = "Лимит участников команды по вашему тарифу исчерпан."
 
 

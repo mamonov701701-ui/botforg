@@ -33,6 +33,12 @@ export interface RefundRequest {
   /** 6.14.10A — только detail; list обычно []. */
   status_history: RefundStatusHistoryItem[];
   public_decision_message: string | null;
+  /** 8.3.5 — покупка для user UI. */
+  product_type: string | null;
+  product_code: string | null;
+  product_name: string | null;
+  amount: string | null;
+  paid_at: string | null;
 }
 
 export interface RefundablePurchase {
@@ -147,6 +153,11 @@ export function normalizeRefundRequest(raw: unknown): RefundRequest {
     completed_at: asNullableString(o.completed_at),
     status_history,
     public_decision_message: asNullableString(o.public_decision_message),
+    product_type: asNullableString(o.product_type),
+    product_code: asNullableString(o.product_code),
+    product_name: asNullableString(o.product_name),
+    amount: asNullableString(o.amount),
+    paid_at: asNullableString(o.paid_at),
   };
 }
 

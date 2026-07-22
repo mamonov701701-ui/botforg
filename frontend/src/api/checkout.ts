@@ -171,6 +171,98 @@ export async function getCheckoutIntent(intentId: number): Promise<CheckoutInten
   return normalizeCheckoutIntent(raw);
 }
 
+/** Compact row from GET /me/checkout-intents (Этап 8.3.1). */
+export interface PurchaseListItem {
+  id: number;
+  created_at: string;
+  product_type: string;
+  product_code: string;
+  product_name: string;
+  amount: string;
+  currency: string;
+  intent_status: string;
+  purchase_status: string;
+  paid_at: string | null;
+  fulfilled_at: string | null;
+  cancelled_at: string | null;
+  refunded_at: string | null;
+  failed_at: string | null;
+  payment_provider: string | null;
+  latest_attempt_status: string | null;
+  fulfilled_subscription_id: number | null;
+  fulfilled_addon_id: number | null;
+  fulfillment_result_type: 'subscription' | 'addon' | null;
+}
+
+export interface PurchaseList {
+  items: PurchaseListItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ListCheckoutIntentsParams {
+  limit?: number;
+  offset?: number;
+  product_type?: CheckoutProductType;
+  status?: string;
+}
+
+export function normalizePurchaseListItem(raw: unknown): PurchaseListItem {
+  const o = asRecord(raw) ?? {};
+  const fulfillment = o.fulfillment_result_type;
+  return {
+    id: asNumber(o.id),
+    created_at: asString(o.created_at),
+    product_type: asString(o.product_type),
+    product_code: asString(o.product_code),
+    product_name: asString(o.product_name),
+    amount: moneyStr(o.amount),
+    currency: asString(o.currency, 'RUB'),
+    intent_status: asString(o.intent_status),
+    purchase_status: asString(o.purchase_status),
+    paid_at: asNullableString(o.paid_at),
+    fulfilled_at: asNullableString(o.fulfilled_at),
+    cancelled_at: asNullableString(o.cancelled_at),
+    refunded_at: asNullableString(o.refunded_at),
+    failed_at: asNullableString(o.failed_at),
+    payment_provider: asNullableString(o.payment_provider),
+    latest_attempt_status: asNullableString(o.latest_attempt_status),
+    fulfilled_subscription_id: asNullableNumber(o.fulfilled_subscription_id),
+    fulfilled_addon_id: asNullableNumber(o.fulfilled_addon_id),
+    fulfillment_result_type:
+      fulfillment === 'subscription' || fulfillment === 'addon' ? fulfillment : null,
+  };
+}
+
+/**
+ * GET /me/checkout-intents — история покупок пользователя (не refundable list).
+ */
+export async function listCheckoutIntents(
+  params?: ListCheckoutIntentsParams
+): Promise<PurchaseList> {
+  const limit = params?.limit ?? 20;
+  const offset = params?.offset ?? 0;
+  const qs = new URLSearchParams();
+  qs.set('limit', String(limit));
+  qs.set('offset', String(offset));
+  if (params?.product_type) {
+    qs.set('product_type', params.product_type);
+  }
+  if (params?.status) {
+    qs.set('status', params.status);
+  }
+  const raw = await get(`/me/checkout-intents?${qs.toString()}`);
+  const o = asRecord(raw) ?? {};
+  const itemsRaw = Array.isArray(o.items) ? o.items : [];
+  return {
+    items: itemsRaw.map(normalizePurchaseListItem),
+    total: asNumber(o.total),
+    limit: asNumber(o.limit, limit),
+    offset: asNumber(o.offset, offset),
+  };
+}
+
 /**
  * POST /me/checkout-intents/{id}/pay
  * return_url только если передан в payload — клиент не подставляет скрытый default.
