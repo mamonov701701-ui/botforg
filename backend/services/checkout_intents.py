@@ -26,6 +26,7 @@ from backend.services.legal_launch import (
     LegalLaunchError,
     assert_production_payments_allowed,
 )
+from backend.services.tariff_limits import get_user_tariff_limits
 
 
 class CheckoutIntentError(Exception):
@@ -37,6 +38,57 @@ class CheckoutIntentError(Exception):
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _effective_plan_code(db: Session, user_id: int) -> str | None:
+    """Effective tariff code from entitlement summary (not legacy users.plan_code)."""
+    try:
+        summary = get_user_tariff_limits(db, user_id)
+    except Exception:
+        return None
+    code = (getattr(summary, "plan_code", None) or "").strip()
+    return code or None
+
+
+def assert_tariff_not_already_active(
+    db: Session,
+    *,
+    user_id: int,
+    tariff_code: str,
+) -> None:
+    """
+    Block purchasing the same tariff the user already has as effective plan.
+    Raises CheckoutIntentError(code=current_tariff_already_active).
+    """
+    requested = (tariff_code or "").strip()
+    if not requested:
+        return
+    current = _effective_plan_code(db, user_id)
+    if current and current == requested:
+        raise CheckoutIntentError(
+            "Этот тариф уже активен",
+            code="current_tariff_already_active",
+        )
+
+
+def assert_addon_purchase_allowed(db: Session, *, user_id: int) -> None:
+    """
+    Block addon checkout when effective plan.limits.addon_purchase is false.
+    Uses entitlement summary (not legacy users.plan_code).
+    Raises CheckoutIntentError(code=addon_not_available_for_current_tariff).
+    """
+    try:
+        summary = get_user_tariff_limits(db, user_id)
+    except Exception as exc:
+        raise CheckoutIntentError(
+            "Не удалось проверить доступность пакетов для текущего тарифа",
+            code="addon_not_available_for_current_tariff",
+        ) from exc
+    if not bool(getattr(summary, "addon_purchase", False)):
+        raise CheckoutIntentError(
+            "Дополнительные пакеты доступны начиная с тарифа «Бизнес»",
+            code="addon_not_available_for_current_tariff",
+        )
 
 
 def _catalog_tariff(db: Session, code: str) -> Plan:
@@ -127,6 +179,7 @@ def create_checkout_intent(
     product_units: int | None = None
     if type_val == CheckoutProductType.TARIFF:
         plan = _catalog_tariff(db, code_norm)
+        assert_tariff_not_already_active(db, user_id=user_id, tariff_code=code_norm)
         name = (plan.name_ru or plan.name or plan.code).strip()
         description = plan.description_ru
         amount = Decimal(str(plan.price_month))
@@ -140,6 +193,7 @@ def create_checkout_intent(
                 product_units = None
     elif type_val == CheckoutProductType.ADDON:
         pkg = _catalog_addon(db, code_norm)
+        assert_addon_purchase_allowed(db, user_id=user_id)
         name = (pkg.name_ru or pkg.code).strip()
         description = pkg.description_ru
         amount = Decimal(str(pkg.price))

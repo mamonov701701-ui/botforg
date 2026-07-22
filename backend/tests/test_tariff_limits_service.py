@@ -168,6 +168,8 @@ def test_active_messages_addon(db, client):
     assert summary.messages_limit == 500 + 1000
     assert len(summary.active_addons) == 1
     assert summary.active_addons[0]["code"] == "msg_1000"
+    assert summary.active_addons[0]["expires_at"] == summary.active_addons[0]["period_end"]
+    assert summary.addon_purchase is False  # start plan
 
 
 def test_active_bot_addon(db, client):

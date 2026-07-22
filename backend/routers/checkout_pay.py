@@ -105,6 +105,7 @@ class CancelOut(BaseModel):
     attempt_id: int | None = None
     attempt_status: str | None = None
     already_cancelled: bool = False
+    payment_already_succeeded: bool = False
     message: str
 
 
@@ -184,6 +185,7 @@ async def cancel_checkout_intent(
         attempt_id=result.attempt.id if result.attempt else None,
         attempt_status=result.attempt.status if result.attempt else None,
         already_cancelled=result.already_cancelled,
+        payment_already_succeeded=result.payment_already_succeeded,
         message=result.message,
     )
 

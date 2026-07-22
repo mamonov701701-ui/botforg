@@ -25,6 +25,8 @@ export const CHECKOUT_ERROR_CODES = {
   providerMisconfigured: 'provider_misconfigured',
   idempotencyRequired: 'idempotency_required',
   invalidProductType: 'invalid_product_type',
+  currentTariffAlreadyActive: 'current_tariff_already_active',
+  addonNotAvailableForCurrentTariff: 'addon_not_available_for_current_tariff',
 } as const;
 
 export interface CreateCheckoutIntentInput {

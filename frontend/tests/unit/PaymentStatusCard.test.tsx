@@ -55,6 +55,20 @@ function cancelled(): PaymentStatus {
   };
 }
 
+function paid(): PaymentStatus {
+  return {
+    intent_id: 11,
+    intent_status: 'fulfilled',
+    amount: '199.00',
+    currency: 'RUB',
+    attempt_status: 'succeeded',
+    normalized_status: 'succeeded',
+    is_final: true,
+    can_retry: false,
+    message: 'Оплата подтверждена',
+  };
+}
+
 describe('PaymentStatusCard', () => {
   beforeEach(() => {
     getCheckoutPaymentStatus.mockReset();
@@ -106,6 +120,7 @@ describe('PaymentStatusCard', () => {
         intent_id: 11,
         intent_status: 'cancelled',
         already_cancelled: false,
+        payment_already_succeeded: false,
         message: 'Оплата отменена',
       });
     });
@@ -113,6 +128,81 @@ describe('PaymentStatusCard', () => {
     await waitFor(() => {
       expect(toast.success).toHaveBeenCalled();
     });
+  });
+
+  it('after cancel always refreshes status', async () => {
+    getCheckoutPaymentStatus.mockResolvedValue(awaiting());
+    cancelCheckoutPayment.mockResolvedValue({
+      intent_id: 11,
+      intent_status: 'cancelled',
+      already_cancelled: false,
+      payment_already_succeeded: false,
+      message: 'Оплата отменена',
+    });
+    getCheckoutPaymentStatus.mockResolvedValueOnce(awaiting()).mockResolvedValueOnce(cancelled());
+
+    render(<PaymentStatusCard intentId={11} pollIntervalMs={60000} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('payment-status-cancel')).toBeInTheDocument();
+    });
+    const callsBefore = getCheckoutPaymentStatus.mock.calls.length;
+    fireEvent.click(screen.getByTestId('payment-status-cancel'));
+    await waitFor(() => {
+      expect(cancelCheckoutPayment).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(getCheckoutPaymentStatus.mock.calls.length).toBeGreaterThan(callsBefore);
+    });
+  });
+
+  it('after reconcile succeeded: hides cancel and shows paid state', async () => {
+    getCheckoutPaymentStatus.mockResolvedValue(awaiting());
+    cancelCheckoutPayment.mockResolvedValue({
+      intent_id: 11,
+      intent_status: 'fulfilled',
+      attempt_status: 'succeeded',
+      already_cancelled: false,
+      payment_already_succeeded: true,
+      message: 'Оплата уже подтверждена',
+    });
+
+    render(<PaymentStatusCard intentId={11} pollIntervalMs={60000} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('payment-status-cancel')).toBeInTheDocument();
+    });
+
+    getCheckoutPaymentStatus.mockResolvedValue(paid());
+    fireEvent.click(screen.getByTestId('payment-status-cancel'));
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('Оплата уже подтверждена');
+    });
+    await waitFor(() => {
+      expect(screen.queryByTestId('payment-status-cancel')).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId('payment-status-title').textContent).toMatch(
+      /оплач|успеш|подтвержд/i
+    );
+  });
+
+  it('does not show raw 502/provider text on cancel error', async () => {
+    getCheckoutPaymentStatus.mockResolvedValue(awaiting());
+    const { ApiError } = await import('@/api/client');
+    cancelCheckoutPayment.mockRejectedValue(
+      new ApiError('YooKassa 502 Bad Gateway provider_http_error', 502, 'provider_error')
+    );
+
+    render(<PaymentStatusCard intentId={11} pollIntervalMs={60000} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('payment-status-cancel')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('payment-status-cancel'));
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalled();
+    });
+    const msg = String(toast.error.mock.calls[0][0] || '');
+    expect(msg).not.toMatch(/yookassa|502|Bad Gateway|provider_http/i);
+    expect(msg.toLowerCase()).toMatch(/недоступ|попробуйте|операц/i);
   });
 
   it('hides cancel for final cancelled status', async () => {

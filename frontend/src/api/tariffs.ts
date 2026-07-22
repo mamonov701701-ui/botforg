@@ -104,6 +104,57 @@ export function buildTariffLimitLines(limits: unknown): string[] {
   return lines;
 }
 
+const PRICING_CARD_CORE_KEYS = [
+  'active_bots',
+  'monthly_messages',
+  'team_members',
+  'analytics_history_days',
+] as const;
+
+/** Доп. преимущества на витрине (только включённые флаги), максимум 3. */
+const PRICING_CARD_EXTRA_KEYS = [
+  'export_reports',
+  'priority_support',
+  'marketplace_access',
+  'template_publish',
+  'scenario_publish',
+] as const;
+
+const PRICING_CARD_MAX_EXTRAS = 3;
+
+function limitLabelEntry(key: string) {
+  return LIMIT_LABELS.find(item => item.key === key);
+}
+
+/**
+ * Компактный набор строк для карточки /pricing.
+ * Полный список — buildTariffLimitLines (CheckoutPage).
+ */
+export function buildPricingCardLines(limits: unknown): string[] {
+  const rec = asRecord(limits);
+  const lines: string[] = [];
+
+  for (const key of PRICING_CARD_CORE_KEYS) {
+    const item = limitLabelEntry(key);
+    if (!item || !(key in rec)) continue;
+    const formatted = item.format(rec[key]);
+    if (formatted == null) continue;
+    lines.push(`${item.label}: ${formatted}`);
+  }
+
+  let extras = 0;
+  for (const key of PRICING_CARD_EXTRA_KEYS) {
+    if (extras >= PRICING_CARD_MAX_EXTRAS) break;
+    const item = limitLabelEntry(key);
+    if (!item || !(key in rec)) continue;
+    if (rec[key] !== true) continue;
+    lines.push(item.label);
+    extras += 1;
+  }
+
+  return lines;
+}
+
 function normalizePublicTariff(raw: unknown): PublicTariff {
   const o = asRecord(raw);
   const priceRaw = o.price_month;

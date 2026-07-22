@@ -26,6 +26,7 @@ export interface CancelPaymentResult {
   attempt_id?: number | null;
   attempt_status?: string | null;
   already_cancelled: boolean;
+  payment_already_succeeded: boolean;
   message: string;
 }
 
@@ -74,6 +75,7 @@ export function normalizeCancelResult(raw: unknown): CancelPaymentResult {
     attempt_id: o.attempt_id == null ? null : asNumber(o.attempt_id),
     attempt_status: o.attempt_status == null ? null : asString(o.attempt_status),
     already_cancelled: asBool(o.already_cancelled, false),
+    payment_already_succeeded: asBool(o.payment_already_succeeded, false),
     message: asString(o.message, 'Оплата отменена'),
   };
 }
@@ -88,14 +90,31 @@ export async function cancelCheckoutPayment(intentId: number): Promise<CancelPay
   return normalizeCancelResult(raw);
 }
 
-/** Безопасное сообщение для UI: без stack/raw detail. */
+/** Безопасное сообщение для UI: без stack/raw detail / provider codes. */
 export function safePaymentErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const msg = (error.message || '').trim();
-    if (msg && !msg.includes('Traceback') && !msg.includes('stack')) {
-      return msg;
+    const lower = msg.toLowerCase();
+    if (
+      !msg ||
+      msg.includes('Traceback') ||
+      msg.includes('stack') ||
+      lower.includes('yookassa') ||
+      lower.includes('payment_method') ||
+      /\b502\b|\b503\b|\b504\b/.test(msg) ||
+      lower.includes('bad gateway') ||
+      lower.includes('provider_error') ||
+      lower.includes('provider_http')
+    ) {
+      if (error.status === 504) {
+        return 'Платёжная система не ответила вовремя. Попробуйте позже.';
+      }
+      if (error.status === 502 || error.status === 503) {
+        return 'Платёжная система временно недоступна. Попробуйте позже.';
+      }
+      return 'Не удалось выполнить операцию. Попробуйте позже.';
     }
-    return 'Не удалось выполнить операцию. Попробуйте позже.';
+    return msg;
   }
   if (error instanceof Error) {
     const msg = (error.message || '').trim();

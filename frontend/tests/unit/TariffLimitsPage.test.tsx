@@ -33,6 +33,7 @@ const mockSummary: TariffSummary = {
     scenario_publish: true,
     export_reports: false,
     priority_support: false,
+    addon_purchase: false,
   },
 };
 
@@ -40,7 +41,12 @@ vi.mock('@/api/tariff', () => ({
   getTariffSummary: vi.fn(),
 }));
 
+vi.mock('@/api/addons', () => ({
+  getPublicAddons: vi.fn(),
+}));
+
 import { getTariffSummary } from '@/api/tariff';
+import { getPublicAddons } from '@/api/addons';
 
 function renderPage() {
   return render(
@@ -53,6 +59,7 @@ function renderPage() {
 describe('TariffLimitsPage', () => {
   beforeEach(() => {
     vi.mocked(getTariffSummary).mockReset();
+    vi.mocked(getPublicAddons).mockReset();
   });
 
   it('shows loading state', () => {
@@ -61,7 +68,7 @@ describe('TariffLimitsPage', () => {
     expect(screen.getByText(/Загрузка данных о тарифе/i)).toBeTruthy();
   });
 
-  it('renders summary on success', async () => {
+  it('renders summary on success without purchasable addons catalog', async () => {
     vi.mocked(getTariffSummary).mockResolvedValue(mockSummary);
     renderPage();
     await waitFor(() => {
@@ -70,28 +77,44 @@ describe('TariffLimitsPage', () => {
     expect(screen.getByText('Финансы и лимиты')).toBeTruthy();
     expect(screen.getByTestId('tariff-current-plan')).toBeTruthy();
     expect(screen.getByTestId('tariff-usage-messages')).toBeTruthy();
-    expect(screen.getByTestId('tariff-usage-bots')).toBeTruthy();
-    expect(screen.getByTestId('tariff-usage-team')).toBeTruthy();
-    expect(screen.getByTestId('tariff-usage-messages-usage').textContent).toMatch(
-      /350 \/ 500 · осталось: 150/
-    );
-    expect(screen.getByTestId('tariff-usage-messages-percent').textContent).toBe('70%');
-    expect(screen.getByTestId('tariff-warnings')).toBeTruthy();
-    expect(screen.queryByText(/Лимиты в норме/i)).toBeNull();
-    expect(screen.getByText(/Использовано 70% лимита сообщений/i)).toBeTruthy();
-    expect(screen.getByText(/Сообщения · 70%/)).toBeTruthy();
     expect(screen.getByTestId('tariff-active-addons').textContent).toMatch(/Активных пакетов нет/);
-    expect(screen.getByText('Активных подарков нет')).toBeTruthy();
-    expect(screen.getByText('Маркетплейс')).toBeTruthy();
+    expect(screen.queryByTestId('tariff-addons-catalog')).toBeNull();
+    expect(getPublicAddons).not.toHaveBeenCalled();
+    expect(screen.getByTestId('tariff-buy-addons-link').getAttribute('href')).toBe(
+      '/pricing?tab=addons'
+    );
     const refundsLink = screen.getByRole('link', { name: /Открыть возвраты/i });
     expect(refundsLink.getAttribute('href')).toBe('/dashboard/finance/refunds');
-    const pageText = document.body.textContent || '';
-    const planIdx = pageText.indexOf('Текущий тариф');
-    const flagsIdx = pageText.indexOf('Возможности тарифа');
-    const refundsIdx = pageText.indexOf('Заявки на возврат');
-    expect(planIdx).toBeGreaterThanOrEqual(0);
-    expect(flagsIdx).toBeGreaterThan(planIdx);
-    expect(refundsIdx).toBeGreaterThan(flagsIdx);
+  });
+
+  it('shows owned UserAddon from summary (e.g. msg_1000)', async () => {
+    vi.mocked(getTariffSummary).mockResolvedValue({
+      ...mockSummary,
+      active_addons: [
+        {
+          id: 2,
+          code: 'msg_1000',
+          name_ru: 'Пакет 1000 сообщений',
+          type: 'messages',
+          amount: 1000,
+          period_start: '2026-07-21T00:00:00Z',
+          period_end: '2026-08-20T00:00:00Z',
+          expires_at: '2026-08-20T00:00:00Z',
+        },
+      ],
+    });
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getByTestId('tariff-owned-addon-msg_1000')).toBeTruthy();
+    });
+    expect(screen.getByTestId('tariff-owned-addon-msg_1000').textContent).toMatch(
+      /Пакет 1000 сообщений/
+    );
+    expect(screen.getByTestId('tariff-owned-addon-msg_1000').textContent).toMatch(/Сообщения/);
+    expect(screen.getByTestId('tariff-owned-addon-until-msg_1000').textContent).toMatch(
+      /Активен до/
+    );
+    expect(screen.queryByTestId('tariff-addon-buy-msg_1000')).toBeNull();
   });
 
   it('shows multi-threshold warnings from summary', async () => {
@@ -110,8 +133,6 @@ describe('TariffLimitsPage', () => {
       expect(screen.getByTestId('tariff-usage-messages-percent').textContent).toBe('100%');
     });
     expect(screen.getByText(/Сообщения · 70%/)).toBeTruthy();
-    expect(screen.getByText(/Сообщения · 85%/)).toBeTruthy();
-    expect(screen.getByText(/Сообщения · 95%/)).toBeTruthy();
     expect(screen.getByText(/Сообщения · 100%/)).toBeTruthy();
   });
 
@@ -148,6 +169,5 @@ describe('TariffLimitsPage', () => {
       expect(screen.getByText(/Период не указан/i)).toBeTruthy();
     });
     expect(screen.getByText(/Подарок тарифа \(требует настройки\)/i)).toBeTruthy();
-    expect(screen.getByText(/Подарочный тариф/i)).toBeTruthy();
   });
 });

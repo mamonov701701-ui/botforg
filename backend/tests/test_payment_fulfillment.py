@@ -83,6 +83,25 @@ def _tariff_intent(db, user_id, key="t1"):
 
 
 def _addon_intent(db, user_id, key="a1"):
+    from datetime import datetime, timedelta, timezone
+
+    from backend.models.plan import Plan
+    from backend.models.tariff import SubscriptionStatus
+
+    # Addon checkout requires effective plan.limits.addon_purchase (Business+).
+    plan = db.query(Plan).filter(Plan.code == "business").one()
+    start = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(
+        UserSubscription(
+            user_id=user_id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=start,
+            current_period_end=start + timedelta(days=30),
+        )
+    )
+    db.commit()
+
     pkg = _ensure_addon(db)
     return create_checkout_intent(
         db,
@@ -141,6 +160,26 @@ def test_fulfill_addon_creates_user_addon(client, db):
     addons = db.query(UserAddon).filter(UserAddon.user_id == uid).all()
     assert len(addons) == 1
     assert addons[0].provider_ref == "testpay:pay-addon-1"
+    # Default validity: 30 calendar days from activation.
+    delta = addons[0].period_end - addons[0].period_start
+    assert abs(delta.total_seconds() - 30 * 24 * 3600) < 2
+
+
+def test_fulfill_addon_replay_does_not_extend_or_duplicate(client, db):
+    _, uid = _user(client, db)
+    intent = _addon_intent(db, uid, key="addon-idem")
+    r1 = _fulfill(db, intent, uid, event_id="e-a-idem", payment_id="pay-addon-idem")
+    end1 = (
+        db.query(UserAddon)
+        .filter(UserAddon.id == r1.intent.fulfilled_addon_id)
+        .one()
+        .period_end
+    )
+    r2 = _fulfill(db, intent, uid, event_id="e-a-idem-2", payment_id="pay-addon-idem")
+    assert r2.already_fulfilled is True
+    addons = db.query(UserAddon).filter(UserAddon.user_id == uid).all()
+    assert len(addons) == 1
+    assert addons[0].period_end == end1
 
 
 def test_webhook_replay_is_idempotent(client, db):

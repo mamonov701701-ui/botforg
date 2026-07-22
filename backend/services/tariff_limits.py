@@ -111,6 +111,8 @@ class TariffLimitsSummary:
     marketplace_access: bool = True
     template_publish: bool = True
     scenario_publish: bool = True
+    # Purchase of public addon packages (Business+). Default False = fail-closed.
+    addon_purchase: bool = False
     source: str = "legacy_plan_code"  # subscription | legacy_plan_code | fallback_start
 
     def to_dict(self) -> dict[str, Any]:
@@ -224,6 +226,7 @@ def get_user_tariff_limits(
         marketplace_access=bool(base.get("marketplace_access", True)),
         template_publish=bool(base.get("template_publish", True)),
         scenario_publish=bool(base.get("scenario_publish", True)),
+        addon_purchase=bool(base.get("addon_purchase", False)),
         source=source,
     )
     summary.warnings = (
@@ -406,6 +409,8 @@ def _parse_plan_limits(plan: Plan | None) -> dict[str, Any]:
         "marketplace_access": bool(raw.get("marketplace_access", True)),
         "template_publish": bool(raw.get("template_publish", True)),
         "scenario_publish": bool(raw.get("scenario_publish", True)),
+        # Missing key → False (fail-closed): Start / legacy free/pro/developer.
+        "addon_purchase": bool(raw.get("addon_purchase", False)),
     }
 
 
@@ -474,6 +479,7 @@ def _sum_active_addons(
         amount = user_addon.amount or package.amount or 0
         pkg_type = _enum_value(package.type)
         _apply_addon_bonus(bonuses, pkg_type, amount)
+        period_end_iso = p_end.isoformat()
         out_list.append(
             {
                 "id": user_addon.id,
@@ -482,7 +488,9 @@ def _sum_active_addons(
                 "type": pkg_type,
                 "amount": amount,
                 "period_start": p_start.isoformat(),
-                "period_end": p_end.isoformat(),
+                "period_end": period_end_iso,
+                # Alias for UI: same source of truth as period_end.
+                "expires_at": period_end_iso,
             }
         )
     return bonuses

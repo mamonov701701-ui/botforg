@@ -576,14 +576,6 @@ export default function HomePage() {
           isLoading={loading}
         />
         <KPICard
-          icon={Wallet}
-          label="Бонусный баланс"
-          value={loading ? '...' : `${dashboardData?.summary?.bonus_balance || 0} ₽`}
-          change={loading ? '' : 'Доступно для покупок'}
-          changeType="neutral"
-          isLoading={loading}
-        />
-        <KPICard
           icon={Star}
           label="Сценарии"
           value={loading ? '...' : dashboardData?.summary?.total_scenarios || 0}

@@ -101,10 +101,36 @@ export function addonTitle(item: TariffAddonItem): string {
 }
 
 export function addonDetails(item: TariffAddonItem): string {
-  const type = item.type != null ? String(item.type) : '';
+  const typeRaw = item.type != null ? String(item.type) : '';
+  const type = typeRaw
+    ? ({
+        messages: 'Сообщения',
+        active_bots: 'Активные боты',
+        active_bot: 'Активные боты',
+        team_members: 'Участники команды',
+        team_member: 'Участник команды',
+      }[typeRaw.toLowerCase()] ?? typeRaw)
+    : '';
   const amount = item.amount != null ? String(item.amount) : '';
   const parts = [type, amount ? `+${amount}` : ''].filter(Boolean);
   return parts.join(' · ') || 'Активный пакет';
+}
+
+/** Active-until line from backend period_end / expires_at (not FE-computed). */
+export function addonActiveUntilLine(item: TariffAddonItem): string {
+  const endRaw = item.expires_at ?? item.period_end ?? item.valid_until;
+  if (typeof endRaw === 'string' && endRaw.trim()) {
+    return `Активен до ${formatPeriodDate(endRaw)}`;
+  }
+  return 'Активен';
+}
+
+export function addonActivatedOnLine(item: TariffAddonItem): string | null {
+  const startRaw = item.period_start;
+  if (typeof startRaw === 'string' && startRaw.trim()) {
+    return `Активирован: ${formatPeriodDate(startRaw)}`;
+  }
+  return null;
 }
 
 export function giftTitle(item: TariffGiftItem): string {

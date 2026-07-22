@@ -35,6 +35,7 @@ export interface TariffFlags {
   scenario_publish: boolean;
   export_reports: boolean;
   priority_support: boolean;
+  addon_purchase: boolean;
 }
 
 /** Элемент active_addons / active_gifts из backend (гибкая схема). */
@@ -58,6 +59,7 @@ const DEFAULT_FLAGS: TariffFlags = {
   scenario_publish: true,
   export_reports: false,
   priority_support: false,
+  addon_purchase: false,
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -144,6 +146,7 @@ export function normalizeTariffSummary(raw: unknown): TariffSummary {
       scenario_publish: coerceBool(flagsRaw.scenario_publish, DEFAULT_FLAGS.scenario_publish),
       export_reports: coerceBool(flagsRaw.export_reports, DEFAULT_FLAGS.export_reports),
       priority_support: coerceBool(flagsRaw.priority_support, DEFAULT_FLAGS.priority_support),
+      addon_purchase: coerceBool(flagsRaw.addon_purchase, DEFAULT_FLAGS.addon_purchase),
     },
   };
 }

@@ -18,6 +18,8 @@ import Card from '../components/Card';
 import { ApiError } from '../../../api/client';
 import { getTariffSummary, type TariffSummary, type UsageBlock } from '../../../api/tariff';
 import {
+  addonActiveUntilLine,
+  addonActivatedOnLine,
   addonDetails,
   addonTitle,
   formatBillingPeriod,
@@ -341,6 +343,7 @@ export default function TariffLimitsPage() {
                       {summary.active_addons.map((item, i) => (
                         <li
                           key={String(item.id ?? i)}
+                          data-testid={`tariff-owned-addon-${String(item.code ?? item.id ?? i)}`}
                           style={{
                             padding: '10px 0',
                             borderBottom:
@@ -353,10 +356,46 @@ export default function TariffLimitsPage() {
                           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
                             {addonDetails(item)}
                           </div>
+                          {addonActivatedOnLine(item) ? (
+                            <div
+                              style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: 4 }}
+                              data-testid={`tariff-owned-addon-activated-${String(item.code ?? item.id ?? i)}`}
+                            >
+                              {addonActivatedOnLine(item)}
+                            </div>
+                          ) : null}
+                          <div
+                            style={{
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              color: '#10b981',
+                              marginTop: 4,
+                            }}
+                            data-testid={`tariff-owned-addon-until-${String(item.code ?? item.id ?? i)}`}
+                          >
+                            {addonActiveUntilLine(item)}
+                          </div>
                         </li>
                       ))}
                     </ul>
                   )}
+                  <p
+                    style={{
+                      margin: '14px 0 0',
+                      fontSize: '13px',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    Купить дополнительные пакеты можно на{' '}
+                    <Link
+                      to="/pricing?tab=addons"
+                      data-testid="tariff-buy-addons-link"
+                      style={{ color: 'var(--primary)', fontWeight: 600 }}
+                    >
+                      странице пакетов
+                    </Link>
+                    .
+                  </p>
                 </Card>
               </div>
 

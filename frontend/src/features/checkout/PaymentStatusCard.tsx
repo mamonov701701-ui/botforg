@@ -2,8 +2,12 @@
  * Переиспользуемая карточка статуса оплаты (Этап 6.11.4).
  * Не показывает внутренние ID, provider codes, stack traces.
  */
-import React, { useCallback, useState } from 'react';
-import { cancelCheckoutPayment, safePaymentErrorMessage } from '@/api/checkoutPay';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  cancelCheckoutPayment,
+  safePaymentErrorMessage,
+  type PaymentStatus,
+} from '@/api/checkoutPay';
 import { toast } from '@/utils/toast';
 import {
   canShowCancelButton,
@@ -24,12 +28,15 @@ export interface PaymentStatusCardProps {
   pollIntervalMs?: number;
   onRetryPay?: () => void;
   onCancelled?: () => void;
+  /** Уведомление родителя о смене статуса (без второго polling). */
+  onStatusChange?: (status: PaymentStatus | null) => void;
   className?: string;
 }
 
 const STATE_HINT: Record<PaymentUiState, string> = {
   awaiting_payment: 'Перейдите к оплате и завершите её в платёжной системе.',
-  processing: 'Мы получили платёж и ждём подтверждение. Это обычно занимает несколько секунд.',
+  processing:
+    'Мы получили платёж и ждём подтверждение. Страницу обновлять вручную не нужно — статус обновится сам.',
   paid: 'Доступ активирован. Можно пользоваться тарифом или пакетом.',
   cancelled: 'Для повторной оплаты создайте новый заказ.',
   failed: 'Оплата не завершена. При необходимости обратитесь в поддержку.',
@@ -42,6 +49,7 @@ export default function PaymentStatusCard({
   pollIntervalMs = DEFAULT_PAYMENT_POLL_INTERVAL_MS,
   onRetryPay,
   onCancelled,
+  onStatusChange,
   className,
 }: PaymentStatusCardProps) {
   const { status, loading, error, isPolling, refresh } = usePaymentStatusPolling({
@@ -52,6 +60,10 @@ export default function PaymentStatusCard({
 
   const [cancelling, setCancelling] = useState(false);
   const cancelLockRef = React.useRef(false);
+
+  useEffect(() => {
+    onStatusChange?.(status);
+  }, [status, onStatusChange]);
 
   const uiState = status ? resolvePaymentUiState(status) : 'awaiting_payment';
   const title = paymentUiTitle(uiState);
@@ -65,11 +77,22 @@ export default function PaymentStatusCard({
     setCancelling(true);
     try {
       const result = await cancelCheckoutPayment(intentId);
-      toast.success(result.message || 'Оплата отменена');
+      // Always re-read status after cancel/reconcile so UI leaves false pending.
       await refresh();
-      onCancelled?.();
+      if (result.payment_already_succeeded) {
+        toast.success(result.message || 'Оплата уже подтверждена');
+      } else {
+        toast.success(result.message || 'Оплата отменена');
+        onCancelled?.();
+      }
     } catch (err) {
       toast.error(safePaymentErrorMessage(err));
+      // Refresh even on error — backend may have partially synced.
+      try {
+        await refresh();
+      } catch {
+        /* ignore refresh errors after cancel failure */
+      }
     } finally {
       cancelLockRef.current = false;
       setCancelling(false);

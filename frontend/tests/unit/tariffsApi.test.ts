@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   RECOMMENDED_BADGE_LABEL,
+  buildPricingCardLines,
   buildTariffLimitLines,
   formatTariffPriceMonth,
   getPublicTariffs,
@@ -83,6 +84,43 @@ describe('buildTariffLimitLines', () => {
     expect(lines.some(l => l.includes('Экспорт отчётов'))).toBe(true);
     expect(lines.every(l => !l.includes('unknown_key'))).toBe(true);
     expect(lines.every(l => !l.includes('active_bots'))).toBe(true);
+  });
+});
+
+describe('buildPricingCardLines', () => {
+  it('keeps core metrics and at most 3 true extras', () => {
+    const lines = buildPricingCardLines({
+      active_bots: 3,
+      monthly_messages: 10000,
+      team_members: 2,
+      analytics_history_days: 90,
+      export_reports: true,
+      priority_support: true,
+      marketplace_access: true,
+      template_publish: true,
+      scenario_publish: true,
+    });
+    expect(lines.some(l => l.includes('Активные боты: 3'))).toBe(true);
+    expect(lines.some(l => l.includes('Сообщений в месяц: 10000'))).toBe(true);
+    expect(lines.some(l => l.includes('Участников команды: 2'))).toBe(true);
+    expect(lines.some(l => l.includes('История аналитики: 90 дн.'))).toBe(true);
+    expect(lines.length).toBeLessThanOrEqual(7);
+    expect(lines.filter(l => !l.includes(':')).length).toBeLessThanOrEqual(3);
+  });
+
+  it('is shorter than full checkout feature list', () => {
+    const limits = {
+      active_bots: 3,
+      monthly_messages: 10000,
+      team_members: 2,
+      analytics_history_days: 90,
+      export_reports: true,
+      priority_support: true,
+      marketplace_access: true,
+      template_publish: true,
+      scenario_publish: true,
+    };
+    expect(buildPricingCardLines(limits).length).toBeLessThan(buildTariffLimitLines(limits).length);
   });
 });
 

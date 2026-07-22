@@ -34,8 +34,13 @@ class PlanListOut(BaseModel):
     items: list[PlanOut]
 
 
-@router.get("/", response_model=PlanListOut)
+@router.get("/", response_model=PlanListOut, deprecated=True)
 async def get_plans(db: Session = Depends(get_db)):
-    """Список всех тарифов."""
+    """
+    Legacy-список всех тарифов.
+
+    Deprecated: публичный каталог — GET /tariffs (is_active + is_public).
+    Контракт ответа сохранён; endpoint пока не удаляется.
+    """
     plans = db.query(Plan).order_by(Plan.id).all()
     return {"total": len(plans), "items": plans}

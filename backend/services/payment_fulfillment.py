@@ -26,6 +26,7 @@ from backend.models.checkout import (
 )
 from backend.models.plan import Plan
 from backend.models.tariff import AddonPackage, UserAddonSource
+from backend.services.addon_validity import resolve_addon_validity_days
 from backend.services.tariff_entitlements import (
     EntitlementError,
     activate_subscription,
@@ -494,7 +495,7 @@ def fulfill_paid_intent(
         intent.updated_at = at
 
         p_start = _normalize_dt(period_start or at)
-        p_end = _normalize_dt(period_end or (p_start + timedelta(days=30)))
+        p_end = _normalize_dt(period_end) if period_end is not None else None
         provider_ref = f"{provider}:{provider_payment_id}"
 
         if intent.product_type == CheckoutProductType.TARIFF.value:
@@ -504,6 +505,8 @@ def fulfill_paid_intent(
                     f"Plan code={intent.product_code!r} not found",
                     code="plan_not_found",
                 )
+            if p_end is None:
+                p_end = _normalize_dt(p_start + timedelta(days=30))
             sub = activate_subscription(
                 db,
                 user_id=intent.user_id,
@@ -528,6 +531,9 @@ def fulfill_paid_intent(
                     f"Addon code={intent.product_code!r} not found",
                     code="addon_not_found",
                 )
+            if p_end is None:
+                days = resolve_addon_validity_days(pkg)
+                p_end = _normalize_dt(p_start + timedelta(days=days))
             addon = create_user_addon(
                 db,
                 user_id=intent.user_id,

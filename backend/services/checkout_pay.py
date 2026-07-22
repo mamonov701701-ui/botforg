@@ -15,13 +15,23 @@ from backend.models.checkout import (
     CHECKOUT_TERMINAL_BLOCKING,
     CheckoutIntent,
     CheckoutIntentStatus,
+    CheckoutProductType,
     PaymentAttempt,
     PaymentAttemptStatus,
 )
 from backend.payments.base import PaymentProviderError
 from backend.payments.dto import CreatePaymentRequest, NormalizedPaymentStatus
 from backend.payments.registry import PaymentProviderRegistryError, get_payment_provider
-from backend.services.payment_fulfillment import FulfillmentError, create_payment_attempt
+from backend.services.checkout_intents import (
+    CheckoutIntentError,
+    assert_addon_purchase_allowed,
+    assert_tariff_not_already_active,
+)
+from backend.services.payment_fulfillment import (
+    FulfillmentError,
+    create_payment_attempt,
+    fulfill_paid_intent,
+)
 from backend.services.payment_provider_connections import (
     ConnectionServiceError,
     decrypt_connection_credentials_for_internal_use,
@@ -118,11 +128,120 @@ class CheckoutCancelResult:
     intent: CheckoutIntent
     attempt: PaymentAttempt | None
     already_cancelled: bool = False
+    payment_already_succeeded: bool = False
     message: str = "Оплата отменена"
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _resolve_attempt_provider(db: Session, attempt: PaymentAttempt):
+    """Build provider adapter for an existing attempt (credentials cleared by caller)."""
+    creds: dict[str, str] = {}
+    if attempt.connection_id:
+        conn = get_connection(db, attempt.connection_id)
+        creds = decrypt_connection_credentials_for_internal_use(conn)
+        provider = get_payment_provider(attempt.provider, credentials=creds)
+    else:
+        provider = get_payment_provider(attempt.provider)
+    return provider, creds
+
+
+def _mark_local_cancelled(
+    db: Session,
+    *,
+    intent: CheckoutIntent,
+    attempt: PaymentAttempt | None,
+) -> CheckoutCancelResult:
+    at = _utcnow()
+    if attempt is not None:
+        attempt.status = PaymentAttemptStatus.CANCELLED.value
+        attempt.updated_at = at
+        db.add(attempt)
+
+    intent.status = CheckoutIntentStatus.CANCELLED.value
+    intent.cancelled_at = at
+    intent.updated_at = at
+    db.add(intent)
+    db.commit()
+    db.refresh(intent)
+    if attempt is not None:
+        db.refresh(attempt)
+
+    return CheckoutCancelResult(
+        intent=intent,
+        attempt=attempt,
+        already_cancelled=False,
+        payment_already_succeeded=False,
+        message="Оплата отменена",
+    )
+
+
+def _reconcile_succeeded_on_cancel(
+    db: Session,
+    *,
+    intent: CheckoutIntent,
+    attempt: PaymentAttempt,
+    live_amount: Decimal | None,
+    live_currency: str | None,
+) -> CheckoutCancelResult:
+    """
+    Provider already succeeded while local intent still awaiting_payment.
+    Fulfill idempotently; never call provider cancel.
+    """
+    amount = live_amount if live_amount is not None else (attempt.amount or intent.amount)
+    currency = (live_currency or attempt.currency or intent.currency or "RUB").strip()
+    payment_id = (attempt.provider_payment_id or "").strip()
+    provider_name = (attempt.provider or "").strip() or "unknown"
+    event_id = f"cancel-reconcile:{provider_name}:{payment_id}:succeeded"
+
+    try:
+        result = fulfill_paid_intent(
+            db,
+            checkout_intent_id=intent.id,
+            user_id=intent.user_id,
+            provider=provider_name,
+            provider_payment_id=payment_id,
+            provider_event_id=event_id,
+            event_type="payment.succeeded",
+            amount=amount,
+            currency=currency,
+            payload={
+                "source": "cancel_reconcile",
+                "provider_payment_id": payment_id,
+            },
+            payment_attempt_id=attempt.id,
+        )
+    except FulfillmentError as exc:
+        # If concurrent webhook already fulfilled, surface paid state instead of 502.
+        db.refresh(intent)
+        if intent.status == CheckoutIntentStatus.FULFILLED.value:
+            refreshed = (
+                db.query(PaymentAttempt)
+                .filter(PaymentAttempt.id == attempt.id)
+                .first()
+            )
+            return CheckoutCancelResult(
+                intent=intent,
+                attempt=refreshed or attempt,
+                already_cancelled=False,
+                payment_already_succeeded=True,
+                message="Оплата уже подтверждена",
+            )
+        raise CheckoutPayError(
+            "Не удалось подтвердить уже оплаченный заказ. Обновите статус оплаты.",
+            code="reconcile_failed",
+            http_status=409,
+        ) from exc
+
+    return CheckoutCancelResult(
+        intent=result.intent or intent,
+        attempt=result.attempt or attempt,
+        already_cancelled=False,
+        payment_already_succeeded=True,
+        message="Оплата уже подтверждена",
+    )
 
 
 def map_payment_provider_error(exc: PaymentProviderError) -> CheckoutPayError:
@@ -272,6 +391,32 @@ def start_checkout_payment(
             code="intent_already_paid",
             http_status=409,
         )
+
+    # Stale tariff intent: user already has this plan as effective current tariff.
+    if (intent.product_type or "") == CheckoutProductType.TARIFF.value:
+        try:
+            assert_tariff_not_already_active(
+                db, user_id=user_id, tariff_code=intent.product_code or ""
+            )
+        except CheckoutIntentError as exc:
+            if exc.code == "current_tariff_already_active":
+                raise CheckoutPayError(
+                    exc.message,
+                    code=exc.code,
+                    http_status=409,
+                ) from exc
+            raise CheckoutPayError(exc.message, code=exc.code, http_status=409) from exc
+
+    # Stale addon intent: effective plan no longer allows addon_purchase.
+    if (intent.product_type or "") == CheckoutProductType.ADDON.value:
+        try:
+            assert_addon_purchase_allowed(db, user_id=user_id)
+        except CheckoutIntentError as exc:
+            raise CheckoutPayError(
+                exc.message,
+                code=exc.code or "addon_not_available_for_current_tariff",
+                http_status=403,
+            ) from exc
 
     key = (idempotency_key or "").strip()
     if not key:
@@ -462,9 +607,9 @@ def cancel_checkout_payment(
     """
     Отмена неоплаченного checkout владельцем.
 
-    Только pending / awaiting_payment. При pending attempt с provider_payment_id
-    вызывается provider.cancel_payment; при timeout/неизвестном результате
-    локальный статус не помечается cancelled.
+    Перед provider.cancel: сверка фактического статуса через get_payment_status.
+    Если провайдер уже succeeded — reconcile/fulfill без cancel (защита от race
+    missed-webhook). Если уже canceled — только локальная синхронизация.
     """
     intent = (
         db.query(CheckoutIntent)
@@ -488,6 +633,7 @@ def cancel_checkout_payment(
             intent=intent,
             attempt=attempt,
             already_cancelled=True,
+            payment_already_succeeded=False,
             message="Оплата уже отменена",
         )
 
@@ -534,13 +680,53 @@ def cancel_checkout_payment(
 
     if attempt is not None and attempt.provider_payment_id:
         creds: dict[str, str] = {}
+        cancel_result = None
         try:
-            if attempt.connection_id:
-                conn = get_connection(db, attempt.connection_id)
-                creds = decrypt_connection_credentials_for_internal_use(conn)
-                provider = get_payment_provider(attempt.provider, credentials=creds)
-            else:
-                provider = get_payment_provider(attempt.provider)
+            provider, creds = _resolve_attempt_provider(db, attempt)
+
+            # Sync with provider before cancel — avoid cancelling a succeeded payment.
+            try:
+                live = provider.get_payment_status(attempt.provider_payment_id)
+            except PaymentProviderError as exc:
+                # Fail-closed: do not mark local cancel without confirmed provider state.
+                raise map_payment_provider_error(exc) from exc
+
+            if live.status == NormalizedPaymentStatus.SUCCEEDED:
+                return _reconcile_succeeded_on_cancel(
+                    db,
+                    intent=intent,
+                    attempt=attempt,
+                    live_amount=live.amount,
+                    live_currency=live.currency,
+                )
+
+            if live.status == NormalizedPaymentStatus.CANCELLED:
+                return _mark_local_cancelled(db, intent=intent, attempt=attempt)
+
+            if live.status == NormalizedPaymentStatus.FAILED:
+                at = _utcnow()
+                attempt.status = PaymentAttemptStatus.FAILED.value
+                attempt.updated_at = at
+                db.add(attempt)
+                intent.status = CheckoutIntentStatus.FAILED.value
+                intent.failed_at = at
+                intent.updated_at = at
+                db.add(intent)
+                db.commit()
+                db.refresh(intent)
+                db.refresh(attempt)
+                return CheckoutCancelResult(
+                    intent=intent,
+                    attempt=attempt,
+                    already_cancelled=False,
+                    payment_already_succeeded=False,
+                    message=(
+                        "Оплата уже завершена в платёжной системе с другим статусом. "
+                        "Локальный статус обновлён."
+                    ),
+                )
+
+            # Still pending / waiting_for_capture — existing cancel path.
             cancel_result = provider.cancel_payment(attempt.provider_payment_id)
         except ConnectionServiceError as exc:
             raise _map_connection_service_error(exc) from exc
@@ -553,39 +739,38 @@ def cancel_checkout_payment(
         except PaymentProviderError as exc:
             # Timeout / network / HTTP — do not mark local cancel as success.
             raise map_payment_provider_error(exc) from exc
+        except CheckoutPayError:
+            raise
         finally:
             for k in list(creds.keys()):
                 creds[k] = ""
             creds.clear()
 
+        if cancel_result is None:
+            raise CheckoutPayError(
+                "Не удалось выполнить отмену платежа. Статус не изменён.",
+                code="cancel_not_confirmed",
+                http_status=409,
+            )
+
         if cancel_result.status != NormalizedPaymentStatus.CANCELLED:
+            # Race: cancel rejected because payment succeeded meanwhile.
+            if cancel_result.status == NormalizedPaymentStatus.SUCCEEDED:
+                return _reconcile_succeeded_on_cancel(
+                    db,
+                    intent=intent,
+                    attempt=attempt,
+                    live_amount=None,
+                    live_currency=None,
+                )
             raise CheckoutPayError(
                 "Не удалось подтвердить отмену платежа. Статус не изменён.",
                 code="cancel_not_confirmed",
                 http_status=409,
             )
 
-    at = _utcnow()
-    if attempt is not None:
-        attempt.status = PaymentAttemptStatus.CANCELLED.value
-        attempt.updated_at = at
-        db.add(attempt)
+    return _mark_local_cancelled(db, intent=intent, attempt=attempt)
 
-    intent.status = CheckoutIntentStatus.CANCELLED.value
-    intent.cancelled_at = at
-    intent.updated_at = at
-    db.add(intent)
-    db.commit()
-    db.refresh(intent)
-    if attempt is not None:
-        db.refresh(attempt)
-
-    return CheckoutCancelResult(
-        intent=intent,
-        attempt=attempt,
-        already_cancelled=False,
-        message="Оплата отменена",
-    )
 
 
 def _normalized_payment_view(

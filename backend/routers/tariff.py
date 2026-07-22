@@ -12,6 +12,7 @@ from backend.schemas.tariff import (
     TariffSummaryOut,
     tariff_summary_from_service,
 )
+from backend.services.addon_validity import resolve_addon_validity_days
 from backend.services.tariff_limits import get_user_tariff_limits
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -44,6 +45,7 @@ def _public_addon_out(pkg: AddonPackage) -> PublicAddonOut:
         price=pkg.price,
         currency=pkg.currency or "RUB",
         duration_type=pkg.duration_type,
+        validity_days=resolve_addon_validity_days(pkg),
         available_from_plan=pkg.available_from_plan,
         max_per_period=pkg.max_per_period,
         sort_order=int(pkg.sort_order or 0),

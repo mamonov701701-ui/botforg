@@ -105,6 +105,7 @@ def test_tariff_summary_start_plan_structure(client, db):
     assert data["flags"]["marketplace_access"] is True
     assert data["flags"]["template_publish"] is True
     assert data["flags"]["scenario_publish"] is True
+    assert data["flags"]["addon_purchase"] is False
 
 
 def test_tariff_summary_matches_tariff_limits_service(client, db):
@@ -183,6 +184,8 @@ def test_tariff_summary_active_addons_and_gifts(client, db):
     data = res.json()
     assert len(data["active_addons"]) == 1
     assert data["active_addons"][0]["code"] == "api_msg_500"
+    assert "period_end" in data["active_addons"][0]
+    assert data["active_addons"][0]["expires_at"] == data["active_addons"][0]["period_end"]
     assert len(data["active_gifts"]) == 1
     assert data["active_gifts"][0]["gift_type"] == "messages"
     assert data["messages"]["limit"] == 500 + 500 + 100

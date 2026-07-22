@@ -20,7 +20,11 @@ from backend.models.checkout import (
 from backend.models.tariff import UserSubscription
 from backend.models.user import User
 from backend.payments.base import PaymentProviderError
-from backend.payments.dto import CancelPaymentResult, NormalizedPaymentStatus
+from backend.payments.dto import (
+    CancelPaymentResult,
+    NormalizedPaymentStatus,
+    PaymentStatusResult,
+)
 from backend.services.checkout_pay import map_payment_provider_error
 from backend.services.payment_fulfillment import fulfill_paid_intent
 from backend.settings import settings
@@ -134,6 +138,36 @@ def _pending_intent(db, user_id: int, key: str = "intent-ec1") -> CheckoutIntent
     return intent
 
 
+def _status_pending(pid: str) -> PaymentStatusResult:
+    return PaymentStatusResult(
+        provider="yookassa",
+        provider_payment_id=pid,
+        status=NormalizedPaymentStatus.PENDING,
+        amount=Decimal("199.00"),
+        currency="RUB",
+    )
+
+
+def _status_succeeded(pid: str) -> PaymentStatusResult:
+    return PaymentStatusResult(
+        provider="yookassa",
+        provider_payment_id=pid,
+        status=NormalizedPaymentStatus.SUCCEEDED,
+        amount=Decimal("199.00"),
+        currency="RUB",
+    )
+
+
+def _status_cancelled(pid: str) -> PaymentStatusResult:
+    return PaymentStatusResult(
+        provider="yookassa",
+        provider_payment_id=pid,
+        status=NormalizedPaymentStatus.CANCELLED,
+        amount=Decimal("199.00"),
+        currency="RUB",
+    )
+
+
 @pytest.mark.parametrize(
     "code,http_status,public_code",
     [
@@ -239,6 +273,11 @@ def test_cancel_awaiting_payment_calls_provider(client, db, monkeypatch):
     assert pay.status_code == 200, pay.text
 
     cancel_calls: list[str] = []
+    status_calls: list[str] = []
+
+    def fake_status(self, provider_payment_id: str):
+        status_calls.append(provider_payment_id)
+        return _status_pending(provider_payment_id)
 
     def fake_cancel(self, provider_payment_id: str):
         cancel_calls.append(provider_payment_id)
@@ -249,15 +288,22 @@ def test_cancel_awaiting_payment_calls_provider(client, db, monkeypatch):
             raw={"status": "canceled"},
         )
 
-    with patch(
-        "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
-        fake_cancel,
+    with (
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.get_payment_status",
+            fake_status,
+        ),
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
+            fake_cancel,
+        ),
     ):
         res = client.post(
             f"/me/checkout-intents/{intent.id}/cancel",
             headers=user_headers,
         )
     assert res.status_code == 200, res.text
+    assert status_calls == ["yk_cancel_1"]
     assert cancel_calls == ["yk_cancel_1"]
     db.refresh(intent)
     assert intent.status == CheckoutIntentStatus.CANCELLED.value
@@ -306,9 +352,15 @@ def test_cancel_timeout_does_not_mark_cancelled(client, db, monkeypatch):
     def timeout_cancel(self, provider_payment_id: str):
         raise PaymentProviderError("timed out", code="provider_timeout")
 
-    with patch(
-        "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
-        timeout_cancel,
+    with (
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.get_payment_status",
+            lambda self, pid: _status_pending(pid),
+        ),
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
+            timeout_cancel,
+        ),
     ):
         res = client.post(
             f"/me/checkout-intents/{intent.id}/cancel",
@@ -373,12 +425,18 @@ def test_late_succeeded_after_cancel_no_entitlement(client, db, monkeypatch):
             == 200
         )
 
-    with patch(
-        "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
-        lambda self, pid: CancelPaymentResult(
-            provider="yookassa",
-            provider_payment_id=pid,
-            status=NormalizedPaymentStatus.CANCELLED,
+    with (
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.get_payment_status",
+            lambda self, pid: _status_pending(pid),
+        ),
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
+            lambda self, pid: CancelPaymentResult(
+                provider="yookassa",
+                provider_payment_id=pid,
+                status=NormalizedPaymentStatus.CANCELLED,
+            ),
         ),
     ):
         assert (
@@ -479,3 +537,303 @@ def test_payment_status_failed_attempt_message(client, db, monkeypatch):
     assert body["can_retry"] is True
     assert "платёжн" in body["message"].lower() or "оплат" in body["message"].lower()
     assert "secret" not in str(body).lower()
+
+
+def test_cancel_reconciles_when_provider_already_succeeded(client, db, monkeypatch):
+    """A: local pending + provider succeeded → no cancel, fulfill, not 502."""
+    owner_headers, _ = _auth_headers(client, db, role="owner")
+    user_headers, user_id = _auth_headers(client, db)
+    _ensure_yookassa_default(client, db, owner_headers, monkeypatch)
+    intent = _pending_intent(db, user_id, key="cancel-succ-race-1")
+
+    mock = _mock_httpx(
+        {
+            "id": "yk_succ_race",
+            "status": "pending",
+            "confirmation": {"confirmation_url": "https://yoomoney.ru/checkout/s"},
+        }
+    )
+    with patch("backend.payments.providers.yookassa.httpx.Client", return_value=mock):
+        assert (
+            client.post(
+                f"/me/checkout-intents/{intent.id}/pay",
+                headers=user_headers,
+                json={"idempotency_key": "pay-key-succ-race"},
+            ).status_code
+            == 200
+        )
+
+    cancel_calls: list[str] = []
+    before_subs = (
+        db.query(UserSubscription).filter(UserSubscription.user_id == user_id).count()
+    )
+
+    with (
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.get_payment_status",
+            lambda self, pid: _status_succeeded(pid),
+        ),
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
+            lambda self, pid: cancel_calls.append(pid)
+            or CancelPaymentResult(
+                provider="yookassa",
+                provider_payment_id=pid,
+                status=NormalizedPaymentStatus.CANCELLED,
+            ),
+        ),
+    ):
+        res = client.post(
+            f"/me/checkout-intents/{intent.id}/cancel",
+            headers=user_headers,
+        )
+
+    assert res.status_code == 200, res.text
+    assert res.status_code != 502
+    body = res.json()
+    assert body["payment_already_succeeded"] is True
+    assert body["intent_status"] == "fulfilled"
+    assert body["attempt_status"] == "succeeded"
+    assert "подтвержд" in body["message"].lower()
+    assert cancel_calls == []
+
+    db.refresh(intent)
+    assert intent.status == CheckoutIntentStatus.FULFILLED.value
+    attempt = (
+        db.query(PaymentAttempt)
+        .filter(PaymentAttempt.checkout_intent_id == intent.id)
+        .one()
+    )
+    assert attempt.status == PaymentAttemptStatus.SUCCEEDED.value
+    after_subs = (
+        db.query(UserSubscription).filter(UserSubscription.user_id == user_id).count()
+    )
+    assert after_subs == before_subs + 1
+
+
+def test_cancel_syncs_when_provider_already_canceled(client, db, monkeypatch):
+    """B: local pending + provider canceled → local canceled, no provider cancel."""
+    owner_headers, _ = _auth_headers(client, db, role="owner")
+    user_headers, user_id = _auth_headers(client, db)
+    _ensure_yookassa_default(client, db, owner_headers, monkeypatch)
+    intent = _pending_intent(db, user_id, key="cancel-prov-canceled-1")
+
+    mock = _mock_httpx(
+        {
+            "id": "yk_already_canceled",
+            "status": "pending",
+            "confirmation": {"confirmation_url": "https://yoomoney.ru/checkout/ac"},
+        }
+    )
+    with patch("backend.payments.providers.yookassa.httpx.Client", return_value=mock):
+        assert (
+            client.post(
+                f"/me/checkout-intents/{intent.id}/pay",
+                headers=user_headers,
+                json={"idempotency_key": "pay-key-already-canceled"},
+            ).status_code
+            == 200
+        )
+
+    cancel_calls: list[str] = []
+    with (
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.get_payment_status",
+            lambda self, pid: _status_cancelled(pid),
+        ),
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
+            lambda self, pid: cancel_calls.append(pid)
+            or CancelPaymentResult(
+                provider="yookassa",
+                provider_payment_id=pid,
+                status=NormalizedPaymentStatus.CANCELLED,
+            ),
+        ),
+    ):
+        res = client.post(
+            f"/me/checkout-intents/{intent.id}/cancel",
+            headers=user_headers,
+        )
+
+    assert res.status_code == 200, res.text
+    assert cancel_calls == []
+    assert res.json()["intent_status"] == "cancelled"
+    assert res.json()["payment_already_succeeded"] is False
+    db.refresh(intent)
+    assert intent.status == CheckoutIntentStatus.CANCELLED.value
+    attempt = (
+        db.query(PaymentAttempt)
+        .filter(PaymentAttempt.checkout_intent_id == intent.id)
+        .one()
+    )
+    assert attempt.status == PaymentAttemptStatus.CANCELLED.value
+
+
+def test_cancel_provider_pending_still_calls_cancel(client, db, monkeypatch):
+    """C: provider still pending → existing cancel is called."""
+    owner_headers, _ = _auth_headers(client, db, role="owner")
+    user_headers, user_id = _auth_headers(client, db)
+    _ensure_yookassa_default(client, db, owner_headers, monkeypatch)
+    intent = _pending_intent(db, user_id, key="cancel-still-pending-1")
+
+    mock = _mock_httpx(
+        {
+            "id": "yk_still_pending",
+            "status": "pending",
+            "confirmation": {"confirmation_url": "https://yoomoney.ru/checkout/sp"},
+        }
+    )
+    with patch("backend.payments.providers.yookassa.httpx.Client", return_value=mock):
+        assert (
+            client.post(
+                f"/me/checkout-intents/{intent.id}/pay",
+                headers=user_headers,
+                json={"idempotency_key": "pay-key-still-pending"},
+            ).status_code
+            == 200
+        )
+
+    cancel_calls: list[str] = []
+    with (
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.get_payment_status",
+            lambda self, pid: _status_pending(pid),
+        ),
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
+            lambda self, pid: (
+                cancel_calls.append(pid),
+                CancelPaymentResult(
+                    provider="yookassa",
+                    provider_payment_id=pid,
+                    status=NormalizedPaymentStatus.CANCELLED,
+                ),
+            )[1],
+        ),
+    ):
+        res = client.post(
+            f"/me/checkout-intents/{intent.id}/cancel",
+            headers=user_headers,
+        )
+    assert res.status_code == 200, res.text
+    assert cancel_calls == ["yk_still_pending"]
+    assert res.json()["intent_status"] == "cancelled"
+
+
+def test_cancel_reconcile_idempotent_no_double_entitlement(client, db, monkeypatch):
+    """D: repeat cancel after reconcile does not duplicate fulfillment."""
+    owner_headers, _ = _auth_headers(client, db, role="owner")
+    user_headers, user_id = _auth_headers(client, db)
+    _ensure_yookassa_default(client, db, owner_headers, monkeypatch)
+    intent = _pending_intent(db, user_id, key="cancel-idem-1")
+
+    mock = _mock_httpx(
+        {
+            "id": "yk_idem_cancel",
+            "status": "pending",
+            "confirmation": {"confirmation_url": "https://yoomoney.ru/checkout/id"},
+        }
+    )
+    with patch("backend.payments.providers.yookassa.httpx.Client", return_value=mock):
+        assert (
+            client.post(
+                f"/me/checkout-intents/{intent.id}/pay",
+                headers=user_headers,
+                json={"idempotency_key": "pay-key-idem-cancel"},
+            ).status_code
+            == 200
+        )
+
+    with patch(
+        "backend.payments.providers.yookassa.YooKassaPaymentProvider.get_payment_status",
+        lambda self, pid: _status_succeeded(pid),
+    ):
+        first = client.post(
+            f"/me/checkout-intents/{intent.id}/cancel",
+            headers=user_headers,
+        )
+    assert first.status_code == 200, first.text
+    assert first.json()["payment_already_succeeded"] is True
+
+    subs_after_first = (
+        db.query(UserSubscription).filter(UserSubscription.user_id == user_id).count()
+    )
+
+    second = client.post(
+        f"/me/checkout-intents/{intent.id}/cancel",
+        headers=user_headers,
+    )
+    # Already fulfilled → intent_already_paid 409 (not a second entitlement).
+    assert second.status_code == 409
+    assert second.json()["detail"]["code"] == "intent_already_paid"
+    subs_after_second = (
+        db.query(UserSubscription).filter(UserSubscription.user_id == user_id).count()
+    )
+    assert subs_after_second == subs_after_first
+
+
+def test_cancel_provider_status_lookup_error_fail_closed(client, db, monkeypatch):
+    """E: status lookup error → controlled error, no false cancel/fulfilled."""
+    owner_headers, _ = _auth_headers(client, db, role="owner")
+    user_headers, user_id = _auth_headers(client, db)
+    _ensure_yookassa_default(client, db, owner_headers, monkeypatch)
+    intent = _pending_intent(db, user_id, key="cancel-status-err-1")
+
+    mock = _mock_httpx(
+        {
+            "id": "yk_status_err",
+            "status": "pending",
+            "confirmation": {"confirmation_url": "https://yoomoney.ru/checkout/se"},
+        }
+    )
+    with patch("backend.payments.providers.yookassa.httpx.Client", return_value=mock):
+        assert (
+            client.post(
+                f"/me/checkout-intents/{intent.id}/pay",
+                headers=user_headers,
+                json={"idempotency_key": "pay-key-status-err"},
+            ).status_code
+            == 200
+        )
+
+    cancel_calls: list[str] = []
+
+    def boom_status(self, provider_payment_id: str):
+        raise PaymentProviderError("network down", code="provider_network_error")
+
+    with (
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.get_payment_status",
+            boom_status,
+        ),
+        patch(
+            "backend.payments.providers.yookassa.YooKassaPaymentProvider.cancel_payment",
+            lambda self, pid: cancel_calls.append(pid)
+            or CancelPaymentResult(
+                provider="yookassa",
+                provider_payment_id=pid,
+                status=NormalizedPaymentStatus.CANCELLED,
+            ),
+        ),
+    ):
+        res = client.post(
+            f"/me/checkout-intents/{intent.id}/cancel",
+            headers=user_headers,
+        )
+
+    assert res.status_code == 502
+    assert res.json()["detail"]["code"] == "provider_unavailable"
+    assert cancel_calls == []
+    db.refresh(intent)
+    assert intent.status == CheckoutIntentStatus.AWAITING_PAYMENT.value
+    attempt = (
+        db.query(PaymentAttempt)
+        .filter(PaymentAttempt.checkout_intent_id == intent.id)
+        .one()
+    )
+    assert attempt.status == PaymentAttemptStatus.PENDING.value
+    assert (
+        db.query(UserSubscription).filter(UserSubscription.user_id == user_id).count()
+        == 0
+    )

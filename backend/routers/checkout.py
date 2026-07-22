@@ -40,6 +40,16 @@ def _http_from_checkout_error(exc: CheckoutIntentError) -> HTTPException:
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": code, "message": exc.message},
         )
+    if code == "current_tariff_already_active":
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": code, "message": exc.message},
+        )
+    if code == "addon_not_available_for_current_tariff":
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": code, "message": exc.message},
+        )
     if code in ("invalid_product_type", "code_required", "idempotency_required"):
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

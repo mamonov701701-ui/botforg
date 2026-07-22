@@ -145,6 +145,7 @@ def test_addons_returns_active_public_only(client, db):
     assert item["price"] in ("199.50", "199.5")
     assert item["currency"] == "RUB"
     assert item["duration_type"] == "current_period"
+    assert item["validity_days"] == 30
     assert item["available_from_plan"] == ["start"]
     assert item["max_per_period"] == 3
     assert item["sort_order"] == 20

@@ -116,6 +116,36 @@ def _ensure_addon(db) -> AddonPackage:
     return pkg
 
 
+def _grant_business_for_addons(db, user_id: int) -> None:
+    """Addon checkout requires effective plan.limits.addon_purchase (Business+)."""
+    from datetime import datetime, timedelta, timezone
+
+    from backend.models.plan import Plan
+    from backend.models.tariff import SubscriptionStatus, UserSubscription
+
+    if (
+        db.query(UserSubscription)
+        .filter(
+            UserSubscription.user_id == user_id,
+            UserSubscription.status == SubscriptionStatus.ACTIVE,
+        )
+        .first()
+    ):
+        return
+    plan = db.query(Plan).filter(Plan.code == "business").one()
+    start = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(
+        UserSubscription(
+            user_id=user_id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=start,
+            current_period_end=start + timedelta(days=30),
+        )
+    )
+    db.commit()
+
+
 def test_revision_lifecycle_and_publish_rules(client, db):
     headers, admin_uid = _admin(client, db)
     rev = create_draft(
@@ -368,6 +398,7 @@ def test_checkout_snapshot_immutable_and_old_intents_untouched(client, db):
 
     _publish_required(db, admin_uid)
     offer = get_published_by_type(db, LegalDocType.PUBLIC_OFFER.value)
+    _grant_business_for_addons(db, uid)
     intent = create_checkout_intent(
         db,
         user_id=uid,
@@ -418,6 +449,7 @@ def test_production_checkout_and_pay_blocked(client, db, monkeypatch):
 
     # Pre-create intent as if from earlier env, then pay must also block.
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    _grant_business_for_addons(db, uid)
     intent = create_checkout_intent(
         db,
         user_id=uid,
@@ -441,6 +473,7 @@ def test_development_not_blocked(client, db, monkeypatch):
     monkeypatch.setattr(settings, "ENVIRONMENT", "development")
     _, uid = _auth(client, db)
     _ensure_addon(db)
+    _grant_business_for_addons(db, uid)
     intent = create_checkout_intent(
         db,
         user_id=uid,
@@ -466,6 +499,7 @@ def test_payment_readiness_still_required_when_legal_ready(client, db, monkeypat
     assert st.legal_launch_ready is True
     assert st.payments_blocked is False
 
+    _grant_business_for_addons(db, uid)
     intent = create_checkout_intent(
         db,
         user_id=uid,
@@ -555,6 +589,7 @@ def test_legal_account_overview_hides_ip_and_shows_snapshots(client, db):
         user_agent="secret-ua",
         commit=True,
     )
+    _grant_business_for_addons(db, uid)
     intent = create_checkout_intent(
         db,
         user_id=uid,
@@ -586,15 +621,13 @@ def test_legal_account_overview_hides_ip_and_shows_snapshots(client, db):
 
 
 def test_migration_head_includes_legal_versioning(db):
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
     from sqlalchemy import text
 
     rev = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    # After upgrade in test DB may still be previous head until migrate —
-    # conftest typically upgrades to head; assert revision file chain exists.
-    from alembic.config import Config
-    from alembic.script import ScriptDirectory
-    from pathlib import Path
-
     root = Path(__file__).resolve().parents[2]
     cfg = Config(str(root / "alembic.ini"))
     cfg.set_main_option(
@@ -602,4 +635,8 @@ def test_migration_head_includes_legal_versioning(db):
         str(root / "backend" / "migrations").replace("\\", "/"),
     )
     script = ScriptDirectory.from_config(cfg)
-    assert "legal_versioning_029" in script.get_heads()
+    heads = set(script.get_heads())
+    assert "addon_purchase_flag_032" in heads
+    assert rev == "addon_purchase_flag_032"
+    all_revs = {r.revision for r in script.walk_revisions()}
+    assert "legal_versioning_029" in all_revs

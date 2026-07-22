@@ -9,6 +9,8 @@ import EditorV2Shell from './features/editorV2/EditorV2Shell';
 import QuickEditorEntry from './features/editorV2/QuickEditorEntry';
 import Home from './pages/Home';
 import Pricing from './pages/Pricing';
+import CheckoutPage from './pages/CheckoutPage';
+import CheckoutReturnPage from './pages/CheckoutReturnPage';
 import MarketplacePage from './pages/MarketplacePage';
 import MarketItemDetailPage from './pages/MarketItemDetailPage';
 import DeveloperTemplatesPage from './pages/DeveloperTemplatesPage';
@@ -93,6 +95,22 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/" element={<SiteLayout />}>
           <Route index element={<Home />} />
           <Route path="pricing" element={<Pricing />} />
+          <Route
+            path="checkout"
+            element={
+              <AuthGate>
+                <CheckoutPage />
+              </AuthGate>
+            }
+          />
+          <Route
+            path="checkout/return"
+            element={
+              <AuthGate>
+                <CheckoutReturnPage />
+              </AuthGate>
+            }
+          />
           <Route path="login" element={<Login />} />
           <Route path="market" element={<MarketplacePage />} />
           <Route path="market/items/:id" element={<MarketItemDetailPage />} />

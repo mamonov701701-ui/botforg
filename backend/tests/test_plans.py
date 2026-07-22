@@ -7,7 +7,7 @@ from backend.tests.conftest import register_and_get_token
 
 
 def test_get_plans(client):
-    """GET /plans — список тарифов (без авторизации)."""
+    """GET /plans — список тарифов (без авторизации); endpoint deprecated, контракт прежний."""
     res = client.get("/plans/")
     assert res.status_code == 200
     data = res.json()
@@ -26,6 +26,14 @@ def test_get_plans(client):
     assert dev["limits"]["can_publish_templates"] is True
     assert dev["limits"]["can_sell_templates"] is True
     assert dev["limits"]["can_view_marketplace_stats"] is True
+
+
+def test_get_plans_route_marked_deprecated(client):
+    """OpenAPI marks legacy GET /plans/ as deprecated."""
+    schema = client.get("/openapi.json").json()
+    path_item = schema["paths"].get("/plans/") or schema["paths"].get("/plans")
+    assert path_item is not None
+    assert path_item["get"].get("deprecated") is True
 
 
 def test_me_has_plan_code(client):

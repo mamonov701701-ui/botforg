@@ -111,7 +111,12 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
-      '/plans': {
+      '/tariffs': {
+        target: backendTarget,
+        changeOrigin: true,
+        secure: false,
+      },
+      '/addons': {
         target: backendTarget,
         changeOrigin: true,
         secure: false,

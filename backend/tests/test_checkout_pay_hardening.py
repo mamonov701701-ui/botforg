@@ -371,3 +371,130 @@ def test_payment_status_owner_schema_and_no_secrets(client, db, monkeypatch):
         headers=other_headers,
     )
     assert forbidden.status_code == 404
+
+
+def test_pay_blocks_stale_tariff_intent_when_already_effective(client, db, monkeypatch):
+    """Intent created earlier; effective plan later matches product_code → 409, no provider pay."""
+    from datetime import datetime, timedelta, timezone
+
+    from backend.models.plan import Plan
+    from backend.models.tariff import SubscriptionStatus, UserSubscription
+
+    owner_headers, _ = _auth_headers(client, db, role="owner")
+    user_headers, user_id = _auth_headers(client, db)
+    _ensure_yookassa_default(client, db, owner_headers, monkeypatch)
+
+    intent = CheckoutIntent(
+        user_id=user_id,
+        product_type=CheckoutProductType.TARIFF.value,
+        product_code="business",
+        product_name="Бизнес",
+        amount=Decimal("990.00"),
+        currency="RUB",
+        status=CheckoutIntentStatus.PENDING.value,
+        idempotency_key="stale-biz-pay",
+    )
+    db.add(intent)
+    db.commit()
+    db.refresh(intent)
+
+    plan = db.query(Plan).filter(Plan.code == "business").one()
+    start = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(
+        UserSubscription(
+            user_id=user_id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=start,
+            current_period_end=start + timedelta(days=30),
+        )
+    )
+    db.commit()
+
+    mock = _mock_httpx(
+        {
+            "id": "yk_should_not_create",
+            "status": "pending",
+            "confirmation": {"confirmation_url": "https://yoomoney.ru/checkout/x"},
+        }
+    )
+    with patch("backend.payments.providers.yookassa.httpx.Client", return_value=mock):
+        res = client.post(
+            f"/me/checkout-intents/{intent.id}/pay",
+            headers=user_headers,
+            json={"idempotency_key": "pay-stale-biz"},
+        )
+    assert res.status_code == 409, res.text
+    detail = res.json().get("detail") or res.json()
+    assert detail.get("code") == "current_tariff_already_active"
+    assert mock.request.call_count == 0
+    assert (
+        db.query(PaymentAttempt)
+        .filter(PaymentAttempt.checkout_intent_id == intent.id)
+        .count()
+        == 0
+    )
+
+
+def test_pay_blocks_stale_addon_intent_when_addon_purchase_revoked(client, db, monkeypatch):
+    """Addon intent created while allowed; later effective plan denies → 403, no provider."""
+    from datetime import datetime, timedelta, timezone
+
+    from backend.models.plan import Plan
+    from backend.models.tariff import SubscriptionStatus, UserSubscription
+
+    owner_headers, _ = _auth_headers(client, db, role="owner")
+    user_headers, user_id = _auth_headers(client, db)
+    _ensure_yookassa_default(client, db, owner_headers, monkeypatch)
+
+    intent = CheckoutIntent(
+        user_id=user_id,
+        product_type=CheckoutProductType.ADDON.value,
+        product_code="msg_1000",
+        product_name="Пакет",
+        amount=Decimal("190.00"),
+        currency="RUB",
+        status=CheckoutIntentStatus.PENDING.value,
+        idempotency_key="stale-addon-pay",
+    )
+    db.add(intent)
+    db.commit()
+    db.refresh(intent)
+
+    # Effective start (no addon_purchase).
+    start_plan = db.query(Plan).filter(Plan.code == "start").one()
+    start = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.add(
+        UserSubscription(
+            user_id=user_id,
+            plan_id=start_plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=start,
+            current_period_end=start + timedelta(days=30),
+        )
+    )
+    db.commit()
+
+    mock = _mock_httpx(
+        {
+            "id": "yk_should_not_create_addon",
+            "status": "pending",
+            "confirmation": {"confirmation_url": "https://yoomoney.ru/checkout/x"},
+        }
+    )
+    with patch("backend.payments.providers.yookassa.httpx.Client", return_value=mock):
+        res = client.post(
+            f"/me/checkout-intents/{intent.id}/pay",
+            headers=user_headers,
+            json={"idempotency_key": "pay-stale-addon"},
+        )
+    assert res.status_code == 403, res.text
+    detail = res.json().get("detail") or res.json()
+    assert detail.get("code") == "addon_not_available_for_current_tariff"
+    assert mock.request.call_count == 0
+    assert (
+        db.query(PaymentAttempt)
+        .filter(PaymentAttempt.checkout_intent_id == intent.id)
+        .count()
+        == 0
+    )

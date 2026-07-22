@@ -32,6 +32,8 @@ class PublicAddonOut(BaseModel):
     price: Decimal
     currency: str = "RUB"
     duration_type: str
+    # Calendar days from successful activation (matches fulfillment).
+    validity_days: int = 30
     available_from_plan: Any = None
     max_per_period: int | None = None
     sort_order: int = 0
@@ -69,6 +71,7 @@ class TariffFlagsOut(BaseModel):
     scenario_publish: bool
     export_reports: bool
     priority_support: bool
+    addon_purchase: bool = False
 
 
 class TariffSummaryOut(BaseModel):
@@ -127,5 +130,6 @@ def tariff_summary_from_service(summary: TariffLimitsSummary) -> TariffSummaryOu
             scenario_publish=summary.scenario_publish,
             export_reports=summary.export_reports,
             priority_support=summary.priority_support,
+            addon_purchase=summary.addon_purchase,
         ),
     )
