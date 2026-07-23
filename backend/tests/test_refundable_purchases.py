@@ -13,7 +13,14 @@ from backend.models.checkout import (
     PaymentAttempt,
     PaymentAttemptStatus,
 )
-from backend.models.refund import RefundRequest, RefundRequestStatus
+from backend.models.refund import (
+    RefundLedgerEntry,
+    RefundLedgerEntryType,
+    RefundLedgerProviderStatus,
+    RefundRequest,
+    RefundRequestStatus,
+    RefundRevision,
+)
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
@@ -195,6 +202,8 @@ def test_list_refundable_purchases_happy_path(client, db):
         "current_refund_request_id",
         "can_request_refund",
         "unavailable_reason",
+        "confirmed_refunded_amount",
+        "refundable_available_amount",
     }
     assert "confirmation_url" not in body
     assert "provider_payment_id" not in str(body)
@@ -239,6 +248,63 @@ def test_list_excludes_other_users_and_non_fulfilled(client, db):
     assert ids == {own.id}
 
 
+def _seed_succeeded_ledger(
+    db,
+    *,
+    req: RefundRequest,
+    amount: str,
+) -> None:
+    from backend.models.refund import (
+        RefundCalculationStatus,
+        RefundEntitlementAction,
+        RefundRevisionType,
+        RefundType,
+    )
+
+    rev = (
+        db.query(RefundRevision)
+        .filter(RefundRevision.refund_request_id == req.id)
+        .order_by(RefundRevision.id.desc())
+        .first()
+    )
+    amt = Decimal(amount)
+    if rev is None:
+        rev = RefundRevision(
+            refund_request_id=req.id,
+            revision_number=1,
+            revision_type=RefundRevisionType.AUTOMATIC.value,
+            calculation_status=RefundCalculationStatus.OK.value,
+            refund_type=RefundType.FULL.value,
+            currency="RUB",
+            paid_amount=amt,
+            prior_refunded_amount=Decimal("0.00"),
+            proposed_refund_amount=amt,
+            final_refund_amount=amt,
+            calculation_at=_utc(),
+            entitlement_action=RefundEntitlementAction.CANCEL_ADDON.value,
+            calculation_snapshot={"formula": "test"},
+            entitlement_snapshot={"action": "cancel_addon"},
+            usage_snapshot={"pool_used": 0},
+        )
+        db.add(rev)
+        db.flush()
+        req.current_revision_number = 1
+    db.add(
+        RefundLedgerEntry(
+            refund_request_id=req.id,
+            refund_revision_id=rev.id,
+            checkout_intent_id=req.checkout_intent_id,
+            payment_attempt_id=req.payment_attempt_id,
+            entry_type=RefundLedgerEntryType.SUCCEEDED.value,
+            amount=amt,
+            currency="RUB",
+            idempotency_key=f"led-rp-{req.id}-{amount}",
+            provider_status=RefundLedgerProviderStatus.SUCCEEDED.value,
+        )
+    )
+    db.commit()
+
+
 def test_list_marks_active_and_completed_refund(client, db):
     auth, uid = _auth(client)
     intent_open, attempt_open = _seed_purchase(db, uid, key="rp-open", hours_ago=3)
@@ -253,7 +319,7 @@ def test_list_marks_active_and_completed_refund(client, db):
         status=RefundRequestStatus.AWAITING_ADMIN_REVIEW.value,
         key="rr-open",
     )
-    _seed_refund(
+    done_req = _seed_refund(
         db,
         user_id=uid,
         intent=intent_done,
@@ -261,6 +327,7 @@ def test_list_marks_active_and_completed_refund(client, db):
         status=RefundRequestStatus.COMPLETED.value,
         key="rr-done",
     )
+    _seed_succeeded_ledger(db, req=done_req, amount=str(attempt_done.amount))
     _seed_refund(
         db,
         user_id=uid,
@@ -283,9 +350,63 @@ def test_list_marks_active_and_completed_refund(client, db):
         == RefundRequestStatus.AWAITING_ADMIN_REVIEW.value
     )
     assert by_id[intent_done.id]["can_request_refund"] is False
-    assert by_id[intent_done.id]["unavailable_reason"] == "refund_completed"
+    assert by_id[intent_done.id]["unavailable_reason"] == "purchase_fully_refunded"
     assert by_id[intent_free.id]["can_request_refund"] is True
     assert by_id[intent_free.id]["unavailable_reason"] is None
+
+
+def test_list_fully_refunded_after_canceled_followup_stays_blocked(client, db):
+    auth, uid = _auth(client)
+    intent, attempt = _seed_purchase(db, uid, key="rp-full-ghost", hours_ago=1, amount="490.00")
+    done = _seed_refund(
+        db,
+        user_id=uid,
+        intent=intent,
+        attempt=attempt,
+        status=RefundRequestStatus.COMPLETED.value,
+        key="rr-full-done",
+    )
+    _seed_succeeded_ledger(db, req=done, amount="490.00")
+    _seed_refund(
+        db,
+        user_id=uid,
+        intent=intent,
+        attempt=attempt,
+        status=RefundRequestStatus.CANCELED.value,
+        key="rr-full-ghost",
+    )
+
+    res = client.get(
+        "/me/refundable-purchases",
+        headers={"Authorization": auth},
+    )
+    assert res.status_code == 200, res.text
+    item = next(i for i in res.json()["items"] if i["checkout_intent_id"] == intent.id)
+    assert item["can_request_refund"] is False
+    assert item["unavailable_reason"] == "purchase_fully_refunded"
+
+
+def test_list_partial_remaining_allows_request(client, db):
+    auth, uid = _auth(client)
+    intent, attempt = _seed_purchase(db, uid, key="rp-part-rem", hours_ago=1, amount="1000.00")
+    done = _seed_refund(
+        db,
+        user_id=uid,
+        intent=intent,
+        attempt=attempt,
+        status=RefundRequestStatus.COMPLETED.value,
+        key="rr-part-done",
+    )
+    _seed_succeeded_ledger(db, req=done, amount="400.00")
+
+    res = client.get(
+        "/me/refundable-purchases",
+        headers={"Authorization": auth},
+    )
+    assert res.status_code == 200, res.text
+    item = next(i for i in res.json()["items"] if i["checkout_intent_id"] == intent.id)
+    assert item["can_request_refund"] is True
+    assert item["unavailable_reason"] is None
 
 
 def test_list_pagination_newest_first(client, db):

@@ -21,6 +21,9 @@ from backend.models.refund import (
     REFUND_TERMINAL_STATUSES,
     RefundAuditAction,
     RefundAuditEvent,
+    RefundLedgerEntry,
+    RefundLedgerEntryType,
+    RefundLedgerProviderStatus,
     RefundRequest,
     RefundRequestStatus,
     RefundRevision,
@@ -508,6 +511,241 @@ def test_rollback_leaves_no_partial_request(client, db, monkeypatch):
         .count()
     )
     assert audits == 0
+
+
+def _mark_full_refund_completed(db, *, req: RefundRequest, amount: str) -> None:
+    rev = (
+        db.query(RefundRevision)
+        .filter(RefundRevision.refund_request_id == req.id)
+        .order_by(RefundRevision.revision_number.desc())
+        .first()
+    )
+    assert rev is not None
+    db.add(
+        RefundLedgerEntry(
+            refund_request_id=req.id,
+            refund_revision_id=rev.id,
+            checkout_intent_id=req.checkout_intent_id,
+            payment_attempt_id=req.payment_attempt_id,
+            entry_type=RefundLedgerEntryType.SUCCEEDED.value,
+            amount=Decimal(amount),
+            currency="RUB",
+            idempotency_key=f"led-full-{req.id}",
+            provider_status=RefundLedgerProviderStatus.SUCCEEDED.value,
+        )
+    )
+    req.status = RefundRequestStatus.COMPLETED.value
+    req.completed_at = _utc()
+    db.commit()
+    db.refresh(req)
+
+
+def test_full_refunded_purchase_blocks_new_request(client, db):
+    token = register_and_get_token(client)
+    uid = get_user_id(client, token)
+    intent, _ = _seed_owned_paid(db, uid, key="sub-full-block", amount="490.00")
+
+    first = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="idem-full-1",
+    )
+    _mark_full_refund_completed(db, req=first, amount="490.00")
+
+    before = (
+        db.query(RefundRequest)
+        .filter(RefundRequest.checkout_intent_id == intent.id)
+        .count()
+    )
+    with pytest.raises(RefundSubmitError) as ei:
+        create_refund_request(
+            db,
+            user_id=uid,
+            checkout_intent_id=intent.id,
+            reason_category="unused",
+            idempotency_key="idem-full-2",
+        )
+    assert ei.value.code == "purchase_fully_refunded"
+    after = (
+        db.query(RefundRequest)
+        .filter(RefundRequest.checkout_intent_id == intent.id)
+        .count()
+    )
+    assert after == before == 1
+
+
+def test_available_zero_does_not_create_zero_amount_request(client, db):
+    token = register_and_get_token(client)
+    uid = get_user_id(client, token)
+    intent, attempt = _seed_owned_paid(db, uid, key="sub-zero-amt", amount="190.00")
+
+    first = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="idem-zero-1",
+    )
+    _mark_full_refund_completed(db, req=first, amount="190.00")
+
+    # Simulate canceled follow-up attempt context: latest may be reopenable, balance is 0.
+    first.status = RefundRequestStatus.CANCELED.value
+    db.commit()
+
+    # Restore completed + succeeded ledger still covers paid (status alone must not reopen).
+    first.status = RefundRequestStatus.COMPLETED.value
+    db.commit()
+
+    before_ids = {
+        r.id
+        for r in db.query(RefundRequest)
+        .filter(RefundRequest.checkout_intent_id == intent.id)
+        .all()
+    }
+    with pytest.raises(RefundSubmitError) as ei:
+        create_refund_request(
+            db,
+            user_id=uid,
+            checkout_intent_id=intent.id,
+            payment_attempt_id=attempt.id,
+            reason_category="other",
+            idempotency_key="idem-zero-2",
+        )
+    assert ei.value.code == "purchase_fully_refunded"
+    after_ids = {
+        r.id
+        for r in db.query(RefundRequest)
+        .filter(RefundRequest.checkout_intent_id == intent.id)
+        .all()
+    }
+    assert after_ids == before_ids
+
+
+def test_completed_full_refund_blocks_even_if_later_canceled_row_exists(client, db):
+    token = register_and_get_token(client)
+    uid = get_user_id(client, token)
+    intent, attempt = _seed_owned_paid(db, uid, key="sub-full-cancel", amount="490.00")
+
+    first = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="idem-fc-1",
+    )
+    _mark_full_refund_completed(db, req=first, amount="490.00")
+
+    # Pre-fix world could create a zero-amount row then cancel it; balance still 0.
+    now = _utc()
+    ghost = RefundRequest(
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        payment_attempt_id=attempt.id,
+        idempotency_key="idem-fc-ghost",
+        status=RefundRequestStatus.CANCELED.value,
+        reason_category="unused",
+        user_comment=None,
+        current_revision_number=0,
+        version=1,
+        submitted_at=now,
+        created_at=now,
+        updated_at=now,
+        completed_at=now,
+    )
+    db.add(ghost)
+    db.commit()
+
+    with pytest.raises(RefundSubmitError) as ei:
+        create_refund_request(
+            db,
+            user_id=uid,
+            checkout_intent_id=intent.id,
+            reason_category="unused",
+            idempotency_key="idem-fc-2",
+        )
+    assert ei.value.code == "purchase_fully_refunded"
+
+
+def test_partial_prior_refund_with_remaining_allows_new_request(client, db):
+    token = register_and_get_token(client)
+    uid = get_user_id(client, token)
+    intent, _ = _seed_owned_paid(db, uid, key="sub-partial-rem", amount="1000.00")
+
+    first = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="idem-part-1",
+    )
+    rev = (
+        db.query(RefundRevision)
+        .filter(RefundRevision.refund_request_id == first.id)
+        .order_by(RefundRevision.revision_number.desc())
+        .first()
+    )
+    assert rev is not None
+    db.add(
+        RefundLedgerEntry(
+            refund_request_id=first.id,
+            refund_revision_id=rev.id,
+            checkout_intent_id=intent.id,
+            payment_attempt_id=first.payment_attempt_id,
+            entry_type=RefundLedgerEntryType.SUCCEEDED.value,
+            amount=Decimal("400.00"),
+            currency="RUB",
+            idempotency_key=f"led-part-{first.id}",
+            provider_status=RefundLedgerProviderStatus.SUCCEEDED.value,
+        )
+    )
+    first.status = RefundRequestStatus.COMPLETED.value
+    first.completed_at = _utc()
+    db.commit()
+
+    second = create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="idem-part-2",
+    )
+    assert second.id != first.id
+    assert second.status not in (
+        RefundRequestStatus.COMPLETED.value,
+        RefundRequestStatus.CANCELED.value,
+        RefundRequestStatus.REJECTED.value,
+    )
+    assert (
+        db.query(RefundRequest)
+        .filter(RefundRequest.checkout_intent_id == intent.id)
+        .count()
+        == 2
+    )
+
+
+def test_open_request_guard_still_blocks(client, db):
+    token = register_and_get_token(client)
+    uid = get_user_id(client, token)
+    intent, _ = _seed_owned_paid(db, uid, key="sub-open-guard")
+
+    create_refund_request(
+        db,
+        user_id=uid,
+        checkout_intent_id=intent.id,
+        reason_category="unused",
+        idempotency_key="idem-og-1",
+    )
+    with pytest.raises(RefundSubmitError) as ei:
+        create_refund_request(
+            db,
+            user_id=uid,
+            checkout_intent_id=intent.id,
+            reason_category="unused",
+            idempotency_key="idem-og-2",
+        )
+    assert ei.value.code == "duplicate_open_request"
 
 
 def test_migration_includes_submit_guards(db):

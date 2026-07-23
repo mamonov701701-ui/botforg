@@ -281,7 +281,7 @@ def test_admin_edit_does_not_mutate_old_revision(client, db):
         json={
             "expected_version": req.version,
             "based_on_revision_id": old.id,
-            "proposed_refund_amount": "50.00",
+            "addon_revoke_units": 250,
             "adjustment_reason_category": "policy",
             "adjustment_comment": "adjusted by admin",
         },
@@ -290,7 +290,8 @@ def test_admin_edit_does_not_mutate_old_revision(client, db):
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["request"]["status"] == RefundRequestStatus.ADMIN_EDITED.value
-    assert body["current_revision"]["proposed_refund_amount"] == "50.00"
+    assert body["current_revision"]["proposed_refund_amount"] == "47.50"
+    assert body["current_revision"]["addon_revoke_units"] == 250
     assert body["current_revision"]["id"] != old_id
 
     db.expire_all()

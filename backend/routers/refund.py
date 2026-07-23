@@ -124,6 +124,26 @@ def _request_out(
     if currency is None:
         currency = product_currency
 
+    confirmed = None
+    available = None
+    revoke_units = None
+    if intent is not None:
+        from backend.services.refund_calculation import load_ledger_balance
+
+        bal = load_ledger_balance(
+            db,
+            checkout_intent_id=int(intent.id),
+            paid_amount=intent.amount,
+        )
+        confirmed = format_money(bal.confirmed_refunded_amount)
+        available = format_money(bal.refundable_available_amount)
+    approved = None
+    if request.approved_revision_id is not None:
+        approved = db.get(RefundRevision, int(request.approved_revision_id))
+    src_rev = approved or revision
+    if src_rev is not None and src_rev.addon_revoke_units is not None:
+        revoke_units = int(src_rev.addon_revoke_units)
+
     return RefundRequestOut(
         id=request.id,
         checkout_intent_id=request.checkout_intent_id,
@@ -149,6 +169,9 @@ def _request_out(
         product_name=intent.product_name if intent else None,
         amount=format_money(intent.amount) if intent is not None else None,
         paid_at=intent.paid_at if intent else None,
+        confirmed_refunded_amount=confirmed,
+        refundable_available_amount=available,
+        addon_revoke_units=revoke_units,
     )
 
 
@@ -161,6 +184,7 @@ def _http_from_submit_error(exc: RefundSubmitError) -> HTTPException:
         )
     if code in (
         "duplicate_open_request",
+        "purchase_fully_refunded",
         "idempotency_conflict",
         "version_conflict",
     ):

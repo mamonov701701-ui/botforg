@@ -43,6 +43,10 @@ _ADMIN_DETAIL_KEYS = (
     "recovery",
     "retry",
     "note",
+    "confirmed_refunded_amount",
+    "equivalent_units_money",
+    "money_units_delta",
+    "provider_called",
 )
 
 _TECHNICAL_REASON_MARKERS = (
@@ -211,6 +215,9 @@ def _admin_title(action: str, new_status: str | None, meta: dict[str, Any]) -> s
             RefundAuditAction.ENTITLEMENT_NOT_REQUIRED.value: "Entitlement не требуется",
             RefundAuditAction.ENTITLEMENT_FAILED.value: "Ошибка entitlement",
             RefundAuditAction.ENTITLEMENT_MANUAL_REQUIRED.value: "Entitlement требует ручной проверки",
+            RefundAuditAction.ENTITLEMENT_RECOVERY.value: (
+                "Recovery entitlement (деньги не менялись)"
+            ),
         }
         return mapping.get(action, "Изменение entitlement")
     if action == RefundAuditAction.STATUS_CHANGED.value:
@@ -334,8 +341,8 @@ def present_public_event(
         RefundAuditAction.ENTITLEMENT_NOT_REQUIRED.value,
     }:
         return item(
-            "Доступ и остатки обновлены",
-            "После возврата были обновлены связанные тарифные права или доступные единицы.",
+            "Изменения по тарифу или пакету применены",
+            "После возврата обновлены связанные тарифные права или доступные единицы.",
             "completed",
             new,
         )
@@ -392,13 +399,13 @@ def present_public_event(
         if new == RefundRequestStatus.REFUND_PROCESSING.value:
             if outcome == "pending":
                 return item(
-                    "Возврат ожидает подтверждения",
+                    "Возврат выполняется",
                     "Платёжный провайдер обрабатывает возврат.",
                     "processing",
                     new,
                 )
             return item(
-                "Возврат обрабатывается",
+                "Возврат выполняется",
                 "Запрос на возврат передан в обработку.",
                 "processing",
                 new,
@@ -409,8 +416,8 @@ def present_public_event(
             RefundRequestStatus.PARTIALLY_REFUNDED.value,
         } or outcome == "succeeded":
             return item(
-                "Платёжный провайдер подтвердил возврат",
-                "Возврат подтверждён платёжным провайдером.",
+                "Деньги возвращены",
+                "Платёжная система подтвердила возврат средств.",
                 "processing",
                 new,
             )
@@ -436,8 +443,8 @@ def present_public_event(
 
         if new == RefundRequestStatus.COMPLETED.value:
             return item(
-                "Возврат завершён",
-                "Обработка заявки на возврат завершена.",
+                "Деньги возвращены",
+                "Возврат выполнен, изменения по тарифу или пакету применены.",
                 "completed",
                 new,
             )

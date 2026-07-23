@@ -28,7 +28,8 @@ const STATUS_LABELS: Record<string, string> = {
   calculation_failed: 'Ошибка расчёта',
   refund_processing: 'Возврат выполняется',
   refunded: 'Деньги возвращены',
-  completed: 'Завершена',
+  partially_refunded: 'Частичный возврат выполнен',
+  completed: 'Деньги возвращены',
 };
 
 const STATUS_HINTS: Record<string, string> = {
@@ -40,19 +41,41 @@ const STATUS_HINTS: Record<string, string> = {
     'Деньги ещё не отправлены через платёжную систему. Следующий этап — выполнение возврата.',
   refund_processing: 'Запрос на возврат передан в платёжную систему.',
   refunded: 'Платёжная система подтвердила возврат.',
+  partially_refunded:
+    'Часть суммы возвращена. Можно оформить возврат на остаток, если он доступен.',
+  completed: 'Возврат выполнен, изменения по тарифу или пакету применены.',
   canceled: 'Вы отменили эту заявку.',
   awaiting_admin_review: 'Заявка ожидает решения администратора.',
 };
 
 export const MANUAL_AMOUNT_LABEL = 'Сумма определяется администратором';
 
-export function refundStatusLabel(status: string): string {
+export function refundStatusLabel(
+  status: string,
+  options?: { confirmedRefunded?: string | null; remainingRefundable?: string | null }
+): string {
+  if (status === 'completed' && isPartialMoneyState(options)) {
+    return 'Частичный возврат выполнен';
+  }
   return STATUS_LABELS[status] ?? status;
+}
+
+function isPartialMoneyState(options?: {
+  confirmedRefunded?: string | null;
+  remainingRefundable?: string | null;
+}): boolean {
+  const confirmed = Number(options?.confirmedRefunded);
+  const remaining = Number(options?.remainingRefundable);
+  return Number.isFinite(confirmed) && confirmed > 0 && Number.isFinite(remaining) && remaining > 0;
 }
 
 export function refundStatusHint(
   status: string,
-  options?: { amountLabel?: string | null }
+  options?: {
+    amountLabel?: string | null;
+    confirmedRefunded?: string | null;
+    remainingRefundable?: string | null;
+  }
 ): string | null {
   const amount = (options?.amountLabel || '').trim();
   if (status === 'approved') {
@@ -65,7 +88,52 @@ export function refundStatusHint(
   if (status === 'refunded') {
     return amount ? `Платёжная система подтвердила возврат ${amount}.` : STATUS_HINTS.refunded;
   }
+  if (status === 'completed') {
+    if (isPartialMoneyState(options)) {
+      return 'Деньги возвращены частично; изменения по тарифу или пакету применены. Можно оформить возврат на остаток.';
+    }
+    return STATUS_HINTS.completed;
+  }
+  if (status === 'partially_refunded') {
+    return STATUS_HINTS.partially_refunded;
+  }
   return STATUS_HINTS[status] ?? null;
+}
+
+/** «Возвращено: X ₽ из Y ₽» */
+export function formatPartialRefundProgress(input: {
+  confirmedRefunded?: string | null;
+  paidAmount?: string | null;
+  currency?: string | null;
+}): string | null {
+  const confirmed = (input.confirmedRefunded || '').trim();
+  const paid = (input.paidAmount || '').trim();
+  if (!confirmed || !paid) return null;
+  const cur = (input.currency || 'RUB').toUpperCase() === 'RUB' ? '₽' : input.currency;
+  return `Возвращено: ${confirmed} ${cur} из ${paid} ${cur}`.trim();
+}
+
+export function formatRemainingRefundable(input: {
+  remaining?: string | null;
+  currency?: string | null;
+}): string | null {
+  const rem = (input.remaining || '').trim();
+  if (!rem) return null;
+  const cur = (input.currency || 'RUB').toUpperCase() === 'RUB' ? '₽' : input.currency;
+  return `Осталось доступно к возврату: ${rem} ${cur}`.trim();
+}
+
+export function formatAddonRevokedUnits(units: number | null | undefined): string | null {
+  if (units == null || !Number.isFinite(units) || units <= 0) return null;
+  const n = Math.trunc(units);
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  let word = 'сообщений';
+  if (!(mod100 >= 11 && mod100 <= 14)) {
+    if (mod10 === 1) word = 'сообщение';
+    else if (mod10 >= 2 && mod10 <= 4) word = 'сообщения';
+  }
+  return `Отозвано: ${n} ${word}`;
 }
 
 export function canUserCancelRefund(status: string): boolean {
@@ -128,6 +196,7 @@ export function unavailableReasonLabel(reason: string | null | undefined): strin
   const map: Record<string, string> = {
     active_refund_request: 'Уже есть активная заявка',
     refund_completed: 'Возврат по покупке завершён',
+    purchase_fully_refunded: 'Покупка уже полностью возвращена',
     purchase_refunded: 'Покупка уже возвращена',
   };
   return map[reason] ?? reason;

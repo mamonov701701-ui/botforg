@@ -29,7 +29,11 @@ import {
 } from '../purchases/purchaseDisplay';
 import { findRefundablePurchaseByIntent } from '../refunds/findRefundablePurchase';
 import type { RefundablePurchase } from '../../../api/refunds';
-import { unavailableReasonLabel } from '../refunds/refundDisplay';
+import {
+  unavailableReasonLabel,
+  formatPartialRefundProgress,
+  formatRemainingRefundable,
+} from '../refunds/refundDisplay';
 
 const linkStyle: React.CSSProperties = {
   color: 'var(--primary)',
@@ -412,9 +416,43 @@ export default function PurchaseDetailPage() {
                         gap: 10,
                       }}
                     >
-                      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>
-                        Можно оформить заявку по этой покупке.
-                      </p>
+                      <div>
+                        {refundable?.confirmed_refunded_amount &&
+                        Number(refundable.confirmed_refunded_amount) > 0 &&
+                        Number(refundable.refundable_available_amount || 0) > 0 ? (
+                          <p
+                            data-testid="purchase-detail-partial-label"
+                            style={{ margin: '0 0 4px', fontWeight: 600, fontSize: 13 }}
+                          >
+                            Частичный возврат выполнен
+                          </p>
+                        ) : null}
+                        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>
+                          Можно оформить заявку по этой покупке.
+                        </p>
+                        {refundable?.confirmed_refunded_amount &&
+                        Number(refundable.confirmed_refunded_amount) > 0 ? (
+                          <div
+                            data-testid="purchase-detail-partial-refund"
+                            style={{ marginTop: 6, fontSize: 13, color: 'var(--text-muted)' }}
+                          >
+                            {formatPartialRefundProgress({
+                              confirmedRefunded: refundable.confirmed_refunded_amount,
+                              paidAmount: refundable.amount,
+                              currency: refundable.currency,
+                            })}
+                            {formatRemainingRefundable({
+                              remaining: refundable.refundable_available_amount,
+                              currency: refundable.currency,
+                            })
+                              ? ` · ${formatRemainingRefundable({
+                                  remaining: refundable.refundable_available_amount,
+                                  currency: refundable.currency,
+                                })}`
+                              : ''}
+                          </div>
+                        ) : null}
+                      </div>
                       <Link
                         to={`/dashboard/finance/refunds?intent=${purchaseId}`}
                         data-testid="purchase-detail-refund-link"

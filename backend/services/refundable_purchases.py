@@ -22,18 +22,10 @@ from backend.models.refund import (
     RefundRequestStatus,
 )
 from backend.services.refund_api_presenters import format_money
+from backend.services.refund_calculation import load_ledger_balance
 
 
-# Refund finished for this purchase (cannot submit another request).
-_REFUND_DONE_STATUSES = frozenset(
-    {
-        RefundRequestStatus.COMPLETED.value,
-        RefundRequestStatus.REFUNDED.value,
-        RefundRequestStatus.PARTIALLY_REFUNDED.value,
-    }
-)
-
-# Terminal statuses that free the purchase for a new request.
+# Terminal statuses that free the purchase for a new request (if balance remains).
 _REFUND_REOPENABLE_STATUSES = frozenset(
     {
         RefundRequestStatus.REJECTED.value,
@@ -71,12 +63,18 @@ def _resolve_succeeded_attempt(
 
 
 def _availability(
+    db: Session,
     *,
     intent: CheckoutIntent,
+    attempt: PaymentAttempt,
     refund: RefundRequest | None,
 ) -> tuple[bool, str | None, str | None]:
     """
     Returns (can_request_refund, unavailable_reason, current_refund_status).
+
+    Open/non-terminal requests block. Ledger available == 0 blocks even when the
+    latest request is canceled/rejected after a completed full refund. Positive
+    remaining balance after a prior partial refund stays requestable.
     """
     current_status = refund.status if refund is not None else None
 
@@ -85,16 +83,19 @@ def _availability(
 
     if refund is not None:
         st = refund.status or ""
-        if st in _REFUND_DONE_STATUSES:
-            return False, "refund_completed", st
-        if st in _REFUND_REOPENABLE_STATUSES:
-            return True, None, st
-        if st not in REFUND_TERMINAL_STATUSES:
-            # Active / open request (including approved until later stages).
+        if st not in REFUND_TERMINAL_STATUSES and st not in _REFUND_REOPENABLE_STATUSES:
+            # Active / open request (including approved / refunded until completed).
             return False, "active_refund_request", st
-        return True, None, st
 
-    return True, None, None
+    balance = load_ledger_balance(
+        db,
+        checkout_intent_id=intent.id,
+        paid_amount=attempt.amount,
+    )
+    if balance.refundable_available_amount <= 0:
+        return False, "purchase_fully_refunded", current_status
+
+    return True, None, current_status
 
 
 def list_refundable_purchases(
@@ -150,8 +151,13 @@ def list_refundable_purchases(
         refund = _latest_refund_for_intent(
             db, checkout_intent_id=intent.id, user_id=user_id
         )
-        can_request, reason, refund_status = _availability(intent=intent, refund=refund)
+        can_request, reason, refund_status = _availability(
+            db, intent=intent, attempt=attempt, refund=refund
+        )
         paid_at = intent.paid_at or attempt.updated_at or attempt.created_at
+        balance = load_ledger_balance(
+            db, checkout_intent_id=intent.id, paid_amount=attempt.amount
+        )
         items.append(
             {
                 "checkout_intent_id": intent.id,
@@ -166,6 +172,12 @@ def list_refundable_purchases(
                 "current_refund_request_id": refund.id if refund else None,
                 "can_request_refund": can_request,
                 "unavailable_reason": reason,
+                "confirmed_refunded_amount": format_money(
+                    balance.confirmed_refunded_amount
+                ),
+                "refundable_available_amount": format_money(
+                    balance.refundable_available_amount
+                ),
             }
         )
 

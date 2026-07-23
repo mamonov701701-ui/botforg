@@ -502,6 +502,48 @@ describe('PurchaseDetailPage', () => {
     );
   });
 
+  it('hides refund CTA when purchase is fully refunded', async () => {
+    getCheckoutIntent.mockResolvedValue(
+      intent({
+        id: 42,
+        status: 'fulfilled',
+        fulfilled_addon_id: 1,
+        paid_at: '2026-07-22T11:00:00Z',
+        fulfilled_at: '2026-07-22T11:01:00Z',
+      })
+    );
+    getCheckoutPaymentStatus.mockResolvedValue(
+      payment({ intent_status: 'fulfilled', normalized_status: 'succeeded', is_final: true })
+    );
+    listMyRefundablePurchases.mockResolvedValue({
+      items: [
+        {
+          checkout_intent_id: 42,
+          payment_attempt_id: 7,
+          product_type: 'addon',
+          product_code: 'msg_1000',
+          product_name: 'Пакет 1000',
+          amount: '490.00',
+          currency: 'RUB',
+          paid_at: '2026-07-22T11:00:00Z',
+          current_refund_status: 'completed',
+          current_refund_request_id: 4,
+          can_request_refund: false,
+          unavailable_reason: 'purchase_fully_refunded',
+        },
+      ],
+      total: 1,
+      limit: 20,
+      offset: 0,
+    });
+    renderDetail();
+    await waitFor(() => {
+      expect(screen.getByTestId('purchase-detail-refund-unavailable')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('purchase-detail-refund-cta')).toBeNull();
+    expect(screen.queryByTestId('purchase-detail-refund-link')).toBeNull();
+  });
+
   it('pending/failed/canceled do not show refund CTA', async () => {
     for (const status of ['pending', 'failed', 'cancelled'] as const) {
       getCheckoutIntent.mockResolvedValue(intent({ id: 42, status }));

@@ -76,6 +76,10 @@ class RefundRequestOut(BaseModel):
     product_name: str | None = None
     amount: str | None = None
     paid_at: datetime | None = None
+    # 6.14.11C.1 — partial refund presentation from ledger / approved revision
+    confirmed_refunded_amount: str | None = None
+    refundable_available_amount: str | None = None
+    addon_revoke_units: int | None = None
 
 
 class RefundablePurchaseOut(BaseModel):
@@ -91,6 +95,8 @@ class RefundablePurchaseOut(BaseModel):
     current_refund_request_id: int | None = None
     can_request_refund: bool
     unavailable_reason: str | None = None
+    confirmed_refunded_amount: str | None = None
+    refundable_available_amount: str | None = None
 
 
 class RefundablePurchaseListOut(BaseModel):

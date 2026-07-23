@@ -17,6 +17,7 @@ from backend.models.plan import Plan
 from backend.models.refund import (
     RefundAuditEvent,
     RefundCalculationStatus,
+    RefundEntitlementAction,
     RefundLedgerEntry,
     RefundLedgerEntryType,
     RefundLedgerProviderStatus,
@@ -769,11 +770,24 @@ def test_admin_edit_bounds(client, db):
             based_on_revision_id=rev.id,
             admin_user_id=uid,
             expected_version=req.version,
-            proposed_refund_amount="200.00",
+            addon_revoke_units=2000,
             adjustment_reason_category="goodwill",
-            adjustment_comment="too much",
+            adjustment_comment="too many units",
         )
-    assert ei.value.code == "refund_exceeds_cap"
+    assert ei.value.code == "over_units"
+
+    with pytest.raises(RefundRevisionServiceError) as ei2:
+        create_admin_revision(
+            db,
+            req.id,
+            based_on_revision_id=rev.id,
+            admin_user_id=uid,
+            expected_version=req.version,
+            proposed_refund_amount="50.00",
+            adjustment_reason_category="goodwill",
+            adjustment_comment="money-only forbidden",
+        )
+    assert ei2.value.code == "addon_units_required"
 
     admin_rev = create_admin_revision(
         db,
@@ -781,18 +795,22 @@ def test_admin_edit_bounds(client, db):
         based_on_revision_id=rev.id,
         admin_user_id=uid,
         expected_version=req.version,
-        proposed_refund_amount="50.00",
+        addon_revoke_units=250,
         adjustment_reason_category="goodwill",
-        adjustment_comment="partial ok",
+        adjustment_comment="partial units ok",
     )
     db.refresh(req)
     assert admin_rev.revision_type == RefundRevisionType.ADMIN.value
     assert admin_rev.based_on_revision_id == rev.id
-    assert admin_rev.proposed_refund_amount == Decimal("50.00")
+    # 190 * 250 / 1000 = 47.50
+    assert admin_rev.proposed_refund_amount == Decimal("47.50")
+    assert admin_rev.addon_revoke_units == 250
+    assert admin_rev.entitlement_action == RefundEntitlementAction.REDUCE_AMOUNT.value
+    assert admin_rev.refund_type == RefundType.PARTIAL.value
     assert req.status == RefundRequestStatus.ADMIN_EDITED.value
     assert admin_rev.calculation_snapshot["changed_fields"]["proposed_refund_amount"][
         "to"
-    ] == "50.00"
+    ] == "47.50"
 
 
 def test_stale_revision_approval_rejected(client, db):
@@ -935,7 +953,7 @@ def test_confirm_admin_then_approve(client, db):
         based_on_revision_id=rev.id,
         admin_user_id=uid,
         expected_version=req.version,
-        proposed_refund_amount="100.00",
+        addon_revoke_units=526,
         adjustment_reason_category="policy",
         adjustment_comment="adjusted",
     )

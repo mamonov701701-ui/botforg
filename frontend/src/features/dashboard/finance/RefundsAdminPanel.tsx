@@ -6,6 +6,7 @@ import {
   adminCreateRefundRevision,
   adminNeedsInformation,
   adminRecalculateRefund,
+  adminRecoverAddonEntitlement,
   adminRejectRefund,
   getAdminRefund,
   isVersionConflictError,
@@ -33,6 +34,7 @@ import {
   canAdminCreateRevision,
   canAdminNeedsInformation,
   canAdminRecalculate,
+  canAdminRecoverAddonEntitlement,
   canAdminReject,
   checkoutStatusLabel,
   extractInputFingerprint,
@@ -46,6 +48,9 @@ import {
   isUserInformationProvidedAudit,
   MANUAL_AMOUNT_LABEL,
   MANUAL_REVIEW_GUIDANCE,
+  moneyFromAddonRevokeUnits,
+  formatRecoveryMoneyDelta,
+  formatUnitsRu,
   parseRefundCalcDisplay,
   parseUsageDisplay,
   paymentStatusLabel,
@@ -66,6 +71,7 @@ type AdminAction =
   | 'reject'
   | 'confirm'
   | 'approve'
+  | 'recover_entitlement'
   | null;
 
 type ListFilters = {
@@ -195,10 +201,16 @@ export default function RefundsAdminPanel() {
   const [action, setAction] = useState<AdminAction>(null);
   const [reasonText, setReasonText] = useState('');
   const [revisionAmount, setRevisionAmount] = useState('');
+  const [revisionRevokeUnits, setRevisionRevokeUnits] = useState('');
   const [adjustmentCategory, setAdjustmentCategory] = useState('policy');
   const [adjustmentComment, setAdjustmentComment] = useState('');
   const [confirmDanger, setConfirmDanger] = useState<AdminAction>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [recoveryPreview, setRecoveryPreview] = useState<{
+    confirmed: string;
+    equivalent: string;
+    delta: string;
+  } | null>(null);
 
   const loadList = useCallback(
     async (opts?: { silent?: boolean; nextOffset?: number; filters?: ListFilters }) => {
@@ -255,6 +267,12 @@ export default function RefundsAdminPanel() {
       } else {
         setRevisionAmount('');
       }
+      if (data.current_revision?.addon_revoke_units != null) {
+        setRevisionRevokeUnits(String(data.current_revision.addon_revoke_units));
+      } else {
+        setRevisionRevokeUnits('');
+      }
+      setRecoveryPreview(null);
     } catch (err) {
       setDetail(null);
       setDetailError(safeAdminRefundErrorMessage(err));
@@ -316,7 +334,14 @@ export default function RefundsAdminPanel() {
       return;
     }
     if (kind === 'revision') {
-      if (!revisionAmount.trim()) {
+      const isAddon = (detail.product?.product_type || '').toLowerCase() === 'addon';
+      if (isAddon) {
+        const n = Number(revisionRevokeUnits.trim());
+        if (!revisionRevokeUnits.trim() || !Number.isFinite(n) || n <= 0) {
+          setFormError('Укажите количество единиц к отзыву.');
+          return;
+        }
+      } else if (!revisionAmount.trim()) {
         setFormError('Укажите сумму возврата.');
         return;
       }
@@ -330,6 +355,21 @@ export default function RefundsAdminPanel() {
       }
       if (!detail.current_revision) {
         setFormError('Нет текущей ревизии для правки.');
+        return;
+      }
+    }
+    if (kind === 'recover_entitlement') {
+      const n = Number(revisionRevokeUnits.trim());
+      if (!revisionRevokeUnits.trim() || !Number.isFinite(n) || n <= 0) {
+        setFormError('Укажите количество единиц к отзыву.');
+        return;
+      }
+      if (!adjustmentComment.trim()) {
+        setFormError('Комментарий к recovery обязателен.');
+        return;
+      }
+      if (confirmDanger !== kind) {
+        setConfirmDanger(kind);
         return;
       }
     }
@@ -349,12 +389,27 @@ export default function RefundsAdminPanel() {
       if (kind === 'recalculate') {
         next = await adminRecalculateRefund(id, version);
       } else if (kind === 'revision') {
+        const isAddon = (detail.product?.product_type || '').toLowerCase() === 'addon';
         next = await adminCreateRefundRevision(id, {
           expected_version: version,
           based_on_revision_id: detail.current_revision!.id,
-          proposed_refund_amount: revisionAmount.trim(),
+          ...(isAddon
+            ? { addon_revoke_units: Number(revisionRevokeUnits.trim()) }
+            : { proposed_refund_amount: revisionAmount.trim() }),
           adjustment_reason_category: adjustmentCategory.trim(),
           adjustment_comment: adjustmentComment.trim(),
+        });
+      } else if (kind === 'recover_entitlement') {
+        const result = await adminRecoverAddonEntitlement(id, {
+          expected_version: version,
+          addon_revoke_units: Number(revisionRevokeUnits.trim()),
+          adjustment_comment: adjustmentComment.trim(),
+        });
+        next = result.detail;
+        setRecoveryPreview({
+          confirmed: result.confirmed_refunded_amount,
+          equivalent: result.equivalent_units_money,
+          delta: result.money_units_delta,
         });
       } else if (kind === 'needs_information') {
         next = await adminNeedsInformation(id, version, reasonText.trim());
@@ -524,6 +579,22 @@ export default function RefundsAdminPanel() {
                 canAdminCreateRevision(detail.request.status);
               const showRevisionSecondary =
                 !showRevisionPrimary && canAdminCreateRevision(detail.request.status);
+              const isAddonProduct = (detail.product?.product_type || '').toLowerCase() === 'addon';
+              const showRecoverEntitlement = canAdminRecoverAddonEntitlement(
+                detail.request.status,
+                detail.product?.product_type
+              );
+              const revUnitsTotal = detail.current_revision?.addon_total_units ?? 0;
+              const revUnitsUsed = detail.current_revision?.addon_used_units ?? 0;
+              const revUnitsAvailable = Math.max(0, revUnitsTotal - revUnitsUsed);
+              const computedAddonRefundMoney =
+                isAddonProduct && revisionRevokeUnits.trim()
+                  ? moneyFromAddonRevokeUnits(
+                      detail.current_revision?.paid_amount || detail.product?.amount || '0',
+                      revUnitsTotal,
+                      Number(revisionRevokeUnits.trim()) || 0
+                    )
+                  : null;
               const openAction = (next: AdminAction) => {
                 setAction(next);
                 setConfirmDanger(null);
@@ -756,6 +827,21 @@ export default function RefundsAdminPanel() {
                           Отклонить
                         </button>
                       )}
+                      {showRecoverEntitlement && (
+                        <button
+                          type="button"
+                          data-testid="refund-admin-action-recover-entitlement"
+                          disabled={busy}
+                          onClick={() => openAction('recover_entitlement')}
+                          style={{
+                            ...btnBase,
+                            background: 'transparent',
+                            color: FINANCE_COLORS.text,
+                          }}
+                        >
+                          Recovery entitlement
+                        </button>
+                      )}
                     </div>
 
                     {action && (
@@ -792,17 +878,70 @@ export default function RefundsAdminPanel() {
                         )}
                         {action === 'revision' && (
                           <>
-                            <div style={{ marginBottom: 10 }}>
-                              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
-                                Сумма возврата *
-                              </label>
-                              <input
-                                data-testid="refund-admin-revision-amount"
-                                value={revisionAmount}
-                                onChange={e => setRevisionAmount(e.target.value)}
-                                style={fieldStyle}
-                              />
-                            </div>
+                            {isAddonProduct ? (
+                              <>
+                                <p
+                                  data-testid="refund-admin-addon-units-hint"
+                                  style={{ marginTop: 0, fontSize: 13 }}
+                                >
+                                  Для доп. пакета корректировка задаётся количеством единиц. Сумма
+                                  рассчитывается автоматически.
+                                </p>
+                                <div style={{ marginBottom: 10, fontSize: 13 }}>
+                                  <div>Оплачено: {paidLabel}</div>
+                                  <div>Всего units: {revUnitsTotal || '—'}</div>
+                                  <div>Использовано: {revUnitsUsed}</div>
+                                  <div>Доступно к отзыву: {revUnitsAvailable}</div>
+                                </div>
+                                <div style={{ marginBottom: 10 }}>
+                                  <label
+                                    style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}
+                                  >
+                                    Количество единиц к отзыву *
+                                  </label>
+                                  <input
+                                    data-testid="refund-admin-revision-revoke-units"
+                                    type="number"
+                                    min={1}
+                                    max={revUnitsAvailable || undefined}
+                                    value={revisionRevokeUnits}
+                                    onChange={e => setRevisionRevokeUnits(e.target.value)}
+                                    style={fieldStyle}
+                                  />
+                                </div>
+                                <div style={{ marginBottom: 10 }}>
+                                  <label
+                                    style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}
+                                  >
+                                    Расчётная сумма возврата
+                                  </label>
+                                  <input
+                                    data-testid="refund-admin-revision-amount"
+                                    value={
+                                      computedAddonRefundMoney
+                                        ? formatMoneyAmount(computedAddonRefundMoney, currency)
+                                        : '—'
+                                    }
+                                    readOnly
+                                    style={{ ...fieldStyle, opacity: 0.85 }}
+                                  />
+                                </div>
+                              </>
+                            ) : (
+                              <div style={{ marginBottom: 10 }}>
+                                <label
+                                  style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}
+                                >
+                                  Сумма возврата *
+                                </label>
+                                <input
+                                  data-testid="refund-admin-revision-amount"
+                                  value={revisionAmount}
+                                  onChange={e => setRevisionAmount(e.target.value)}
+                                  style={fieldStyle}
+                                />
+                              </div>
+                            )}
                             <div style={{ marginBottom: 10 }}>
                               <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
                                 Категория корректировки *
@@ -834,6 +973,124 @@ export default function RefundsAdminPanel() {
                             </div>
                           </>
                         )}
+                        {action === 'recover_entitlement' && (
+                          <>
+                            <p
+                              data-testid="refund-admin-recovery-warning"
+                              style={{
+                                marginTop: 0,
+                                padding: '10px 12px',
+                                borderRadius: 8,
+                                border: `1px solid ${FINANCE_COLORS.danger}`,
+                                color: FINANCE_COLORS.danger,
+                                fontWeight: 600,
+                                fontSize: 13,
+                              }}
+                            >
+                              Денежный возврат уже выполнен. Изменяется только корректировка
+                              начисления.
+                            </p>
+                            {(() => {
+                              const n = Number(revisionRevokeUnits.trim()) || 0;
+                              const oldReserve =
+                                detail.approved_revision?.addon_revoke_units ?? revUnitsTotal ?? 0;
+                              const remainingAfter = Math.max(0, revUnitsTotal - n);
+                              const actual =
+                                calc.alreadyRefunded ||
+                                detail.approved_revision?.final_refund_amount ||
+                                '0';
+                              const deltaInfo =
+                                computedAddonRefundMoney != null
+                                  ? formatRecoveryMoneyDelta(
+                                      computedAddonRefundMoney,
+                                      actual,
+                                      currency
+                                    )
+                                  : null;
+                              return (
+                                <div
+                                  data-testid="refund-admin-recovery-preview"
+                                  style={{ marginBottom: 10, fontSize: 13, lineHeight: 1.5 }}
+                                >
+                                  <div>
+                                    Фактически возвращено: {formatMoneyAmount(actual, currency)}
+                                  </div>
+                                  <div>Всего units: {revUnitsTotal || '—'}</div>
+                                  <div>Доступно к отзыву: {revUnitsAvailable}</div>
+                                  <div data-testid="refund-admin-recovery-old-reserve">
+                                    Старая резервация: {formatUnitsRu(oldReserve)}
+                                  </div>
+                                  {n > 0 && (
+                                    <>
+                                      <div data-testid="refund-admin-recovery-new-reserve">
+                                        Новая резервация: {formatUnitsRu(n)}
+                                      </div>
+                                      <div data-testid="refund-admin-recovery-remaining">
+                                        После применения останется: {formatUnitsRu(remainingAfter)}
+                                      </div>
+                                      <div data-testid="refund-admin-recovery-active-note">
+                                        {remainingAfter > 0
+                                          ? 'Пакет останется активным'
+                                          : 'Пакет будет отменён (остаток 0)'}
+                                      </div>
+                                    </>
+                                  )}
+                                  {computedAddonRefundMoney && (
+                                    <>
+                                      <div data-testid="refund-admin-recovery-equivalent">
+                                        Эквивалент выбранных units:{' '}
+                                        {formatMoneyAmount(computedAddonRefundMoney, currency)}
+                                      </div>
+                                      {deltaInfo && (
+                                        <>
+                                          <div data-testid="refund-admin-recovery-delta">
+                                            Расхождение: {deltaInfo.signedAmount}
+                                          </div>
+                                          {deltaInfo.explanation && (
+                                            <div
+                                              data-testid="refund-admin-recovery-delta-explain"
+                                              style={{
+                                                color: FINANCE_COLORS.textSecondary,
+                                                marginTop: 4,
+                                              }}
+                                            >
+                                              {deltaInfo.explanation}
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                            <div style={{ marginBottom: 10 }}>
+                              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
+                                Количество единиц к отзыву *
+                              </label>
+                              <input
+                                data-testid="refund-admin-recovery-revoke-units"
+                                type="number"
+                                min={1}
+                                value={revisionRevokeUnits}
+                                onChange={e => setRevisionRevokeUnits(e.target.value)}
+                                style={fieldStyle}
+                              />
+                            </div>
+                            <div style={{ marginBottom: 10 }}>
+                              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600 }}>
+                                Комментарий *
+                              </label>
+                              <textarea
+                                data-testid="refund-admin-recovery-comment"
+                                value={adjustmentComment}
+                                onChange={e => setAdjustmentComment(e.target.value)}
+                                rows={3}
+                                style={fieldStyle}
+                              />
+                            </div>
+                          </>
+                        )}
                         {action === 'approve' && (
                           <p style={{ marginTop: 0 }} data-testid="refund-admin-approve-notice">
                             {ADMIN_STAGE_NO_PAYOUT}
@@ -845,6 +1102,15 @@ export default function RefundsAdminPanel() {
                             style={{ color: FINANCE_COLORS.danger, fontWeight: 600 }}
                           >
                             Подтвердите опасное действие ещё раз кнопкой ниже.
+                          </p>
+                        )}
+                        {recoveryPreview && (
+                          <p
+                            data-testid="refund-admin-recovery-result"
+                            style={{ fontSize: 13, color: FINANCE_COLORS.textSecondary }}
+                          >
+                            Recovery: факт {recoveryPreview.confirmed}, эквивалент{' '}
+                            {recoveryPreview.equivalent}, дельта {recoveryPreview.delta}
                           </p>
                         )}
                         {formError && (

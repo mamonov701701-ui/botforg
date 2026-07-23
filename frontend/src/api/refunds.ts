@@ -39,6 +39,9 @@ export interface RefundRequest {
   product_name: string | null;
   amount: string | null;
   paid_at: string | null;
+  confirmed_refunded_amount: string | null;
+  refundable_available_amount: string | null;
+  addon_revoke_units: number | null;
 }
 
 export interface RefundablePurchase {
@@ -54,6 +57,8 @@ export interface RefundablePurchase {
   current_refund_request_id: number | null;
   can_request_refund: boolean;
   unavailable_reason: string | null;
+  confirmed_refunded_amount: string | null;
+  refundable_available_amount: string | null;
 }
 
 export interface RefundablePurchaseList {
@@ -158,6 +163,9 @@ export function normalizeRefundRequest(raw: unknown): RefundRequest {
     product_name: asNullableString(o.product_name),
     amount: asNullableString(o.amount),
     paid_at: asNullableString(o.paid_at),
+    confirmed_refunded_amount: asNullableString(o.confirmed_refunded_amount),
+    refundable_available_amount: asNullableString(o.refundable_available_amount),
+    addon_revoke_units: asNullableNumber(o.addon_revoke_units),
   };
 }
 
@@ -183,6 +191,8 @@ export function normalizeRefundablePurchase(raw: unknown): RefundablePurchase {
     current_refund_request_id: asNullableNumber(o.current_refund_request_id),
     can_request_refund: asBool(o.can_request_refund, false),
     unavailable_reason: asNullableString(o.unavailable_reason),
+    confirmed_refunded_amount: asNullableString(o.confirmed_refunded_amount),
+    refundable_available_amount: asNullableString(o.refundable_available_amount),
   };
 }
 
@@ -265,6 +275,9 @@ export function safeRefundErrorMessage(err: unknown): string {
       if (err.code === 'duplicate_open_request') {
         return 'По этой покупке уже есть активная заявка на возврат.';
       }
+      if (err.code === 'purchase_fully_refunded') {
+        return 'По этой покупке уже выполнен полный возврат. Новую заявку создать нельзя.';
+      }
       if (err.code === 'version_conflict') {
         return 'Заявка уже была изменена. Данные обновлены.';
       }
@@ -290,6 +303,9 @@ export function safeRefundErrorMessage(err: unknown): string {
     }
     if (err.code === 'duplicate_open_request') {
       return 'По этой покупке уже есть активная заявка на возврат.';
+    }
+    if (err.code === 'purchase_fully_refunded') {
+      return 'По этой покупке уже выполнен полный возврат. Новую заявку создать нельзя.';
     }
     if (err.code === 'reason_required') {
       return 'Выберите причину возврата.';

@@ -186,6 +186,8 @@ class RefundAuditAction(str, Enum):
     ENTITLEMENT_NOT_REQUIRED = "entitlement_not_required"
     ENTITLEMENT_FAILED = "entitlement_failed"
     ENTITLEMENT_MANUAL_REQUIRED = "entitlement_manual_required"
+    # 6.14.11C.1 — post-money entitlement/reservation recovery (no provider call)
+    ENTITLEMENT_RECOVERY = "entitlement_recovery"
 
 
 class RefundRequest(Base):

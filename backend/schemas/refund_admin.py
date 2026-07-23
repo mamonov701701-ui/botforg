@@ -207,13 +207,33 @@ class RefundAdminRecalculateIn(RefundAdminExpectedVersionIn):
 class RefundAdminEditIn(BaseModel):
     expected_version: int = Field(..., ge=1)
     based_on_revision_id: int = Field(..., ge=1)
-    proposed_refund_amount: Decimal
+    # Required for tariff; for addon derive from addon_revoke_units.
+    proposed_refund_amount: Decimal | None = None
     adjustment_reason_category: str = Field(..., min_length=1, max_length=64)
     adjustment_comment: str = Field(..., min_length=1, max_length=4000)
     refund_type: str | None = Field(default=None, max_length=32)
     entitlement_action: str | None = Field(default=None, max_length=64)
     entitlement_effective_at: datetime | None = None
+    # Required for addon correction (units-first).
     addon_revoke_units: int | None = Field(default=None, ge=0)
+
+
+class RefundAdminEntitlementRecoveryIn(BaseModel):
+    """Post-money entitlement/reservation recovery (no provider call)."""
+
+    expected_version: int = Field(..., ge=1)
+    addon_revoke_units: int = Field(..., gt=0)
+    adjustment_comment: str = Field(..., min_length=1, max_length=4000)
+
+
+class RefundAdminEntitlementRecoveryOut(BaseModel):
+    confirmed_refunded_amount: str
+    equivalent_units_money: str
+    money_units_delta: str
+    addon_revoke_units: int
+    entitlement_action: str
+    detail: RefundAdminDetailOut
+
 
 
 class RefundAdminNeedsInformationIn(BaseModel):

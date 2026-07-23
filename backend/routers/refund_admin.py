@@ -20,12 +20,18 @@ from backend.schemas.refund_admin import (
     RefundAdminConfirmIn,
     RefundAdminDetailOut,
     RefundAdminEditIn,
+    RefundAdminEntitlementRecoveryIn,
+    RefundAdminEntitlementRecoveryOut,
     RefundAdminExecuteIn,
     RefundAdminExecuteOut,
     RefundAdminListOut,
     RefundAdminNeedsInformationIn,
     RefundAdminRecalculateIn,
     RefundAdminRejectIn,
+)
+from backend.services.refund_addon_partial import (
+    AddonPartialRefundError,
+    recover_addon_entitlement_units,
 )
 from backend.services.refund_admin_read import (
     RefundAdminReadError,
@@ -107,6 +113,12 @@ def _http_from_revision_error(exc: RefundRevisionServiceError) -> HTTPException:
         "revoke_exceeds_total",
         "refund_exceeds_cap",
         "refund_negative",
+        "addon_units_required",
+        "addon_money_independent_forbidden",
+        "proposed_amount_required",
+        "over_units",
+        "over_money",
+        "inconsistent_addon_entitlement",
     ):
         return HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -137,6 +149,7 @@ def _http_from_execution_error(exc: RefundExecutionError) -> HTTPException:
         "revision_ownership",
         "provider_unknown_no_refund_id",
         "amount_exceeds_available",
+        "inconsistent_addon_entitlement",
     ):
         return HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -431,6 +444,79 @@ async def admin_execute_refund(
         provider_refund_id=result.provider_refund_id,
         ledger_entry_id=ledger_id,
         already_completed=result.already_completed,
+        detail=detail,
+    )
+
+
+def _http_from_addon_partial_error(exc: AddonPartialRefundError) -> HTTPException:
+    code = exc.code
+    if code in ("request_not_found", "revision_not_found", "addon_not_found"):
+        return HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": code, "message": exc.message},
+        )
+    if code in (
+        "version_conflict",
+        "recovery_not_allowed",
+        "entitlement_already_applied",
+        "approved_revision_required",
+    ):
+        return HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": code, "message": exc.message},
+        )
+    if code in (
+        "adjustment_required",
+        "addon_units_required",
+        "over_units",
+        "over_money",
+        "revoke_exceeds_total",
+        "inconsistent_addon_entitlement",
+    ):
+        return HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": code, "message": exc.message},
+        )
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={"code": code, "message": exc.message},
+    )
+
+
+@router.post(
+    "/{request_id}/recover-entitlement",
+    response_model=RefundAdminEntitlementRecoveryOut,
+)
+async def admin_recover_addon_entitlement(
+    request_id: int,
+    body: RefundAdminEntitlementRecoveryIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """
+    Post-money entitlement/reservation recovery for addon (6.14.11C.1).
+
+    Does not call the payment provider and does not change confirmed refunded money.
+    """
+    try:
+        result = recover_addon_entitlement_units(
+            db,
+            request_id,
+            admin_user_id=admin.id,
+            expected_version=body.expected_version,
+            addon_revoke_units=body.addon_revoke_units,
+            adjustment_comment=body.adjustment_comment,
+        )
+    except AddonPartialRefundError as exc:
+        raise _http_from_addon_partial_error(exc) from exc
+
+    detail = _detail_out(db, request_id)
+    return RefundAdminEntitlementRecoveryOut(
+        confirmed_refunded_amount=result["confirmed_refunded_amount"],
+        equivalent_units_money=result["equivalent_units_money"],
+        money_units_delta=result["money_units_delta"],
+        addon_revoke_units=int(result["addon_revoke_units"]),
+        entitlement_action=str(result["entitlement_action"]),
         detail=detail,
     )
 

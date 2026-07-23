@@ -19,6 +19,7 @@ from backend.models.refund import (
     RefundRequest,
     RefundRequestStatus,
 )
+from backend.services.refund_calculation import load_ledger_balance
 from backend.services.refund_revisions import (
     RefundRevisionServiceError,
     create_initial_automatic_revision,
@@ -92,6 +93,31 @@ def _find_open_request(db: Session, *, checkout_intent_id: int) -> RefundRequest
     )
 
 
+def _assert_refundable_amount_available(
+    db: Session,
+    *,
+    checkout_intent_id: int,
+    paid_amount,
+) -> None:
+    """
+    Authoritative balance guard before creating a new RefundRequest.
+
+    Blocks when confirmed + reserved + provider_unknown already cover paid
+    (available == 0), including after a completed full refund. Does not block
+    when a prior partial refund left a positive remaining amount.
+    """
+    balance = load_ledger_balance(
+        db,
+        checkout_intent_id=int(checkout_intent_id),
+        paid_amount=paid_amount,
+    )
+    if balance.refundable_available_amount <= 0:
+        raise RefundSubmitError(
+            "Purchase has no remaining refundable amount",
+            code="purchase_fully_refunded",
+        )
+
+
 def _resolve_succeeded_attempt(
     db: Session,
     *,
@@ -151,7 +177,8 @@ def create_refund_request(
 
     Idempotent on (user_id, idempotency_key).
     Blocks a second non-terminal request for the same checkout_intent_id.
-    Terminal statuses (completed / rejected / canceled) do not block a new request.
+    Rejected / canceled do not block a new request when refundable balance > 0.
+    Completed full refund (available == 0) blocks with purchase_fully_refunded.
     """
     key = (idempotency_key or "").strip()
     if not key:
@@ -221,6 +248,12 @@ def create_refund_request(
                 "An active refund request already exists for this CheckoutIntent",
                 code="duplicate_open_request",
             )
+
+        _assert_refundable_amount_available(
+            db,
+            checkout_intent_id=intent.id,
+            paid_amount=attempt.amount,
+        )
 
         now = _utcnow()
         request = RefundRequest(

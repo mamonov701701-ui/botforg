@@ -117,24 +117,53 @@ def ensure_addon_refund_reservation(
 ) -> AddonRefundReservationResult:
     """
     Идемпотентно зарезервировать addon_revoke_units для approved revision.
-  """
+
+    Unique(refund_request_id): reuse the same row when re-reserving after release.
+    """
     addon, units, skip_reason = _revision_eligible_for_reserve(db, request, revision)
     if addon is None or units <= 0:
         return AddonRefundReservationResult(
             reservation=None, created=False, skipped=True, reason=skip_reason
         )
 
-    existing = _get_active_reservation(db, int(request.id))
+    existing = (
+        db.query(AddonRefundUnitReservation)
+        .filter(AddonRefundUnitReservation.refund_request_id == int(request.id))
+        .first()
+    )
     if existing is not None:
         if (
-            int(existing.refund_revision_id or 0) == int(revision.id)
+            existing.status == AddonRefundReservationStatus.ACTIVE.value
+            and int(existing.refund_revision_id or 0) == int(revision.id)
             and int(existing.units) == int(units)
             and int(existing.user_addon_id) == int(addon.id)
         ):
             return AddonRefundReservationResult(
                 reservation=existing, created=False, skipped=False
             )
-        release_addon_refund_reservation(db, int(request.id), commit=False)
+        if existing.status == AddonRefundReservationStatus.ACTIVE.value:
+            release_addon_refund_reservation(db, int(request.id), commit=False)
+            db.refresh(existing)
+
+        reserve_user_addon_units(
+            db,
+            user_addon_id=int(addon.id),
+            units=int(units),
+            commit=False,
+        )
+        existing.refund_revision_id = int(revision.id)
+        existing.user_addon_id = int(addon.id)
+        existing.units = int(units)
+        existing.status = AddonRefundReservationStatus.ACTIVE.value
+        existing.updated_at = _utcnow().replace(tzinfo=None)
+        if commit:
+            db.commit()
+            db.refresh(existing)
+        else:
+            db.flush()
+        return AddonRefundReservationResult(
+            reservation=existing, created=False, skipped=False
+        )
 
     reserve_user_addon_units(
         db,

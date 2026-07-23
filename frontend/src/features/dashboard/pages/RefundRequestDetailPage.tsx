@@ -13,8 +13,11 @@ import {
 import { ApiError } from '../../../api/client';
 import {
   canUserCancelRefund,
+  formatAddonRevokedUnits,
+  formatPartialRefundProgress,
   formatRecommendedRefundAmount,
   formatRefundDate,
+  formatRemainingRefundable,
   reasonCategoryLabel,
   refundPurchaseSubtitle,
   refundPurchaseTitle,
@@ -154,8 +157,26 @@ export default function RefundRequestDetailPage() {
       })
     : null;
   const statusHint = item
-    ? refundStatusHint(item.status, { amountLabel: amountLabel ?? undefined })
+    ? refundStatusHint(item.status, {
+        amountLabel: amountLabel ?? undefined,
+        confirmedRefunded: item.confirmed_refunded_amount,
+        remainingRefundable: item.refundable_available_amount,
+      })
     : null;
+  const partialProgress = item
+    ? formatPartialRefundProgress({
+        confirmedRefunded: item.confirmed_refunded_amount,
+        paidAmount: item.amount,
+        currency: item.currency,
+      })
+    : null;
+  const remainingLabel = item
+    ? formatRemainingRefundable({
+        remaining: item.refundable_available_amount,
+        currency: item.currency,
+      })
+    : null;
+  const revokedUnitsLabel = item ? formatAddonRevokedUnits(item.addon_revoke_units) : null;
 
   return (
     <DashboardPage
@@ -223,7 +244,10 @@ export default function RefundRequestDetailPage() {
                     Статус
                   </div>
                   <div style={{ fontWeight: 700, fontSize: 15 }} data-testid="refund-detail-status">
-                    {refundStatusLabel(item.status)}
+                    {refundStatusLabel(item.status, {
+                      confirmedRefunded: item.confirmed_refunded_amount,
+                      remainingRefundable: item.refundable_available_amount,
+                    })}
                   </div>
                   {statusHint && (
                     <p
@@ -232,6 +256,29 @@ export default function RefundRequestDetailPage() {
                     >
                       {statusHint}
                     </p>
+                  )}
+                  {(item.status === 'partially_refunded' ||
+                    (item.confirmed_refunded_amount &&
+                      item.refundable_available_amount &&
+                      Number(item.confirmed_refunded_amount) > 0)) && (
+                    <div
+                      data-testid="refund-detail-partial-progress"
+                      style={{ marginTop: 8, fontSize: 13, lineHeight: 1.45 }}
+                    >
+                      {partialProgress && <div>{partialProgress}</div>}
+                      {remainingLabel && <div>{remainingLabel}</div>}
+                      {revokedUnitsLabel && (
+                        <div data-testid="refund-detail-revoked-units">{revokedUnitsLabel}</div>
+                      )}
+                      {item.product_type === 'addon' &&
+                        item.addon_revoke_units != null &&
+                        item.addon_revoke_units > 0 &&
+                        Number(item.refundable_available_amount || 0) > 0 && (
+                          <div data-testid="refund-detail-addon-active-note">
+                            Пакет остаётся активным
+                          </div>
+                        )}
+                    </div>
                   )}
                   {item.public_decision_message &&
                     (item.status === 'needs_information' || item.status === 'rejected') && (

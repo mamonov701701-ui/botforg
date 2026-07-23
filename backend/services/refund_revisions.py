@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from backend.models.checkout import CheckoutIntent, CheckoutProductType
 from backend.models.refund import (
     REFUND_FINANCIAL_FROZEN_STATUSES,
     REFUND_TERMINAL_STATUSES,
@@ -26,6 +27,11 @@ from backend.models.refund import (
     RefundRevision,
     RefundRevisionType,
     RefundType,
+)
+from backend.services.refund_addon_partial import (
+    AddonPartialRefundError,
+    assert_addon_revision_entitlement_consistent,
+    build_addon_units_correction,
 )
 from backend.services.refund_calculation import (
     RefundCalculationError,
@@ -255,6 +261,8 @@ def _result_to_revision(
     entitlement_action_override: str | None = None,
     entitlement_effective_at_override: datetime | None = None,
     addon_revoke_units_override: int | None = None,
+    addon_total_units_override: int | None = None,
+    addon_used_units_override: int | None = None,
     extra_snapshot: dict | None = None,
 ) -> RefundRevision:
     proposed = (
@@ -285,8 +293,16 @@ def _result_to_revision(
         period_end=result.period_end,
         used_time_seconds=result.used_time_seconds,
         total_time_seconds=result.total_time_seconds,
-        addon_total_units=result.addon_total_units,
-        addon_used_units=result.addon_used_units,
+        addon_total_units=(
+            addon_total_units_override
+            if addon_total_units_override is not None
+            else result.addon_total_units
+        ),
+        addon_used_units=(
+            addon_used_units_override
+            if addon_used_units_override is not None
+            else result.addon_used_units
+        ),
         addon_revoke_units=(
             addon_revoke_units_override
             if addon_revoke_units_override is not None
@@ -548,7 +564,7 @@ def create_admin_revision(
     based_on_revision_id: int,
     admin_user_id: int,
     expected_version: int,
-    proposed_refund_amount: Decimal | str,
+    proposed_refund_amount: Decimal | str | None = None,
     adjustment_reason_category: str,
     adjustment_comment: str,
     refund_type: str | None = None,
@@ -558,7 +574,11 @@ def create_admin_revision(
     final_refund_amount: Decimal | str | None = None,
     commit: bool = True,
 ) -> RefundRevision:
-    """Admin edit: requires reason+comment, based_on, bounds; status → admin_edited."""
+    """Admin edit: requires reason+comment, based_on, bounds; status → admin_edited.
+
+    Addon purchases: correction is units-first. Money is derived via
+    round_money(paid × N / total_units). Arbitrary money-only addon edits are rejected.
+    """
     request = _lock_request(db, request_id)
     _assert_editable(request)
     assert_financials_not_frozen(request)
@@ -586,8 +606,6 @@ def create_admin_revision(
         validate_current_revision(request, base)
 
         paid = round_money(base.paid_amount)
-        # Cap against live ledger: confirmed + reserved + provider_unknown.
-        # prior_refunded on revision = confirmed only; do not treat reserved as refunded.
         balance = load_ledger_balance(
             db,
             checkout_intent_id=request.checkout_intent_id,
@@ -598,11 +616,109 @@ def create_admin_revision(
             + balance.active_reserved_amount
             + balance.provider_unknown_amount
         )
-        proposed = validate_refund_amount_bounds(
-            refund_amount=proposed_refund_amount,
-            paid_amount=paid,
-            prior_refunded_amount=allocated,
+        max_r = balance.refundable_available_amount
+
+        intent = db.get(CheckoutIntent, int(request.checkout_intent_id))
+        is_addon = (
+            intent is not None
+            and intent.product_type == CheckoutProductType.ADDON.value
         )
+
+        resolved_entitlement = entitlement_action
+        resolved_revoke = addon_revoke_units
+        extra_snap: dict[str, Any] = {
+            "admin_edit": True,
+            "auto_snapshot": base.calculation_snapshot,
+            "based_on_revision_id": base.id,
+            "based_on_revision_number": base.revision_number,
+        }
+
+        if is_addon:
+            if addon_revoke_units is None:
+                raise RefundRevisionServiceError(
+                    "addon_revoke_units is required for addon refund correction",
+                    code="addon_units_required",
+                )
+            try:
+                correction = build_addon_units_correction(
+                    db,
+                    request=request,
+                    paid_amount=paid,
+                    total_units=int(base.addon_total_units or 0),
+                    revoke_units=int(addon_revoke_units),
+                )
+            except AddonPartialRefundError as exc:
+                raise RefundRevisionServiceError(exc.message, code=exc.code) from exc
+
+            if proposed_refund_amount is not None:
+                client_money = round_money(proposed_refund_amount)
+                if client_money != correction.proposed_refund_amount:
+                    raise RefundRevisionServiceError(
+                        "Addon refund amount is derived from revoke units; "
+                        "do not supply an independent monetary amount",
+                        code="addon_money_independent_forbidden",
+                    )
+
+            proposed = correction.proposed_refund_amount
+            resolved_type = correction.refund_type
+            if refund_type is not None and refund_type not in {
+                RefundType.FULL.value,
+                RefundType.PARTIAL.value,
+            }:
+                raise RefundRevisionServiceError(
+                    "Invalid refund_type", code="invalid_refund_type"
+                )
+            resolved_entitlement = correction.entitlement_action
+            resolved_revoke = correction.revoke_units
+            resolved_total = correction.total_units
+            resolved_used = correction.used_units
+            extra_snap.update(
+                {
+                    "addon_units_correction": True,
+                    "formula": "addon_units_to_money",
+                    "admin_revoke_units": correction.revoke_units,
+                    "admin_proposed_refund_amount": str(proposed),
+                    "unused_available_units": correction.unused_available_units,
+                    "money_ratio_total_units": correction.total_units,
+                }
+            )
+        else:
+            if proposed_refund_amount is None:
+                raise RefundRevisionServiceError(
+                    "proposed_refund_amount is required",
+                    code="proposed_amount_required",
+                )
+            proposed = validate_refund_amount_bounds(
+                refund_amount=proposed_refund_amount,
+                paid_amount=paid,
+                prior_refunded_amount=allocated,
+            )
+            resolved_type = refund_type
+            if resolved_type is None:
+                resolved_type = (
+                    RefundType.FULL.value
+                    if proposed == max_r and max_r > 0
+                    else RefundType.PARTIAL.value
+                )
+            if resolved_type not in {RefundType.FULL.value, RefundType.PARTIAL.value}:
+                raise RefundRevisionServiceError(
+                    "Invalid refund_type", code="invalid_refund_type"
+                )
+            if resolved_type == RefundType.FULL.value and proposed != max_r:
+                raise RefundRevisionServiceError(
+                    "full refund_type requires proposed == paid − prior",
+                    code="full_partial_mismatch",
+                )
+            if (
+                resolved_type == RefundType.PARTIAL.value
+                and proposed == max_r
+                and max_r > 0
+            ):
+                resolved_type = RefundType.FULL.value
+            extra_snap["admin_proposed_refund_amount"] = str(proposed)
+            resolved_total = None
+            resolved_used = None
+
         final_amt = (
             validate_refund_amount_bounds(
                 refund_amount=final_refund_amount,
@@ -613,34 +729,16 @@ def create_admin_revision(
             else None
         )
 
-        max_r = balance.refundable_available_amount
-        resolved_type = refund_type
-        if resolved_type is None:
-            resolved_type = (
-                RefundType.FULL.value
-                if proposed == max_r and max_r > 0
-                else RefundType.PARTIAL.value
-            )
-        if resolved_type not in {RefundType.FULL.value, RefundType.PARTIAL.value}:
-            raise RefundRevisionServiceError(
-                "Invalid refund_type", code="invalid_refund_type"
-            )
-        if resolved_type == RefundType.FULL.value and proposed != max_r:
-            raise RefundRevisionServiceError(
-                "full refund_type requires proposed == paid − prior",
-                code="full_partial_mismatch",
-            )
-        if resolved_type == RefundType.PARTIAL.value and proposed == max_r and max_r > 0:
-            resolved_type = RefundType.FULL.value
-
-        if addon_revoke_units is not None and addon_revoke_units < 0:
+        if resolved_revoke is not None and int(resolved_revoke) < 0:
             raise RefundRevisionServiceError(
                 "addon_revoke_units must be >= 0", code="negative_revoke_units"
             )
         if (
-            addon_revoke_units is not None
-            and base.addon_total_units is not None
-            and addon_revoke_units > int(base.addon_total_units)
+            resolved_revoke is not None
+            and (resolved_total if resolved_total is not None else base.addon_total_units)
+            is not None
+            and int(resolved_revoke)
+            > int(resolved_total if resolved_total is not None else base.addon_total_units)
         ):
             raise RefundRevisionServiceError(
                 "addon_revoke_units exceeds addon_total_units",
@@ -658,24 +756,24 @@ def create_admin_revision(
                 "from": base.refund_type,
                 "to": resolved_type,
             }
-        if entitlement_action and entitlement_action != base.entitlement_action:
+        if resolved_entitlement and resolved_entitlement != base.entitlement_action:
             changed_fields["entitlement_action"] = {
                 "from": base.entitlement_action,
-                "to": entitlement_action,
+                "to": resolved_entitlement,
             }
         if (
-            addon_revoke_units is not None
-            and addon_revoke_units != base.addon_revoke_units
+            resolved_revoke is not None
+            and resolved_revoke != base.addon_revoke_units
         ):
             changed_fields["addon_revoke_units"] = {
                 "from": base.addon_revoke_units,
-                "to": addon_revoke_units,
+                "to": resolved_revoke,
             }
+        extra_snap["changed_fields"] = changed_fields
 
         audit_buf: list[dict[str, Any]] = []
         _bump_version(request, expected_version=expected_version)
 
-        # Rebuild auto context snapshot for transparency (admin stores auto + overrides).
         auto_result = build_refund_calculation(db, request)
 
         def _build(number: int) -> RefundRevision:
@@ -691,21 +789,23 @@ def create_admin_revision(
                 final_refund_amount=final_amt,
                 proposed_override=proposed,
                 refund_type_override=resolved_type,
-                entitlement_action_override=entitlement_action,
+                entitlement_action_override=resolved_entitlement,
                 entitlement_effective_at_override=entitlement_effective_at,
-                addon_revoke_units_override=addon_revoke_units,
+                addon_revoke_units_override=resolved_revoke,
+                addon_total_units_override=resolved_total,
+                addon_used_units_override=resolved_used,
                 calculation_status_override=RefundCalculationStatus.OK.value,
-                extra_snapshot={
-                    "admin_edit": True,
-                    "auto_snapshot": base.calculation_snapshot,
-                    "based_on_revision_id": base.id,
-                    "based_on_revision_number": base.revision_number,
-                    "changed_fields": changed_fields,
-                    "admin_proposed_refund_amount": str(proposed),
-                },
+                extra_snapshot=extra_snap,
             )
 
         rev = _persist_revision_with_collision_recovery(db, request, _build)
+
+        try:
+            assert_addon_revision_entitlement_consistent(
+                db, request=request, revision=rev
+            )
+        except AddonPartialRefundError as exc:
+            raise RefundRevisionServiceError(exc.message, code=exc.code) from exc
 
         _set_status(
             request,
@@ -749,10 +849,18 @@ def create_admin_revision(
             db.refresh(rev)
             db.refresh(request)
         return rev
+    except RefundRevisionServiceError:
+        if commit:
+            db.rollback()
+        raise
     except (RefundCalculationError, RefundInvariantError) as exc:
         db.rollback()
         code = getattr(exc, "code", "admin_edit_error")
         raise RefundRevisionServiceError(str(exc), code=code) from exc
+    except Exception:
+        if commit:
+            db.rollback()
+        raise
 
 
 def confirm_admin_revision(
@@ -918,6 +1026,13 @@ def approve_revision(
                 stale=True,
                 new_revision=new_rev,
             )
+
+        try:
+            assert_addon_revision_entitlement_consistent(
+                db, request=request, revision=revision
+            )
+        except AddonPartialRefundError as exc:
+            raise RefundRevisionServiceError(exc.message, code=exc.code) from exc
 
         audit_buf = []
         _bump_version(request, expected_version=expected_version)

@@ -541,9 +541,20 @@ def execute_approved_refund(
         )
 
     revision = _approved_revision(db, request)
+    from backend.services.refund_addon_partial import (
+        AddonPartialRefundError,
+        assert_addon_revision_entitlement_consistent,
+    )
     from backend.services.refund_addon_reservation import (
         ensure_addon_refund_reservation,
     )
+
+    try:
+        assert_addon_revision_entitlement_consistent(
+            db, request=request, revision=revision
+        )
+    except AddonPartialRefundError as exc:
+        raise RefundExecutionError(exc.message, code=exc.code) from exc
 
     ensure_addon_refund_reservation(db, request, revision, commit=False)
     amount = _refund_amount(revision)

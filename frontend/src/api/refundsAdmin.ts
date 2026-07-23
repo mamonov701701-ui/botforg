@@ -132,6 +132,9 @@ export interface RefundAdminRevision {
   final_refund_amount: string | null;
   proposed_amount_undefined: boolean;
   calculation_at: string;
+  addon_total_units: number | null;
+  addon_used_units: number | null;
+  addon_revoke_units: number | null;
   entitlement_action: string;
   entitlement_effective_at: string | null;
   adjustment_reason_category: string | null;
@@ -185,11 +188,27 @@ export interface AdminRefundListParams {
 export interface AdminRevisionInput {
   expected_version: number;
   based_on_revision_id: number;
-  proposed_refund_amount: string;
+  proposed_refund_amount?: string | null;
   adjustment_reason_category: string;
   adjustment_comment: string;
   refund_type?: string | null;
   entitlement_action?: string | null;
+  addon_revoke_units?: number | null;
+}
+
+export interface AdminEntitlementRecoveryInput {
+  expected_version: number;
+  addon_revoke_units: number;
+  adjustment_comment: string;
+}
+
+export interface AdminEntitlementRecoveryResult {
+  confirmed_refunded_amount: string;
+  equivalent_units_money: string;
+  money_units_delta: string;
+  addon_revoke_units: number;
+  entitlement_action: string;
+  detail: RefundAdminDetail;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -276,6 +295,9 @@ function normalizeRevision(raw: unknown): RefundAdminRevision {
     final_refund_amount: moneyStr(o.final_refund_amount),
     proposed_amount_undefined: asBool(o.proposed_amount_undefined, false),
     calculation_at: asString(o.calculation_at),
+    addon_total_units: asNullableNumber(o.addon_total_units),
+    addon_used_units: asNullableNumber(o.addon_used_units),
+    addon_revoke_units: asNullableNumber(o.addon_revoke_units),
     entitlement_action: asString(o.entitlement_action, 'none'),
     entitlement_effective_at: asNullableString(o.entitlement_effective_at),
     adjustment_reason_category: asNullableString(o.adjustment_reason_category),
@@ -452,6 +474,22 @@ export async function adminCreateRefundRevision(
 ): Promise<RefundAdminDetail> {
   const raw = await post(`${ADMIN_REFUNDS_API_PATH}/${id}/revisions`, body);
   return normalizeAdminDetail(raw);
+}
+
+export async function adminRecoverAddonEntitlement(
+  id: number,
+  body: AdminEntitlementRecoveryInput
+): Promise<AdminEntitlementRecoveryResult> {
+  const raw = await post(`${ADMIN_REFUNDS_API_PATH}/${id}/recover-entitlement`, body);
+  const o = asRecord(raw) ?? {};
+  return {
+    confirmed_refunded_amount: moneyStr(o.confirmed_refunded_amount) || '0.00',
+    equivalent_units_money: moneyStr(o.equivalent_units_money) || '0.00',
+    money_units_delta: moneyStr(o.money_units_delta) || '0.00',
+    addon_revoke_units: asNumber(o.addon_revoke_units),
+    entitlement_action: asString(o.entitlement_action),
+    detail: normalizeAdminDetail(o.detail),
+  };
 }
 
 export async function adminNeedsInformation(

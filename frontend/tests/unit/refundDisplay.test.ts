@@ -8,11 +8,19 @@ import { ApiError } from '@/api/client';
 import {
   MANUAL_AMOUNT_LABEL,
   canUserCancelRefund,
+  formatAddonRevokedUnits,
+  formatPartialRefundProgress,
   formatRecommendedRefundAmount,
+  formatRemainingRefundable,
   refundStatusHint,
   refundStatusLabel,
   unavailableReasonLabel,
 } from '@/features/dashboard/refunds/refundDisplay';
+import {
+  canAdminRecoverAddonEntitlement,
+  formatRecoveryMoneyDelta,
+  moneyFromAddonRevokeUnits,
+} from '@/features/dashboard/finance/refundAdminDisplay';
 
 describe('refundDisplay', () => {
   it('labels key statuses', () => {
@@ -21,6 +29,24 @@ describe('refundDisplay', () => {
     expect(refundStatusLabel('rejected')).toMatch(/отклон/i);
     expect(refundStatusLabel('approved')).toMatch(/одобр/i);
     expect(refundStatusLabel('canceled')).toMatch(/отмен/i);
+    expect(refundStatusLabel('completed')).toMatch(/деньги возвращены/i);
+  });
+
+  it('partial refund is not shown as full refund', () => {
+    expect(refundStatusLabel('partially_refunded')).toMatch(/частичный возврат выполнен/i);
+    expect(refundStatusLabel('partially_refunded')).not.toMatch(/^Деньги возвращены$/);
+    expect(
+      formatPartialRefundProgress({
+        confirmedRefunded: '300.00',
+        paidAmount: '790.00',
+        currency: 'RUB',
+      })
+    ).toMatch(/Возвращено:\s*300\.00 ₽ из 790\.00 ₽/);
+    expect(formatRemainingRefundable({ remaining: '490.00', currency: 'RUB' })).toMatch(
+      /Осталось доступно к возврату:\s*490\.00 ₽/
+    );
+    expect(formatAddonRevokedUnits(2000)).toMatch(/Отозвано:\s*2000 сообщений/);
+    expect(formatAddonRevokedUnits(1899)).toMatch(/Отозвано:\s*1899 сообщений/);
   });
 
   it('does not claim money returned on approved', () => {
@@ -39,6 +65,26 @@ describe('refundDisplay', () => {
     expect(refundStatusHint('refunded', { amountLabel: '100 ₽' }) || '').toMatch(
       /подтвердила возврат 100 ₽/i
     );
+  });
+
+  it('completed maps to money returned with entitlement hint', () => {
+    expect(refundStatusLabel('completed')).toMatch(/деньги возвращены/i);
+    expect(refundStatusHint('completed') || '').toMatch(/тарифу или пакету применены/i);
+  });
+
+  it('completed with remaining money is labeled as partial', () => {
+    expect(
+      refundStatusLabel('completed', {
+        confirmedRefunded: '300.00',
+        remainingRefundable: '490.00',
+      })
+    ).toMatch(/частичный возврат выполнен/i);
+    expect(
+      refundStatusHint('completed', {
+        confirmedRefunded: '300.00',
+        remainingRefundable: '490.00',
+      }) || ''
+    ).toMatch(/частично/i);
   });
 
   it('shows admin-determined amount for null / undefined flags', () => {
@@ -61,6 +107,22 @@ describe('refundDisplay', () => {
   it('labels unavailable reasons', () => {
     expect(unavailableReasonLabel('active_refund_request')).toMatch(/активн/i);
     expect(unavailableReasonLabel('refund_completed')).toMatch(/заверш/i);
+    expect(unavailableReasonLabel('purchase_fully_refunded')).toMatch(/полностью возвращена/i);
+  });
+});
+
+describe('addon admin units money helper', () => {
+  it('derives money from units like backend and gates recovery', () => {
+    expect(moneyFromAddonRevokeUnits('790.00', 5000, 2000)).toBe('316.00');
+    expect(canAdminRecoverAddonEntitlement('partially_refunded', 'addon')).toBe(true);
+    expect(canAdminRecoverAddonEntitlement('awaiting_admin_review', 'addon')).toBe(false);
+    expect(canAdminRecoverAddonEntitlement('partially_refunded', 'tariff')).toBe(false);
+  });
+
+  it('formats recovery delta as canonical minus actual', () => {
+    const d = formatRecoveryMoneyDelta('300.04', '300.00', 'RUB');
+    expect(d.signedAmount).toMatch(/\+0,04/);
+    expect(d.explanation || '').toMatch(/выше фактически/);
   });
 });
 
@@ -84,9 +146,15 @@ describe('refunds api normalize', () => {
       updated_at: '2026-07-01T00:00:00Z',
       submitted_at: '2026-07-01T00:00:00Z',
       completed_at: null,
+      confirmed_refunded_amount: '300.00',
+      refundable_available_amount: '490.00',
+      addon_revoke_units: 2000,
     });
     expect(row.recommended_refund_amount).toBeNull();
     expect(row.proposed_amount_undefined).toBe(true);
+    expect(row.confirmed_refunded_amount).toBe('300.00');
+    expect(row.refundable_available_amount).toBe('490.00');
+    expect(row.addon_revoke_units).toBe(2000);
     expect(
       formatRecommendedRefundAmount(row.recommended_refund_amount, {
         proposedAmountUndefined: row.proposed_amount_undefined,
@@ -123,6 +191,9 @@ describe('refunds api normalize', () => {
     );
     expect(safeRefundErrorMessage(new ApiError('dup', 409, 'duplicate_open_request'))).toMatch(
       /активн/i
+    );
+    expect(safeRefundErrorMessage(new ApiError('full', 409, 'purchase_fully_refunded'))).toMatch(
+      /полный возврат/i
     );
   });
 });

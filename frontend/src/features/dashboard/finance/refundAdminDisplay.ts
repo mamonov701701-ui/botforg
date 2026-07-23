@@ -6,7 +6,7 @@ import {
   formatRecommendedRefundAmount,
   formatRefundDate,
   reasonCategoryLabel,
-  refundStatusLabel,
+  refundStatusLabel as userRefundStatusLabel,
 } from '../refunds/refundDisplay';
 
 export {
@@ -14,8 +14,16 @@ export {
   formatRecommendedRefundAmount,
   formatRefundDate,
   reasonCategoryLabel,
-  refundStatusLabel,
 };
+
+/** Admin keeps technical status wording where user UI uses money-returned phrasing. */
+const ADMIN_STATUS_OVERRIDES: Record<string, string> = {
+  completed: 'Завершена',
+};
+
+export function refundStatusLabel(status: string): string {
+  return ADMIN_STATUS_OVERRIDES[status] ?? userRefundStatusLabel(status);
+}
 
 export const ADMIN_APPROVED_NOTICE = 'Заявка одобрена, выплата ещё не выполнена';
 
@@ -92,6 +100,83 @@ export function canAdminConfirm(status: string): boolean {
 
 export function canAdminApprove(status: string): boolean {
   return status === 'awaiting_admin_review' || status === 'awaiting_final_confirmation';
+}
+
+/** Post-money addon entitlement recovery (no provider call). */
+export function canAdminRecoverAddonEntitlement(
+  status: string,
+  productType?: string | null
+): boolean {
+  if ((productType || '').toLowerCase() !== 'addon') return false;
+  return status === 'partially_refunded' || status === 'refunded';
+}
+
+/** ROUND_HALF_UP money from revoke units (mirrors backend money_from_revoke_units). */
+export function moneyFromAddonRevokeUnits(
+  paidAmount: string | number,
+  totalUnits: number,
+  revokeUnits: number
+): string {
+  const total = Math.trunc(totalUnits);
+  const n = Math.trunc(revokeUnits);
+  if (total <= 0 || n <= 0) return '0.00';
+  const paid = Number(paidAmount);
+  if (!Number.isFinite(paid)) return '0.00';
+  const raw = (paid * n) / total;
+  return (Math.round((raw + Number.EPSILON) * 100) / 100).toFixed(2);
+}
+
+/**
+ * Delta for recovery UI: canonical_money − actual_refunded (same sign as backend).
+ * Returns formatted signed RUB string like "+0.04 ₽" / "−0.12 ₽".
+ */
+export function formatRecoveryMoneyDelta(
+  canonicalMoney: string | number | null | undefined,
+  actualRefunded: string | number | null | undefined,
+  currency?: string | null
+): { signedAmount: string; explanation: string | null } {
+  const canon = Number(canonicalMoney);
+  const actual = Number(actualRefunded);
+  if (!Number.isFinite(canon) || !Number.isFinite(actual)) {
+    return { signedAmount: '—', explanation: null };
+  }
+  const delta = Math.round((canon - actual + Number.EPSILON) * 100) / 100;
+  const abs = Math.abs(delta).toFixed(2).replace('.', ',');
+  const sign = delta > 0 ? '+' : delta < 0 ? '−' : '';
+  const cur = (currency || 'RUB').toUpperCase() === 'RUB' ? '₽' : currency || '';
+  const signedAmount = `${sign}${Math.abs(delta).toFixed(2).replace('.', ',')} ${cur}`.trim();
+  let explanation: string | null = null;
+  if (delta > 0) {
+    explanation =
+      `Расчётная стоимость отзываемых единиц на ${abs} ${cur} выше фактически возвращённой суммы.`.trim();
+  } else if (delta < 0) {
+    explanation =
+      `Расчётная стоимость отзываемых единиц на ${abs} ${cur} ниже фактически возвращённой суммы.`.trim();
+  } else {
+    explanation =
+      'Расчётная стоимость отзываемых единиц совпадает с фактически возвращённой суммой.';
+  }
+  return { signedAmount, explanation };
+}
+
+export function formatUnitsRu(n: number, nounBase: 'сообщение' | 'единица' = 'сообщение'): string {
+  const v = Math.trunc(Math.abs(n));
+  const formatted = v.toLocaleString('ru-RU');
+  const mod100 = v % 100;
+  const mod10 = v % 10;
+  let word: string;
+  if (nounBase === 'сообщение') {
+    if (mod100 >= 11 && mod100 <= 14) word = 'сообщений';
+    else if (mod10 === 1) word = 'сообщение';
+    else if (mod10 >= 2 && mod10 <= 4) word = 'сообщения';
+    else word = 'сообщений';
+  } else {
+    if (mod100 >= 11 && mod100 <= 14) word = 'единиц';
+    else if (mod10 === 1) word = 'единица';
+    else if (mod10 >= 2 && mod10 <= 4) word = 'единицы';
+    else word = 'единиц';
+  }
+  return `${formatted} ${word}`;
 }
 
 export function adminStatusHint(status: string): string | null {
