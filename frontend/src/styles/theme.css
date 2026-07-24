@@ -75,3 +75,34 @@
 body {
   color: var(--text);
 }
+
+/*
+ * Canonical BotForg primary CTA (amber + dark text).
+ * Beats inherited `html { color: white }` / ambient button color.
+ * Use for create/save/publish/confirm — not for secondary or destructive.
+ */
+.bf-primary-cta,
+button.bf-primary-cta,
+a.bf-primary-cta {
+  background: var(--primary, #ffd24c);
+  color: var(--text-on-primary, #111827);
+  border: 1px solid var(--primary, #ffd24c);
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.bf-primary-cta:hover:not(:disabled),
+button.bf-primary-cta:hover:not(:disabled),
+a.bf-primary-cta:hover:not(:disabled) {
+  background: var(--primary-hover, #ffc107);
+  border-color: var(--primary-hover, #ffc107);
+  color: var(--text-on-primary, #111827);
+}
+
+.bf-primary-cta:disabled,
+button.bf-primary-cta:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--text-on-primary, #111827);
+}

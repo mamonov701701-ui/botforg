@@ -275,7 +275,12 @@ export default function PaymentProvidersPanel() {
     return (
       <div style={panelShell}>
         <StatusBanner tone="danger">{errorMessage || 'Ошибка API'}</StatusBanner>
-        <button type="button" onClick={() => void load()} style={accentBtn}>
+        <button
+          type="button"
+          className="bf-primary-cta"
+          onClick={() => void load()}
+          style={accentBtn}
+        >
           Повторить
         </button>
       </div>
@@ -310,6 +315,7 @@ export default function PaymentProvidersPanel() {
         <button
           type="button"
           data-testid="add-connection-button"
+          className="bf-primary-cta"
           onClick={() => setAddOpen(true)}
           style={accentBtn}
         >
@@ -582,6 +588,7 @@ export default function PaymentProvidersPanel() {
                     disabled={busy || !defaultGate.ok}
                     title={!defaultGate.ok ? defaultGate.reason : undefined}
                     onClick={() => setConfirmDefault(c)}
+                    className="bf-primary-cta"
                     style={accentBtn}
                   >
                     Сделать основным
@@ -643,6 +650,7 @@ export default function PaymentProvidersPanel() {
               data-testid="rename-connection-submit"
               disabled={busyId === renameTarget.id}
               onClick={submitRename}
+              className="bf-primary-cta"
               style={accentBtn}
             >
               Сохранить
@@ -732,6 +740,7 @@ export default function PaymentProvidersPanel() {
               data-testid="replace-keys-submit"
               disabled={busyId === replaceTarget.id}
               onClick={submitReplace}
+              className="bf-primary-cta"
               style={accentBtn}
             >
               Сохранить ключи
@@ -958,10 +967,6 @@ const accentBtn: React.CSSProperties = {
   padding: '10px 12px',
   borderRadius: 8,
   border: 'none',
-  background: FINANCE_COLORS.accent,
-  color: FINANCE_COLORS.dark,
-  cursor: 'pointer',
-  fontWeight: 700,
   minHeight: 44,
 };
 

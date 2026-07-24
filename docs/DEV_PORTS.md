@@ -11,7 +11,14 @@
 
 ## Где это настроено
 
-- **`npm run dev`** в **корне репозитория** (обёртка над `scripts/start-dev.ps1`, Windows).
+- **`npm run dev`** / `scripts/start-dev.ps1` — полный стек (backend + frontend).
+- **`scripts/dev-backend.ps1`** — **канонический** запуск **только backend** для локальной разработки:
+  - `backend\venv\Scripts\python.exe`
+  - `127.0.0.1:8001`
+  - `--reload` (`--reload-dir backend`)
+  - не убивает неизвестный процесс на `:8001` (fail closed с PID/command); известный BotForg uvicorn может заменить
+  - после старта ждёт `GET /healthz`
+  - лог: `scripts/.dev-backend-only-YYYYMMDD-HHMMSS.log`
 - `scripts/start-dev.ps1` (Windows, одна команда из корня репозитория)  
   - Текст в консоли — **на английском** (совместимость **Windows PowerShell 5.1** и UTF-8 без BOM: кириллица в том же файле ломала разбор скрипта).  
   - Освобождает порты **`8001` (основной backend)**, **`8002` (legacy cleanup — старый дефолт)**, **`5173`**, **`5174`**.  
@@ -38,13 +45,18 @@
 
 Чаще всего фронт запущен **`npm run dev`**, а бэкенд — **`uvicorn ... --port 8001`**, но переменная **`BOTFORG_BACKEND_PORT`** указывала на другой порт (раньше дефолты были **8000** / **8002**). Запросы шли не на ваш uvicorn → обрыв прокси или чужой процесс → **500**.
 
-**Правило:** порт в uvicorn и порт в Vite-proxy должны совпадать. Либо запускайте **`scripts/start-dev.ps1`** из корня (он выставляет оба), либо вручную: `uvicorn` на **8001** и `npm run dev` без `BOTFORG_BACKEND_PORT`.
+**Правило:** порт в uvicorn и порт в Vite-proxy должны совпадать.
+
+- Полный стек: **`scripts/start-dev.ps1`** / `npm run dev`.
+- Только backend (канон для «перезапусти backend»): **`.\scripts\dev-backend.ps1`**.
+- Не запускать произвольный `python -m uvicorn ...` для обычной локальной разработки (риск stale process без `--reload`).
 
 ## Правила для разработки
 
 1. **Backend по умолчанию слушает `8001`.**
 2. **Frontend всегда на `5173`.**
-3. Если нужен другой порт API — задайте **`BOTFORG_BACKEND_PORT`** и запустите uvicorn на том же порту.
+3. Если нужен другой порт API — задайте **`BOTFORG_BACKEND_PORT`** и запустите backend на том же порту (через launcher / start-dev).
+4. Для задач «запусти / перезапусти backend» используйте **`scripts/dev-backend.ps1`**.
 
 ## Проверка работоспособности
 

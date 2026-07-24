@@ -11,7 +11,7 @@
 
 ## 2. Запуск проекта
 
-Рекомендуемый способ (одна команда из корня проекта):
+Рекомендуемый способ (полный стек, одна команда из корня проекта):
 
 ```powershell
 cd C:\Users\mamon\botforg
@@ -20,25 +20,25 @@ npm run dev
 
 (то же самое: `.\scripts\start-dev.ps1`.)
 
-Что делает скрипт:
+Только backend (канон для локальной разработки API / «перезапусти :8001»):
+
+```powershell
+cd C:\Users\mamon\botforg
+.\scripts\dev-backend.ps1
+```
+
+- venv: `backend\venv\Scripts\python.exe`
+- `127.0.0.1:8001` + `--reload`
+- fail closed, если порт занят неизвестным процессом
+
+Что делает `start-dev.ps1`:
 
 - освобождает порты `8001`, `5173`, `5174`;
 - применяет миграции (`alembic upgrade head` из корня);
 - поднимает backend и frontend в фоне (логи в `scripts/.dev-*-*.log`);
 - проверяет `/healthz`, ответ фронта и пробу `POST /auth/email/login` (ожидается 401 или 422).
 
-Альтернатива — ручной запуск:
-
-```powershell
-# Backend
-cd C:\Users\mamon\botforg
-uvicorn backend.main:app --host 0.0.0.0 --port 8001
-
-# Frontend
-cd C:\Users\mamon\botforg\frontend
-npm run dev
-```
-
+Не используйте произвольный `uvicorn ...` для обычной локальной разработки.
 ## 3. Проверка backend
 
 1. Убедиться, что процесс uvicorn слушает порт:

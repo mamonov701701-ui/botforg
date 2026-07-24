@@ -727,10 +727,9 @@ export default function RefundsAdminPanel() {
                           onClick={() => openAction('revision')}
                           style={{
                             ...btnBase,
-                            background: FINANCE_COLORS.accent,
-                            color: '#111',
-                            borderColor: FINANCE_COLORS.accent,
+                            marginRight: 0,
                           }}
+                          className="bf-primary-cta"
                         >
                           {SET_REFUND_AMOUNT_LABEL}
                         </button>
@@ -743,10 +742,9 @@ export default function RefundsAdminPanel() {
                           onClick={() => openAction('confirm')}
                           style={{
                             ...btnBase,
-                            background: FINANCE_COLORS.accent,
-                            color: '#111',
-                            borderColor: FINANCE_COLORS.accent,
+                            marginRight: 0,
                           }}
+                          className="bf-primary-cta"
                         >
                           {CONFIRM_CALC_LABEL}
                         </button>
@@ -759,10 +757,9 @@ export default function RefundsAdminPanel() {
                           onClick={() => openAction('approve')}
                           style={{
                             ...btnBase,
-                            background: FINANCE_COLORS.accent,
-                            color: '#111',
-                            borderColor: FINANCE_COLORS.accent,
+                            marginRight: 0,
                           }}
+                          className="bf-primary-cta"
                         >
                           {APPROVE_REQUEST_LABEL}
                         </button>
@@ -1129,10 +1126,9 @@ export default function RefundsAdminPanel() {
                             onClick={() => runAction(action)}
                             style={{
                               ...btnBase,
-                              background: FINANCE_COLORS.accent,
-                              color: '#111',
-                              borderColor: FINANCE_COLORS.accent,
+                              marginRight: 0,
                             }}
+                            className="bf-primary-cta"
                           >
                             {confirmDanger === action
                               ? 'Подтверждаю'
@@ -1694,7 +1690,8 @@ export default function RefundsAdminPanel() {
             type="button"
             data-testid="refund-admin-filter-apply"
             onClick={applyFilters}
-            style={{ ...btnBase, background: FINANCE_COLORS.accent, color: '#111' }}
+            style={{ ...btnBase, marginRight: 0 }}
+            className="bf-primary-cta"
           >
             Применить
           </button>

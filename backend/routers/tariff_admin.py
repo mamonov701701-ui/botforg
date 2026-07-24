@@ -16,12 +16,32 @@ from backend.models.plan import Plan
 from backend.models.tariff import GiftGrant, GiftGrantStatus, GiftType
 from backend.models.user import User
 from backend.schemas.tariff_admin import (
+    AdminPlanAuditListOut,
+    AdminPlanCreateIn,
+    AdminPlanListOut,
+    AdminPlanOut,
+    AdminPlanLimitsOut,
+    AdminPlanUpdateIn,
+    AdminPlanVisibilityIn,
     AdminUserLookupOut,
     GiftGrantCreateIn,
     GiftGrantOut,
     GiftRevokeOut,
 )
 from backend.services.tariff_admin_audit import gift_grant_snapshot, write_admin_audit_log
+from backend.services.tariff_admin_plan_audit import (
+    TARIFF_PLAN_AUDIT_ACTIONS,
+    list_plan_audit_events,
+)
+from backend.services.tariff_admin_plans import (
+    archive_admin_plan,
+    create_admin_plan,
+    delete_admin_plan,
+    list_admin_plans,
+    reactivate_admin_plan,
+    set_admin_plan_visibility,
+    update_admin_plan,
+)
 from backend.services.tariff_entitlements import EntitlementError, grant_gift, revoke_gift
 
 router = APIRouter(prefix="/api/admin/tariffs", tags=["Tariff Admin"])
@@ -119,6 +139,171 @@ async def lookup_user(
         role=user.role,
         plan_code=user.plan_code,
     )
+
+
+def _admin_plan_out(row: dict) -> AdminPlanOut:
+    return AdminPlanOut(
+        id=row["id"],
+        code=row["code"],
+        name=row["name"],
+        name_ru=row["name_ru"],
+        description_ru=row["description_ru"],
+        price_month=row["price_month"],
+        currency=row["currency"],
+        is_active=row["is_active"],
+        is_public=row["is_public"],
+        is_recommended=row["is_recommended"],
+        sort_order=row["sort_order"],
+        limits=AdminPlanLimitsOut(**row["limits"]),
+        created_at=row["created_at"],
+        subscription_count=row.get("subscription_count", 0),
+        checkout_count=row.get("checkout_count", 0),
+        gift_count=row.get("gift_count", 0),
+        has_references=row["has_references"],
+        can_delete=row["can_delete"],
+    )
+
+
+@router.get("/plans", response_model=AdminPlanListOut)
+async def list_plans_admin(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    """
+    Все Plan для админки (включая hidden/inactive/legacy).
+    Без фильтра is_public / is_active.
+    """
+    rows = list_admin_plans(db)
+    items = [_admin_plan_out(row) for row in rows]
+    return AdminPlanListOut(items=items, total=len(items))
+
+
+@router.get("/plans/audit", response_model=AdminPlanAuditListOut)
+async def list_plan_audit_admin(
+    action: str | None = Query(
+        None,
+        description="Filter by tariff_plan_* action",
+        max_length=64,
+    ),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    """
+    Журнал изменений тарифов (7.1.5).
+    Только entity_type=plan и tariff_plan_* (без gift audit).
+    """
+    if action is not None and action.strip() and action.strip() not in TARIFF_PLAN_AUDIT_ACTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "invalid_audit_action",
+                "message": "Неизвестное действие журнала тарифов",
+            },
+        )
+    data = list_plan_audit_events(
+        db,
+        action=(action.strip() if action and action.strip() else None),
+        limit=limit,
+        offset=offset,
+    )
+    return AdminPlanAuditListOut.model_validate(data)
+
+
+@router.post("/plans", response_model=AdminPlanOut, status_code=status.HTTP_201_CREATED)
+async def create_plan_admin(
+    body: AdminPlanCreateIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Создание Plan (7.1.3). is_active всегда true при создании."""
+    payload = body.model_dump(exclude_unset=True)
+    if body.limits is not None:
+        payload["limits"] = body.limits.model_dump(exclude_unset=True)
+    row = create_admin_plan(db, payload=payload, admin_user_id=int(admin.id))
+    return _admin_plan_out(row)
+
+
+@router.patch("/plans/{plan_id}", response_model=AdminPlanOut)
+async def patch_plan_admin(
+    plan_id: int,
+    body: AdminPlanUpdateIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """
+    Частичное обновление Plan (7.1.2).
+    Не меняет code / is_active / is_public.
+    """
+    patch = body.model_dump(exclude_unset=True)
+    if "limits" in patch and patch["limits"] is not None:
+        # Preserve nested exclude_unset semantics for partial limits.
+        patch["limits"] = body.limits.model_dump(exclude_unset=True) if body.limits else {}
+    row, _mutated = update_admin_plan(
+        db,
+        plan_id=plan_id,
+        patch=patch,
+        admin_user_id=int(admin.id),
+    )
+    return _admin_plan_out(row)
+
+
+@router.post("/plans/{plan_id}/visibility", response_model=AdminPlanOut)
+async def set_plan_visibility_admin(
+    plan_id: int,
+    body: AdminPlanVisibilityIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Публичность Plan: hide/publish (7.1.3). Не меняет is_active."""
+    row, _ = set_admin_plan_visibility(
+        db,
+        plan_id=plan_id,
+        is_public=body.is_public,
+        admin_user_id=int(admin.id),
+    )
+    return _admin_plan_out(row)
+
+
+@router.post("/plans/{plan_id}/archive", response_model=AdminPlanOut)
+async def archive_plan_admin(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Архивирование Plan: is_active=false. Подписки сохраняют limits."""
+    row, _ = archive_admin_plan(
+        db, plan_id=plan_id, admin_user_id=int(admin.id)
+    )
+    return _admin_plan_out(row)
+
+
+@router.post("/plans/{plan_id}/reactivate", response_model=AdminPlanOut)
+async def reactivate_plan_admin(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Восстановление Plan: is_active=true. is_public не меняется."""
+    row, _ = reactivate_admin_plan(
+        db, plan_id=plan_id, admin_user_id=int(admin.id)
+    )
+    return _admin_plan_out(row)
+
+
+@router.delete("/plans/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_plan_admin(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """
+    Физическое удаление Plan (7.1.4).
+    Только без references; иначе 409 plan_in_use.
+    """
+    delete_admin_plan(db, plan_id=plan_id, admin_user_id=int(admin.id))
+    return None
 
 
 @router.get("/users/{user_id}/gifts", response_model=list[GiftGrantOut])

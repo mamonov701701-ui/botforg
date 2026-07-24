@@ -2,19 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import PaymentProvidersPanel from '../finance/PaymentProvidersPanel';
 import RefundsAdminPanel from '../finance/RefundsAdminPanel';
+import TariffsAdminPanel from '../finance/TariffsAdminPanel';
 import FinancePlaceholderTab from '../finance/FinancePlaceholderTab';
 import { FINANCE_TABS, type FinanceTabId } from '../finance/financeHelpers';
 import PageShell from '../../../ui/PageShell';
 
 const PLACEHOLDERS: Record<
-  Exclude<FinanceTabId, 'providers' | 'refunds'>,
+  Exclude<FinanceTabId, 'providers' | 'refunds' | 'tariffs'>,
   { title: string; description: string }
 > = {
-  tariffs: {
-    title: 'Тарифы',
-    description:
-      'Управление каталогом тарифов платформы будет доступно на следующих этапах. Сейчас используйте публичный каталог и admin backend без UI.',
-  },
   packages: {
     title: 'Пакеты',
     description:
@@ -27,7 +23,8 @@ const PLACEHOLDERS: Record<
   },
   audit: {
     title: 'Журнал действий',
-    description: 'Просмотр AdminAuditLog по тарифам и платежам появится на следующих этапах.',
+    description:
+      'Общий AdminAuditLog (тарифы + платежи) появится позже. Журнал изменений тарифов уже доступен: вкладка «Тарифы» → «Журнал изменений».',
   },
 };
 
@@ -62,6 +59,9 @@ export default function PlatformFinancePage() {
     if (tab === 'refunds') {
       return 'Очередь заявок на возврат. Одобрение не запускает выплату денег.';
     }
+    if (tab === 'tariffs') {
+      return 'Каталог тарифов Plan: просмотр публичных, скрытых и legacy.';
+    }
     return 'Раздел финансов платформы';
   }, [tab]);
 
@@ -85,6 +85,8 @@ export default function PlatformFinancePage() {
           <PaymentProvidersPanel />
         ) : tab === 'refunds' ? (
           <RefundsAdminPanel />
+        ) : tab === 'tariffs' ? (
+          <TariffsAdminPanel />
         ) : (
           <FinancePlaceholderTab
             title={PLACEHOLDERS[tab].title}

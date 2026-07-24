@@ -4,7 +4,17 @@
 
 :root {
   --header-h: 80px;
-  --footer-h: 0px;
+  /* Fixed .site-footer chrome height (single-row desktop). */
+  --footer-h: 64px;
+  /* Safe gap between viewport chrome and overlay dialogs. */
+  --modal-viewport-gap: 12px;
+}
+
+@media (max-width: 768px) {
+  :root {
+    /* Stacked footer (logo / nav / language) is taller. */
+    --footer-h: 110px;
+  }
 }
 
 body {
