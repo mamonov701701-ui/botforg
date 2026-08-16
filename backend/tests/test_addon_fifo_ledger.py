@@ -220,6 +220,98 @@ def test_fifo_order_plan_gift_paid_a_paid_b(client, db):
     assert fifo_ledger_used(db, addon_b.id) == 1
 
 
+def test_fifo_paid_nearest_expiry_first(client, db):
+    """Paid message addons: nearest period_end first; price must not affect order."""
+    user = _user(client, db)
+    _ensure_cutover(db)
+    _plan(db, user, messages=0)
+    pkg = _msg_pkg(db)
+    now = _utc()
+    soon = create_user_addon(
+        db,
+        user_id=user.id,
+        addon_package_id=pkg.id,
+        period_start=now - timedelta(days=1),
+        period_end=now + timedelta(days=5),
+        source=UserAddonSource.PURCHASE,
+        amount=1,
+        provider_ref="fake:soon",
+        commit=True,
+    )
+    later = create_user_addon(
+        db,
+        user_id=user.id,
+        addon_package_id=pkg.id,
+        period_start=now - timedelta(days=2),
+        period_end=now + timedelta(days=20),
+        source=UserAddonSource.PURCHASE,
+        amount=1,
+        provider_ref="fake:later",
+        commit=True,
+    )
+    # Older created_at on the later-expiring pack — expiry still wins.
+    later.created_at = (now - timedelta(days=10)).replace(tzinfo=None)
+    soon.created_at = (now - timedelta(hours=1)).replace(tzinfo=None)
+    db.commit()
+
+    r = check_and_consume_message_unit(db, user.id, source_event_key="exp-1")
+    assert r.consumed
+    entry = (
+        db.query(AddonUsageLedgerEntry)
+        .filter(AddonUsageLedgerEntry.source_event_key == "exp-1")
+        .one()
+    )
+    assert entry.user_addon_id == soon.id
+    assert fifo_ledger_used(db, soon.id) == 1
+    assert fifo_ledger_used(db, later.id) == 0
+
+
+def test_fifo_paid_same_expiry_older_created_first(client, db):
+    """Same period_end: older created_at is consumed first; price ignored."""
+    user = _user(client, db)
+    _ensure_cutover(db)
+    _plan(db, user, messages=0)
+    pkg = _msg_pkg(db)
+    now = _utc()
+    end = now + timedelta(days=10)
+    older = create_user_addon(
+        db,
+        user_id=user.id,
+        addon_package_id=pkg.id,
+        period_start=now - timedelta(days=5),
+        period_end=end,
+        source=UserAddonSource.PURCHASE,
+        amount=1,
+        provider_ref="fake:older-created",
+        commit=True,
+    )
+    newer = create_user_addon(
+        db,
+        user_id=user.id,
+        addon_package_id=pkg.id,
+        period_start=now - timedelta(days=1),
+        period_end=end,
+        source=UserAddonSource.PURCHASE,
+        amount=1,
+        provider_ref="fake:newer-created",
+        commit=True,
+    )
+    older.created_at = (now - timedelta(days=5)).replace(tzinfo=None)
+    newer.created_at = (now - timedelta(hours=1)).replace(tzinfo=None)
+    db.commit()
+
+    r = check_and_consume_message_unit(db, user.id, source_event_key="same-end-1")
+    assert r.consumed
+    entry = (
+        db.query(AddonUsageLedgerEntry)
+        .filter(AddonUsageLedgerEntry.source_event_key == "same-end-1")
+        .one()
+    )
+    assert entry.user_addon_id == older.id
+    assert fifo_ledger_used(db, older.id) == 1
+    assert fifo_ledger_used(db, newer.id) == 0
+
+
 def test_fifo_two_paid_same_created_stable_id_order(client, db):
     user = _user(client, db)
     _ensure_cutover(db)
@@ -721,3 +813,73 @@ def test_legacy_webhook_and_messages_routes_untouched():
     assert "tariff_addon_usage_ledger" not in message
     src = inspect.getsource(check_and_consume_message_unit)
     assert "fifo_debit_message_unit" in src
+
+
+def test_message_addon_expiry_survives_tariff_period_renewal(client, db):
+    """Message UserAddon.period_end = activation + validity_days; tariff renew does not extend it.
+    Consumption: nearest period_end, then older created_at.
+    """
+    from backend.models.tariff import SubscriptionStatus, UserSubscription
+
+    user = _user(client, db)
+    _ensure_cutover(db)
+    plan = _plan(db, user, messages=0)
+    pkg = _msg_pkg(db)
+    pkg.validity_days = 14
+    db.add(pkg)
+    now = _utc().replace(tzinfo=None)
+    sub = UserSubscription(
+        user_id=user.id,
+        plan_id=plan.id,
+        status=SubscriptionStatus.ACTIVE,
+        current_period_start=now - timedelta(days=20),
+        current_period_end=now + timedelta(days=10),
+    )
+    db.add(sub)
+    db.commit()
+
+    soon = create_user_addon(
+        db,
+        user_id=user.id,
+        addon_package_id=pkg.id,
+        period_start=now - timedelta(days=1),
+        period_end=now + timedelta(days=5),
+        source=UserAddonSource.PURCHASE,
+        amount=1,
+        provider_ref="fake:soon-renew",
+        commit=True,
+    )
+    later = create_user_addon(
+        db,
+        user_id=user.id,
+        addon_package_id=pkg.id,
+        period_start=now - timedelta(days=2),
+        period_end=now + timedelta(days=14),
+        source=UserAddonSource.PURCHASE,
+        amount=1,
+        provider_ref="fake:later-renew",
+        commit=True,
+    )
+    soon_end = soon.period_end
+    later_end = later.period_end
+    later.created_at = (now - timedelta(days=10)).replace(tzinfo=None)
+    soon.created_at = (now - timedelta(hours=1)).replace(tzinfo=None)
+    db.commit()
+
+    # Renew base tariff period — message pack expiry must stay frozen.
+    sub.current_period_start = now
+    sub.current_period_end = now + timedelta(days=40)
+    db.commit()
+    db.refresh(soon)
+    db.refresh(later)
+    assert soon.period_end == soon_end
+    assert later.period_end == later_end
+
+    r = check_and_consume_message_unit(db, user.id, source_event_key="renew-fifo-1")
+    assert r.consumed
+    entry = (
+        db.query(AddonUsageLedgerEntry)
+        .filter(AddonUsageLedgerEntry.source_event_key == "renew-fifo-1")
+        .one()
+    )
+    assert entry.user_addon_id == soon.id

@@ -15,6 +15,7 @@ from backend.models.checkout import (
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
+    SubscriptionStatus,
     UserAddon,
     UserSubscription,
 )
@@ -163,6 +164,115 @@ def test_fulfill_addon_creates_user_addon(client, db):
     # Default validity: 30 calendar days from activation.
     delta = addons[0].period_end - addons[0].period_start
     assert abs(delta.total_seconds() - 30 * 24 * 3600) < 2
+
+
+def test_fulfill_bot_addon_uses_current_tariff_period(client, db):
+    _, uid = _user(client, db)
+    from backend.models.plan import Plan
+
+    plan = db.query(Plan).filter(Plan.code == "business").one()
+    start = datetime.now(timezone.utc).replace(tzinfo=None)
+    end = start + timedelta(days=12)
+    db.add(
+        UserSubscription(
+            user_id=uid,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=start,
+            current_period_end=end,
+        )
+    )
+    pkg = AddonPackage(
+        code="ful_bot_cap",
+        name_ru="Бот",
+        type=AddonPackageType.ACTIVE_BOT,
+        amount=1,
+        price=Decimal("10.00"),
+        currency="RUB",
+        duration_type="current_billing_period",
+        is_active=True,
+        is_public=True,
+        sort_order=1,
+    )
+    db.add(pkg)
+    db.commit()
+    intent = create_checkout_intent(
+        db,
+        user_id=uid,
+        product_type="addon",
+        code="ful_bot_cap",
+        idempotency_key="ful-bot-cap",
+    )
+    result = fulfill_paid_intent(
+        db,
+        checkout_intent_id=intent.id,
+        user_id=uid,
+        provider="testpay",
+        provider_payment_id="pay-bot-cap",
+        provider_event_id="e-bot-cap",
+        event_type="payment.succeeded",
+        amount=intent.amount,
+        currency=intent.currency,
+    )
+    addon = db.query(UserAddon).filter(UserAddon.id == result.intent.fulfilled_addon_id).one()
+    got_end = addon.period_end.replace(tzinfo=None) if addon.period_end.tzinfo else addon.period_end
+    assert abs((got_end - end).total_seconds()) < 2
+
+
+def test_fulfill_team_member_addon_uses_current_tariff_period(client, db):
+    _, uid = _user(client, db)
+    from backend.models.plan import Plan
+
+    plan = db.query(Plan).filter(Plan.code == "business").one()
+    start = datetime.now(timezone.utc).replace(tzinfo=None)
+    end = start + timedelta(days=9)
+    db.add(
+        UserSubscription(
+            user_id=uid,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=start,
+            current_period_end=end,
+        )
+    )
+    pkg = AddonPackage(
+        code="ful_team_cap",
+        name_ru="Участник",
+        type=AddonPackageType.TEAM_MEMBER,
+        amount=1,
+        price=Decimal("10.00"),
+        currency="RUB",
+        duration_type="current_billing_period",
+        validity_days=90,
+        is_active=True,
+        is_public=True,
+        sort_order=1,
+    )
+    db.add(pkg)
+    db.commit()
+    intent = create_checkout_intent(
+        db,
+        user_id=uid,
+        product_type="addon",
+        code="ful_team_cap",
+        idempotency_key="ful-team-cap",
+    )
+    result = fulfill_paid_intent(
+        db,
+        checkout_intent_id=intent.id,
+        user_id=uid,
+        provider="testpay",
+        provider_payment_id="pay-team-cap",
+        provider_event_id="e-team-cap",
+        event_type="payment.succeeded",
+        amount=intent.amount,
+        currency=intent.currency,
+    )
+    addon = db.query(UserAddon).filter(UserAddon.id == result.intent.fulfilled_addon_id).one()
+    got_end = addon.period_end.replace(tzinfo=None) if addon.period_end.tzinfo else addon.period_end
+    assert abs((got_end - end).total_seconds()) < 2
+    # Must not use package.validity_days (90).
+    assert abs((got_end - (addon.period_start.replace(tzinfo=None) + timedelta(days=90))).total_seconds()) > 60
 
 
 def test_fulfill_addon_replay_does_not_extend_or_duplicate(client, db):

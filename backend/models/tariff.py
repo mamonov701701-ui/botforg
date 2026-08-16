@@ -38,6 +38,8 @@ class AddonPackageType(str, Enum):
     MESSAGES = "messages"
     ACTIVE_BOT = "active_bot"
     TEAM_MEMBER = "team_member"
+    # Catalog-only until stages 7.3/7.4 (no spend, conversion, or tariff quantities).
+    AI_CREDITS = "ai_credits"
 
 
 class SubscriptionStatus(str, Enum):
@@ -122,6 +124,8 @@ class AddonPackage(Base):
     price = Column(Numeric(10, 2), nullable=False, default=Decimal("0.00"))
     currency = Column(String(10), nullable=False, default="RUB")
     duration_type = Column(String(64), nullable=False, default="current_billing_period")
+    # Calendar days from successful activation (fulfillment + public catalog).
+    validity_days = Column(Integer, nullable=False, default=30)
     available_from_plan = Column(JSON, nullable=True)
     max_per_period = Column(Integer, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -420,3 +424,98 @@ class AdminAuditLog(Base):
     comment = Column(Text, nullable=True)
 
     admin_user = relationship("User", foreign_keys=[admin_user_id], backref="tariff_admin_audit_logs")
+
+
+class AddonPricingGridVersionStatus(str, Enum):
+    """Lifecycle of a full pricing grid version (Этап 7.2 versioning)."""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class AddonPricingGridVersion(Base):
+    """
+    Versioned full set of graduated pricing tiers for one (resource_type, currency).
+
+    Only one ACTIVE version per (resource_type, currency). Edits happen on DRAFT only.
+    """
+
+    __tablename__ = "addon_pricing_grid_versions"
+    __table_args__ = (
+        Index("ix_addon_pricing_grid_versions_resource_type", "resource_type"),
+        Index("ix_addon_pricing_grid_versions_status", "status"),
+        Index(
+            "ix_addon_pricing_grid_versions_resource_currency_status",
+            "resource_type",
+            "currency",
+            "status",
+        ),
+        {"extend_existing": True},
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    resource_type = Column(String(32), nullable=False)
+    currency = Column(String(10), nullable=False, default="RUB")
+    status = Column(String(16), nullable=False, default=AddonPricingGridVersionStatus.DRAFT.value)
+    version_number = Column(Integer, nullable=False, default=1)
+    based_on_version_id = Column(
+        Integer,
+        ForeignKey("addon_pricing_grid_versions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    published_at = Column(DateTime, nullable=True)
+    archived_at = Column(DateTime, nullable=True)
+    note = Column(Text, nullable=True)
+
+    based_on = relationship(
+        "AddonPricingGridVersion",
+        remote_side="AddonPricingGridVersion.id",
+        foreign_keys=[based_on_version_id],
+    )
+    tiers = relationship(
+        "AddonPricingTier",
+        back_populates="grid_version",
+        foreign_keys="AddonPricingTier.grid_version_id",
+    )
+
+
+class AddonPricingTier(Base):
+    """Graduated unit-price bands for custom addon packs (Этап 7.2)."""
+
+    __tablename__ = "addon_pricing_tiers"
+    __table_args__ = (
+        Index("ix_addon_pricing_tiers_resource_type", "resource_type"),
+        Index("ix_addon_pricing_tiers_is_active", "is_active"),
+        Index(
+            "ix_addon_pricing_tiers_resource_active_start",
+            "resource_type",
+            "is_active",
+            "range_start",
+        ),
+        Index("ix_addon_pricing_tiers_grid_version_id", "grid_version_id"),
+        {"extend_existing": True},
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    grid_version_id = Column(
+        Integer,
+        ForeignKey("addon_pricing_grid_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    resource_type = Column(String(32), nullable=False)
+    range_start = Column(Integer, nullable=False)
+    range_end = Column(Integer, nullable=True)
+    unit_price = Column(Numeric(12, 6), nullable=False)
+    currency = Column(String(10), nullable=False, default="RUB")
+    is_active = Column(Boolean, default=True, nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    grid_version = relationship(
+        "AddonPricingGridVersion",
+        back_populates="tiers",
+        foreign_keys=[grid_version_id],
+    )

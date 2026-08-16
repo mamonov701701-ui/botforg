@@ -284,6 +284,8 @@ describe('TariffsAdminPanel', () => {
   it('expands detail on Подробнее', async () => {
     listAdminPlans.mockResolvedValue({ items: SAMPLE_PLANS, total: SAMPLE_PLANS.length });
     render(<TariffsAdminPanel />);
+    await waitFor(() => screen.getByTestId('tariffs-admin-actions-pro'));
+    fireEvent.click(screen.getByTestId('tariffs-admin-actions-pro'));
     await waitFor(() => screen.getByTestId('tariffs-admin-detail-btn-pro'));
     fireEvent.click(screen.getByTestId('tariffs-admin-detail-btn-pro'));
     await waitFor(() => {
@@ -297,8 +299,8 @@ describe('TariffsAdminPanel', () => {
   it('opens edit form with filled values and read-only code', async () => {
     listAdminPlans.mockResolvedValue({ items: SAMPLE_PLANS, total: SAMPLE_PLANS.length });
     render(<TariffsAdminPanel />);
-    await waitFor(() => screen.getByTestId('tariffs-admin-edit-btn-pro'));
-    fireEvent.click(screen.getByTestId('tariffs-admin-edit-btn-pro'));
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-pro'));
+    fireEvent.click(await screen.findByTestId('tariffs-admin-edit-btn-pro'));
     await waitFor(() => screen.getByTestId('tariffs-admin-edit-modal'));
     const code = screen.getByTestId('tariffs-admin-edit-code') as HTMLInputElement;
     expect(code.value).toBe('pro');
@@ -319,6 +321,7 @@ describe('TariffsAdminPanel', () => {
   it('shows price note and limits warning when fields change', async () => {
     listAdminPlans.mockResolvedValue({ items: SAMPLE_PLANS, total: SAMPLE_PLANS.length });
     render(<TariffsAdminPanel />);
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-pro'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-edit-btn-pro'));
     await waitFor(() => screen.getByTestId('tariffs-admin-edit-form'));
     fireEvent.change(screen.getByTestId('tariffs-admin-edit-price'), {
@@ -362,6 +365,7 @@ describe('TariffsAdminPanel', () => {
       })
     );
     render(<TariffsAdminPanel />);
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-pro'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-edit-btn-pro'));
     fireEvent.change(await screen.findByTestId('tariffs-admin-edit-monthly-messages'), {
       target: { value: '4000' },
@@ -395,6 +399,7 @@ describe('TariffsAdminPanel', () => {
         })
     );
     render(<TariffsAdminPanel />);
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-pro'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-edit-btn-pro'));
     fireEvent.change(await screen.findByTestId('tariffs-admin-edit-name'), {
       target: { value: 'Pro Updated' },
@@ -484,6 +489,7 @@ describe('TariffsAdminPanel', () => {
     );
 
     render(<TariffsAdminPanel />);
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-pro'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-hide-btn-pro'));
     await waitFor(() => screen.getByTestId('tariffs-admin-hide-confirm'));
     expect(screen.getByTestId('tariffs-admin-hide-confirm').textContent).toMatch(
@@ -500,12 +506,16 @@ describe('TariffsAdminPanel', () => {
       total: SAMPLE_PLANS.length,
     });
     fireEvent.click(screen.getByTestId('tariffs-admin-refresh'));
+    await waitFor(() => screen.getByTestId('tariffs-admin-actions-pro'));
+    fireEvent.click(screen.getByTestId('tariffs-admin-actions-pro'));
     await waitFor(() => screen.getByTestId('tariffs-admin-publish-btn-pro'));
     fireEvent.click(screen.getByTestId('tariffs-admin-publish-btn-pro'));
     await waitFor(() => expect(setAdminPlanVisibility).toHaveBeenCalledWith(2, true));
 
     listAdminPlans.mockResolvedValue({ items: SAMPLE_PLANS, total: SAMPLE_PLANS.length });
     fireEvent.click(screen.getByTestId('tariffs-admin-refresh'));
+    await waitFor(() => screen.getByTestId('tariffs-admin-actions-pro'));
+    fireEvent.click(screen.getByTestId('tariffs-admin-actions-pro'));
     await waitFor(() => screen.getByTestId('tariffs-admin-archive-btn-pro'));
     fireEvent.click(screen.getByTestId('tariffs-admin-archive-btn-pro'));
     await waitFor(() => screen.getByTestId('tariffs-admin-archive-confirm'));
@@ -521,6 +531,8 @@ describe('TariffsAdminPanel', () => {
     });
     fireEvent.click(screen.getByTestId('tariffs-admin-refresh'));
     fireEvent.click(screen.getByTestId('tariffs-admin-subtab-archived'));
+    await waitFor(() => screen.getByTestId('tariffs-admin-actions-pro'));
+    fireEvent.click(screen.getByTestId('tariffs-admin-actions-pro'));
     await waitFor(() => screen.getByTestId('tariffs-admin-reactivate-btn-pro'));
     fireEvent.click(screen.getByTestId('tariffs-admin-reactivate-btn-pro'));
     await waitFor(() => expect(reactivateAdminPlan).toHaveBeenCalledWith(2));
@@ -555,11 +567,14 @@ describe('TariffsAdminPanel', () => {
     deleteAdminPlan.mockResolvedValue(undefined);
 
     render(<TariffsAdminPanel />);
-    await waitFor(() => screen.getByTestId('tariffs-admin-delete-btn-test_delete_unused'));
+    await waitFor(() => screen.getByTestId('tariffs-admin-actions-test_delete_unused'));
+    fireEvent.click(screen.getByTestId('tariffs-admin-actions-used_plan'));
+    await waitFor(() => screen.getByTestId('tariffs-admin-delete-disabled-used_plan'));
     expect(screen.getByTestId('tariffs-admin-delete-disabled-used_plan')).toBeDisabled();
     expect(deleteAdminPlan).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByTestId('tariffs-admin-delete-btn-test_delete_unused'));
+    fireEvent.click(screen.getByTestId('tariffs-admin-actions-test_delete_unused'));
+    fireEvent.click(await screen.findByTestId('tariffs-admin-delete-btn-test_delete_unused'));
     await waitFor(() => screen.getByTestId('tariffs-admin-delete-confirm'));
     expect(screen.getByTestId('tariffs-admin-delete-confirm').textContent).toMatch(
       /без возможности восстановления/i
@@ -591,6 +606,7 @@ describe('TariffsAdminPanel', () => {
       )
     );
     render(<TariffsAdminPanel />);
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-race_plan'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-delete-btn-race_plan'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-delete-confirm-confirm'));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
@@ -620,8 +636,10 @@ describe('TariffsAdminPanel', () => {
     fireEvent.click(screen.getByTestId('tariffs-admin-subtab-archived'));
     expect(await screen.findByTestId('tariffs-admin-row-archived_hidden')).toBeTruthy();
     expect(screen.queryByTestId('tariffs-admin-row-free')).toBeNull();
-    expect(screen.getByTestId('tariffs-admin-reactivate-btn-archived_hidden').className).toMatch(
-      /bf-primary-cta/
+    fireEvent.click(screen.getByTestId('tariffs-admin-actions-archived_hidden'));
+    expect(screen.getByTestId('tariffs-admin-reactivate-btn-archived_hidden')).toBeTruthy();
+    expect(screen.getByTestId('tariffs-admin-reactivate-btn-archived_hidden').textContent).toMatch(
+      /Восстановить/
     );
   });
 
@@ -675,6 +693,7 @@ describe('TariffsAdminPanel', () => {
       total: 1,
     });
     render(<TariffsAdminPanel />);
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-business_pro'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-edit-btn-business_pro'));
     await screen.findByTestId('tariffs-admin-edit-modal');
     expect(screen.getByTestId('tariffs-admin-edit-modal-header')).toBeTruthy();
@@ -695,6 +714,7 @@ describe('TariffsAdminPanel', () => {
       total: 1,
     });
     render(<TariffsAdminPanel />);
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-used'));
     const btn = await screen.findByTestId('tariffs-admin-delete-disabled-used');
     expect(btn).toBeDisabled();
     expect(btn.getAttribute('title') || '').toMatch(/покупк/i);
@@ -720,6 +740,7 @@ describe('TariffsAdminPanel', () => {
       return restored;
     });
     render(<TariffsAdminPanel />);
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-temp_arch'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-archive-btn-temp_arch'));
     fireEvent.click(await screen.findByTestId('tariffs-admin-archive-confirm-confirm'));
     await waitFor(() =>
@@ -728,6 +749,7 @@ describe('TariffsAdminPanel', () => {
       )
     );
     fireEvent.click(screen.getByTestId('tariffs-admin-subtab-archived'));
+    fireEvent.click(await screen.findByTestId('tariffs-admin-actions-temp_arch'));
     expect(await screen.findByTestId('tariffs-admin-reactivate-btn-temp_arch')).toBeTruthy();
     fireEvent.click(screen.getByTestId('tariffs-admin-reactivate-btn-temp_arch'));
     await waitFor(() =>

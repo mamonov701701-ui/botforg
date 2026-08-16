@@ -263,3 +263,359 @@ class AdminPlanAuditListOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class AdminAddonOut(BaseModel):
+    """Admin read of an AddonPackage row (Этап 7.2)."""
+
+    id: int
+    code: str
+    name_ru: str
+    description_ru: str | None = None
+    type: str
+    amount: int
+    price: Decimal
+    currency: str = "RUB"
+    duration_type: str
+    validity_days: int = 30
+    available_from_plan: Any = None
+    max_per_period: int | None = None
+    is_active: bool = True
+    is_public: bool = True
+    sort_order: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    user_addon_count: int = 0
+    checkout_count: int = 0
+    gift_count: int = 0
+    refund_count: int = 0
+    has_references: bool = False
+    can_delete: bool = False
+
+
+class AdminAddonListOut(BaseModel):
+    items: list[AdminAddonOut]
+    total: int
+
+
+class AdminCustomMessagesProductOut(BaseModel):
+    """System «Настраиваемый пакет сообщений» — read-only admin card (not CRUD)."""
+
+    code: str
+    title: str
+    public_title: str
+    resource_type: str
+    sales_enabled: bool
+    sales_status_label: str
+    active_grid_version_id: int | None = None
+    active_grid_version_number: int | None = None
+    currency: str = "RUB"
+    validity_days: int
+    min_quantity: int
+    max_quantity: int
+    pricing_grids_hint: str
+
+
+class AdminAddonCreateIn(BaseModel):
+    """POST AddonPackage (Этап 7.2)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(..., min_length=1, max_length=64)
+    name_ru: str = Field(..., min_length=1, max_length=255)
+    description_ru: str | None = None
+    type: str = Field(..., min_length=1, max_length=32)
+    amount: int = Field(..., ge=1)
+    price: Decimal = Field(..., ge=0)
+    currency: str = Field(default="RUB", min_length=3, max_length=10)
+    duration_type: str = Field(default="current_period", min_length=1, max_length=64)
+    validity_days: int = Field(default=30, ge=1, le=3650)
+    available_from_plan: list[str] | None = None
+    max_per_period: int | None = Field(default=None, ge=1)
+    is_public: bool = True
+    sort_order: int = 0
+
+    @field_validator("code", "name_ru", "description_ru", "type", "currency", "duration_type", mode="before")
+    @classmethod
+    def _strip_strings(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("code")
+    @classmethod
+    def _normalize_code(cls, v: str) -> str:
+        return v.lower()
+
+    @field_validator("currency")
+    @classmethod
+    def _upper_currency(cls, v: str) -> str:
+        if not v:
+            raise ValueError("currency must not be empty")
+        return v.upper()
+
+    @field_validator("type")
+    @classmethod
+    def _normalize_type(cls, v: str) -> str:
+        return v.lower()
+
+
+class AdminAddonUpdateIn(BaseModel):
+    """
+    PATCH AddonPackage (Этап 7.2).
+    code / is_active / is_public are immutable here (extra=forbid).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name_ru: str | None = Field(default=None, min_length=1, max_length=255)
+    description_ru: str | None = None
+    type: str | None = Field(default=None, min_length=1, max_length=32)
+    amount: int | None = Field(default=None, ge=1)
+    price: Decimal | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=10)
+    duration_type: str | None = Field(default=None, min_length=1, max_length=64)
+    validity_days: int | None = Field(default=None, ge=1, le=3650)
+    available_from_plan: list[str] | None = None
+    max_per_period: int | None = Field(default=None, ge=1)
+    sort_order: int | None = None
+
+    @field_validator(
+        "name_ru",
+        "description_ru",
+        "type",
+        "currency",
+        "duration_type",
+        mode="before",
+    )
+    @classmethod
+    def _strip_strings(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("currency")
+    @classmethod
+    def _upper_currency(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not v:
+            raise ValueError("currency must not be empty")
+        return v.upper()
+
+    @field_validator("type")
+    @classmethod
+    def _normalize_type(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.lower()
+
+
+class AdminAddonVisibilityIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_public: bool
+
+
+class AdminAddonAuditChangeOut(BaseModel):
+    field: str
+    label: str
+    before: str
+    after: str
+
+
+class AdminAddonAuditItemOut(BaseModel):
+    id: int
+    created_at: datetime | None = None
+    action: str
+    action_label: str
+    entity_type: str
+    entity_id: int | None = None
+    admin_user_id: int
+    admin_email: str | None = None
+    addon_code: str | None = None
+    addon_name: str | None = None
+    comment: str | None = None
+    changed_fields: list[str] | None = None
+    changes: list[AdminAddonAuditChangeOut] = Field(default_factory=list)
+
+
+class AdminAddonAuditListOut(BaseModel):
+    items: list[AdminAddonAuditItemOut]
+    total: int
+    limit: int
+    offset: int
+
+
+class AdminPricingTierOut(BaseModel):
+    id: int
+    resource_type: str
+    range_start: int
+    range_end: int | None = None
+    unit_price: Decimal
+    currency: str = "RUB"
+    is_active: bool = True
+    sort_order: int = 0
+    used_in_purchases: bool = False
+    can_delete: bool = True
+    grid_version_id: int | None = None
+
+
+class AdminPricingTierListOut(BaseModel):
+    items: list[AdminPricingTierOut]
+    total: int
+
+
+class AdminPricingTierCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resource_type: str = Field(..., min_length=1, max_length=32)
+    range_start: int = Field(..., ge=1)
+    range_end: int | None = Field(default=None, ge=1)
+    unit_price: Decimal
+    currency: str = Field(default="RUB", min_length=3, max_length=10)
+    is_active: bool = True
+    sort_order: int | None = None
+
+    @field_validator("resource_type", "currency", mode="before")
+    @classmethod
+    def _strip_tier_strings(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("currency")
+    @classmethod
+    def _upper_tier_currency(cls, v: str) -> str:
+        return v.upper()
+
+    @field_validator("resource_type")
+    @classmethod
+    def _lower_resource_type(cls, v: str) -> str:
+        return v.lower()
+
+
+class AdminPricingTierUpdateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resource_type: str | None = Field(default=None, min_length=1, max_length=32)
+    range_start: int | None = Field(default=None, ge=1)
+    range_end: int | None = Field(default=None, ge=1)
+    unit_price: Decimal | None = None
+    currency: str | None = Field(default=None, min_length=3, max_length=10)
+    sort_order: int | None = None
+
+    @field_validator("resource_type", "currency", mode="before")
+    @classmethod
+    def _strip_tier_strings(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("currency")
+    @classmethod
+    def _upper_tier_currency(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.upper()
+
+    @field_validator("resource_type")
+    @classmethod
+    def _lower_resource_type(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.lower()
+
+
+class AdminPricingGridVersionOut(BaseModel):
+    id: int
+    resource_type: str
+    currency: str = "RUB"
+    status: str
+    version_number: int
+    based_on_version_id: int | None = None
+    created_at: datetime | str | None = None
+    published_at: datetime | str | None = None
+    archived_at: datetime | str | None = None
+    note: str | None = None
+    tiers_count: int = 0
+    tiers: list[AdminPricingTierOut] = Field(default_factory=list)
+
+
+class AdminPricingGridVersionListOut(BaseModel):
+    items: list[AdminPricingGridVersionOut]
+    total: int
+
+
+class AdminPricingGridCreateDraftIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resource_type: str = Field(..., min_length=1, max_length=32)
+    currency: str = Field(default="RUB", min_length=3, max_length=10)
+    based_on_version_id: int | None = None
+    note: str | None = None
+
+    @field_validator("resource_type", "currency", mode="before")
+    @classmethod
+    def _strip_strings(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("currency")
+    @classmethod
+    def _upper_currency(cls, v: str) -> str:
+        return v.upper()
+
+    @field_validator("resource_type")
+    @classmethod
+    def _lower_resource(cls, v: str) -> str:
+        return v.lower()
+
+
+class AdminPricingGridTierCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    range_start: int = Field(..., ge=1)
+    range_end: int | None = Field(default=None, ge=1)
+    unit_price: Decimal
+    currency: str | None = Field(default=None, min_length=3, max_length=10)
+    sort_order: int | None = None
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _strip_currency(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("currency")
+    @classmethod
+    def _upper_currency(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.upper()
+
+
+class AdminPricingGridTierUpdateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    range_start: int | None = Field(default=None, ge=1)
+    range_end: int | None = Field(default=None, ge=1)
+    unit_price: Decimal | None = None
+    currency: str | None = Field(default=None, min_length=3, max_length=10)
+    sort_order: int | None = None
+
+    @field_validator("currency", mode="before")
+    @classmethod
+    def _strip_currency(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
+    @field_validator("currency")
+    @classmethod
+    def _upper_currency(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        return v.upper()

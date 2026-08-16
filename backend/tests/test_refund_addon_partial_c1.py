@@ -665,3 +665,181 @@ def test_assert_consistent_helper_rejects_partial_cancel(client, db):
             db, request=ctx["req"], revision=rev
         )
     assert ei.value.code == "inconsistent_addon_entitlement"
+
+
+def test_multiple_partial_refunds_cumulative_caps_and_idempotency(client, db):
+    """
+    Regression: cumulative units/money caps, no double-refund of same units,
+    partial then remaining full, partial after full forbidden, apply idempotent.
+    """
+    from backend.services.refund_revisions import confirm_admin_revision
+    from backend.services.refund_submit import RefundSubmitError
+
+    ctx = _open_request(client, db, key="c1-multi")
+    # --- partial 2000 / 5000 → 316.00 ---
+    admin_rev = create_admin_revision(
+        db,
+        ctx["req"].id,
+        based_on_revision_id=ctx["rev"].id,
+        admin_user_id=ctx["admin_uid"],
+        expected_version=ctx["req"].version,
+        addon_revoke_units=2000,
+        adjustment_reason_category="policy",
+        adjustment_comment="first partial",
+    )
+    db.refresh(ctx["req"])
+    confirm_admin_revision(
+        db, ctx["req"].id, expected_version=ctx["req"].version, actor_user_id=ctx["admin_uid"]
+    )
+    db.refresh(ctx["req"])
+    approve_revision(
+        db,
+        ctx["req"].id,
+        revision_id=admin_rev.id,
+        expected_version=ctx["req"].version,
+        actor_user_id=ctx["admin_uid"],
+    )
+    db.refresh(ctx["req"])
+    ensure_addon_refund_reservation(db, ctx["req"], admin_rev, commit=True)
+    db.add(
+        RefundLedgerEntry(
+            refund_request_id=ctx["req"].id,
+            refund_revision_id=admin_rev.id,
+            checkout_intent_id=ctx["req"].checkout_intent_id,
+            payment_attempt_id=ctx["attempt"].id,
+            entry_type=RefundLedgerEntryType.SUCCEEDED.value,
+            amount=Decimal("316.00"),
+            currency="RUB",
+            idempotency_key=f"bf-rf-{ctx['req'].id}-r{admin_rev.id}",
+            provider_refund_id=f"rf_{ctx['req'].id}",
+            provider_status="succeeded",
+        )
+    )
+    ctx["req"].status = RefundRequestStatus.PARTIALLY_REFUNDED.value
+    ctx["req"].approved_revision_id = admin_rev.id
+    db.commit()
+    db.refresh(ctx["req"])
+    apply_refund_entitlement(
+        db,
+        ctx["req"].id,
+        expected_version=ctx["req"].version,
+        actor_user_id=ctx["admin_uid"],
+    )
+    db.refresh(ctx["addon"])
+    db.refresh(ctx["req"])
+    assert ctx["addon"].amount == 3000
+    assert ctx["req"].status == RefundRequestStatus.COMPLETED.value
+
+    items = list_refundable_purchases(db, user_id=ctx["uid"], limit=50, offset=0)
+    match = next(i for i in items["items"] if i["checkout_intent_id"] == ctx["intent"].id)
+    assert match["can_request_refund"] is True
+    assert Decimal(match["refundable_available_amount"]) == Decimal("474.00")
+
+    # --- remaining full 3000 → 474.00; over-units rejected ---
+    req2 = create_refund_request(
+        db,
+        user_id=ctx["uid"],
+        checkout_intent_id=ctx["intent"].id,
+        reason_category="unused",
+        idempotency_key=f"idem-{ctx['intent'].id}-full-rest",
+    )
+    db.refresh(req2)
+    rev2 = (
+        db.query(RefundRevision)
+        .filter(
+            RefundRevision.refund_request_id == req2.id,
+            RefundRevision.revision_number == req2.current_revision_number,
+        )
+        .one()
+    )
+    with pytest.raises(RefundRevisionServiceError) as over:
+        create_admin_revision(
+            db,
+            req2.id,
+            based_on_revision_id=rev2.id,
+            admin_user_id=ctx["admin_uid"],
+            expected_version=req2.version,
+            addon_revoke_units=4000,
+            adjustment_reason_category="policy",
+            adjustment_comment="cannot exceed remaining",
+        )
+    assert over.value.code in {"over_units", "over_money"}
+
+    admin_rev2 = create_admin_revision(
+        db,
+        req2.id,
+        based_on_revision_id=rev2.id,
+        admin_user_id=ctx["admin_uid"],
+        expected_version=req2.version,
+        addon_revoke_units=3000,
+        adjustment_reason_category="policy",
+        adjustment_comment="remaining full",
+    )
+    assert admin_rev2.proposed_refund_amount == Decimal("474.00")
+    # Remaining units after a prior partial use reduce_amount (cancel only when
+    # revoke equals the original purchase grant in one request).
+    assert admin_rev2.entitlement_action == RefundEntitlementAction.REDUCE_AMOUNT.value
+    assert admin_rev2.addon_revoke_units == 3000
+
+    db.refresh(req2)
+    confirm_admin_revision(
+        db, req2.id, expected_version=req2.version, actor_user_id=ctx["admin_uid"]
+    )
+    db.refresh(req2)
+    approve_revision(
+        db,
+        req2.id,
+        revision_id=admin_rev2.id,
+        expected_version=req2.version,
+        actor_user_id=ctx["admin_uid"],
+    )
+    db.refresh(req2)
+    ensure_addon_refund_reservation(db, req2, admin_rev2, commit=True)
+    db.add(
+        RefundLedgerEntry(
+            refund_request_id=req2.id,
+            refund_revision_id=admin_rev2.id,
+            checkout_intent_id=req2.checkout_intent_id,
+            payment_attempt_id=ctx["attempt"].id,
+            entry_type=RefundLedgerEntryType.SUCCEEDED.value,
+            amount=Decimal("474.00"),
+            currency="RUB",
+            idempotency_key=f"bf-rf-{req2.id}-r{admin_rev2.id}",
+            provider_refund_id=f"rf_{req2.id}",
+            provider_status="succeeded",
+        )
+    )
+    req2.status = RefundRequestStatus.PARTIALLY_REFUNDED.value
+    req2.approved_revision_id = admin_rev2.id
+    db.commit()
+    db.refresh(req2)
+
+    res1 = apply_refund_entitlement(
+        db, req2.id, expected_version=req2.version, actor_user_id=ctx["admin_uid"]
+    )
+    assert res1.outcome == "applied"
+    db.refresh(ctx["addon"])
+    assert int(ctx["addon"].amount or 0) == 0
+    assert ctx["addon"].status == UserAddonStatus.CANCELLED.value
+    db.refresh(req2)
+    assert req2.status == RefundRequestStatus.COMPLETED.value
+
+    res2 = apply_refund_entitlement(
+        db, req2.id, expected_version=req2.version, actor_user_id=ctx["admin_uid"]
+    )
+    assert res2.outcome in {"already_applied", "applied"}
+
+    items2 = list_refundable_purchases(db, user_id=ctx["uid"], limit=50, offset=0)
+    match2 = next(i for i in items2["items"] if i["checkout_intent_id"] == ctx["intent"].id)
+    assert match2["can_request_refund"] is False
+    assert Decimal(match2["refundable_available_amount"]) == Decimal("0.00")
+
+    with pytest.raises(RefundSubmitError) as blocked:
+        create_refund_request(
+            db,
+            user_id=ctx["uid"],
+            checkout_intent_id=ctx["intent"].id,
+            reason_category="unused",
+            idempotency_key=f"idem-{ctx['intent'].id}-after-full",
+        )
+    assert blocked.value.code == "purchase_fully_refunded"

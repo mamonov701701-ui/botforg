@@ -3,19 +3,15 @@ import { useSearchParams } from 'react-router-dom';
 import PaymentProvidersPanel from '../finance/PaymentProvidersPanel';
 import RefundsAdminPanel from '../finance/RefundsAdminPanel';
 import TariffsAdminPanel from '../finance/TariffsAdminPanel';
+import AddonsAdminPanel from '../finance/AddonsAdminPanel';
 import FinancePlaceholderTab from '../finance/FinancePlaceholderTab';
 import { FINANCE_TABS, type FinanceTabId } from '../finance/financeHelpers';
 import PageShell from '../../../ui/PageShell';
 
 const PLACEHOLDERS: Record<
-  Exclude<FinanceTabId, 'providers' | 'refunds' | 'tariffs'>,
+  Exclude<FinanceTabId, 'providers' | 'refunds' | 'tariffs' | 'packages'>,
   { title: string; description: string }
 > = {
-  packages: {
-    title: 'Пакеты',
-    description:
-      'Управление пакетами расширения (сообщения, боты, команда) будет реализовано позже.',
-  },
   gifts: {
     title: 'Подарки',
     description:
@@ -24,7 +20,7 @@ const PLACEHOLDERS: Record<
   audit: {
     title: 'Журнал действий',
     description:
-      'Общий AdminAuditLog (тарифы + платежи) появится позже. Журнал изменений тарифов уже доступен: вкладка «Тарифы» → «Журнал изменений».',
+      'Общий AdminAuditLog (тарифы + платежи) появится позже. Журнал изменений тарифов уже доступен: вкладка «Тарифы» → «Журнал изменений». Журнал пакетов: вкладка «Пакеты» → «Журнал изменений».',
   },
 };
 
@@ -62,6 +58,9 @@ export default function PlatformFinancePage() {
     if (tab === 'tariffs') {
       return 'Каталог тарифов Plan: просмотр публичных, скрытых и legacy.';
     }
+    if (tab === 'packages') {
+      return 'Каталог дополнительных пакетов: сообщения, боты, команда, ИИ-кредиты.';
+    }
     return 'Раздел финансов платформы';
   }, [tab]);
 
@@ -87,6 +86,8 @@ export default function PlatformFinancePage() {
           <RefundsAdminPanel />
         ) : tab === 'tariffs' ? (
           <TariffsAdminPanel />
+        ) : tab === 'packages' ? (
+          <AddonsAdminPanel />
         ) : (
           <FinancePlaceholderTab
             title={PLACEHOLDERS[tab].title}

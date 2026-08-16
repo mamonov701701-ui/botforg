@@ -359,6 +359,15 @@ def get_payment_operation_detail(
         "currency": intent.currency,
         "status": intent.status,
         "idempotency_key": intent.idempotency_key,
+        "product_units": intent.product_units,
+        "price_grid_snapshot": intent.price_grid_snapshot
+        if isinstance(intent.price_grid_snapshot, dict)
+        else None,
+        "terms_confirmed": bool(
+            isinstance(intent.price_grid_snapshot, dict)
+            and isinstance(intent.price_grid_snapshot.get("terms_confirmation"), dict)
+            and intent.price_grid_snapshot["terms_confirmation"].get("confirmed") is True
+        ),
         "payment_provider": intent.payment_provider,
         "provider_payment_id": intent.provider_payment_id,
         "created_at": intent.created_at,

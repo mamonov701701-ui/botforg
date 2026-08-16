@@ -105,6 +105,14 @@ class RefundAdminProductOut(BaseModel):
     product_name: str
     amount: str
     currency: str
+    product_units: int | None = None
+    validity_days: int | None = None
+    duration_kind: str | None = None
+    terms_confirmed: bool = False
+    terms_confirmed_at: str | None = None
+    purchase_kind: str | None = None
+    average_unit_price: str | None = None
+    pricing_grid_version_id: int | None = None
 
 
 class RefundAdminRequestCoreOut(BaseModel):

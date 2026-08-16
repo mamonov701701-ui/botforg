@@ -3,10 +3,10 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 import {
   listAdminPlanAudit,
   safeAdminPlansErrorMessage,
-  TARIFF_PLAN_AUDIT_ACTIONS,
   type AdminPlanAuditItem,
 } from '../../../api/tariffsAdmin';
 import { ApiError } from '../../../api/client';
+import AdminAuditRow, { formatAuditWhen } from './AdminAuditRow';
 import { FINANCE_COLORS } from './financeHelpers';
 
 const PAGE_SIZE = 20;
@@ -23,17 +23,6 @@ const ACTION_FILTERS: { value: string; label: string }[] = [
 ];
 
 type LoadState = 'loading' | 'ready' | 'empty' | 'error' | 'forbidden';
-
-function formatWhen(iso: string | null): string {
-  if (!iso) return '—';
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString('ru-RU');
-  } catch {
-    return iso;
-  }
-}
 
 export default function TariffsAdminAuditJournal() {
   const [items, setItems] = useState<AdminPlanAuditItem[]>([]);
@@ -98,7 +87,7 @@ export default function TariffsAdminAuditJournal() {
         }}
       >
         <p style={{ margin: 0, fontSize: 13, color: FINANCE_COLORS.textSecondary }}>
-          Журнал изменений тарифов Plan. Подарки и платежи сюда не входят.
+          Журнал изменений тарифов. По умолчанию одна строка на операцию.
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <label style={{ fontSize: 13, color: FINANCE_COLORS.textSecondary }}>
@@ -182,125 +171,39 @@ export default function TariffsAdminAuditJournal() {
 
       {loadState === 'ready' && (
         <>
-          <div data-testid="tariffs-admin-audit-list">
-            {items.map(item => {
-              const open = expandedId === item.id;
-              return (
-                <div
-                  key={item.id}
-                  data-testid={`tariffs-admin-audit-row-${item.id}`}
-                  style={{
-                    marginBottom: 10,
-                    padding: 12,
-                    borderRadius: 10,
-                    border: `1px solid ${FINANCE_COLORS.accentBorder}`,
-                    background: FINANCE_COLORS.panelBg,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      gap: 8,
-                      flexWrap: 'wrap',
-                      marginBottom: 6,
-                    }}
-                  >
-                    <div>
-                      <strong data-testid={`tariffs-admin-audit-action-${item.id}`}>
-                        {item.action_label}
-                      </strong>
-                      <span
-                        style={{ color: FINANCE_COLORS.textSecondary, marginLeft: 8, fontSize: 12 }}
-                      >
-                        {item.action}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 12, color: FINANCE_COLORS.textSecondary }}>
-                      {formatWhen(item.created_at)}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 13, marginBottom: 6 }}>
-                    Тариф: <strong>{item.plan_name || '—'}</strong>
-                    {item.plan_code ? (
-                      <>
-                        {' '}
-                        (
-                        <code data-testid={`tariffs-admin-audit-code-${item.id}`}>
-                          {item.plan_code}
-                        </code>
-                        )
-                      </>
-                    ) : null}
-                  </div>
-                  <div
-                    style={{ fontSize: 12, color: FINANCE_COLORS.textSecondary, marginBottom: 8 }}
-                  >
-                    Админ: {item.admin_email || `id ${item.admin_user_id}`}
-                    {item.changed_fields && item.changed_fields.length > 0
-                      ? ` · Поля: ${item.changed_fields.join(', ')}`
-                      : ''}
-                  </div>
-                  <button
-                    type="button"
-                    data-testid={`tariffs-admin-audit-detail-btn-${item.id}`}
-                    onClick={() => setExpandedId(open ? null : item.id)}
-                    style={{
-                      padding: '6px 10px',
-                      borderRadius: 8,
-                      border: `1px solid ${FINANCE_COLORS.accentBorder}`,
-                      background: 'transparent',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      fontSize: 12,
-                    }}
-                  >
-                    {open ? 'Скрыть' : 'Подробнее'}
-                  </button>
-                  {open && (
-                    <div
-                      data-testid={`tariffs-admin-audit-detail-${item.id}`}
-                      style={{
-                        marginTop: 10,
-                        padding: 10,
-                        borderRadius: 8,
-                        background: FINANCE_COLORS.panelBgElevated,
-                        fontSize: 13,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {item.changed_fields && item.changed_fields.length > 0 && (
-                        <div
-                          data-testid={`tariffs-admin-audit-changed-${item.id}`}
-                          style={{ marginBottom: 8 }}
-                        >
-                          Изменённые поля: {item.changed_fields.join(', ')}
-                        </div>
-                      )}
-                      {item.changes.length === 0 ? (
-                        <div style={{ color: FINANCE_COLORS.textSecondary }}>
-                          Нет детализации изменений.
-                        </div>
-                      ) : (
-                        <ul style={{ margin: 0, paddingLeft: 18 }}>
-                          {item.changes.map(ch => (
-                            <li
-                              key={`${item.id}-${ch.field}`}
-                              data-testid={`tariffs-admin-audit-change-${item.id}-${ch.field}`}
-                              style={{ marginBottom: 4 }}
-                            >
-                              <strong>{ch.label}</strong>: {ch.before} → {ch.after}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div
+            data-testid="tariffs-admin-audit-list"
+            style={{
+              border: `1px solid ${FINANCE_COLORS.accentBorder}`,
+              borderRadius: 10,
+              overflow: 'hidden',
+            }}
+          >
+            {items.map(item => (
+              <AdminAuditRow
+                key={item.id}
+                testIdPrefix="tariffs-admin-audit"
+                expanded={expandedId === item.id}
+                onToggle={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                item={{
+                  id: item.id,
+                  whenLabel: formatAuditWhen(item.created_at),
+                  actionLabel: item.action_label,
+                  objectLabel: item.plan_name || item.plan_code || `Тариф #${item.entity_id}`,
+                  actorLabel: item.admin_email || `id ${item.admin_user_id}`,
+                  actionCode: item.action,
+                  entityType: item.entity_type,
+                  entityId: item.entity_id,
+                  comment: item.comment,
+                  changedFields: item.changed_fields,
+                  changes: item.changes,
+                  extraDetails: item.plan_code
+                    ? [{ label: 'Код', value: item.plan_code }]
+                    : undefined,
+                }}
+              />
+            ))}
           </div>
-
           <div
             data-testid="tariffs-admin-audit-pagination"
             style={{
@@ -358,10 +261,8 @@ export default function TariffsAdminAuditJournal() {
           </div>
         </>
       )}
-
-      {/* Ensure action constants stay aligned with backend */}
       <span data-testid="tariffs-admin-audit-actions-meta" style={{ display: 'none' }}>
-        {TARIFF_PLAN_AUDIT_ACTIONS.join(',')}
+        ready
       </span>
     </div>
   );

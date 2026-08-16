@@ -94,6 +94,14 @@ export interface RefundAdminProduct {
   product_name: string;
   amount: string;
   currency: string;
+  product_units: number | null;
+  validity_days: number | null;
+  duration_kind: string | null;
+  terms_confirmed: boolean;
+  terms_confirmed_at: string | null;
+  purchase_kind: string | null;
+  average_unit_price: string | null;
+  pricing_grid_version_id: number | null;
 }
 
 export interface RefundAdminRequestCore {
@@ -417,6 +425,17 @@ export function normalizeAdminDetail(raw: unknown): RefundAdminDetail {
           product_name: asString(product.product_name),
           amount: moneyStr(product.amount) ?? '0.00',
           currency: asString(product.currency, 'RUB'),
+          product_units: typeof product.product_units === 'number' ? product.product_units : null,
+          validity_days: typeof product.validity_days === 'number' ? product.validity_days : null,
+          duration_kind: asNullableString(product.duration_kind),
+          terms_confirmed: asBool(product.terms_confirmed, false),
+          terms_confirmed_at: asNullableString(product.terms_confirmed_at),
+          purchase_kind: asNullableString(product.purchase_kind),
+          average_unit_price: asNullableString(product.average_unit_price),
+          pricing_grid_version_id:
+            typeof product.pricing_grid_version_id === 'number'
+              ? product.pricing_grid_version_id
+              : null,
         }
       : null,
     usage_snapshot: asRecord(o.usage_snapshot),

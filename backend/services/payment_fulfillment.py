@@ -26,12 +26,19 @@ from backend.models.checkout import (
 )
 from backend.models.plan import Plan
 from backend.models.tariff import AddonPackage, UserAddonSource
+from backend.services.addon_custom_pack import (
+    is_capacity_addon_type,
+    is_custom_messages_code,
+    is_message_addon_type,
+)
+from backend.services.addon_package_types import enum_value, is_sellable_addon_type
 from backend.services.addon_validity import resolve_addon_validity_days
 from backend.services.tariff_entitlements import (
     EntitlementError,
     activate_subscription,
     create_user_addon,
 )
+from backend.services.tariff_limits import get_user_tariff_limits
 
 
 class FulfillmentError(Exception):
@@ -531,9 +538,43 @@ def fulfill_paid_intent(
                     f"Addon code={intent.product_code!r} not found",
                     code="addon_not_found",
                 )
+            pkg_type = enum_value(pkg.type)
+            if not is_sellable_addon_type(pkg_type):
+                raise FulfillmentError(
+                    f"Addon code={intent.product_code!r} is not sellable",
+                    code="product_unavailable",
+                )
             if p_end is None:
-                days = resolve_addon_validity_days(pkg)
-                p_end = _normalize_dt(p_start + timedelta(days=days))
+                if is_capacity_addon_type(pkg_type):
+                    try:
+                        summary = get_user_tariff_limits(db, intent.user_id)
+                    except Exception as exc:
+                        raise FulfillmentError(
+                            "Не удалось определить срок тарифного периода",
+                            code="addon_period_unavailable",
+                        ) from exc
+                    p_end = _normalize_dt(summary.period_end)
+                    if p_end <= p_start:
+                        raise FulfillmentError(
+                            "Срок тарифного периода недоступен для пакета",
+                            code="addon_period_unavailable",
+                        )
+                elif is_message_addon_type(pkg_type):
+                    days = resolve_addon_validity_days(pkg)
+                    p_end = _normalize_dt(p_start + timedelta(days=days))
+                else:
+                    raise FulfillmentError(
+                        f"Addon code={intent.product_code!r} is not sellable",
+                        code="product_unavailable",
+                    )
+            fulfill_amount = None
+            if is_custom_messages_code(intent.product_code):
+                if intent.product_units is None or int(intent.product_units) < 1:
+                    raise FulfillmentError(
+                        "Custom message pack requires product_units",
+                        code="quantity_required",
+                    )
+                fulfill_amount = int(intent.product_units)
             addon = create_user_addon(
                 db,
                 user_id=intent.user_id,
@@ -542,6 +583,7 @@ def fulfill_paid_intent(
                 period_end=p_end,
                 source=UserAddonSource.PURCHASE,
                 provider_ref=provider_ref,
+                amount=fulfill_amount,
                 commit=False,
             )
             intent.fulfilled_addon_id = addon.id

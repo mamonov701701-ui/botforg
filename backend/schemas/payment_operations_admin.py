@@ -145,6 +145,9 @@ class PaymentOperationDetailOut(BaseModel):
     provider_payment_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    product_units: int | None = None
+    price_grid_snapshot: dict | None = None
+    terms_confirmed: bool = False
     attempts: list[PaymentAttemptAdminOut] = Field(default_factory=list)
     webhook_events: list[WebhookEventAdminOut] = Field(default_factory=list)
     fulfillment: FulfillmentSummaryOut

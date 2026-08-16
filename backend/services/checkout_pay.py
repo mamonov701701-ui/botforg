@@ -25,6 +25,8 @@ from backend.payments.registry import PaymentProviderRegistryError, get_payment_
 from backend.services.checkout_intents import (
     CheckoutIntentError,
     assert_addon_purchase_allowed,
+    assert_custom_intent_price_current,
+    assert_custom_intent_terms_confirmed,
     assert_tariff_not_already_active,
 )
 from backend.services.payment_fulfillment import (
@@ -416,6 +418,26 @@ def start_checkout_payment(
                 exc.message,
                 code=exc.code or "addon_not_available_for_current_tariff",
                 http_status=403,
+            ) from exc
+
+        try:
+            assert_custom_intent_terms_confirmed(intent)
+            assert_custom_intent_price_current(db, intent)
+        except CheckoutIntentError as exc:
+            http_status = 409 if exc.code == "price_changed" else 422
+            if exc.code == "addon_not_available_for_current_tariff":
+                http_status = 403
+            if exc.code in ("product_unavailable", "pricing_unavailable", "pricing_incomplete"):
+                http_status = 409
+            if exc.code == "terms_confirmation_required":
+                http_status = 422
+            if exc.code == "price_changed":
+                # Persist invalidated confirmation so UI cannot reuse stale consent.
+                db.commit()
+            raise CheckoutPayError(
+                exc.message,
+                code=exc.code or "price_changed",
+                http_status=http_status,
             ) from exc
 
     key = (idempotency_key or "").strip()

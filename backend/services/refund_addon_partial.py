@@ -174,12 +174,18 @@ def build_addon_units_correction(
     total = int(total_units or 0)
     if total <= 0:
         total = max(0, int(addon.amount or 0))
-    # Money ratio uses original purchase grant (package amount), not live remainder.
+    # Money ratio uses immutable purchase grant from checkout snapshot, not live remainder.
+    intent_units = int(getattr(intent, "product_units", None) or 0)
     pkg = getattr(addon, "addon_package", None)
     if pkg is None and getattr(addon, "addon_package_id", None) is not None:
         pkg = db.get(AddonPackage, int(addon.addon_package_id))
     grant_total = int(getattr(pkg, "amount", 0) or 0) if pkg is not None else 0
-    ratio_total = grant_total if grant_total > 0 else total
+    if intent_units > 0:
+        ratio_total = intent_units
+    elif grant_total > 0:
+        ratio_total = grant_total
+    else:
+        ratio_total = total
     if ratio_total <= 0:
         raise AddonPartialRefundError(
             "addon_total_units is required",

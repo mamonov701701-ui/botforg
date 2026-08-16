@@ -27,6 +27,12 @@ import {
   purchaseProductTypeLabel,
   purchaseProviderLabel,
 } from '../purchases/purchaseDisplay';
+import {
+  formatAverageUnitPriceRu,
+  formatMoneyRu,
+  humanPricingBreakdownLines,
+  type PricingBandLike,
+} from '../../pricing/pricingDisplay';
 import { findRefundablePurchaseByIntent } from '../refunds/findRefundablePurchase';
 import type { RefundablePurchase } from '../../../api/refunds';
 import {
@@ -92,6 +98,7 @@ export default function PurchaseDetailPage() {
   const [retryError, setRetryError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [refundable, setRefundable] = useState<RefundablePurchase | null>(null);
+  const [pricingOpen, setPricingOpen] = useState(false);
   const retryLockRef = useRef(false);
   const lastFinalRefreshKey = useRef<string | null>(null);
 
@@ -341,7 +348,66 @@ export default function PurchaseDetailPage() {
                       <span data-testid="purchase-detail-provider">{providerLabel}</span>
                     </CompactField>
                   ) : null}
+                  {item.product_units != null ? (
+                    <CompactField label="Количество">
+                      <span data-testid="purchase-detail-units">{item.product_units}</span>
+                    </CompactField>
+                  ) : null}
                 </div>
+                {item.price_grid_snapshot &&
+                Array.isArray(item.price_grid_snapshot.bands) &&
+                (item.price_grid_snapshot.bands as unknown[]).length > 0 ? (
+                  <div data-testid="purchase-detail-pricing" style={{ marginTop: 4 }}>
+                    {typeof item.price_grid_snapshot.validity_days === 'number' ? (
+                      <p style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text-muted)' }}>
+                        Срок действия: {String(item.price_grid_snapshot.validity_days)} дней с
+                        момента активации
+                      </p>
+                    ) : null}
+                    {item.price_grid_snapshot.average_unit_price ? (
+                      <p
+                        style={{ margin: '0 0 6px', fontSize: 13, color: 'var(--text-muted)' }}
+                        data-testid="purchase-detail-avg"
+                      >
+                        {formatAverageUnitPriceRu(
+                          item.price_grid_snapshot.average_unit_price,
+                          item.currency
+                        )}
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      data-testid="purchase-detail-how-pricing"
+                      onClick={() => setPricingOpen(v => !v)}
+                      style={{
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--primary)',
+                        fontWeight: 600,
+                        fontSize: 13,
+                        padding: 0,
+                        cursor: 'pointer',
+                        textDecoration: 'underline',
+                      }}
+                    >
+                      Как была рассчитана стоимость
+                    </button>
+                    {pricingOpen ? (
+                      <ul
+                        data-testid="purchase-detail-breakdown"
+                        style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: 13 }}
+                      >
+                        {humanPricingBreakdownLines(
+                          item.price_grid_snapshot.bands as PricingBandLike[],
+                          item.currency
+                        ).map(line => (
+                          <li key={line}>{line}</li>
+                        ))}
+                        <li>итог: {formatMoneyRu(item.amount, item.currency)}</li>
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </Card>
 

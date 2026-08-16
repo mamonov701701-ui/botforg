@@ -126,6 +126,34 @@ const mockAddons: PublicAddon[] = [
     max_per_period: null,
     sort_order: 10,
   },
+  {
+    code: 'bot_extra',
+    name_ru: '+1 активный бот',
+    description_ru: null,
+    type: 'active_bot',
+    amount: 1,
+    price: '199.00',
+    currency: 'RUB',
+    duration_type: 'current_period',
+    validity_days: 30,
+    available_from_plan: null,
+    max_per_period: null,
+    sort_order: 20,
+  },
+  {
+    code: 'team_extra',
+    name_ru: '+1 участник команды',
+    description_ru: null,
+    type: 'team_member',
+    amount: 1,
+    price: '149.00',
+    currency: 'RUB',
+    duration_type: 'current_period',
+    validity_days: 30,
+    available_from_plan: null,
+    max_per_period: null,
+    sort_order: 30,
+  },
 ];
 
 function summaryFor(code: string, opts?: { addon_purchase?: boolean }): TariffSummary {
@@ -171,6 +199,8 @@ vi.mock('@/api/addons', async () => {
   return {
     ...actual,
     getPublicAddons: vi.fn(),
+    quoteCustomAddon: vi.fn(),
+    getCustomMessagesConfig: vi.fn(),
   };
 });
 
@@ -187,7 +217,7 @@ vi.mock('@/stores/authStore', () => ({
 }));
 
 import { getPublicTariffs } from '@/api/tariffs';
-import { getPublicAddons } from '@/api/addons';
+import { getPublicAddons, quoteCustomAddon, getCustomMessagesConfig } from '@/api/addons';
 import { getTariffSummary } from '@/api/tariff';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -249,9 +279,31 @@ describe('Pricing page', () => {
   beforeEach(() => {
     vi.mocked(getPublicTariffs).mockReset();
     vi.mocked(getPublicAddons).mockReset();
+    vi.mocked(quoteCustomAddon).mockReset();
+    vi.mocked(getCustomMessagesConfig).mockReset();
     vi.mocked(getTariffSummary).mockReset();
     vi.mocked(useAuthStore).mockReset();
     vi.mocked(getPublicAddons).mockResolvedValue(mockAddons);
+    vi.mocked(getCustomMessagesConfig).mockResolvedValue({
+      min_quantity: 1,
+      max_quantity: 1_000_000,
+      validity_days: 30,
+      sales_enabled: true,
+      currency: 'RUB',
+    });
+    vi.mocked(quoteCustomAddon).mockResolvedValue({
+      resource_type: 'messages',
+      quantity: 1000,
+      currency: 'RUB',
+      total: '220.00',
+      average_unit_price: '0.22',
+      validity_days: 30,
+      checkout_code: 'custom_messages',
+      product_name: 'Настроить пакет',
+      bands: [],
+      min_quantity: 1,
+      max_quantity: 1_000_000,
+    });
     vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('start'));
   });
 
@@ -410,6 +462,12 @@ describe('Pricing page', () => {
     expect(screen.getByText('Дополнительные пакеты')).toBeTruthy();
     expect(screen.getByTestId('pricing-addon-amount-msg_1000').textContent).toMatch(/Сообщения/);
     expect(screen.getByTestId('pricing-addon-duration-msg_1000').textContent).toMatch(/30 дней/);
+    expect(screen.getByTestId('pricing-addon-duration-bot_extra').textContent).toMatch(
+      /тарифного периода/i
+    );
+    expect(screen.getByTestId('pricing-addon-duration-team_extra').textContent).toMatch(
+      /тарифного периода/i
+    );
     fireEvent.click(screen.getByTestId('pricing-addon-buy-msg_1000'));
     await waitFor(() => {
       expect(screen.getByTestId('checkout-route')).toBeTruthy();
@@ -438,7 +496,7 @@ describe('Pricing page', () => {
     await waitFor(() => {
       expect(screen.getByTestId('pricing-addons-gate-message')).toBeTruthy();
     });
-    expect(screen.getByTestId('pricing-addons-gate-message').textContent).toMatch(/Бизнес/);
+    expect(screen.getByTestId('pricing-addons-gate-message').textContent).toMatch(/платный тариф/i);
     expect(screen.getByTestId('pricing-addons-choose-tariff')).toBeTruthy();
     expect(screen.getByTestId('pricing-addon-buy-msg_1000').tagName).not.toBe('BUTTON');
     fireEvent.click(screen.getByTestId('pricing-addons-choose-tariff'));
@@ -456,5 +514,54 @@ describe('Pricing page', () => {
       expect(screen.getByTestId('pricing-addons-summary-error')).toBeTruthy();
     });
     expect(screen.getByTestId('pricing-addon-buy-msg_1000').tagName).not.toBe('BUTTON');
+  });
+
+  it('shows Настроить пакет card and quotes price for paid user', async () => {
+    vi.mocked(getPublicTariffs).mockResolvedValue(mockTariffs);
+    vi.mocked(getPublicAddons).mockResolvedValue(mockAddons);
+    vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('business'));
+    renderPricing('/pricing?tab=addons', { plan_code: 'business' });
+    await waitFor(() => {
+      expect(screen.getByTestId('pricing-custom-pack-card')).toBeTruthy();
+    });
+    expect(screen.getByText('Настроить пакет')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('pricing-custom-qty'), { target: { value: '3450' } });
+    await waitFor(() => {
+      expect(quoteCustomAddon).toHaveBeenCalledWith({ quantity: 3450, resource_type: 'messages' });
+      expect(screen.getByTestId('pricing-custom-price').textContent).toMatch(/220/);
+    });
+    expect(screen.queryByTestId('pricing-custom-breakdown')).toBeNull();
+    fireEvent.click(screen.getByTestId('pricing-custom-how-toggle'));
+    // empty bands → only итог line when opened with empty list is ok; with empty bands no crash
+  });
+
+  it('shows custom pack quote error from backend', async () => {
+    vi.mocked(getPublicTariffs).mockResolvedValue(mockTariffs);
+    vi.mocked(getPublicAddons).mockResolvedValue(mockAddons);
+    vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('business'));
+    vi.mocked(quoteCustomAddon).mockRejectedValue(
+      new ApiError(
+        'Сейчас нельзя рассчитать стоимость этого количества.',
+        422,
+        'pricing_incomplete'
+      )
+    );
+    renderPricing('/pricing?tab=addons', { plan_code: 'business' });
+    await waitFor(() => {
+      expect(screen.getByTestId('pricing-custom-quote-error').textContent).toMatch(
+        /нельзя рассчитать/
+      );
+    });
+  });
+
+  it('free user custom pack offers paid tariff upgrade', async () => {
+    vi.mocked(getPublicTariffs).mockResolvedValue(mockTariffs);
+    vi.mocked(getPublicAddons).mockResolvedValue(mockAddons);
+    vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('start'));
+    renderPricing('/pricing?tab=addons', { plan_code: 'start' });
+    await waitFor(() => {
+      expect(screen.getByTestId('pricing-custom-upgrade')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('pricing-custom-buy')).toBeNull();
   });
 });

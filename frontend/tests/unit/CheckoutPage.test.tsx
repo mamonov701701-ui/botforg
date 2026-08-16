@@ -62,6 +62,7 @@ vi.mock('@/api/addons', async () => {
   return {
     ...actual,
     getPublicAddons: vi.fn(),
+    quoteCustomAddon: vi.fn(),
   };
 });
 
@@ -76,6 +77,7 @@ vi.mock('@/api/tariff', async () => {
 vi.mock('@/api/checkout', () => ({
   createCheckoutIntent: vi.fn(),
   startCheckoutPayment: vi.fn(),
+  confirmAddonCheckoutTerms: vi.fn(),
   CHECKOUT_ERROR_CODES: {
     productUnavailable: 'product_unavailable',
     productUnpriced: 'product_unpriced',
@@ -94,15 +96,25 @@ vi.mock('@/api/checkout', () => ({
     invalidProductType: 'invalid_product_type',
     currentTariffAlreadyActive: 'current_tariff_already_active',
     addonNotAvailableForCurrentTariff: 'addon_not_available_for_current_tariff',
+    priceChanged: 'price_changed',
+    quantityRequired: 'quantity_required',
+    pricingIncomplete: 'pricing_incomplete',
+    pricingUnavailable: 'pricing_unavailable',
+    termsConfirmationRequired: 'terms_confirmation_required',
+    confirmationMismatch: 'confirmation_mismatch',
   },
 }));
 
 import { getPublicTariffs } from '@/api/tariffs';
-import { getPublicAddons } from '@/api/addons';
+import { getPublicAddons, quoteCustomAddon } from '@/api/addons';
 import type { PublicAddon } from '@/api/addons';
 import { getTariffSummary } from '@/api/tariff';
 import type { TariffSummary } from '@/api/tariff';
-import { createCheckoutIntent, startCheckoutPayment } from '@/api/checkout';
+import {
+  confirmAddonCheckoutTerms,
+  createCheckoutIntent,
+  startCheckoutPayment,
+} from '@/api/checkout';
 
 function summaryFor(code: string, opts?: { addon_purchase?: boolean }): TariffSummary {
   const addon_purchase =
@@ -163,6 +175,20 @@ const mockAddons: PublicAddon[] = [
     max_per_period: null,
     sort_order: 20,
   },
+  {
+    code: 'bot_extra',
+    name_ru: '+1 активный бот',
+    description_ru: null,
+    type: 'active_bot',
+    amount: 1,
+    price: '199.00',
+    currency: 'RUB',
+    duration_type: 'current_period',
+    validity_days: 30,
+    available_from_plan: null,
+    max_per_period: null,
+    sort_order: 30,
+  },
 ];
 
 function renderCheckout(path: string) {
@@ -198,6 +224,10 @@ const intentFixture = {
   fulfilled_addon_id: null,
   created_at: '',
   updated_at: '',
+  product_units: null,
+  price_grid_snapshot: null,
+  terms_confirmed: false,
+  terms_confirmed_at: null,
 };
 
 describe('CheckoutPage', () => {
@@ -206,9 +236,17 @@ describe('CheckoutPage', () => {
   beforeEach(() => {
     vi.mocked(getPublicTariffs).mockReset();
     vi.mocked(getPublicAddons).mockReset();
+    vi.mocked(quoteCustomAddon).mockReset();
     vi.mocked(getTariffSummary).mockReset();
     vi.mocked(createCheckoutIntent).mockReset();
     vi.mocked(startCheckoutPayment).mockReset();
+    vi.mocked(confirmAddonCheckoutTerms).mockReset();
+    vi.mocked(confirmAddonCheckoutTerms).mockImplementation(async (id, _input) => ({
+      ...intentFixture,
+      id,
+      terms_confirmed: true,
+      terms_confirmed_at: '2026-01-01T00:00:00',
+    }));
     vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('start'));
     assignSpy.mockReset();
     vi.stubGlobal('location', {
@@ -318,7 +356,27 @@ describe('CheckoutPage', () => {
     expect(screen.getByTestId('checkout-addon-validity-note').textContent).toMatch(
       /успешной активации/
     );
-    expect(screen.getByTestId('checkout-continue')).toBeTruthy();
+    const continueBtn = screen.getByTestId('checkout-continue');
+    expect(continueBtn).toBeTruthy();
+    expect(continueBtn).toHaveProperty('disabled', true);
+    expect(screen.getByTestId('checkout-terms-confirm')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('checkout-terms-confirm'));
+    expect(continueBtn).toHaveProperty('disabled', false);
+  });
+
+  it('capacity addon checkout shows tariff period duration', async () => {
+    vi.mocked(getPublicAddons).mockResolvedValue(mockAddons);
+    vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('business'));
+    renderCheckout('/checkout?addon=bot_extra');
+    await waitFor(() => {
+      expect(screen.getByTestId('checkout-addon-validity').textContent).toMatch(
+        /тарифного периода/i
+      );
+    });
+    expect(screen.getByTestId('checkout-addon-validity-note').textContent).toMatch(
+      /тарифного периода/i
+    );
+    expect(screen.getByTestId('checkout-addon-validity').textContent).not.toMatch(/30 дней/);
   });
 
   it('addon checkout blocked for start with choose-tariff CTA', async () => {
@@ -342,6 +400,7 @@ describe('CheckoutPage', () => {
     );
     renderCheckout('/checkout?addon=msg_1k');
     await waitFor(() => expect(screen.getByTestId('checkout-continue')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('checkout-terms-confirm'));
     fireEvent.click(screen.getByTestId('checkout-continue'));
     await waitFor(() => {
       expect(screen.getByTestId('checkout-action-error').textContent).toMatch(/Бизнес/);
@@ -537,6 +596,7 @@ describe('CheckoutPage', () => {
     expect(screen.getByTestId('checkout-addon-name').textContent).toMatch(/1000/);
     expect(createCheckoutIntent).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByTestId('checkout-terms-confirm'));
     fireEvent.click(screen.getByTestId('checkout-continue'));
     await waitFor(() => expect(createCheckoutIntent).toHaveBeenCalledTimes(1));
     const body = vi.mocked(createCheckoutIntent).mock.calls[0][0];
@@ -544,6 +604,8 @@ describe('CheckoutPage', () => {
     expect(body.code).toBe('msg_1k');
     expect(body).not.toHaveProperty('amount');
     expect(body).not.toHaveProperty('price');
+    await waitFor(() => expect(confirmAddonCheckoutTerms).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(confirmAddonCheckoutTerms).mock.calls[0][0]).toBe(91);
     await waitFor(() => expect(startCheckoutPayment).toHaveBeenCalledTimes(1));
     expect(vi.mocked(startCheckoutPayment).mock.calls[0][0]).toBe(91);
     expect(assignSpy).toHaveBeenCalledWith(
@@ -596,6 +658,7 @@ describe('CheckoutPage', () => {
     await waitFor(() => expect(screen.getByTestId('checkout-continue')).toBeTruthy());
     expect(createCheckoutIntent).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByTestId('checkout-terms-confirm'));
     const btn = screen.getByTestId('checkout-continue');
     fireEvent.click(btn);
     fireEvent.click(btn);
@@ -610,5 +673,130 @@ describe('CheckoutPage', () => {
       });
     });
     await waitFor(() => expect(startCheckoutPayment).toHaveBeenCalledTimes(1));
+  });
+
+  it('custom pack checkout requires terms confirmation and sends quantity', async () => {
+    vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('business'));
+    vi.mocked(quoteCustomAddon).mockResolvedValue({
+      resource_type: 'messages',
+      quantity: 3450,
+      currency: 'RUB',
+      total: '838.92',
+      average_unit_price: '0.24',
+      validity_days: 30,
+      checkout_code: 'custom_messages',
+      product_name: 'Настроить пакет',
+      bands: [
+        {
+          tier_id: 1,
+          range_start: 1,
+          range_end: 999,
+          units: 999,
+          unit_price: '0.30',
+          subtotal: '299.70',
+        },
+        {
+          tier_id: 2,
+          range_start: 1000,
+          range_end: 4999,
+          units: 2451,
+          unit_price: '0.22',
+          subtotal: '539.22',
+        },
+      ],
+    });
+    vi.mocked(createCheckoutIntent).mockResolvedValue({
+      ...intentFixture,
+      id: 77,
+      product_type: 'addon',
+      product_code: 'custom_messages',
+      amount: '838.92',
+      product_units: 3450,
+    });
+    vi.mocked(startCheckoutPayment).mockResolvedValue({
+      intent_id: 77,
+      attempt_id: 8,
+      provider: 'yookassa',
+      provider_payment_id: 'pay-c',
+      confirmation_url: 'https://yoomoney.ru/checkout/payments/v2/contract?orderId=c',
+      already_started: false,
+    });
+    renderCheckout('/checkout?addon=custom_messages&qty=3450');
+    await waitFor(() => expect(screen.getByTestId('checkout-custom-summary')).toBeTruthy());
+    expect(screen.getByTestId('checkout-addon-price').textContent).toMatch(/838/);
+    expect(screen.getByTestId('checkout-addon-avg').textContent).toMatch(/0,24/);
+    expect(screen.queryByTestId('checkout-pricing-breakdown')).toBeNull();
+    fireEvent.click(screen.getByTestId('checkout-how-pricing'));
+    expect(screen.getByTestId('checkout-pricing-breakdown').textContent).toMatch(/первые 999/);
+    const continueBtn = screen.getByTestId('checkout-continue');
+    expect(continueBtn).toHaveProperty('disabled', true);
+    expect(continueBtn.textContent).toMatch(/Перейти к оплате/);
+    fireEvent.click(screen.getByTestId('checkout-terms-confirm'));
+    expect(continueBtn).toHaveProperty('disabled', false);
+    fireEvent.click(continueBtn);
+    await waitFor(() => expect(createCheckoutIntent).toHaveBeenCalled());
+    expect(vi.mocked(createCheckoutIntent).mock.calls[0][0]).toMatchObject({
+      product_type: 'addon',
+      code: 'custom_messages',
+      quantity: 3450,
+    });
+    await waitFor(() => expect(confirmAddonCheckoutTerms).toHaveBeenCalled());
+    expect(vi.mocked(confirmAddonCheckoutTerms).mock.calls[0][0]).toBe(77);
+    await waitFor(() => expect(startCheckoutPayment).toHaveBeenCalled());
+  });
+
+  it('price_changed resets terms confirmation and refreshes quote', async () => {
+    vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('business'));
+    vi.mocked(quoteCustomAddon)
+      .mockResolvedValueOnce({
+        resource_type: 'messages',
+        quantity: 1000,
+        currency: 'RUB',
+        total: '220.00',
+        average_unit_price: '0.22',
+        validity_days: 30,
+        checkout_code: 'custom_messages',
+        product_name: 'Настроить пакет',
+        bands: [],
+      })
+      .mockResolvedValueOnce({
+        resource_type: 'messages',
+        quantity: 1000,
+        currency: 'RUB',
+        total: '300.00',
+        average_unit_price: '0.30',
+        validity_days: 30,
+        checkout_code: 'custom_messages',
+        product_name: 'Настроить пакет',
+        bands: [],
+      });
+    vi.mocked(createCheckoutIntent).mockResolvedValue({
+      ...intentFixture,
+      id: 88,
+      product_type: 'addon',
+      product_code: 'custom_messages',
+      amount: '220.00',
+      product_units: 1000,
+    });
+    vi.mocked(confirmAddonCheckoutTerms).mockResolvedValue({
+      ...intentFixture,
+      id: 88,
+      amount: '220.00',
+      terms_confirmed: true,
+    });
+    vi.mocked(startCheckoutPayment).mockRejectedValue(
+      new ApiError('price changed', 409, 'price_changed')
+    );
+    renderCheckout('/checkout?addon=custom_messages&qty=1000');
+    await waitFor(() => screen.getByTestId('checkout-terms-confirm'));
+    fireEvent.click(screen.getByTestId('checkout-terms-confirm'));
+    fireEvent.click(screen.getByTestId('checkout-continue'));
+    await waitFor(() => {
+      expect(screen.getByTestId('checkout-action-error').textContent).toMatch(/изменилась/);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('checkout-addon-price').textContent).toMatch(/300/);
+    });
+    expect(screen.getByTestId('checkout-continue')).toHaveProperty('disabled', true);
   });
 });

@@ -870,7 +870,11 @@ def _calc_addon(
         addon = db.get(UserAddon, intent.fulfilled_addon_id)
 
     exists, revoked = _entitlement_active_addon(addon)
-    units = int(addon.amount) if addon is not None else None
+    live_units = int(addon.amount) if addon is not None else None
+    purchased_units = int(intent.product_units or 0) if intent is not None else 0
+    if purchased_units <= 0 and addon is not None:
+        purchased_units = int(live_units or 0)
+    units = purchased_units if purchased_units > 0 else live_units
     period_start = ensure_aware(addon.period_start) if addon else None
     period_end = ensure_aware(addon.period_end) if addon else None
 
@@ -990,8 +994,10 @@ def _calc_addon(
         )
 
     total_units = max(int(units or 0), 0)
+    live = max(0, int(live_units or 0)) if addon is not None else 0
     used_units = fifo_used if fifo_precise else 0
-    unused_units = max(total_units - used_units - reserved, 0)
+    # Available units from live entitlement; money ratio uses purchased snapshot (total_units).
+    unused_units = max(live - used_units - reserved, 0)
 
     if total_units <= 0:
         proposed = ZERO
@@ -1001,14 +1007,13 @@ def _calc_addon(
         proposed = ZERO
         revoke_units = 0
         action = RefundEntitlementAction.NONE.value
-    elif used_units == 0 and reserved == 0:
+    elif used_units == 0 and reserved == 0 and unused_units == live and live == total_units:
         proposed = available
         revoke_units = total_units
         action = RefundEntitlementAction.CANCEL_ADDON.value
     else:
-        # Partial: unused share of paid amount.
-        unused_ratio = Decimal(unused_units) / Decimal(total_units)
-        proposed = round_money(paid * unused_ratio)
+        # Partial: unused share of paid amount from purchase snapshot.
+        proposed = round_money(paid * Decimal(unused_units) / Decimal(total_units))
         proposed = round_money(proposed - confirmed)
         if proposed < ZERO:
             proposed = ZERO

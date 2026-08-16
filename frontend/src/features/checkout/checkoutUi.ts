@@ -27,6 +27,17 @@ const CODE_MESSAGES: Record<string, string> = {
   [CHECKOUT_ERROR_CODES.currentTariffAlreadyActive]: 'Этот тариф уже активен',
   [CHECKOUT_ERROR_CODES.addonNotAvailableForCurrentTariff]:
     'Дополнительные пакеты доступны начиная с тарифа «Бизнес».',
+  [CHECKOUT_ERROR_CODES.priceChanged]:
+    'Стоимость пакета изменилась. Обновите расчёт и подтвердите новые условия.',
+  [CHECKOUT_ERROR_CODES.quantityRequired]: 'Укажите количество сообщений.',
+  [CHECKOUT_ERROR_CODES.pricingIncomplete]:
+    'Сейчас нельзя рассчитать стоимость этого количества. Обратитесь в поддержку или выберите готовый пакет.',
+  [CHECKOUT_ERROR_CODES.pricingUnavailable]:
+    'Настраиваемый пакет сейчас недоступен: не заданы ценовые ступени.',
+  [CHECKOUT_ERROR_CODES.termsConfirmationRequired]:
+    'Подтвердите количество, стоимость и срок действия пакета перед оплатой.',
+  [CHECKOUT_ERROR_CODES.confirmationMismatch]:
+    'Подтверждённые условия не совпадают с заказом. Обновите страницу.',
 };
 
 function looksLikeTechnicalHttpMessage(msg: string): boolean {

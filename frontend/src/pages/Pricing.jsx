@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Check, Package, Zap } from 'lucide-react';
 import {
-  addonValidityLabel,
+  addonPublicDurationLabel,
   formatAddonAmountLine,
   formatAddonPrice,
   getPublicAddons,
@@ -15,6 +15,7 @@ import {
   getPublicTariffs,
 } from '../api/tariffs';
 import { useAuthStore } from '../stores/authStore';
+import CustomMessagesPackCard from '../features/pricing/CustomMessagesPackCard';
 import './Pricing.css';
 
 function resolvePricingTab(raw) {
@@ -384,8 +385,8 @@ export default function Pricing() {
             <header className="pricing-section-header">
               <h2 className="pricing-section-title">Дополнительные пакеты</h2>
               <p className="pricing-section-subtitle">
-                Расширение лимитов для тарифа «Бизнес» и выше. Срок — 30 календарных дней с
-                активации.
+                Готовые пакеты и «Настроить пакет» для платного тарифа. Сообщения действуют
+                фиксированное число дней с активации и не сбрасываются при новом тарифном месяце.
               </p>
             </header>
 
@@ -402,7 +403,7 @@ export default function Pricing() {
             {isAuthenticated && summaryStatus === 'ready' && !addonPurchaseAllowed ? (
               <div className="pricing-addons-gate" data-testid="pricing-addons-gate" role="status">
                 <p data-testid="pricing-addons-gate-message">
-                  Дополнительные пакеты доступны начиная с тарифа «Бизнес».
+                  Для покупки дополнительных сообщений требуется платный тариф.
                 </p>
                 <button
                   type="button"
@@ -429,14 +430,14 @@ export default function Pricing() {
 
             {!addonsLoading && !addonsError && sortedAddons.length === 0 && (
               <div className="pricing-empty" data-testid="pricing-addons-empty">
-                Сейчас нет доступных дополнений.
+                Готовых пакетов сейчас нет — можно настроить количество сообщений.
               </div>
             )}
 
-            {!addonsLoading && !addonsError && sortedAddons.length > 0 && (
+            {!addonsLoading && !addonsError && (
               <div className="pricing-addon-grid">
                 {sortedAddons.map(addon => {
-                  const validity = addonValidityLabel(addon);
+                  const validity = addonPublicDurationLabel(addon);
                   return (
                     <div
                       key={addon.code}
@@ -494,6 +495,12 @@ export default function Pricing() {
                     </div>
                   );
                 })}
+                <CustomMessagesPackCard
+                  isAuthenticated={isAuthenticated}
+                  summaryStatus={summaryStatus}
+                  addonPurchaseAllowed={addonPurchaseAllowed}
+                  onChooseTariff={() => setTab('tariffs')}
+                />
               </div>
             )}
           </section>

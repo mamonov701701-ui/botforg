@@ -16,19 +16,72 @@ from backend.models.plan import Plan
 from backend.models.tariff import GiftGrant, GiftGrantStatus, GiftType
 from backend.models.user import User
 from backend.schemas.tariff_admin import (
+    AdminAddonAuditListOut,
+    AdminAddonCreateIn,
+    AdminAddonListOut,
+    AdminAddonOut,
+    AdminAddonUpdateIn,
+    AdminAddonVisibilityIn,
+    AdminCustomMessagesProductOut,
     AdminPlanAuditListOut,
     AdminPlanCreateIn,
     AdminPlanListOut,
     AdminPlanOut,
     AdminPlanLimitsOut,
     AdminPlanUpdateIn,
+    AdminPricingGridCreateDraftIn,
+    AdminPricingGridTierCreateIn,
+    AdminPricingGridTierUpdateIn,
+    AdminPricingGridVersionListOut,
+    AdminPricingGridVersionOut,
+    AdminPricingTierCreateIn,
+    AdminPricingTierListOut,
+    AdminPricingTierOut,
+    AdminPricingTierUpdateIn,
     AdminPlanVisibilityIn,
     AdminUserLookupOut,
     GiftGrantCreateIn,
     GiftGrantOut,
     GiftRevokeOut,
 )
+from backend.services.tariff_admin_addon_audit import (
+    PACKAGES_TAB_AUDIT_ACTIONS,
+    list_addon_audit_events,
+)
 from backend.services.tariff_admin_audit import gift_grant_snapshot, write_admin_audit_log
+from backend.services.tariff_admin_addons import (
+    archive_admin_addon,
+    create_admin_addon,
+    delete_admin_addon,
+    get_admin_addon_or_404,
+    get_admin_addon_row,
+    list_admin_addons,
+    reactivate_admin_addon,
+    set_admin_addon_visibility,
+    update_admin_addon,
+)
+from backend.services.tariff_admin_custom_messages_product import (
+    get_custom_messages_system_product,
+)
+from backend.services.tariff_admin_pricing_grids import (
+    add_tier_to_draft,
+    archive_active_grid_version,
+    create_draft_from_version,
+    delete_draft_grid_version,
+    delete_tier_on_draft,
+    get_grid_version,
+    list_grid_versions,
+    publish_grid_version,
+    update_tier_on_draft,
+)
+from backend.services.tariff_admin_pricing_tiers import (
+    archive_admin_pricing_tier,
+    create_admin_pricing_tier,
+    delete_admin_pricing_tier,
+    list_admin_pricing_tiers,
+    reactivate_admin_pricing_tier,
+    update_admin_pricing_tier,
+)
 from backend.services.tariff_admin_plan_audit import (
     TARIFF_PLAN_AUDIT_ACTIONS,
     list_plan_audit_events,
@@ -303,6 +356,393 @@ async def delete_plan_admin(
     Только без references; иначе 409 plan_in_use.
     """
     delete_admin_plan(db, plan_id=plan_id, admin_user_id=int(admin.id))
+    return None
+
+
+def _admin_addon_out(row: dict) -> AdminAddonOut:
+    return AdminAddonOut.model_validate(row)
+
+
+@router.get("/addons", response_model=AdminAddonListOut)
+async def list_addons_admin(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    """Все AddonPackage для админки (включая hidden/inactive)."""
+    rows = list_admin_addons(db)
+    items = [_admin_addon_out(row) for row in rows]
+    return AdminAddonListOut(items=items, total=len(items))
+
+
+@router.get(
+    "/addons/system/custom-messages",
+    response_model=AdminCustomMessagesProductOut,
+)
+async def get_custom_messages_system_product_admin(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    """Read-only system product card (not editable via addon CRUD)."""
+    return AdminCustomMessagesProductOut.model_validate(
+        get_custom_messages_system_product(db)
+    )
+
+
+@router.get("/addons/audit", response_model=AdminAddonAuditListOut)
+async def list_addon_audit_admin(
+    action: str | None = Query(
+        None,
+        description="Filter by addon_package_* action",
+        max_length=64,
+    ),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    """Журнал изменений дополнительных пакетов (7.2)."""
+    if action is not None and action.strip() and action.strip() not in PACKAGES_TAB_AUDIT_ACTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "invalid_audit_action",
+                "message": "Неизвестное действие журнала пакетов",
+            },
+        )
+    data = list_addon_audit_events(
+        db,
+        action=(action.strip() if action and action.strip() else None),
+        limit=limit,
+        offset=offset,
+    )
+    return AdminAddonAuditListOut.model_validate(data)
+
+
+@router.post("/addons", response_model=AdminAddonOut, status_code=status.HTTP_201_CREATED)
+async def create_addon_admin(
+    body: AdminAddonCreateIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Создание AddonPackage. is_active всегда true при создании."""
+    payload = body.model_dump(exclude_unset=True)
+    row = create_admin_addon(db, payload=payload, admin_user_id=int(admin.id))
+    return _admin_addon_out(row)
+
+
+@router.get("/addons/{addon_id}", response_model=AdminAddonOut)
+async def get_addon_admin(
+    addon_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    pkg = get_admin_addon_or_404(db, addon_id)
+    return _admin_addon_out(get_admin_addon_row(db, pkg))
+
+
+@router.patch("/addons/{addon_id}", response_model=AdminAddonOut)
+async def patch_addon_admin(
+    addon_id: int,
+    body: AdminAddonUpdateIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Частичное обновление. Не меняет code / is_active / is_public."""
+    patch = body.model_dump(exclude_unset=True)
+    row, _mutated = update_admin_addon(
+        db,
+        addon_id=addon_id,
+        patch=patch,
+        admin_user_id=int(admin.id),
+    )
+    return _admin_addon_out(row)
+
+
+@router.post("/addons/{addon_id}/visibility", response_model=AdminAddonOut)
+async def set_addon_visibility_admin(
+    addon_id: int,
+    body: AdminAddonVisibilityIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Публичность пакета: hide/publish. Не меняет is_active."""
+    row, _ = set_admin_addon_visibility(
+        db,
+        addon_id=addon_id,
+        is_public=body.is_public,
+        admin_user_id=int(admin.id),
+    )
+    return _admin_addon_out(row)
+
+
+@router.post("/addons/{addon_id}/archive", response_model=AdminAddonOut)
+async def archive_addon_admin(
+    addon_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Архивирование: is_active=false. Купленные entitlements сохраняются."""
+    row, _ = archive_admin_addon(
+        db, addon_id=addon_id, admin_user_id=int(admin.id)
+    )
+    return _admin_addon_out(row)
+
+
+@router.post("/addons/{addon_id}/reactivate", response_model=AdminAddonOut)
+async def reactivate_addon_admin(
+    addon_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """Восстановление: is_active=true. is_public не меняется."""
+    row, _ = reactivate_admin_addon(
+        db, addon_id=addon_id, admin_user_id=int(admin.id)
+    )
+    return _admin_addon_out(row)
+
+
+@router.delete("/addons/{addon_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_addon_admin(
+    addon_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    """
+    Физическое удаление AddonPackage.
+    Только без references; иначе 409 addon_in_use.
+    """
+    delete_admin_addon(db, addon_id=addon_id, admin_user_id=int(admin.id))
+    return None
+
+
+def _admin_tier_out(row: dict) -> AdminPricingTierOut:
+    return AdminPricingTierOut.model_validate(row)
+
+
+def _admin_grid_out(row: dict) -> AdminPricingGridVersionOut:
+    return AdminPricingGridVersionOut.model_validate(row)
+
+
+@router.get("/addon-pricing-grids", response_model=AdminPricingGridVersionListOut)
+async def list_pricing_grids_admin(
+    resource_type: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    rows = list_grid_versions(db, resource_type=resource_type)
+    return AdminPricingGridVersionListOut(
+        items=[_admin_grid_out(r) for r in rows],
+        total=len(rows),
+    )
+
+
+@router.get("/addon-pricing-grids/{version_id}", response_model=AdminPricingGridVersionOut)
+async def get_pricing_grid_admin(
+    version_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    return _admin_grid_out(get_grid_version(db, version_id))
+
+
+@router.post(
+    "/addon-pricing-grids",
+    response_model=AdminPricingGridVersionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_pricing_grid_draft_admin(
+    body: AdminPricingGridCreateDraftIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    row = create_draft_from_version(
+        db,
+        resource_type=body.resource_type,
+        currency=body.currency,
+        based_on_version_id=body.based_on_version_id,
+        admin_user_id=int(admin.id),
+        note=body.note,
+    )
+    return _admin_grid_out(row)
+
+
+@router.post(
+    "/addon-pricing-grids/{version_id}/publish",
+    response_model=AdminPricingGridVersionOut,
+)
+async def publish_pricing_grid_admin(
+    version_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    return _admin_grid_out(
+        publish_grid_version(db, version_id=version_id, admin_user_id=int(admin.id))
+    )
+
+
+@router.post(
+    "/addon-pricing-grids/{version_id}/archive",
+    response_model=AdminPricingGridVersionOut,
+)
+async def archive_pricing_grid_admin(
+    version_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    return _admin_grid_out(
+        archive_active_grid_version(
+            db, version_id=version_id, admin_user_id=int(admin.id)
+        )
+    )
+
+
+@router.delete(
+    "/addon-pricing-grids/{version_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_pricing_grid_draft_admin(
+    version_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    delete_draft_grid_version(
+        db, version_id=version_id, admin_user_id=int(admin.id)
+    )
+    return None
+
+
+@router.post(
+    "/addon-pricing-grids/{version_id}/tiers",
+    response_model=AdminPricingTierOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_pricing_grid_tier_admin(
+    version_id: int,
+    body: AdminPricingGridTierCreateIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    row = add_tier_to_draft(
+        db,
+        version_id=version_id,
+        payload=body.model_dump(exclude_unset=True),
+        admin_user_id=int(admin.id),
+    )
+    return _admin_tier_out(row)
+
+
+@router.patch(
+    "/addon-pricing-grids/{version_id}/tiers/{tier_id}",
+    response_model=AdminPricingTierOut,
+)
+async def patch_pricing_grid_tier_admin(
+    version_id: int,
+    tier_id: int,
+    body: AdminPricingGridTierUpdateIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    row = update_tier_on_draft(
+        db,
+        version_id=version_id,
+        tier_id=tier_id,
+        patch=body.model_dump(exclude_unset=True),
+        admin_user_id=int(admin.id),
+    )
+    return _admin_tier_out(row)
+
+
+@router.delete(
+    "/addon-pricing-grids/{version_id}/tiers/{tier_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_pricing_grid_tier_admin(
+    version_id: int,
+    tier_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    delete_tier_on_draft(
+        db,
+        version_id=version_id,
+        tier_id=tier_id,
+        admin_user_id=int(admin.id),
+    )
+    return None
+
+
+@router.get("/addon-pricing-tiers", response_model=AdminPricingTierListOut)
+async def list_pricing_tiers_admin(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_tariff_admin),
+):
+    rows = list_admin_pricing_tiers(db)
+    return AdminPricingTierListOut(items=[_admin_tier_out(r) for r in rows], total=len(rows))
+
+
+@router.post(
+    "/addon-pricing-tiers",
+    response_model=AdminPricingTierOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_pricing_tier_admin(
+    body: AdminPricingTierCreateIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    row = create_admin_pricing_tier(
+        db,
+        payload=body.model_dump(exclude_unset=True),
+        admin_user_id=int(admin.id),
+    )
+    return _admin_tier_out(row)
+
+
+@router.patch("/addon-pricing-tiers/{tier_id}", response_model=AdminPricingTierOut)
+async def patch_pricing_tier_admin(
+    tier_id: int,
+    body: AdminPricingTierUpdateIn,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    row = update_admin_pricing_tier(
+        db,
+        tier_id=tier_id,
+        patch=body.model_dump(exclude_unset=True),
+        admin_user_id=int(admin.id),
+    )
+    return _admin_tier_out(row)
+
+
+@router.post("/addon-pricing-tiers/{tier_id}/archive", response_model=AdminPricingTierOut)
+async def archive_pricing_tier_admin(
+    tier_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    return _admin_tier_out(
+        archive_admin_pricing_tier(db, tier_id=tier_id, admin_user_id=int(admin.id))
+    )
+
+
+@router.post("/addon-pricing-tiers/{tier_id}/reactivate", response_model=AdminPricingTierOut)
+async def reactivate_pricing_tier_admin(
+    tier_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    return _admin_tier_out(
+        reactivate_admin_pricing_tier(db, tier_id=tier_id, admin_user_id=int(admin.id))
+    )
+
+
+@router.delete("/addon-pricing-tiers/{tier_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_pricing_tier_admin(
+    tier_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    delete_admin_pricing_tier(db, tier_id=tier_id, admin_user_id=int(admin.id))
     return None
 
 

@@ -104,6 +104,8 @@ describe('TariffsAdminAuditJournal', () => {
       offset: 0,
     });
     render(<TariffsAdminAuditJournal />);
+    await waitFor(() => screen.getByTestId('tariffs-admin-audit-row-7'));
+    fireEvent.click(screen.getByTestId('tariffs-admin-audit-detail-btn-7'));
     await waitFor(() => screen.getByTestId('tariffs-admin-audit-code-7'));
     expect(screen.getByTestId('tariffs-admin-audit-code-7').textContent).toBe('gone');
     expect(screen.getByText(/Ушедший/)).toBeTruthy();

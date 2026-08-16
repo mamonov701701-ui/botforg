@@ -377,12 +377,58 @@ def get_refund_request_admin(db: Session, *, request_id: int) -> dict[str, Any]:
 
     product = None
     if intent is not None:
+        snap = (
+            intent.price_grid_snapshot
+            if isinstance(intent.price_grid_snapshot, dict)
+            else {}
+        )
+        terms = snap.get("terms_confirmation") if isinstance(snap.get("terms_confirmation"), dict) else {}
+        avg = snap.get("average_unit_price")
+        if avg is None and isinstance(terms, dict):
+            avg = terms.get("average_unit_price")
+        validity = snap.get("validity_days")
+        if validity is None and isinstance(terms, dict):
+            validity = terms.get("validity_days")
+        confirmed_at = terms.get("confirmed_at") if terms else None
+        avg_out = None
+        if avg is not None:
+            try:
+                avg_out = format_money(avg)
+            except Exception:
+                avg_out = str(avg)
+        try:
+            validity_out = int(validity) if validity is not None else None
+        except (TypeError, ValueError):
+            validity_out = None
+        grid_vid = snap.get("pricing_grid_version_id")
+        if grid_vid is None and isinstance(terms, dict):
+            grid_vid = terms.get("pricing_grid_version_id")
+        try:
+            grid_vid_out = int(grid_vid) if grid_vid is not None else None
+        except (TypeError, ValueError):
+            grid_vid_out = None
         product = {
             "product_type": intent.product_type,
             "product_code": intent.product_code,
             "product_name": intent.product_name,
             "amount": format_money(intent.amount),
             "currency": intent.currency,
+            "product_units": intent.product_units,
+            "validity_days": validity_out,
+            "duration_kind": (
+                str(snap.get("duration_kind"))
+                if snap.get("duration_kind")
+                else (
+                    "activation_days"
+                    if validity_out is not None
+                    else None
+                )
+            ),
+            "terms_confirmed": bool(terms and terms.get("confirmed") is True),
+            "terms_confirmed_at": str(confirmed_at) if confirmed_at else None,
+            "purchase_kind": snap.get("kind") if isinstance(snap.get("kind"), str) else None,
+            "average_unit_price": avg_out,
+            "pricing_grid_version_id": grid_vid_out,
         }
 
     return {

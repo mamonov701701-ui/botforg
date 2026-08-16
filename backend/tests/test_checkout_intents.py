@@ -447,3 +447,34 @@ def test_addon_create_uses_effective_plan_not_legacy_plan_code(client, db):
         idempotency_key="addon-legacy-start-effective-biz",
     )
     assert res_ok.status_code == 201, res_ok.text
+
+
+def test_ai_credits_addon_not_sellable(client, db):
+    auth, uid = _auth(client)
+    pkg = AddonPackage(
+        code="ai_credits_pack",
+        name_ru="ИИ-кредиты",
+        type=AddonPackageType.AI_CREDITS,
+        amount=50,
+        price=Decimal("10.00"),
+        currency="RUB",
+        duration_type="current_period",
+        validity_days=30,
+        is_active=True,
+        is_public=True,
+        sort_order=50,
+    )
+    db.add(pkg)
+    db.commit()
+    _activate_subscription(db, uid, "business")
+    res = _create(
+        client,
+        auth,
+        product_type="addon",
+        code="ai_credits_pack",
+        idempotency_key="ai-credits-blocked",
+    )
+    assert res.status_code == 404, res.text
+    detail = res.json().get("detail") or res.json()
+    code = detail.get("code") if isinstance(detail, dict) else None
+    assert code == "product_unavailable"

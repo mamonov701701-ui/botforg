@@ -760,4 +760,4 @@ def test_migration_includes_submit_guards(db):
     assert "uq_refund_requests_user_idempotency" in index_names
 
     rev = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert rev == "business_pro_team_members_034"
+    assert rev == "addon_pricing_open_ended_038"

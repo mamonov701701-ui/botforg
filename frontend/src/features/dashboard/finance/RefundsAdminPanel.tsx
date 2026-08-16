@@ -655,6 +655,89 @@ export default function RefundsAdminPanel() {
                       )}
                       <Kv label="Покупка" value={purchaseLabel} />
                       <Kv label="Оплачено" value={paidLabel} />
+                      {isAddonProduct && detail.product?.purchase_kind ? (
+                        <Kv
+                          label="Тип покупки"
+                          value={
+                            <span data-testid="refund-admin-purchase-kind">
+                              {detail.product.purchase_kind}
+                            </span>
+                          }
+                        />
+                      ) : null}
+                      {isAddonProduct && detail.product?.pricing_grid_version_id != null ? (
+                        <Kv
+                          label="Версия сетки"
+                          value={
+                            <span data-testid="refund-admin-pricing-grid-version">
+                              {detail.product.pricing_grid_version_id}
+                            </span>
+                          }
+                        />
+                      ) : null}
+                      {isAddonProduct && detail.product?.product_units != null ? (
+                        <Kv
+                          label="Куплено units"
+                          value={
+                            <span data-testid="refund-admin-purchase-units">
+                              {detail.product.product_units}
+                            </span>
+                          }
+                        />
+                      ) : null}
+                      {isAddonProduct && detail.product?.duration_kind === 'tariff_period_end' ? (
+                        <Kv label="Срок пакета" value="до конца текущего тарифного периода" />
+                      ) : isAddonProduct && detail.product?.validity_days != null ? (
+                        <Kv
+                          label="Срок пакета"
+                          value={`${detail.product.validity_days} дн. с активации`}
+                        />
+                      ) : null}
+                      {isAddonProduct && detail.product?.average_unit_price ? (
+                        <Kv
+                          label="Средняя цена unit"
+                          value={formatMoneyAmount(detail.product.average_unit_price, currency)}
+                        />
+                      ) : null}
+                      {isAddonProduct ? (
+                        <Kv
+                          label="Условия подтверждены"
+                          value={
+                            <span data-testid="refund-admin-terms-confirmed">
+                              {detail.product?.terms_confirmed
+                                ? detail.product.terms_confirmed_at
+                                  ? `да · ${formatRefundDate(detail.product.terms_confirmed_at)}`
+                                  : 'да'
+                                : 'нет / нет данных'}
+                            </span>
+                          }
+                        />
+                      ) : null}
+                      {isAddonProduct ? (
+                        <Kv
+                          label="Возврат (units)"
+                          value={
+                            <span data-testid="refund-admin-units-summary">
+                              всего {revUnitsTotal} · использовано {revUnitsUsed} · доступно{' '}
+                              {revUnitsAvailable}
+                              {detail.current_revision?.addon_revoke_units != null
+                                ? ` · к отзыву ${detail.current_revision.addon_revoke_units}`
+                                : ''}
+                            </span>
+                          }
+                        />
+                      ) : null}
+                      {isAddonProduct && computedAddonRefundMoney != null ? (
+                        <Kv
+                          label="Расчёт возврата по units"
+                          value={
+                            <span data-testid="refund-admin-units-money-hint">
+                              {formatMoneyAmount(computedAddonRefundMoney, currency)} = оплачено ×
+                              отзыв / куплено
+                            </span>
+                          }
+                        />
+                      ) : null}
                       <Kv
                         label="Доступно к возврату"
                         value={formatMoneyAmount(calc.available, currency)}
@@ -1243,6 +1326,15 @@ export default function RefundsAdminPanel() {
                           <>
                             <Kv label="Название" value={detail.product.product_name} />
                             <Kv label="Тип" value={productTypeLabel(detail.product.product_type)} />
+                            {detail.product.purchase_kind ? (
+                              <Kv label="Тип покупки" value={detail.product.purchase_kind} />
+                            ) : null}
+                            {detail.product.pricing_grid_version_id != null ? (
+                              <Kv
+                                label="Версия сетки"
+                                value={detail.product.pricing_grid_version_id}
+                              />
+                            ) : null}
                             <Kv
                               label="Сумма покупки"
                               value={formatMoneyAmount(

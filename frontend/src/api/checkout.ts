@@ -27,12 +27,19 @@ export const CHECKOUT_ERROR_CODES = {
   invalidProductType: 'invalid_product_type',
   currentTariffAlreadyActive: 'current_tariff_already_active',
   addonNotAvailableForCurrentTariff: 'addon_not_available_for_current_tariff',
+  priceChanged: 'price_changed',
+  quantityRequired: 'quantity_required',
+  pricingIncomplete: 'pricing_incomplete',
+  pricingUnavailable: 'pricing_unavailable',
+  termsConfirmationRequired: 'terms_confirmation_required',
+  confirmationMismatch: 'confirmation_mismatch',
 } as const;
 
 export interface CreateCheckoutIntentInput {
   product_type: CheckoutProductType;
   code: string;
   idempotency_key: string;
+  quantity?: number;
 }
 
 /** Соответствует backend CheckoutIntentOut. */
@@ -57,6 +64,10 @@ export interface CheckoutIntent {
   fulfilled_addon_id: number | null;
   created_at: string;
   updated_at: string;
+  product_units: number | null;
+  price_grid_snapshot: Record<string, unknown> | null;
+  terms_confirmed: boolean;
+  terms_confirmed_at: string | null;
 }
 
 export interface StartCheckoutPaymentInput {
@@ -113,6 +124,11 @@ function moneyStr(value: unknown, fallback = '0.00'): string {
 
 export function normalizeCheckoutIntent(raw: unknown): CheckoutIntent {
   const o = asRecord(raw) ?? {};
+  const snapRaw = o.price_grid_snapshot;
+  const snap =
+    snapRaw !== null && typeof snapRaw === 'object' && !Array.isArray(snapRaw)
+      ? (snapRaw as Record<string, unknown>)
+      : null;
   return {
     id: asNumber(o.id),
     product_type: asString(o.product_type),
@@ -134,6 +150,10 @@ export function normalizeCheckoutIntent(raw: unknown): CheckoutIntent {
     fulfilled_addon_id: asNullableNumber(o.fulfilled_addon_id),
     created_at: asString(o.created_at),
     updated_at: asString(o.updated_at),
+    product_units: asNullableNumber(o.product_units),
+    price_grid_snapshot: snap,
+    terms_confirmed: asBool(o.terms_confirmed, false),
+    terms_confirmed_at: asNullableString(o.terms_confirmed_at),
   };
 }
 
@@ -156,12 +176,32 @@ export function normalizeStartCheckoutPaymentResult(raw: unknown): StartCheckout
 export async function createCheckoutIntent(
   input: CreateCheckoutIntentInput
 ): Promise<CheckoutIntent> {
-  const body = {
+  const body: Record<string, unknown> = {
     product_type: input.product_type,
     code: input.code,
     idempotency_key: input.idempotency_key,
   };
+  if (typeof input.quantity === 'number' && Number.isInteger(input.quantity)) {
+    body.quantity = input.quantity;
+  }
   const raw = await post('/me/checkout-intents', body);
+  return normalizeCheckoutIntent(raw);
+}
+
+/** POST /me/checkout-intents/{id}/confirm-addon-terms */
+export async function confirmAddonCheckoutTerms(
+  intentId: number,
+  input: {
+    confirmed_amount: string | number;
+    confirmed_currency: string;
+    confirmed_quantity: number;
+  }
+): Promise<CheckoutIntent> {
+  const raw = await post(`/me/checkout-intents/${intentId}/confirm-addon-terms`, {
+    confirmed_amount: input.confirmed_amount,
+    confirmed_currency: input.confirmed_currency,
+    confirmed_quantity: input.confirmed_quantity,
+  });
   return normalizeCheckoutIntent(raw);
 }
 

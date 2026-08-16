@@ -3,8 +3,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from backend.services.addon_custom_pack import MAX_CUSTOM_QUANTITY, MIN_CUSTOM_QUANTITY
 from backend.services.tariff_limits import TariffLimitsSummary
 
 
@@ -37,6 +38,51 @@ class PublicAddonOut(BaseModel):
     available_from_plan: Any = None
     max_per_period: int | None = None
     sort_order: int = 0
+
+
+class CustomAddonQuoteIn(BaseModel):
+    resource_type: str = Field(default="messages", min_length=1, max_length=32)
+    quantity: int = Field(..., ge=MIN_CUSTOM_QUANTITY, le=MAX_CUSTOM_QUANTITY)
+
+    @field_validator("resource_type", mode="before")
+    @classmethod
+    def _strip_resource(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
+
+class CustomAddonQuoteBandOut(BaseModel):
+    tier_id: int
+    range_start: int
+    range_end: int | None = None
+    units: int
+    unit_price: Decimal
+    subtotal: Decimal
+
+
+class CustomAddonQuoteOut(BaseModel):
+    resource_type: str
+    quantity: int
+    currency: str
+    total: Decimal
+    average_unit_price: Decimal
+    validity_days: int
+    checkout_code: str
+    product_name: str
+    bands: list[CustomAddonQuoteBandOut] = Field(default_factory=list)
+    min_quantity: int = MIN_CUSTOM_QUANTITY
+    max_quantity: int = MAX_CUSTOM_QUANTITY
+
+
+class CustomMessagesConfigOut(BaseModel):
+    """Public UX limits for «Настроить пакет» (backend-authoritative)."""
+
+    min_quantity: int = MIN_CUSTOM_QUANTITY
+    max_quantity: int = MAX_CUSTOM_QUANTITY
+    validity_days: int
+    sales_enabled: bool
+    currency: str = "RUB"
 
 
 class BillingPeriodOut(BaseModel):

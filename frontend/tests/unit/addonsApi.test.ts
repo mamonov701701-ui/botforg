@@ -3,6 +3,7 @@ import { getPublicAddons, formatAddonPrice, formatAddonAmountLine } from '@/api/
 
 vi.mock('@/api/client', () => ({
   get: vi.fn(),
+  post: vi.fn(),
 }));
 
 import { get } from '@/api/client';

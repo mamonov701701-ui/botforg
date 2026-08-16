@@ -218,6 +218,35 @@
   border-color: rgba(255, 210, 76, 0.45);
 }
 
+.checkout-terms {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 14px 0 8px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text, #e6eaf2);
+  cursor: pointer;
+}
+
+.checkout-terms input {
+  margin-top: 3px;
+  flex: 0 0 auto;
+}
+
+.checkout-how-link {
+  margin: 10px 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--primary, #ffd24c);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .checkout-return-card .checkout-payment-status {
   margin-top: 16px;
   border: 1px solid var(--bf-section-border) !important;

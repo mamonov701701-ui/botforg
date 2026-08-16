@@ -7,11 +7,27 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from backend.services.addon_custom_pack import MAX_CUSTOM_QUANTITY, MIN_CUSTOM_QUANTITY
+
 
 class CheckoutIntentCreateIn(BaseModel):
     product_type: Literal["tariff", "addon"]
     code: str = Field(..., min_length=1, max_length=64)
     idempotency_key: str = Field(..., min_length=1, max_length=128)
+    # Custom message pack only. Ignored/rejected for fixed catalog items.
+    quantity: int | None = Field(
+        default=None, ge=MIN_CUSTOM_QUANTITY, le=MAX_CUSTOM_QUANTITY
+    )
+
+
+class ConfirmAddonTermsIn(BaseModel):
+    """User acknowledgment of locked custom-pack quote before payment."""
+
+    confirmed_amount: Decimal
+    confirmed_currency: str = Field(default="RUB", min_length=1, max_length=10)
+    confirmed_quantity: int = Field(
+        ..., ge=MIN_CUSTOM_QUANTITY, le=MAX_CUSTOM_QUANTITY
+    )
 
 
 class CheckoutIntentOut(BaseModel):
@@ -35,6 +51,11 @@ class CheckoutIntentOut(BaseModel):
     fulfilled_addon_id: int | None = None
     created_at: datetime
     updated_at: datetime
+    # Purchase snapshot (nullable on legacy rows).
+    product_units: int | None = None
+    price_grid_snapshot: dict | None = None
+    terms_confirmed: bool = False
+    terms_confirmed_at: datetime | None = None
 
     class Config:
         from_attributes = True

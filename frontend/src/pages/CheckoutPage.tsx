@@ -7,13 +7,21 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Check, Package, Zap } from 'lucide-react';
 import {
   addonActivationValiditySentence,
-  addonValidityLabel,
+  addonPublicDurationLabel,
+  CUSTOM_MESSAGES_CODE,
+  CUSTOM_PACK_TITLE_RU,
   formatAddonAmountLine,
   formatAddonPrice,
   getPublicAddons,
+  quoteCustomAddon,
+  type CustomAddonQuote,
   type PublicAddon,
 } from '@/api/addons';
-import { createCheckoutIntent, startCheckoutPayment } from '@/api/checkout';
+import {
+  confirmAddonCheckoutTerms,
+  createCheckoutIntent,
+  startCheckoutPayment,
+} from '@/api/checkout';
 import { getTariffSummary } from '@/api/tariff';
 import {
   buildTariffLimitLines,
@@ -27,6 +35,12 @@ import {
   canStartPaidCheckout,
   checkoutErrorMessage,
 } from '@/features/checkout/checkoutUi';
+import {
+  formatAverageUnitPriceRu,
+  formatMoneyRu,
+  humanPricingBreakdownLines,
+} from '@/features/pricing/pricingDisplay';
+import { ApiError } from '@/api/client';
 import './Checkout.css';
 
 type CheckoutMode = 'empty' | 'conflict' | 'tariff' | 'addon';
@@ -36,12 +50,17 @@ export default function CheckoutPage() {
   const [searchParams] = useSearchParams();
   const planCode = (searchParams.get('plan') || '').trim();
   const addonCode = (searchParams.get('addon') || '').trim();
+  const qtyRaw = (searchParams.get('qty') || '').trim();
+  const customQty = Number(qtyRaw);
+  const isCustomMessages =
+    addonCode === CUSTOM_MESSAGES_CODE && Number.isInteger(customQty) && customQty >= 1;
 
   const mode: CheckoutMode =
     planCode && addonCode ? 'conflict' : planCode ? 'tariff' : addonCode ? 'addon' : 'empty';
 
   const [tariffs, setTariffs] = useState<PublicTariff[]>([]);
   const [addons, setAddons] = useState<PublicAddon[]>([]);
+  const [customQuote, setCustomQuote] = useState<CustomAddonQuote | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(mode === 'tariff' || mode === 'addon');
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -53,7 +72,15 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [intentId, setIntentId] = useState<number | null>(null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const submitLockRef = useRef(false);
+
+  useEffect(() => {
+    setTermsAccepted(false);
+    setBreakdownOpen(false);
+    setIntentId(null);
+  }, [customQty, addonCode, planCode]);
 
   useEffect(() => {
     if (mode !== 'tariff' && mode !== 'addon') {
@@ -73,11 +100,18 @@ export default function CheckoutPage() {
             setTariffs(items);
             setAddons([]);
           })
-        : getPublicAddons().then(items => {
-            if (cancelled) return;
-            setAddons(items);
-            setTariffs([]);
-          });
+        : isCustomMessages
+          ? quoteCustomAddon({ quantity: customQty, resource_type: 'messages' }).then(data => {
+              if (cancelled) return;
+              setCustomQuote(data);
+              setAddons([]);
+            })
+          : getPublicAddons().then(items => {
+              if (cancelled) return;
+              setAddons(items);
+              setTariffs([]);
+              setCustomQuote(null);
+            });
 
     loader
       .catch(() => {
@@ -97,7 +131,7 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, planCode, addonCode]);
+  }, [mode, planCode, addonCode, isCustomMessages, customQty]);
 
   useEffect(() => {
     if (mode !== 'tariff' && mode !== 'addon') {
@@ -138,8 +172,11 @@ export default function CheckoutPage() {
   );
 
   const addon = useMemo(
-    () => (mode === 'addon' ? (addons.find(a => a.code === addonCode) ?? null) : null),
-    [mode, addons, addonCode]
+    () =>
+      mode === 'addon' && !isCustomMessages
+        ? (addons.find(a => a.code === addonCode) ?? null)
+        : null,
+    [mode, addons, addonCode, isCustomMessages]
   );
 
   const tariffLimitLines = useMemo(
@@ -154,9 +191,11 @@ export default function CheckoutPage() {
 
   const payGate = tariff
     ? canStartPaidCheckout(tariff.price_month)
-    : addon
-      ? canStartPaidCheckout(addon.price)
-      : { ok: false, reason: null };
+    : isCustomMessages
+      ? canStartPaidCheckout(customQuote?.total)
+      : addon
+        ? canStartPaidCheckout(addon.price)
+        : { ok: false, reason: null };
 
   const isCurrentTariff =
     effectivePlanStatus === 'ready' &&
@@ -165,11 +204,17 @@ export default function CheckoutPage() {
   const summaryBlocksPay = effectivePlanStatus === 'loading' || effectivePlanStatus === 'error';
   const addonBlockedByPlan =
     mode === 'addon' && effectivePlanStatus === 'ready' && !addonPurchaseAllowed;
+  /** Same legal confirmation gate for fixed packs and custom messages. */
+  const addonPayAllowed = mode !== 'addon' || termsAccepted;
   const canPay =
     mode === 'tariff'
       ? Boolean(tariff) && !summaryBlocksPay && !isCurrentTariff && payGate.ok
       : mode === 'addon'
-        ? Boolean(addon) && !summaryBlocksPay && !addonBlockedByPlan && payGate.ok
+        ? Boolean(isCustomMessages ? customQuote : addon) &&
+          !summaryBlocksPay &&
+          !addonBlockedByPlan &&
+          payGate.ok &&
+          addonPayAllowed
         : false;
 
   const handleContinue = useCallback(async () => {
@@ -182,7 +227,13 @@ export default function CheckoutPage() {
         return;
       }
     } else if (mode === 'addon') {
-      if (!addon || summaryBlocksPay || addonBlockedByPlan) return;
+      if ((isCustomMessages ? !customQuote : !addon) || summaryBlocksPay || addonBlockedByPlan) {
+        return;
+      }
+      if (!termsAccepted) {
+        setActionError('Подтвердите условия покупки перед оплатой.');
+        return;
+      }
       if (!payGate.ok) {
         setActionError(payGate.reason);
         return;
@@ -192,7 +243,7 @@ export default function CheckoutPage() {
     }
 
     const productType = mode === 'addon' ? 'addon' : 'tariff';
-    const code = mode === 'addon' ? addon!.code : tariff!.code;
+    const code = mode === 'addon' ? addonCode : tariff!.code;
 
     submitLockRef.current = true;
     setSubmitting(true);
@@ -204,8 +255,22 @@ export default function CheckoutPage() {
         product_type: productType,
         code,
         idempotency_key: createKey,
+        ...(isCustomMessages ? { quantity: customQty } : {}),
       });
       setIntentId(intent.id);
+
+      if (mode === 'addon') {
+        const confirmedAmount = isCustomMessages ? customQuote!.total : String(addon!.price);
+        const confirmedCurrency = isCustomMessages
+          ? customQuote!.currency
+          : addon!.currency || 'RUB';
+        const confirmedQuantity = isCustomMessages ? customQuote!.quantity : Number(addon!.amount);
+        await confirmAddonCheckoutTerms(intent.id, {
+          confirmed_amount: confirmedAmount,
+          confirmed_currency: confirmedCurrency,
+          confirmed_quantity: confirmedQuantity,
+        });
+      }
 
       const payKey = buildCheckoutIdempotencyKey(`pay-${intent.id}`);
       const returnUrl = buildCheckoutReturnUrl(intent.id);
@@ -223,7 +288,27 @@ export default function CheckoutPage() {
       }
       window.location.assign(url);
     } catch (err) {
-      setActionError(checkoutErrorMessage(err));
+      if (err instanceof ApiError && err.code === 'price_changed') {
+        setTermsAccepted(false);
+        setIntentId(null);
+        try {
+          if (isCustomMessages) {
+            const fresh = await quoteCustomAddon({
+              quantity: customQty,
+              resource_type: 'messages',
+            });
+            setCustomQuote(fresh);
+          } else {
+            const items = await getPublicAddons();
+            setAddons(items);
+          }
+          setActionError(checkoutErrorMessage(err));
+        } catch {
+          setActionError(checkoutErrorMessage(err));
+        }
+      } else {
+        setActionError(checkoutErrorMessage(err));
+      }
     } finally {
       submitLockRef.current = false;
       setSubmitting(false);
@@ -232,12 +317,17 @@ export default function CheckoutPage() {
     mode,
     tariff,
     addon,
+    customQuote,
+    isCustomMessages,
+    customQty,
+    addonCode,
     submitting,
     isCurrentTariff,
     summaryBlocksPay,
     addonBlockedByPlan,
     payGate.ok,
     payGate.reason,
+    termsAccepted,
   ]);
 
   return (
@@ -320,7 +410,7 @@ export default function CheckoutPage() {
         </section>
       )}
 
-      {mode === 'addon' && !catalogLoading && !catalogError && !addon && (
+      {mode === 'addon' && !isCustomMessages && !catalogLoading && !catalogError && !addon && (
         <section className="checkout-card" data-testid="checkout-addon-not-found">
           <div className="checkout-alert checkout-alert--error" role="alert">
             Дополнение недоступно. Выбранный пакет отсутствует в актуальном каталоге.
@@ -457,6 +547,146 @@ export default function CheckoutPage() {
         </section>
       )}
 
+      {isCustomMessages && customQuote && (
+        <section className="checkout-card" data-testid="checkout-custom-summary">
+          <div className="checkout-card__icon">
+            <Package size={28} />
+          </div>
+          <h2 className="checkout-card__name" data-testid="checkout-addon-name">
+            {customQuote.product_name || CUSTOM_PACK_TITLE_RU}
+          </h2>
+          <p className="checkout-card__price" data-testid="checkout-addon-price">
+            {formatMoneyRu(customQuote.total, customQuote.currency)}
+          </p>
+          <p className="checkout-card__desc" data-testid="checkout-addon-avg">
+            {formatAverageUnitPriceRu(
+              customQuote.average_unit_price || Number(customQuote.total) / customQuote.quantity,
+              customQuote.currency
+            )}
+          </p>
+          <div className="checkout-card__block">
+            <h3 className="checkout-card__block-title">Состав покупки</h3>
+            <ul className="checkout-card__list">
+              <li>
+                <Check size={18} className="checkout-card__check" />
+                Сообщения: {customQuote.quantity}
+              </li>
+              <li data-testid="checkout-addon-validity">
+                <Check size={18} className="checkout-card__check" />
+                Срок действия: {customQuote.validity_days} дней с момента активации
+              </li>
+            </ul>
+            <button
+              type="button"
+              className="checkout-how-link"
+              data-testid="checkout-how-pricing"
+              aria-expanded={breakdownOpen}
+              onClick={() => setBreakdownOpen(v => !v)}
+            >
+              Как рассчитана стоимость
+            </button>
+            {breakdownOpen ? (
+              <ul className="checkout-card__list" data-testid="checkout-pricing-breakdown">
+                {humanPricingBreakdownLines(customQuote.bands, customQuote.currency).map(line => (
+                  <li key={line}>
+                    <Check size={18} className="checkout-card__check" />
+                    {line}
+                  </li>
+                ))}
+                <li>
+                  <Check size={18} className="checkout-card__check" />
+                  итог: {formatMoneyRu(customQuote.total, customQuote.currency)}
+                </li>
+              </ul>
+            ) : null}
+          </div>
+          {effectivePlanStatus === 'error' && (
+            <div
+              className="checkout-alert checkout-alert--error"
+              data-testid="checkout-summary-error"
+              role="alert"
+            >
+              Не удалось проверить текущий тариф. Обновите страницу или попробуйте позже.
+            </div>
+          )}
+          {addonBlockedByPlan && (
+            <div className="checkout-alert" data-testid="checkout-addon-plan-gate">
+              Для покупки дополнительных сообщений требуется платный тариф.
+              <div style={{ marginTop: 10 }}>
+                <Link
+                  to="/pricing?tab=tariffs"
+                  className="checkout-btn checkout-btn--primary"
+                  data-testid="checkout-addon-choose-tariff"
+                >
+                  Выбрать тариф
+                </Link>
+              </div>
+            </div>
+          )}
+          {!summaryBlocksPay && !addonBlockedByPlan && payGate.ok && (
+            <label className="checkout-terms" data-testid="checkout-terms-label">
+              <input
+                type="checkbox"
+                data-testid="checkout-terms-confirm"
+                checked={termsAccepted}
+                onChange={e => setTermsAccepted(e.target.checked)}
+              />
+              <span>
+                Я ознакомился с количеством, итоговой стоимостью, сроком действия и условиями
+                дополнительного пакета и подтверждаю покупку на указанных условиях.
+              </span>
+            </label>
+          )}
+          {actionError && (
+            <div
+              className="checkout-alert checkout-alert--error"
+              data-testid="checkout-action-error"
+              role="alert"
+            >
+              {actionError}
+            </div>
+          )}
+          {intentId != null && (
+            <p className="checkout-meta" data-testid="checkout-intent-id">
+              Заказ №{intentId}
+            </p>
+          )}
+          <div className="checkout-actions">
+            <Link
+              to="/pricing?tab=addons"
+              className="checkout-btn checkout-btn--ghost"
+              data-testid="checkout-back-to-finance"
+            >
+              К пакетам
+            </Link>
+            {canPay ? (
+              <button
+                type="button"
+                className="checkout-btn checkout-btn--primary bf-primary-cta"
+                data-testid="checkout-continue"
+                disabled={submitting}
+                onClick={() => {
+                  void handleContinue();
+                }}
+              >
+                {submitting
+                  ? 'Оформляем…'
+                  : `Перейти к оплате — ${formatMoneyRu(customQuote.total, customQuote.currency)}`}
+              </button>
+            ) : !summaryBlocksPay && !addonBlockedByPlan && payGate.ok && !termsAccepted ? (
+              <button
+                type="button"
+                className="checkout-btn checkout-btn--primary bf-primary-cta"
+                data-testid="checkout-continue"
+                disabled
+              >
+                {`Перейти к оплате — ${formatMoneyRu(customQuote.total, customQuote.currency)}`}
+              </button>
+            ) : null}
+          </div>
+        </section>
+      )}
+
       {addon && (
         <section className="checkout-card" data-testid="checkout-addon-summary">
           <div className="checkout-card__icon">
@@ -481,7 +711,7 @@ export default function CheckoutPage() {
               </li>
               <li data-testid="checkout-addon-validity">
                 <Check size={18} className="checkout-card__check" />
-                {addonValidityLabel(addon)}
+                {addonPublicDurationLabel(addon)}
               </li>
               <li data-testid="checkout-addon-validity-note">
                 <Check size={18} className="checkout-card__check" />
@@ -525,6 +755,21 @@ export default function CheckoutPage() {
             </div>
           )}
 
+          {!summaryBlocksPay && !addonBlockedByPlan && payGate.ok && (
+            <label className="checkout-terms" data-testid="checkout-terms-label">
+              <input
+                type="checkbox"
+                data-testid="checkout-terms-confirm"
+                checked={termsAccepted}
+                onChange={e => setTermsAccepted(e.target.checked)}
+              />
+              <span>
+                Я ознакомился с названием пакета, количеством, итоговой стоимостью, сроком действия
+                и условиями дополнительного пакета и подтверждаю покупку на указанных условиях.
+              </span>
+            </label>
+          )}
+
           {actionError && (
             <div
               className="checkout-alert checkout-alert--error"
@@ -552,14 +797,23 @@ export default function CheckoutPage() {
             {canPay ? (
               <button
                 type="button"
-                className="checkout-btn checkout-btn--primary"
+                className="checkout-btn checkout-btn--primary bf-primary-cta"
                 data-testid="checkout-continue"
                 disabled={submitting}
                 onClick={() => {
                   void handleContinue();
                 }}
               >
-                {submitting ? 'Оформляем…' : 'Продолжить к оплате'}
+                {submitting ? 'Оформляем…' : `Перейти к оплате — ${addonPriceLabel}`}
+              </button>
+            ) : !summaryBlocksPay && !addonBlockedByPlan && payGate.ok && !termsAccepted ? (
+              <button
+                type="button"
+                className="checkout-btn checkout-btn--primary bf-primary-cta"
+                data-testid="checkout-continue"
+                disabled
+              >
+                {`Перейти к оплате — ${addonPriceLabel}`}
               </button>
             ) : null}
           </div>

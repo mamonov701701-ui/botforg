@@ -22,6 +22,7 @@ from backend.models.tariff import (
 from backend.models.user import User
 from backend.services.checkout_intents import (
     CheckoutIntentError,
+    confirm_custom_addon_terms,
     create_checkout_intent,
 )
 from backend.services.checkout_pay import CheckoutPayError, start_checkout_payment
@@ -508,6 +509,16 @@ def test_payment_readiness_still_required_when_legal_ready(client, db, monkeypat
         idempotency_key="legal-ready-pay",
         commit=True,
     )
+    # Addon pay requires terms before connection readiness is evaluated.
+    confirm_custom_addon_terms(
+        db,
+        user_id=uid,
+        intent_id=intent.id,
+        confirmed_quantity=int(intent.product_units or 0),
+        confirmed_amount=intent.amount,
+        confirmed_currency=intent.currency or "RUB",
+        commit=True,
+    )
     with pytest.raises(CheckoutPayError) as pe:
         start_checkout_payment(
             db,
@@ -636,7 +647,7 @@ def test_migration_head_includes_legal_versioning(db):
     )
     script = ScriptDirectory.from_config(cfg)
     heads = set(script.get_heads())
-    assert "business_pro_team_members_034" in heads
-    assert rev == "business_pro_team_members_034"
+    assert "addon_pricing_open_ended_038" in heads
+    assert rev == "addon_pricing_open_ended_038"
     all_revs = {r.revision for r in script.walk_revisions()}
     assert "legal_versioning_029" in all_revs

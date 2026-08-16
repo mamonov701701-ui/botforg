@@ -401,7 +401,9 @@ def _build_fifo_buckets(
                 grant_units=int(addon.amount or 0),
                 remaining=remaining,
                 user_addon_id=int(addon.id),
-                sort_key=(2, created.timestamp(), int(addon.id)),
+                # Expiry-aware: nearest period_end first, then older created_at.
+                # Price/unit cost must never affect consumption order.
+                sort_key=(2, a_end.timestamp(), created.timestamp(), int(addon.id)),
             )
         )
     paid.sort(key=lambda b: b.sort_key)

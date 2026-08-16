@@ -1,7 +1,7 @@
 /**
  * Публичный каталог дополнений (GET /addons) — этап 8.2.5 / 6.1.
  */
-import { get } from './client';
+import { get, post } from './client';
 
 export interface PublicAddon {
   code: string;
@@ -23,8 +23,10 @@ const ADDON_TYPE_LABELS: Record<string, string> = {
   messages: 'Сообщения',
   active_bots: 'Активные боты',
   active_bot: 'Активные боты',
+  bots: 'Боты',
   team_members: 'Участники команды',
   team_member: 'Участник команды',
+  ai_credits: 'ИИ-кредиты',
 };
 
 const DURATION_LABELS: Record<string, string> = {
@@ -52,6 +54,17 @@ export function addonDurationLabel(durationType: string): string {
   return 'Срок действия указан продавцом';
 }
 
+function isCapacityAddonType(type: string | undefined): boolean {
+  const t = (type || '').toLowerCase();
+  return (
+    t === 'active_bot' ||
+    t === 'team_member' ||
+    t === 'bots' ||
+    t === 'active_bots' ||
+    t === 'team_members'
+  );
+}
+
 /** Visible validity line from backend validity_days (not a hardcoded FE-only 30). */
 export function addonValidityLabel(addon: Pick<PublicAddon, 'validity_days'>): string {
   const days =
@@ -59,7 +72,12 @@ export function addonValidityLabel(addon: Pick<PublicAddon, 'validity_days'>): s
   return `Срок действия: ${days} дней с момента активации`;
 }
 
-export function addonActivationValiditySentence(addon: Pick<PublicAddon, 'validity_days'>): string {
+export function addonActivationValiditySentence(
+  addon: Pick<PublicAddon, 'type' | 'validity_days' | 'duration_type'>
+): string {
+  if (isCapacityAddonType(addon.type)) {
+    return 'Пакет действует до конца текущего тарифного периода';
+  }
   const days =
     typeof addon.validity_days === 'number' && addon.validity_days > 0 ? addon.validity_days : 30;
   return `Пакет будет действовать ${days} дней с момента успешной активации`;
@@ -114,6 +132,132 @@ function normalizePublicAddon(raw: unknown): PublicAddon {
           : Number(maxRaw) || null,
     sort_order: typeof o.sort_order === 'number' ? o.sort_order : Number(o.sort_order) || 0,
   };
+}
+
+export const CUSTOM_MESSAGES_CODE = 'custom_messages';
+export const CUSTOM_PACK_TITLE_RU = 'Настроить пакет';
+/**
+ * Fallback UX ceiling until /me/addons/custom-messages-config loads.
+ * Authoritative value is always backend MAX_CUSTOM_QUANTITY.
+ */
+export const MAX_CUSTOM_MESSAGES_QUANTITY = 1_000_000;
+export const MIN_CUSTOM_MESSAGES_QUANTITY = 1;
+
+export interface CustomMessagesConfig {
+  min_quantity: number;
+  max_quantity: number;
+  validity_days: number;
+  sales_enabled: boolean;
+  currency: string;
+}
+
+export interface CustomAddonQuoteBand {
+  tier_id: number;
+  range_start: number;
+  range_end: number | null;
+  units: number;
+  unit_price: string;
+  subtotal: string;
+}
+
+export interface CustomAddonQuote {
+  resource_type: string;
+  quantity: number;
+  currency: string;
+  total: string;
+  average_unit_price: string;
+  validity_days: number;
+  checkout_code: string;
+  product_name: string;
+  bands: CustomAddonQuoteBand[];
+  min_quantity: number;
+  max_quantity: number;
+}
+
+export function addonPublicDurationLabel(
+  addon: Pick<PublicAddon, 'type' | 'validity_days' | 'duration_type'>
+): string {
+  if (isCapacityAddonType(addon.type)) {
+    return 'Срок действия: до конца текущего тарифного периода';
+  }
+  return addonValidityLabel(addon);
+}
+
+function normalizeQuoteBand(raw: unknown): CustomAddonQuoteBand | null {
+  const o = asRecord(raw);
+  const tierId = typeof o.tier_id === 'number' ? o.tier_id : Number(o.tier_id);
+  const units = typeof o.units === 'number' ? o.units : Number(o.units);
+  if (!Number.isFinite(tierId) || !Number.isFinite(units)) return null;
+  return {
+    tier_id: tierId,
+    range_start: typeof o.range_start === 'number' ? o.range_start : Number(o.range_start) || 0,
+    range_end:
+      o.range_end == null || o.range_end === ''
+        ? null
+        : typeof o.range_end === 'number'
+          ? o.range_end
+          : Number(o.range_end),
+    units,
+    unit_price: String(o.unit_price ?? ''),
+    subtotal: String(o.subtotal ?? ''),
+  };
+}
+
+export function normalizeCustomAddonQuote(raw: unknown): CustomAddonQuote {
+  const o = asRecord(raw);
+  const bandsRaw = Array.isArray(o.bands) ? o.bands : [];
+  return {
+    resource_type: String(o.resource_type || 'messages'),
+    quantity: typeof o.quantity === 'number' ? o.quantity : Number(o.quantity) || 0,
+    currency: String(o.currency || 'RUB'),
+    total: String(o.total ?? '0.00'),
+    average_unit_price: String(o.average_unit_price ?? ''),
+    validity_days:
+      typeof o.validity_days === 'number' && o.validity_days > 0 ? o.validity_days : 30,
+    checkout_code: String(o.checkout_code || CUSTOM_MESSAGES_CODE),
+    product_name: String(o.product_name || CUSTOM_PACK_TITLE_RU),
+    bands: bandsRaw.map(normalizeQuoteBand).filter((b): b is CustomAddonQuoteBand => b != null),
+    min_quantity:
+      typeof o.min_quantity === 'number' && o.min_quantity > 0
+        ? o.min_quantity
+        : MIN_CUSTOM_MESSAGES_QUANTITY,
+    max_quantity:
+      typeof o.max_quantity === 'number' && o.max_quantity > 0
+        ? o.max_quantity
+        : MAX_CUSTOM_MESSAGES_QUANTITY,
+  };
+}
+
+/** GET /me/addons/custom-messages-config — authoritative min/max for UX. */
+export async function getCustomMessagesConfig(): Promise<CustomMessagesConfig> {
+  const raw = await get('/me/addons/custom-messages-config');
+  const o = asRecord(raw) ?? {};
+  return {
+    min_quantity:
+      typeof o.min_quantity === 'number' && o.min_quantity > 0
+        ? o.min_quantity
+        : MIN_CUSTOM_MESSAGES_QUANTITY,
+    max_quantity:
+      typeof o.max_quantity === 'number' && o.max_quantity > 0
+        ? o.max_quantity
+        : MAX_CUSTOM_MESSAGES_QUANTITY,
+    validity_days:
+      typeof o.validity_days === 'number' && o.validity_days > 0 ? o.validity_days : 30,
+    sales_enabled: Boolean(o.sales_enabled),
+    currency: String(o.currency || 'RUB'),
+  };
+}
+
+/** POST /me/addons/custom-quote — authoritative server price. */
+export async function quoteCustomAddon(input: {
+  quantity: number;
+  resource_type?: string;
+}): Promise<CustomAddonQuote> {
+  const raw = await post('/me/addons/custom-quote', {
+    resource_type: input.resource_type || 'messages',
+    quantity: input.quantity,
+  });
+  return normalizeCustomAddonQuote(raw);
 }
 
 export async function getPublicAddons(): Promise<PublicAddon[]> {

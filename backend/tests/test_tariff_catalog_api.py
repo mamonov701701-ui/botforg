@@ -214,6 +214,28 @@ def test_addons_empty_list(client, db):
     assert res.json() == []
 
 
+def test_public_catalog_excludes_ai_credits(client, db):
+    pkg = AddonPackage(
+        code="ai_public_hidden",
+        name_ru="ИИ",
+        description_ru="нет",
+        type=AddonPackageType.AI_CREDITS,
+        amount=10,
+        price=Decimal("1.00"),
+        currency="RUB",
+        duration_type="current_period",
+        validity_days=30,
+        is_active=True,
+        is_public=True,
+        sort_order=1,
+    )
+    db.add(pkg)
+    db.commit()
+    res = client.get("/addons")
+    assert res.status_code == 200
+    assert all(item["code"] != "ai_public_hidden" for item in res.json())
+
+
 def test_catalog_endpoints_do_not_require_auth(client):
     assert client.get("/tariffs").status_code == 200
     assert client.get("/addons").status_code == 200

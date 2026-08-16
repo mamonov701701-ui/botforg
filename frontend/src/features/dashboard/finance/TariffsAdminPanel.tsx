@@ -16,6 +16,7 @@ import { FINANCE_COLORS } from './financeHelpers';
 import TariffsAdminCreateModal from './TariffsAdminCreateModal';
 import TariffsAdminEditModal from './TariffsAdminEditModal';
 import TariffsAdminAuditJournal from './TariffsAdminAuditJournal';
+import AdminActionsMenu, { type AdminActionItem } from './AdminActionsMenu';
 import {
   ARCHIVE_PLAN_CONFIRM,
   DELETE_PLAN_BLOCKED_HINT,
@@ -335,98 +336,66 @@ export default function TariffsAdminPanel() {
     }
   };
 
-  const deleteButton = (plan: AdminPlan, prefix: string) =>
-    plan.can_delete ? (
-      <button
-        type="button"
-        data-testid={`${prefix}-delete-btn-${plan.code}`}
-        onClick={() => setConfirm({ kind: 'delete', plan })}
-        style={{
-          ...actionBtn,
-          color: FINANCE_COLORS.danger,
-          borderColor: FINANCE_COLORS.danger,
-        }}
-      >
-        Удалить
-      </button>
-    ) : (
-      <button
-        type="button"
-        data-testid={`${prefix}-delete-disabled-${plan.code}`}
-        disabled
-        title={DELETE_PLAN_BLOCKED_HINT}
-        style={{
-          ...actionBtn,
-          opacity: 0.45,
-          cursor: 'not-allowed',
-        }}
-      >
-        Удалить
-      </button>
-    );
-
-  const lifecycleButtons = (plan: AdminPlan, prefix: string) => (
-    <>
-      {plan.is_active &&
-        (plan.is_public ? (
-          <button
-            type="button"
-            data-testid={`${prefix}-hide-btn-${plan.code}`}
-            onClick={() => setConfirm({ kind: 'hide', plan })}
-            style={actionBtn}
-          >
-            Скрыть
-          </button>
-        ) : (
-          <button
-            type="button"
-            data-testid={`${prefix}-publish-btn-${plan.code}`}
-            className="bf-primary-cta"
-            onClick={() =>
-              void runLifecycle(() => setAdminPlanVisibility(plan.id, true), 'Тариф опубликован')
+  const planActionItems = (plan: AdminPlan, prefix: string): AdminActionItem[] => {
+    const open = expandedId === plan.id;
+    const items: AdminActionItem[] = [
+      {
+        id: 'detail',
+        label: open ? 'Скрыть детали' : 'Подробнее',
+        testId: `${prefix}-detail-btn-${plan.code}`,
+        onSelect: () => setExpandedId(prev => (prev === plan.id ? null : plan.id)),
+      },
+      {
+        id: 'edit',
+        label: 'Изменить',
+        testId: `${prefix}-edit-btn-${plan.code}`,
+        onSelect: () => setEditPlan(plan),
+      },
+    ];
+    if (plan.is_active) {
+      items.push(
+        plan.is_public
+          ? {
+              id: 'hide',
+              label: 'Скрыть',
+              testId: `${prefix}-hide-btn-${plan.code}`,
+              onSelect: () => setConfirm({ kind: 'hide', plan }),
             }
-            style={{
-              padding: '6px 10px',
-              borderRadius: 8,
-              minHeight: 36,
-              fontSize: 12,
-              marginRight: 6,
-            }}
-          >
-            Опубликовать
-          </button>
-        ))}
-      {plan.is_active ? (
-        <button
-          type="button"
-          data-testid={`${prefix}-archive-btn-${plan.code}`}
-          onClick={() => setConfirm({ kind: 'archive', plan })}
-          style={actionBtn}
-        >
-          Архивировать
-        </button>
-      ) : (
-        <button
-          type="button"
-          data-testid={`${prefix}-reactivate-btn-${plan.code}`}
-          className="bf-primary-cta"
-          onClick={() =>
-            void runLifecycle(() => reactivateAdminPlan(plan.id), 'Тариф восстановлен')
-          }
-          style={{
-            padding: '6px 10px',
-            borderRadius: 8,
-            minHeight: 36,
-            fontSize: 12,
-            marginRight: 6,
-          }}
-        >
-          Восстановить
-        </button>
-      )}
-      {deleteButton(plan, prefix)}
-    </>
-  );
+          : {
+              id: 'publish',
+              label: 'Опубликовать',
+              testId: `${prefix}-publish-btn-${plan.code}`,
+              onSelect: () =>
+                void runLifecycle(() => setAdminPlanVisibility(plan.id, true), 'Тариф опубликован'),
+            }
+      );
+      items.push({
+        id: 'archive',
+        label: 'Архивировать',
+        testId: `${prefix}-archive-btn-${plan.code}`,
+        onSelect: () => setConfirm({ kind: 'archive', plan }),
+      });
+    } else {
+      items.push({
+        id: 'reactivate',
+        label: 'Восстановить',
+        testId: `${prefix}-reactivate-btn-${plan.code}`,
+        onSelect: () => void runLifecycle(() => reactivateAdminPlan(plan.id), 'Тариф восстановлен'),
+      });
+    }
+    items.push({
+      id: 'delete',
+      label: 'Удалить',
+      testId: plan.can_delete
+        ? `${prefix}-delete-btn-${plan.code}`
+        : `${prefix}-delete-disabled-${plan.code}`,
+      danger: true,
+      disabled: !plan.can_delete,
+      title: plan.can_delete ? undefined : DELETE_PLAN_BLOCKED_HINT,
+      onSelect: () => setConfirm({ kind: 'delete', plan }),
+    });
+    return items;
+  };
 
   return (
     <div data-testid="tariffs-admin-panel">
@@ -622,25 +591,10 @@ export default function TariffsAdminPanel() {
                               </Badge>
                             </td>
                             <td style={tdStyle}>
-                              <button
-                                type="button"
-                                data-testid={`tariffs-admin-edit-btn-${plan.code}`}
-                                onClick={() => setEditPlan(plan)}
-                                style={actionBtn}
-                              >
-                                Изменить
-                              </button>
-                              {lifecycleButtons(plan, 'tariffs-admin')}
-                              <button
-                                type="button"
-                                data-testid={`tariffs-admin-detail-btn-${plan.code}`}
-                                onClick={() =>
-                                  setExpandedId(prev => (prev === plan.id ? null : plan.id))
-                                }
-                                style={actionBtn}
-                              >
-                                {open ? 'Скрыть детали' : 'Подробнее'}
-                              </button>
+                              <AdminActionsMenu
+                                testId={`tariffs-admin-actions-${plan.code}`}
+                                items={planActionItems(plan, 'tariffs-admin')}
+                              />
                             </td>
                           </tr>
                           {open && (
@@ -695,23 +649,10 @@ export default function TariffsAdminPanel() {
                         {plan.is_recommended && <Badge tone="accent">Рекомендуемый</Badge>}
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          data-testid={`tariffs-admin-card-edit-btn-${plan.code}`}
-                          onClick={() => setEditPlan(plan)}
-                          style={actionBtn}
-                        >
-                          Изменить
-                        </button>
-                        {lifecycleButtons(plan, 'tariffs-admin-card')}
-                        <button
-                          type="button"
-                          data-testid={`tariffs-admin-card-detail-btn-${plan.code}`}
-                          onClick={() => setExpandedId(prev => (prev === plan.id ? null : plan.id))}
-                          style={actionBtn}
-                        >
-                          {open ? 'Скрыть детали' : 'Подробнее'}
-                        </button>
+                        <AdminActionsMenu
+                          testId={`tariffs-admin-card-actions-${plan.code}`}
+                          items={planActionItems(plan, 'tariffs-admin-card')}
+                        />
                       </div>
                       {open && (
                         <div style={{ marginTop: 10 }}>

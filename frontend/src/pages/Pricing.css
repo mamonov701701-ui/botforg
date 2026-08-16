@@ -357,6 +357,54 @@
   margin: 0;
 }
 
+.pricing-custom-qty-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 4px 0;
+}
+
+.pricing-custom-qty {
+  width: 100%;
+  max-width: 180px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--bf-section-border);
+  background: var(--bf-shell-bg);
+  color: var(--text, #e6eaf2);
+  font-size: 1rem;
+  margin-bottom: 10px;
+}
+
+.pricing-addon-card--custom {
+  border-color: rgba(255, 210, 76, 0.45);
+}
+
+.pricing-addon-card__avg,
+.pricing-addon-card__meta-line {
+  margin: 4px 0;
+  font-size: 0.85rem;
+  color: var(--text-muted, #9aa4b2);
+}
+
+.pricing-custom-how {
+  margin: 6px 0 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--primary, #ffd24c);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.pricing-custom-how:focus-visible {
+  outline: 2px solid var(--primary, #ffd24c);
+  outline-offset: 2px;
+}
+
 @media (max-width: 640px) {
   .pricing-page {
     padding: 32px 16px 64px;
