@@ -90,12 +90,32 @@ def _eligible(db: Session, user_id: int, now: datetime) -> list[AiCreditBucket]:
     return sorted(rows, key=lambda b: (0 if b.credit_class == "included" else 1, _now(b.expires_at) if b.expires_at else far, _now(b.granted_at), b.id))
 
 
-def debit_credits(db: Session, *, user_id: int, amount: int, capability: str, idempotency_key: str, reason_code: str = "capability_usage", now: datetime | None = None) -> AiCreditLedgerEntry:
+def _active_reserved_amount(db: Session, *, user_id: int, exclude_reservation_id: int | None = None) -> int:
+    """Reservations are availability holds, never a second credit balance."""
+    # Local import keeps the pre-7.5 ledger model independent at import time.
+    from backend.models.ai_provider import AiCreditReservation
+    q = db.query(func.coalesce(func.sum(AiCreditReservation.reserved_amount), 0)).filter(
+        AiCreditReservation.user_id == user_id,
+        AiCreditReservation.status.in_(("reserved", "provider_unknown")),
+    )
+    if exclude_reservation_id is not None:
+        q = q.filter(AiCreditReservation.id != exclude_reservation_id)
+    return int(q.scalar() or 0)
+
+
+def debit_credits(db: Session, *, user_id: int, amount: int, capability: str, idempotency_key: str, reason_code: str = "capability_usage", now: datetime | None = None, reservation_exempt_id: int | None = None) -> AiCreditLedgerEntry:
     if amount <= 0 or not capability.strip(): raise AiCreditError("Invalid debit", code="invalid_debit")
     expected = (int(user_id), -int(amount), "debit", "capability", "capability_request", idempotency_key, reason_code, capability.strip())
     old = _existing(db, idempotency_key, expected)
     if old: return old
-    at = _now(now); remaining = amount; allocations: list[tuple[AiCreditBucket, int]] = []
+    at = _now(now)
+    # A normal debit must not consume credits protected for another provider
+    # invocation. Settlement excludes only its own reservation.
+    reserved_for_others = _active_reserved_amount(db, user_id=user_id, exclude_reservation_id=reservation_exempt_id)
+    available = sum(int(bucket.remaining_amount) for bucket in _eligible(db, user_id, at)) - reserved_for_others
+    if available < amount:
+        raise AiCreditError("Insufficient AI Credits", code="insufficient_credits")
+    remaining = amount; allocations: list[tuple[AiCreditBucket, int]] = []
     for bucket in _eligible(db, user_id, at):
         take = min(remaining, int(bucket.remaining_amount)); allocations.append((bucket, take)); remaining -= take
         if not remaining: break

@@ -234,31 +234,40 @@ export default function AddonPricingTiersPanel() {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
 
-  const load = useCallback(async () => {
-    setLoadState('loading');
-    setError(null);
-    try {
-      const res = await listAdminPricingGrids({ resource_type: resourceFilter });
-      setVersions(res.items);
-      setLoadState(res.items.length ? 'ready' : 'empty');
-      setSelectedId(prev => {
-        if (prev && res.items.some(v => v.id === prev)) return prev;
-        const active = res.items.find(v => v.status === 'active');
-        return active?.id ?? res.items[0]?.id ?? null;
-      });
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
-        setLoadState('forbidden');
-        setError('Недостаточно прав для управления ценовыми сетками.');
-      } else {
-        setLoadState('error');
-        setError(safePricingGridsErrorMessage(err));
+  const load = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      setLoadState('loading');
+      setError(null);
+      try {
+        const res = await listAdminPricingGrids({ resource_type: resourceFilter });
+        if (!isCurrent()) return;
+        setVersions(res.items);
+        setLoadState(res.items.length ? 'ready' : 'empty');
+        setSelectedId(prev => {
+          if (prev && res.items.some(v => v.id === prev)) return prev;
+          const active = res.items.find(v => v.status === 'active');
+          return active?.id ?? res.items[0]?.id ?? null;
+        });
+      } catch (err) {
+        if (!isCurrent()) return;
+        if (err instanceof ApiError && err.status === 403) {
+          setLoadState('forbidden');
+          setError('Недостаточно прав для управления ценовыми сетками.');
+        } else {
+          setLoadState('error');
+          setError(safePricingGridsErrorMessage(err));
+        }
       }
-    }
-  }, [resourceFilter]);
+    },
+    [resourceFilter]
+  );
 
   useEffect(() => {
-    void load();
+    let mounted = true;
+    void load(() => mounted);
+    return () => {
+      mounted = false;
+    };
   }, [load]);
 
   const loadDetail = useCallback(async (id: number) => {

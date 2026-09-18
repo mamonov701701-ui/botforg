@@ -15,6 +15,7 @@ const {
   reactivateAdminAddon,
   deleteAdminAddon,
   listAdminPricingTiers,
+  listAdminPricingGrids,
   toast,
 } = vi.hoisted(() => ({
   listAdminAddons: vi.fn(),
@@ -26,6 +27,7 @@ const {
   reactivateAdminAddon: vi.fn(),
   deleteAdminAddon: vi.fn(),
   listAdminPricingTiers: vi.fn(),
+  listAdminPricingGrids: vi.fn(),
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
 }));
 
@@ -47,7 +49,7 @@ vi.mock('@/api/addonsAdmin', async () => {
 vi.mock('@/api/addonPricingAdmin', async () => {
   const actual =
     await vi.importActual<typeof import('@/api/addonPricingAdmin')>('@/api/addonPricingAdmin');
-  return { ...actual, listAdminPricingTiers };
+  return { ...actual, listAdminPricingTiers, listAdminPricingGrids };
 });
 
 vi.mock('@/utils/toast', () => ({ toast }));
@@ -176,6 +178,8 @@ describe('AddonsAdminPanel', () => {
     });
     listAdminPricingTiers.mockReset();
     listAdminPricingTiers.mockResolvedValue({ items: [], total: 0 });
+    listAdminPricingGrids.mockReset();
+    listAdminPricingGrids.mockResolvedValue({ items: [], total: 0 });
     updateAdminAddon.mockReset();
     createAdminAddon.mockReset();
     setAdminAddonVisibility.mockReset();
@@ -270,6 +274,7 @@ describe('AddonsAdminPanel', () => {
     await waitFor(() => {
       expect(screen.getByTestId('addon-pricing-tiers-panel')).toBeTruthy();
     });
+    await waitFor(() => expect(screen.getByTestId('addon-grids-empty')).toBeTruthy());
   });
 
   it('create form shows days for messages and period hint for bots', async () => {

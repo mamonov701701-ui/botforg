@@ -6,6 +6,7 @@ These documents are the technical source of truth for their domains. Where an ol
 
 ### Architecture
 - [AI Credits Architecture (архитектура ИИ-кредитов)](architecture/ai-credits.md) — credits, ledger, buckets, allocations and provider boundary.
+- [AI Provider Layer](architecture/ai-provider-layer.md) — canonical provider-neutral routing, invocation accounting and reserve → call → settle lifecycle.
 
 ### Billing
 - [Effective Entitlement (фактические права пользователя)](billing/effective-entitlement.md) — base-plan resolver and legacy boundary.
