@@ -61,6 +61,39 @@ test_engine = create_engine(
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
+def activate_test_subscription(db, user, plan_code: str):
+    """Give a test user a durable effective plan without using users.plan_code.
+
+    Test fixtures used to treat the legacy metadata column as an entitlement.
+    Keep legacy codes only as migration inputs while tests that need a paid plan
+    create the same subscription source used in production.
+    """
+    from datetime import datetime, timezone
+    from backend.models.plan import Plan
+    from backend.models.tariff import SubscriptionStatus, UserSubscription
+
+    normalized = {"free": "start", "pro": "business_pro", "developer": "team"}.get(
+        plan_code, plan_code
+    )
+    # Start is the resolver fallback.  A fixture that requests it must not
+    # accidentally create a higher-precedence subscription and mask plan gifts.
+    if normalized == "start":
+        return
+    plan = db.query(Plan).filter(Plan.code == normalized).one()
+    db.add(
+        UserSubscription(
+            user_id=user.id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            current_period_end=datetime(2030, 1, 1, tzinfo=timezone.utc),
+            auto_renew=False,
+            payment_provider="test_fixture",
+        )
+    )
+    db.commit()
+
+
 def pytest_sessionfinish(session, exitstatus):
     """Close DB connections to avoid PermissionError on Windows."""
     test_engine.dispose()
@@ -210,4 +243,3 @@ def create_test_bot_instance(client: TestClient, auth_header: str) -> int:
         return bot_instance.id
     finally:
         db.close()
-

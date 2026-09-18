@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.models.checkout import CheckoutIntent, PaymentAttempt, PaymentAttemptStatus
+from backend.models.tariff import AddonPackage, AddonPackageType, UserAddon
 from backend.models.refund import (
     REFUND_TERMINAL_STATUSES,
     RefundAuditAction,
@@ -227,6 +228,17 @@ def create_refund_request(
                 "CheckoutIntent does not belong to user",
                 code="intent_forbidden",
             )
+
+        # Stage 7.4: AI-credit refunds require a separately approved economy.
+        # Do not let generic addon-unit reduction desynchronise immutable buckets.
+        if intent.fulfilled_addon_id is not None:
+            addon = db.get(UserAddon, int(intent.fulfilled_addon_id))
+            package = db.get(AddonPackage, int(addon.addon_package_id)) if addon else None
+            if package is not None and package.type == AddonPackageType.AI_CREDITS:
+                raise RefundSubmitError(
+                    "AI Credit package refunds require manual review",
+                    code="ai_credits_refund_manual_review",
+                )
 
         attempt = _resolve_succeeded_attempt(
             db, intent=intent, payment_attempt_id=payment_attempt_id

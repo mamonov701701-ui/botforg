@@ -26,6 +26,29 @@ from backend.models.tariff import (
 )
 
 
+def _ledger_available(db: Session) -> bool:
+    from sqlalchemy import inspect
+    # Inspect through this Session's connection.  Inspecting ``db.bind`` opens
+    # another Engine connection; with SQLite StaticPool that connection shares
+    # the DB-API transaction and its cleanup can roll back payment fulfillment.
+    return inspect(db.connection()).has_table("ai_credit_buckets")
+
+
+def _grant_subscription_ai_credits(db: Session, sub: UserSubscription, plan: Plan) -> None:
+    if not _ledger_available(db): return
+    from backend.services.tariff_limits import _parse_plan_limits
+    from backend.services.ai_credits import grant_credits
+    amount = int(_parse_plan_limits(plan).get("ai_credits") or 0)
+    if amount:
+        grant_credits(db, user_id=int(sub.user_id), amount=amount, credit_class="included", source_type="subscription", source_ref_type="user_subscription", source_ref_id=sub.id, idempotency_key=f"ai-credit:subscription:{sub.id}:period:{sub.current_period_start.isoformat()}", expires_at=sub.current_period_end, reason_code="subscription_period")
+
+
+def _grant_addon_ai_credits(db: Session, addon: UserAddon, pkg: AddonPackage) -> None:
+    if not _ledger_available(db) or _enum_value(pkg.type) != "ai_credits": return
+    from backend.services.ai_credits import grant_credits
+    grant_credits(db, user_id=int(addon.user_id), amount=int(addon.amount or 0), credit_class="purchased", source_type="addon", source_ref_type="user_addon", source_ref_id=addon.id, idempotency_key=f"ai-credit:addon:{addon.id}:grant", expires_at=addon.period_end, reason_code="addon_grant")
+
+
 class EntitlementError(Exception):
     """Доменная ошибка entitlement (невалидный период, overlap, missing refs)."""
 
@@ -131,6 +154,11 @@ def activate_subscription(
         )
     now = _utcnow()
     for sub in overlapping:
+        if _ledger_available(db):
+            from backend.models.ai_credit import AiCreditBucket
+            from backend.services.ai_credits import revoke_bucket
+            for bucket in db.query(AiCreditBucket).filter(AiCreditBucket.source_ref_type == "user_subscription", AiCreditBucket.source_ref_id == str(sub.id), AiCreditBucket.status == "active").all():
+                revoke_bucket(db, bucket_id=bucket.id, idempotency_key=f"ai-credit:subscription:{sub.id}:immediate-switch-revoke", reason_code="immediate_plan_switch")
         sub.status = SubscriptionStatus.CANCELLED
         sub.cancelled_at = now
         sub.updated_at = now
@@ -146,11 +174,20 @@ def activate_subscription(
         provider_subscription_id=provider_subscription_id,
     )
     db.add(sub)
+    # Avoid flushing unrelated dirty webhook/payment rows owned by fulfillment.
+    db.flush([sub])
+    _grant_subscription_ai_credits(db, sub, plan)
+    if _ledger_available(db):
+        from backend.services.ai_credit_gift_lifecycle import sync_effective_plan_gift_ai_credits
+        # The subscription has already been object-flushed.  The gift resolver
+        # must not autoflush unrelated payment webhook/attempt state.
+        with db.no_autoflush:
+            sync_effective_plan_gift_ai_credits(db, user_id=user_id)
     if commit:
         db.commit()
         db.refresh(sub)
     else:
-        db.flush()
+        db.flush([sub])
     return sub
 
 
@@ -201,6 +238,10 @@ def create_user_addon(
         created_by_admin_id=created_by_admin_id,
     )
     db.add(addon)
+    if _enum_value(pkg.type) == "ai_credits" and _ledger_available(db):
+        # AI bucket must refer to the durable addon in the caller transaction.
+        db.flush([addon])
+        _grant_addon_ai_credits(db, addon, pkg)
     if commit:
         db.commit()
         db.refresh(addon)
@@ -259,6 +300,12 @@ def grant_gift(
         status=GiftGrantStatus.ACTIVE,
     )
     db.add(grant)
+    if _ledger_available(db) and gift_type_val == GiftType.PLAN:
+        # Only plan gifts need a durable id for their included-credit bucket.
+        db.flush([grant])
+        from backend.services.ai_credit_gift_lifecycle import sync_effective_plan_gift_ai_credits
+        with db.no_autoflush:
+            sync_effective_plan_gift_ai_credits(db, user_id=target_user_id)
     if commit:
         db.commit()
         db.refresh(grant)
@@ -280,6 +327,10 @@ def revoke_gift(
     if grant.status != GiftGrantStatus.CANCELLED:
         grant.status = GiftGrantStatus.CANCELLED
         grant.updated_at = _utcnow()
+    if _ledger_available(db) and grant.gift_type == GiftType.PLAN:
+        from backend.services.ai_credit_gift_lifecycle import sync_effective_plan_gift_ai_credits
+        with db.no_autoflush:
+            sync_effective_plan_gift_ai_credits(db, user_id=int(grant.target_user_id))
     if commit:
         db.commit()
         db.refresh(grant)

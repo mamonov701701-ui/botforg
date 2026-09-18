@@ -42,6 +42,7 @@ type FormState = {
   monthly_messages: string;
   active_bots: string;
   team_members: string;
+  ai_credits: string;
   analytics_history_days: string;
   addon_purchase: boolean;
   export_reports: boolean;
@@ -66,6 +67,12 @@ function parseOptionalNonNegInt(raw: string): number | null {
   return n;
 }
 
+function parseRequiredNonNegInt(raw: string): number {
+  const value = parseOptionalNonNegInt(raw);
+  if (value === null) throw new Error('invalid_required_int');
+  return value;
+}
+
 function planToForm(plan: AdminPlan): FormState {
   return {
     name: plan.name || '',
@@ -79,6 +86,7 @@ function planToForm(plan: AdminPlan): FormState {
     monthly_messages: limitToInput(plan.limits.monthly_messages),
     active_bots: limitToInput(plan.limits.active_bots),
     team_members: limitToInput(plan.limits.team_members),
+    ai_credits: String(plan.limits.ai_credits),
     analytics_history_days: limitToInput(plan.limits.analytics_history_days),
     addon_purchase: plan.limits.addon_purchase,
     export_reports: plan.limits.export_reports,
@@ -125,6 +133,7 @@ export default function TariffsAdminEditModal({
       'monthly_messages',
       'active_bots',
       'team_members',
+      'ai_credits',
       'analytics_history_days',
       'addon_purchase',
       'export_reports',
@@ -191,11 +200,14 @@ export default function TariffsAdminEditModal({
         if (form.team_members !== initial.team_members) {
           limits.team_members = parseOptionalNonNegInt(form.team_members);
         }
+        if (form.ai_credits !== initial.ai_credits) {
+          limits.ai_credits = parseRequiredNonNegInt(form.ai_credits);
+        }
         if (form.analytics_history_days !== initial.analytics_history_days) {
           limits.analytics_history_days = parseOptionalNonNegInt(form.analytics_history_days);
         }
       } catch {
-        throw new Error('Лимиты должны быть целыми числами ≥ 0 (пусто = без ограничения).');
+        throw new Error('Лимиты должны быть целыми числами ≥ 0 (ИИ-кредиты обязательны).');
       }
       if (form.addon_purchase !== initial.addon_purchase) {
         limits.addon_purchase = form.addon_purchase;
@@ -448,6 +460,16 @@ export default function TariffsAdminEditModal({
                   value={form.team_members}
                   onChange={e => set('team_members', e.target.value)}
                   style={tariffsFieldStyle}
+                />
+              </div>
+              <div>
+                <label style={tariffsLabelStyle}>ИИ-кредиты</label>
+                <input
+                  data-testid="tariffs-admin-edit-ai-credits"
+                  value={form.ai_credits}
+                  onChange={e => set('ai_credits', e.target.value)}
+                  style={tariffsFieldStyle}
+                  inputMode="numeric"
                 />
               </div>
               <div>

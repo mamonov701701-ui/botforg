@@ -159,6 +159,21 @@ export default function Pricing() {
     []
   );
 
+  const addonIsAvailableForCurrentPlan = useCallback(
+    addon => {
+      const allowed = Array.isArray(addon.available_from_plan)
+        ? addon.available_from_plan.map(value => String(value).trim().toLowerCase()).filter(Boolean)
+        : [];
+      if (allowed.length > 0 && (!currentPlan || !allowed.includes(currentPlan.toLowerCase()))) {
+        return false;
+      }
+      // AI credits are a separate purchase axis. A Start user may buy them
+      // unless this particular package explicitly restricts its tariff list.
+      return addon.type === 'ai_credits' || addonPurchaseAllowed;
+    },
+    [addonPurchaseAllowed, currentPlan]
+  );
+
   const selectPlan = useCallback(
     code => {
       if (!code) return;
@@ -175,22 +190,19 @@ export default function Pricing() {
   );
 
   const selectAddon = useCallback(
-    code => {
-      if (!code) return;
-      if (isAuthenticated && (summaryStatus !== 'ready' || !addonPurchaseAllowed)) return;
-      const checkoutPath = checkoutPathForAddon(code);
+    addon => {
+      if (!addon?.code) return;
+      if (isAuthenticated && (summaryStatus !== 'ready' || !addonIsAvailableForCurrentPlan(addon)))
+        return;
+      const checkoutPath = checkoutPathForAddon(addon.code);
       if (!isAuthenticated) {
         navigate(`/login?next=${encodeURIComponent(checkoutPath)}`);
         return;
       }
       navigate(checkoutPath);
     },
-    [isAuthenticated, navigate, checkoutPathForAddon, summaryStatus, addonPurchaseAllowed]
+    [isAuthenticated, navigate, checkoutPathForAddon, summaryStatus, addonIsAvailableForCurrentPlan]
   );
-
-  const addonBuyBlocked =
-    isAuthenticated &&
-    (summaryStatus === 'loading' || summaryStatus === 'error' || !addonPurchaseAllowed);
 
   return (
     <div className="pricing-page" data-testid="pricing-page">
@@ -385,8 +397,8 @@ export default function Pricing() {
             <header className="pricing-section-header">
               <h2 className="pricing-section-title">Дополнительные пакеты</h2>
               <p className="pricing-section-subtitle">
-                Готовые пакеты и «Настроить пакет» для платного тарифа. Сообщения действуют
-                фиксированное число дней с активации и не сбрасываются при новом тарифном месяце.
+                Готовые пакеты, ИИ-кредиты и «Настроить пакет». Ограничения применяются к
+                конкретному пакету; ИИ-кредиты можно приобрести и на тарифе «Старт».
               </p>
             </header>
 
@@ -397,22 +409,6 @@ export default function Pricing() {
                 role="alert"
               >
                 Не удалось проверить текущий тариф. Обновите страницу или попробуйте позже.
-              </div>
-            ) : null}
-
-            {isAuthenticated && summaryStatus === 'ready' && !addonPurchaseAllowed ? (
-              <div className="pricing-addons-gate" data-testid="pricing-addons-gate" role="status">
-                <p data-testid="pricing-addons-gate-message">
-                  Для покупки дополнительных сообщений требуется платный тариф.
-                </p>
-                <button
-                  type="button"
-                  className="pricing-card__cta"
-                  data-testid="pricing-addons-choose-tariff"
-                  onClick={() => setTab('tariffs')}
-                >
-                  Выбрать тариф
-                </button>
               </div>
             ) : null}
 
@@ -438,6 +434,11 @@ export default function Pricing() {
               <div className="pricing-addon-grid">
                 {sortedAddons.map(addon => {
                   const validity = addonPublicDurationLabel(addon);
+                  const addonBuyBlocked =
+                    isAuthenticated &&
+                    (summaryStatus === 'loading' ||
+                      summaryStatus === 'error' ||
+                      !addonIsAvailableForCurrentPlan(addon));
                   return (
                     <div
                       key={addon.code}
@@ -479,7 +480,7 @@ export default function Pricing() {
                           type="button"
                           className="pricing-card__cta"
                           data-testid={`pricing-addon-buy-${addon.code}`}
-                          onClick={() => selectAddon(addon.code)}
+                          onClick={() => selectAddon(addon)}
                         >
                           Купить
                         </button>

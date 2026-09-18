@@ -18,6 +18,7 @@ const mockSummary: TariffSummary = {
   messages: { limit: 500, used: 350, remaining: 150 },
   active_bots: { limit: 1, used: 0, remaining: 1 },
   team_members: { limit: 0, used: 0, remaining: 0 },
+  ai_credits: { limit: 0, used: 0, remaining: 0 },
   active_addons: [],
   active_gifts: [],
   warnings: [
@@ -78,6 +79,7 @@ describe('TariffLimitsPage', () => {
     expect(screen.getByTestId('tariff-accruals-title').textContent).toMatch(/Тариф и начисления/);
     expect(screen.getByTestId('tariff-current-plan')).toBeTruthy();
     expect(screen.getByTestId('tariff-usage-messages')).toBeTruthy();
+    expect(screen.getByTestId('tariff-usage-ai-credits-usage').textContent).toMatch(/0 \/ 0/);
     expect(screen.getByTestId('tariff-active-addons').textContent).toMatch(/Активных пакетов нет/);
     expect(screen.getByTestId('tariff-gifts-empty').textContent).toMatch(/Нет активных подарков/);
     expect(screen.queryByTestId('tariff-addons-catalog')).toBeNull();
@@ -95,6 +97,10 @@ describe('TariffLimitsPage', () => {
     expect(screen.getByTestId('tariff-messages-increase-limit').getAttribute('href')).toBe(
       '/pricing?tab=addons'
     );
+    expect(screen.getByTestId('tariff-ai-credits-buy').getAttribute('href')).toBe(
+      '/pricing?tab=addons&resource=ai_credits'
+    );
+    expect(screen.getByTestId('tariff-ai-credits-buy').textContent).toMatch(/ИИ-кредиты/i);
     expect(screen.getByTestId('tariff-team-choose-plan').getAttribute('href')).toBe(
       '/pricing?tab=tariffs'
     );
@@ -107,6 +113,7 @@ describe('TariffLimitsPage', () => {
       'tariff-buy-addons-link',
       'tariff-messages-increase-limit',
       'tariff-bots-increase-limit',
+      'tariff-ai-credits-buy',
       'tariff-team-choose-plan',
     ]) {
       const el = screen.getByTestId(id);

@@ -1,7 +1,8 @@
 """
 Тесты кабинета разработчика (GET /api/market/my-templates).
 """
-from backend.tests.conftest import register_and_get_token, get_user_id, TestingSessionLocal
+from backend.tests.conftest import register_and_get_token, get_user_id, TestingSessionLocal, activate_test_subscription
+from backend.models.user import User
 
 
 def test_my_templates_developer_ok(client):
@@ -9,13 +10,12 @@ def test_my_templates_developer_ok(client):
     from backend.models.market import MarketItem, MarketItemType
 
     auth = register_and_get_token(client)
-    # Меняем тариф на developer
-    client.post("/me/plan", json={"plan_code": "developer"}, headers={"Authorization": auth})
     user_id = get_user_id(client, auth)
 
     # Создаём шаблон от имени пользователя
     db = TestingSessionLocal()
     try:
+        activate_test_subscription(db, db.query(User).filter(User.id == user_id).one(), "team")
         item = MarketItem(
             item_type=MarketItemType.TEMPLATE,
             title="Мой шаблон",
@@ -51,7 +51,7 @@ def test_my_templates_non_developer_403(client):
     # План по умолчанию — free
     res = client.get("/api/market/my-templates", headers={"Authorization": auth})
     assert res.status_code == 403
-    assert "Developer" in (res.json().get("detail") or "")
+    assert "Team" in (res.json().get("detail") or "")
 
 
 def test_my_templates_requires_auth(client):

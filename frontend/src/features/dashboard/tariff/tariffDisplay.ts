@@ -109,6 +109,7 @@ export function addonDetails(item: TariffAddonItem): string {
         active_bot: 'Активные боты',
         team_members: 'Участники команды',
         team_member: 'Участник команды',
+        ai_credits: 'ИИ-кредиты',
       }[typeRaw.toLowerCase()] ?? typeRaw)
     : '';
   const amount = item.amount != null ? String(item.amount) : '';

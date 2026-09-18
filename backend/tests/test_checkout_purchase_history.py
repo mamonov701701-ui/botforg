@@ -17,7 +17,18 @@ from backend.models.checkout import (
     PaymentAttemptStatus,
 )
 from backend.models.plan import Plan
-from backend.models.refund import RefundRequest, RefundRequestStatus
+from backend.models.refund import (
+    RefundCalculationStatus,
+    RefundEntitlementAction,
+    RefundLedgerEntry,
+    RefundLedgerEntryType,
+    RefundLedgerProviderStatus,
+    RefundRequest,
+    RefundRequestStatus,
+    RefundRevision,
+    RefundRevisionType,
+    RefundType,
+)
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
@@ -361,6 +372,39 @@ def test_refund_eligibility_does_not_exclude_purchase(client, db):
         submitted_at=_utc(),
     )
     db.add(refund)
+    db.flush()
+    revision = RefundRevision(
+        refund_request_id=refund.id,
+        revision_number=1,
+        revision_type=RefundRevisionType.AUTOMATIC.value,
+        calculation_status=RefundCalculationStatus.OK.value,
+        refund_type=RefundType.FULL.value,
+        currency="RUB",
+        paid_amount=attempt.amount,
+        prior_refunded_amount=Decimal("0.00"),
+        proposed_refund_amount=attempt.amount,
+        final_refund_amount=attempt.amount,
+        calculation_at=_utc(),
+        entitlement_action=RefundEntitlementAction.CANCEL_ADDON.value,
+        calculation_snapshot={"formula": "test"},
+        entitlement_snapshot={"action": "cancel_addon"},
+        usage_snapshot={"pool_used": 0},
+    )
+    db.add(revision)
+    db.flush()
+    db.add(
+        RefundLedgerEntry(
+            refund_request_id=refund.id,
+            refund_revision_id=revision.id,
+            checkout_intent_id=intent.id,
+            payment_attempt_id=attempt.id,
+            entry_type=RefundLedgerEntryType.SUCCEEDED.value,
+            amount=attempt.amount,
+            currency="RUB",
+            idempotency_key=f"led-hist-{refund.id}",
+            provider_status=RefundLedgerProviderStatus.SUCCEEDED.value,
+        )
+    )
     db.commit()
 
     hist = _list(client, auth)

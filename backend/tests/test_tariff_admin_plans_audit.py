@@ -215,11 +215,11 @@ def test_delete_snapshot_identity_from_old_value(client, db):
 def test_build_plan_audit_changes_unit():
     lines = build_plan_audit_changes(
         "tariff_plan_updated",
-        {"price_month": "10.00", "currency": "RUB", "limits": {"monthly_messages": 1, "max_bots": 1, "active_bots": 1}},
+        {"price_month": "10.00", "currency": "RUB", "limits": {"monthly_messages": 1, "max_bots": 1, "active_bots": 1, "ai_credits": 0}},
         {
             "price_month": "20.00",
             "currency": "RUB",
-            "limits": {"monthly_messages": 2, "max_bots": 2, "active_bots": 2},
+            "limits": {"monthly_messages": 2, "max_bots": 2, "active_bots": 2, "ai_credits": 50},
             "changed_fields": ["price_month", "limits"],
         },
     )
@@ -227,6 +227,8 @@ def test_build_plan_audit_changes_unit():
     assert "price_month" in fields
     assert "limits.monthly_messages" in fields
     assert "limits.active_bots" in fields
+    assert "limits.ai_credits" in fields
+    assert next(l for l in lines if l["field"] == "limits.ai_credits")["label"] == "ИИ-кредиты"
     assert "max_bots" not in fields
     assert all("Да" in (l["before"] + l["after"]) or "Нет" not in l["field"] or True for l in lines)
 

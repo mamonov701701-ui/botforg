@@ -23,6 +23,30 @@ export interface UsageBlock {
   remaining: number | null;
 }
 
+export interface AiCreditClassDetails {
+  total: number;
+  used: number;
+  expired: number;
+  revoked: number;
+  remaining: number;
+  period_end: string | null;
+}
+export interface AiCreditDetails {
+  included: AiCreditClassDetails;
+  purchased: AiCreditClassDetails;
+  total_spendable: number;
+  ledger_enabled: boolean;
+}
+export interface AiCreditHistoryItem {
+  id: number;
+  created_at: string;
+  direction: string;
+  amount: number;
+  category: string;
+  capability: string | null;
+  source: string;
+}
+
 export interface TariffWarning {
   type: string;
   threshold: number;
@@ -47,6 +71,8 @@ export interface TariffSummary {
   messages: UsageBlock;
   active_bots: UsageBlock;
   team_members: UsageBlock;
+  ai_credits: UsageBlock;
+  ai_credit_details: AiCreditDetails | null;
   active_addons: TariffAddonItem[];
   active_gifts: TariffGiftItem[];
   warnings: TariffWarning[];
@@ -76,6 +102,34 @@ function coerceLimit(value: unknown): number | null {
   if (value === null) return null;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   return null;
+}
+
+function coerceAiClass(raw: unknown): AiCreditClassDetails {
+  const o = asRecord(raw) ?? {};
+  const n = (key: string) =>
+    Math.max(0, Math.floor(typeof o[key] === 'number' ? (o[key] as number) : 0));
+  return {
+    total: n('total'),
+    used: n('used'),
+    expired: n('expired'),
+    revoked: n('revoked'),
+    remaining: n('remaining'),
+    period_end: typeof o.period_end === 'string' ? o.period_end : null,
+  };
+}
+
+function coerceAiDetails(raw: unknown): AiCreditDetails | null {
+  const o = asRecord(raw);
+  if (!o) return null;
+  return {
+    included: coerceAiClass(o.included),
+    purchased: coerceAiClass(o.purchased),
+    total_spendable: Math.max(
+      0,
+      Math.floor(typeof o.total_spendable === 'number' ? o.total_spendable : 0)
+    ),
+    ledger_enabled: o.ledger_enabled === true,
+  };
 }
 
 export function coerceUsageBlock(raw: unknown): UsageBlock {
@@ -132,11 +186,13 @@ export function normalizeTariffSummary(raw: unknown): TariffSummary {
       billing_period,
       subscription_status:
         planRaw.subscription_status == null ? null : String(planRaw.subscription_status),
-      source: String(planRaw.source ?? 'legacy_plan_code'),
+      source: String(planRaw.source ?? 'fallback_start'),
     },
     messages: coerceUsageBlock(data.messages),
     active_bots: coerceUsageBlock(data.active_bots),
     team_members: coerceUsageBlock(data.team_members),
+    ai_credits: coerceUsageBlock(data.ai_credits),
+    ai_credit_details: coerceAiDetails(data.ai_credit_details),
     active_addons: Array.isArray(data.active_addons) ? data.active_addons : [],
     active_gifts: Array.isArray(data.active_gifts) ? data.active_gifts : [],
     warnings,
@@ -154,4 +210,19 @@ export function normalizeTariffSummary(raw: unknown): TariffSummary {
 export async function getTariffSummary(): Promise<TariffSummary> {
   const raw = await get('/me/tariff/summary');
   return normalizeTariffSummary(raw);
+}
+
+export async function getAiCreditHistory(): Promise<AiCreditHistoryItem[]> {
+  const raw = asRecord(await get('/me/ai-credits/history')) ?? {};
+  return Array.isArray(raw.items)
+    ? raw.items.filter(asRecord).map(item => ({
+        id: Number(item.id),
+        created_at: String(item.created_at ?? ''),
+        direction: String(item.direction ?? ''),
+        amount: Math.max(0, Number(item.amount) || 0),
+        category: String(item.category ?? ''),
+        capability: item.capability == null ? null : String(item.capability),
+        source: String(item.source ?? ''),
+      }))
+    : [];
 }

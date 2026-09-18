@@ -19,6 +19,7 @@ from backend.models.checkout import (
     PaymentAttempt,
     PaymentAttemptStatus,
 )
+from backend.models.tariff import AddonPackage
 from backend.payments.base import PaymentProviderError
 from backend.payments.dto import CreatePaymentRequest, NormalizedPaymentStatus
 from backend.payments.registry import PaymentProviderRegistryError, get_payment_provider
@@ -412,7 +413,12 @@ def start_checkout_payment(
     # Stale addon intent: effective plan no longer allows addon_purchase.
     if (intent.product_type or "") == CheckoutProductType.ADDON.value:
         try:
-            assert_addon_purchase_allowed(db, user_id=user_id)
+            addon_pkg = (
+                db.query(AddonPackage)
+                .filter(AddonPackage.code == (intent.product_code or ""))
+                .first()
+            )
+            assert_addon_purchase_allowed(db, user_id=user_id, addon=addon_pkg)
         except CheckoutIntentError as exc:
             raise CheckoutPayError(
                 exc.message,

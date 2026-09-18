@@ -6,11 +6,11 @@ from backend.models.token_blacklist import TokenBlacklist
 from backend.models.user import User
 from backend.schemas.auth import RegisterIn, Token
 from backend.security import (
-    create_access_token,
     get_password_hash,
     verify_password,
     verify_token,
 )
+from backend.core.security import create_jwt_token
 from backend.settings import settings
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -43,7 +43,7 @@ def register(user_in: RegisterIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    access_token = create_access_token({"sub": str(user.id)})
+    access_token = create_jwt_token(user.id, getattr(user, "token_version", 0))
     return {"access_token": access_token, "token": access_token, "token_type": "bearer"}
 
 
@@ -66,7 +66,7 @@ def login(
         )
 
     logger.info(f"Successful login: {user.email}")
-    token = create_access_token({"sub": str(user.id)})
+    token = create_jwt_token(user.id, getattr(user, "token_version", 0))
     return {"access_token": token, "token": token, "token_type": "bearer"}
 
 

@@ -135,6 +135,7 @@ function PlanDetail({ plan }: { plan: AdminPlan }) {
       <div>Сообщения: {formatLimitValue(lim.monthly_messages)}</div>
       <div>Боты: {formatLimitValue(lim.active_bots)}</div>
       <div>Команда: {formatLimitValue(lim.team_members)}</div>
+      <div>ИИ-кредиты: {formatLimitValue(lim.ai_credits)}</div>
       <div>Аналитика (дней): {formatLimitValue(lim.analytics_history_days)}</div>
       <div>Доп. пакеты: {formatAddonPurchase(lim)}</div>
       <div>Экспорт отчётов: {formatBoolRu(lim.export_reports)}</div>

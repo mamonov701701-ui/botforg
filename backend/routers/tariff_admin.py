@@ -12,9 +12,11 @@ from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.dependencies.tariff_admin import require_tariff_admin
+from backend.models.ai_credit import AiCreditLedgerEntry
 from backend.models.plan import Plan
 from backend.models.tariff import GiftGrant, GiftGrantStatus, GiftType
 from backend.models.user import User
+from backend.schemas.ai_credits import AdminAiCreditLedgerItemOut, AdminAiCreditLedgerOut
 from backend.schemas.tariff_admin import (
     AdminAddonAuditListOut,
     AdminAddonCreateIn,
@@ -98,6 +100,21 @@ from backend.services.tariff_admin_plans import (
 from backend.services.tariff_entitlements import EntitlementError, grant_gift, revoke_gift
 
 router = APIRouter(prefix="/api/admin/tariffs", tags=["Tariff Admin"])
+
+
+@router.get("/ai-credits/ledger", response_model=AdminAiCreditLedgerOut)
+async def list_ai_credit_ledger(
+    user_id: int | None = None,
+    limit: int = 100,
+    _: User = Depends(require_tariff_admin),
+    db: Session = Depends(get_db),
+):
+    """Read-only resource audit; internal metadata is intentionally omitted."""
+    q = db.query(AiCreditLedgerEntry)
+    if user_id is not None:
+        q = q.filter(AiCreditLedgerEntry.user_id == int(user_id))
+    rows = q.order_by(AiCreditLedgerEntry.id.desc()).limit(max(1, min(int(limit), 200))).all()
+    return AdminAiCreditLedgerOut(items=[AdminAiCreditLedgerItemOut(id=r.id, user_id=r.user_id, delta=r.delta, operation_type=r.operation_type, source_type=r.source_type, source_ref_type=r.source_ref_type, source_ref_id=r.source_ref_id, reason_code=r.reason_code, capability=r.capability, idempotency_key=r.idempotency_key, actor_kind=r.actor_kind, actor_user_id=r.actor_user_id, created_at=r.created_at) for r in rows])
 
 ENTITY_GIFT_GRANT = "gift_grant"
 ACTION_GIFT_GRANT = "gift_grant"

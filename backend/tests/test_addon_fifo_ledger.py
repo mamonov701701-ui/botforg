@@ -41,7 +41,12 @@ from backend.services.tariff_message_enforcement import (
     refund_consumed_message_unit,
 )
 from backend.services.tariff_limits import get_user_tariff_limits
-from backend.tests.conftest import TestingSessionLocal, get_user_id, register_and_get_token
+from backend.tests.conftest import (
+    TestingSessionLocal,
+    activate_test_subscription,
+    get_user_id,
+    register_and_get_token,
+)
 
 
 @pytest.fixture
@@ -104,6 +109,7 @@ def _plan(db, user: User, *, messages: int = 2) -> Plan:
         db.refresh(plan)
     user.plan_code = plan.code
     db.commit()
+    activate_test_subscription(db, user, plan.code)
     return plan
 
 

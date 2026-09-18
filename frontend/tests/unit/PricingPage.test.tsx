@@ -154,6 +154,20 @@ const mockAddons: PublicAddon[] = [
     max_per_period: null,
     sort_order: 30,
   },
+  {
+    code: 'ai_credits_100',
+    name_ru: '100 ИИ-кредитов',
+    description_ru: 'Для ИИ-функций BotForg',
+    type: 'ai_credits',
+    amount: 100,
+    price: '99.00',
+    currency: 'RUB',
+    duration_type: 'current_period',
+    validity_days: 365,
+    available_from_plan: null,
+    max_per_period: null,
+    sort_order: 40,
+  },
 ];
 
 function summaryFor(code: string, opts?: { addon_purchase?: boolean }): TariffSummary {
@@ -488,21 +502,21 @@ describe('Pricing page', () => {
     );
   });
 
-  it('effective start disables addon buy and shows Business gate', async () => {
+  it('effective start blocks messages but allows an unrestricted AI-credit package', async () => {
     vi.mocked(getPublicTariffs).mockResolvedValue(mockTariffs);
     vi.mocked(getPublicAddons).mockResolvedValue(mockAddons);
     vi.mocked(getTariffSummary).mockResolvedValue(summaryFor('start'));
     renderPricing('/pricing?tab=addons', { plan_code: 'start' });
     await waitFor(() => {
-      expect(screen.getByTestId('pricing-addons-gate-message')).toBeTruthy();
+      expect(screen.getByTestId('pricing-addon-buy-msg_1000')).toBeTruthy();
     });
-    expect(screen.getByTestId('pricing-addons-gate-message').textContent).toMatch(/платный тариф/i);
-    expect(screen.getByTestId('pricing-addons-choose-tariff')).toBeTruthy();
     expect(screen.getByTestId('pricing-addon-buy-msg_1000').tagName).not.toBe('BUTTON');
-    fireEvent.click(screen.getByTestId('pricing-addons-choose-tariff'));
+    expect(screen.getByTestId('pricing-addon-buy-ai_credits_100').tagName).toBe('BUTTON');
+    fireEvent.click(screen.getByTestId('pricing-addon-buy-ai_credits_100'));
     await waitFor(() => {
-      expect(screen.getByTestId('loc-tab').textContent).toBe('tariffs');
+      expect(screen.getByTestId('checkout-route')).toBeTruthy();
     });
+    expect(screen.getByTestId('loc-addon').textContent).toBe('ai_credits_100');
   });
 
   it('summary error fail-closes addon purchase', async () => {

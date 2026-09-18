@@ -20,7 +20,7 @@ from backend.models.legal import (
     LegalDocType,
 )
 from backend.models.plan import Plan
-from backend.models.tariff import AddonPackage
+from backend.models.tariff import AddonPackage, AddonPackageType
 from backend.services.addon_custom_pack import (
     CUSTOM_MESSAGES_CODE,
     CUSTOM_PACK_TITLE_RU,
@@ -83,12 +83,23 @@ def assert_tariff_not_already_active(
         )
 
 
-def assert_addon_purchase_allowed(db: Session, *, user_id: int) -> None:
+def assert_addon_purchase_allowed(
+    db: Session,
+    *,
+    user_id: int,
+    addon: AddonPackage | None = None,
+) -> None:
     """
-    Block addon checkout when effective plan.limits.addon_purchase is false.
+    Block restricted addon checkout when effective plan.limits.addon_purchase is false.
+    Purchased AI credits are independent from a paid plan and bypass this
+    generic gate unless their package explicitly restricts tariff codes.
     Uses entitlement summary (not legacy users.plan_code).
     Raises CheckoutIntentError(code=addon_not_available_for_current_tariff).
     """
+    addon_type = enum_value(addon.type) if addon is not None else None
+    raw_allowed = getattr(addon, "available_from_plan", None) if addon is not None else None
+    if addon_type == AddonPackageType.AI_CREDITS.value and not raw_allowed:
+        return
     try:
         summary = get_user_tariff_limits(db, user_id)
     except Exception as exc:
@@ -96,7 +107,18 @@ def assert_addon_purchase_allowed(db: Session, *, user_id: int) -> None:
             "Не удалось проверить доступность пакетов для текущего тарифа",
             code="addon_not_available_for_current_tariff",
         ) from exc
-    if not bool(getattr(summary, "addon_purchase", False)):
+    allowed = {
+        str(code or "").strip().lower()
+        for code in (raw_allowed if isinstance(raw_allowed, list) else [])
+        if str(code or "").strip()
+    }
+    current_plan = (getattr(summary, "plan_code", None) or "").strip().lower()
+    if allowed and current_plan not in allowed:
+        raise CheckoutIntentError(
+            "Этот пакет недоступен на текущем тарифе",
+            code="addon_not_available_for_current_tariff",
+        )
+    if addon_type != AddonPackageType.AI_CREDITS.value and not bool(getattr(summary, "addon_purchase", False)):
         raise CheckoutIntentError(
             "Дополнительные пакеты доступны начиная с тарифа «Бизнес»",
             code="addon_not_available_for_current_tariff",
@@ -251,7 +273,7 @@ def create_checkout_intent(
                     code="quantity_not_allowed",
                 )
             pkg = _catalog_addon(db, code_norm)
-            assert_addon_purchase_allowed(db, user_id=user_id)
+            assert_addon_purchase_allowed(db, user_id=user_id, addon=pkg)
             name = (pkg.name_ru or pkg.code).strip()
             description = pkg.description_ru
             amount = Decimal(str(pkg.price))

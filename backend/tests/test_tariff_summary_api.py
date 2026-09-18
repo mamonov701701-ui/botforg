@@ -1,6 +1,7 @@
 """
 Тесты GET /me/tariff/summary (Этап 5.4).
 """
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -101,6 +102,7 @@ def test_tariff_summary_start_plan_structure(client, db):
     assert data["team_members"]["limit"] == 0
     assert data["team_members"]["used"] == 0
     assert data["team_members"]["remaining"] == 0
+    assert data["ai_credits"] == {"limit": 0, "used": 0, "remaining": 0}
 
     assert data["flags"]["marketplace_access"] is True
     assert data["flags"]["template_publish"] is True
@@ -125,6 +127,33 @@ def test_tariff_summary_matches_tariff_limits_service(client, db):
     assert data["team_members"]["limit"] == service_summary.team_members_limit
     assert data["team_members"]["used"] == service_summary.team_members_used
     assert data["team_members"]["remaining"] == service_summary.team_members_remaining
+    assert data["ai_credits"]["limit"] == service_summary.ai_credits_limit
+    assert data["ai_credits"]["used"] == 0
+    assert data["ai_credits"]["remaining"] == service_summary.ai_credits_remaining
+
+
+def test_tariff_summary_ai_credits_plan_and_addon(client, db):
+    auth = _auth_on_start(client)
+    me = client.get("/me", headers={"Authorization": auth}).json()
+    from backend.models.plan import Plan
+
+    plan = db.query(Plan).filter(Plan.code == "start").one()
+    plan.limits = {**(plan.limits or {}), "ai_credits": 100}
+    period_start, period_end = month_period()
+    pkg = _ensure_addon(db, "api_ai_credits_25", AddonPackageType.AI_CREDITS, 25)
+    db.add(
+        UserAddon(
+            user_id=me["id"], addon_package_id=pkg.id, amount=25,
+            period_start=period_start, period_end=period_end,
+            status=UserAddonStatus.ACTIVE, source=UserAddonSource.PURCHASE,
+        )
+    )
+    db.commit()
+
+    res = client.get("/me/tariff/summary", headers={"Authorization": auth})
+    assert res.status_code == 200
+    # users.plan_code plus a raw UserAddon is not a post-cutover spendable grant.
+    assert res.json()["ai_credits"]["remaining"] == 0
 
 
 def test_tariff_summary_active_bots_used(client, db):
@@ -233,7 +262,20 @@ def test_tariff_summary_business_pro_team_members_limit(client, db):
     user.plan_code = "business_pro"
     db.commit()
 
+    from backend.models.tariff import SubscriptionStatus, UserSubscription
+    start, end = month_period(FIXED_TARIFF_NOW)
+
     pro = db.query(Plan).filter(Plan.code == "business_pro").one()
+    db.add(
+        UserSubscription(
+            user_id=user.id,
+            plan_id=pro.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=start,
+            current_period_end=end,
+        )
+    )
+    db.commit()
     assert dict(pro.limits or {}).get("team_members") == 3
 
     res = client.get("/me/tariff/summary", headers={"Authorization": auth})

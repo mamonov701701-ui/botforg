@@ -76,7 +76,7 @@ export function addonAdminDurationLabel(pkg: Pick<AdminAddon, 'type' | 'validity
   const kind = addonDurationUiKind(pkg.type);
   if (kind === 'messages') return addonValidityLabel(pkg.validity_days);
   if (kind === 'capacity') return 'Срок действия: до конца текущего тарифного периода';
-  if (kind === 'ai_credits') return 'Срок будет определён на следующих этапах';
+  if (kind === 'ai_credits') return addonValidityLabel(pkg.validity_days);
   return '—';
 }
 
@@ -84,7 +84,7 @@ export const ADDON_CAPACITY_DURATION_HELP =
   'Пакет расширяет ёмкость текущего платного тарифа и действует до конца текущего тарифного периода.';
 
 export const ADDON_AI_DURATION_HELP =
-  'Срок действия ИИ-кредитов будет задан на этапах 7.3–7.4. Сейчас это поле не утверждает экономику.';
+  'Купленные ИИ-кредиты действуют до указанной даты. Срок сохраняется в каждой выданной партии кредитов.';
 
 export function addonDeleteHint(pkg: Pick<AdminAddon, 'has_references' | 'can_delete'>): string {
   if (pkg.can_delete) return 'Физическое удаление возможно';
@@ -103,10 +103,10 @@ export const ADDON_CODE_HELP =
   'Технический идентификатор пакета. Используется в покупках. После создания изменить его нельзя.';
 
 export const ADDON_TYPE_HELP =
-  'Тип ресурса пакета. «Боты» сохраняется как active_bot. ИИ-кредиты пока только в каталоге администратора.';
+  'Тип ресурса пакета. «Боты» сохраняется как active_bot. ИИ-кредиты покупаются как отдельный ресурс.';
 
 export const ADDON_AI_CREDITS_HELP =
-  'ИИ-кредиты на этом этапе не продаются и не списываются. Цена и количество хранятся в каталоге для следующих этапов.';
+  'После успешной оплаты пользователю начисляется указанное количество ИИ-кредитов. Они доступны и на тарифе «Старт». Автоматический денежный возврат таких пакетов требует ручного рассмотрения.';
 
 export const ADDON_PRICE_NEW_PURCHASES_NOTE =
   'Новая цена будет использоваться только для новых покупок. Уже созданные CheckoutIntent сохраняют свою сумму.';

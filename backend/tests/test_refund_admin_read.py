@@ -517,7 +517,7 @@ def test_manual_review_filter_after_admin_edit(client, db):
         based_on_revision_id=current.id,
         admin_user_id=admin_uid,
         expected_version=req.version,
-        proposed_refund_amount=Decimal("50.00"),
+        addon_revoke_units=500,
         adjustment_reason_category="goodwill",
         adjustment_comment="manual pool usage reviewed",
     )
@@ -545,15 +545,16 @@ def test_manual_review_filter_after_admin_edit(client, db):
     assert match is not None
     assert match["status"] == RefundRequestStatus.ADMIN_EDITED.value
     assert match["manual_review_required"] is True
-    assert match["recommended_refund_amount"] == "50.00"
+    # Addon corrections are units-driven: 500 of 1,000 paid units at 190 RUB.
+    assert match["recommended_refund_amount"] == "95.00"
 
     detail = client.get(f"/api/admin/refunds/{req.id}", headers=admin_headers)
     assert detail.status_code == 200
     body = detail.json()
     assert body["request"]["status"] == RefundRequestStatus.ADMIN_EDITED.value
     assert body["request"]["manual_review_required"] is True
-    assert body["request"]["recommended_refund_amount"] == "50.00"
-    assert body["current_revision"]["proposed_refund_amount"] == "50.00"
+    assert body["request"]["recommended_refund_amount"] == "95.00"
+    assert body["current_revision"]["proposed_refund_amount"] == "95.00"
     assert body["current_revision"]["proposed_amount_undefined"] is False
 
 

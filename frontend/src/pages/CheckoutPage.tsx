@@ -203,7 +203,27 @@ export default function CheckoutPage() {
   /** While summary loads or fails: do not enable tariff/addon pay (fail-closed). */
   const summaryBlocksPay = effectivePlanStatus === 'loading' || effectivePlanStatus === 'error';
   const addonBlockedByPlan =
-    mode === 'addon' && effectivePlanStatus === 'ready' && !addonPurchaseAllowed;
+    mode === 'addon' &&
+    effectivePlanStatus === 'ready' &&
+    (isCustomMessages
+      ? !addonPurchaseAllowed
+      : Boolean(
+          addon &&
+            (() => {
+              const allowed = Array.isArray(addon.available_from_plan)
+                ? addon.available_from_plan
+                    .map(value => String(value).trim().toLowerCase())
+                    .filter(Boolean)
+                : [];
+              if (
+                allowed.length > 0 &&
+                (!effectivePlanCode || !allowed.includes(effectivePlanCode.toLowerCase()))
+              ) {
+                return true;
+              }
+              return addon.type !== 'ai_credits' && !addonPurchaseAllowed;
+            })()
+        ));
   /** Same legal confirmation gate for fixed packs and custom messages. */
   const addonPayAllowed = mode !== 'addon' || termsAccepted;
   const canPay =

@@ -13,12 +13,13 @@ STORED_ADDON_TYPES: tuple[str, ...] = (
     AddonPackageType.AI_CREDITS.value,
 )
 
-# Types that checkout / public catalog may sell today.
+# Types that checkout / public catalog may sell.
 SELLABLE_ADDON_TYPES: frozenset[str] = frozenset(
     {
         AddonPackageType.MESSAGES.value,
         AddonPackageType.ACTIVE_BOT.value,
         AddonPackageType.TEAM_MEMBER.value,
+        AddonPackageType.AI_CREDITS.value,
     }
 )
 

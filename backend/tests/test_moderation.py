@@ -1,18 +1,19 @@
 """
 Тесты модерации шаблонов маркетплейса.
 """
-from backend.tests.conftest import register_and_get_token, get_user_id, TestingSessionLocal
+from backend.tests.conftest import register_and_get_token, get_user_id, TestingSessionLocal, activate_test_subscription
 from backend.models.market import MarketItem, MarketItemType, ModerationStatus
+from backend.models.user import User
 
 
 def test_submit_template_developer_ok(client):
     """Developer может отправить шаблон на модерацию."""
     auth = register_and_get_token(client)
-    client.post("/me/plan", json={"plan_code": "developer"}, headers={"Authorization": auth})
     user_id = get_user_id(client, auth)
 
     db = TestingSessionLocal()
     try:
+        activate_test_subscription(db, db.query(User).filter(User.id == user_id).one(), "team")
         item = MarketItem(
             item_type=MarketItemType.TEMPLATE,
             title="Тест шаблон",

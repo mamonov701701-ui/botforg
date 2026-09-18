@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from backend.models.checkout import (
     CheckoutIntent,
@@ -46,7 +50,12 @@ from backend.services.refund_webhook_reconciliation import (
     reconcile_refund_webhook,
 )
 from backend.settings import settings
-from backend.tests.conftest import TestingSessionLocal, get_user_id, register_and_get_token
+from backend.tests.conftest import (
+    TEST_DATABASE_URL,
+    TestingSessionLocal,
+    get_user_id,
+    register_and_get_token,
+)
 
 
 @pytest.fixture
@@ -787,8 +796,6 @@ def test_reconcile_late_succeeded_after_canceled(client, db, monkeypatch):
 
 
 def test_reconcile_concurrent_succeeded_no_double_amount(client, db, monkeypatch):
-    import threading
-
     _enable_fake(monkeypatch)
     ctx = _create_approved(client, db, key="wh-race")
     rid = "rf_race"
@@ -800,14 +807,36 @@ def test_reconcile_concurrent_succeeded_no_double_amount(client, db, monkeypatch
         provider_refund_id=rid,
     )
     attempt_id = ctx["attempt"].id
+    intent_id = ctx["intent"].id
     outcomes: list[str] = []
     lock = threading.Lock()
+    barrier = threading.Barrier(2)
+
+    # TestingSessionLocal uses StaticPool, which intentionally shares one physical
+    # SQLite connection. A concurrent regression must instead exercise two actual
+    # transactions, otherwise nested SAVEPOINTs from unrelated workers invalidate
+    # each other before reconciliation can be tested.
+    db.close()
+    race_engine = create_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False, "timeout": 30},
+        poolclass=NullPool,
+    )
+
+    @event.listens_for(race_engine, "connect")
+    def _busy_timeout(dbapi_conn, _connection_record):  # noqa: ANN001
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
+
+    RaceSession = sessionmaker(autocommit=False, autoflush=False, bind=race_engine)
 
     def worker(event_id: str) -> None:
-        session = TestingSessionLocal()
+        session = RaceSession()
         try:
             att = session.get(PaymentAttempt, attempt_id)
             assert att is not None
+            barrier.wait(timeout=15)
             res = reconcile_refund_webhook(
                 session,
                 event=_event(
@@ -827,29 +856,35 @@ def test_reconcile_concurrent_succeeded_no_double_amount(client, db, monkeypatch
     t2 = threading.Thread(target=worker, args=("evt-race-b",))
     t1.start()
     t2.start()
-    t1.join()
-    t2.join()
+    t1.join(timeout=60)
+    t2.join(timeout=60)
+    assert not t1.is_alive() and not t2.is_alive()
 
-    db.expire_all()
-    db.refresh(ctx["req"])
-    succeeded_rows = (
-        db.query(RefundLedgerEntry)
-        .filter(
-            RefundLedgerEntry.checkout_intent_id == ctx["intent"].id,
-            RefundLedgerEntry.entry_type == RefundLedgerEntryType.SUCCEEDED.value,
+    verify = RaceSession()
+    try:
+        request = verify.get(RefundRequest, ctx["req"].id)
+        succeeded_rows = (
+                verify.query(RefundLedgerEntry)
+                .filter(
+                    RefundLedgerEntry.checkout_intent_id == intent_id,
+                RefundLedgerEntry.entry_type == RefundLedgerEntryType.SUCCEEDED.value,
+            )
+            .count()
         )
-        .count()
-    )
-    assert succeeded_rows == 1
-    assert ctx["req"].status == RefundRequestStatus.REFUNDED.value
-    assert "succeeded" in outcomes
-    # Race losers may surface as already_* or ignored; money must not double.
-    assert set(outcomes) <= {
-        "succeeded",
-        "already_succeeded",
-        "already_processed",
-        "ignored",
-    }
+        assert succeeded_rows == 1
+        assert request is not None
+        assert request.status == RefundRequestStatus.REFUNDED.value
+        assert "succeeded" in outcomes
+        # Race losers may surface as already_* or ignored; money must not double.
+        assert set(outcomes) <= {
+            "succeeded",
+            "already_succeeded",
+            "already_processed",
+            "ignored",
+        }
+    finally:
+        verify.close()
+        race_engine.dispose()
 
 
 def test_reconcile_never_calls_refund_payment(client, db, monkeypatch):

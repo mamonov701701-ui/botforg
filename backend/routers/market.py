@@ -233,8 +233,8 @@ async def get_my_templates(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Список шаблонов текущего пользователя для кабинета разработчика.
-    Доступ только при plan_code === 'developer'.
+    Список шаблонов текущего пользователя для кабинета автора.
+    Доступ определяется effective тарифом (Team/Corporate), а не legacy plan_code.
     """
     require_developer_plan(db, current_user)
     items = (

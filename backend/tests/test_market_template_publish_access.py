@@ -3,11 +3,13 @@
 """
 from backend.tests.conftest import (
     TestingSessionLocal,
+    activate_test_subscription,
     create_test_bot,
     get_user_id,
     register_and_get_token,
 )
 from backend.models.market import MarketItem, MarketItemType, ModerationStatus
+from backend.models.user import User
 
 
 def _template_payload(source_bot_id: int) -> dict:
@@ -32,13 +34,18 @@ def test_create_market_template_non_developer_403(client):
         headers={"Authorization": auth},
     )
     assert res.status_code == 403
-    assert "Developer" in res.json()["detail"]
+    assert "Team" in res.json()["detail"]
 
 
 def test_create_market_template_developer_201(client):
     """Developer может создать шаблон на маркете."""
     auth = register_and_get_token(client)
-    client.post("/me/plan", json={"plan_code": "developer"}, headers={"Authorization": auth})
+    user_id = get_user_id(client, auth)
+    db = TestingSessionLocal()
+    try:
+        activate_test_subscription(db, db.query(User).filter(User.id == user_id).one(), "team")
+    finally:
+        db.close()
     bot_id = create_test_bot(client, auth)
 
     res = client.post(
@@ -78,4 +85,4 @@ def test_publish_market_template_via_put_non_developer_403(client):
         headers={"Authorization": auth},
     )
     assert res.status_code == 403
-    assert "Developer" in res.json()["detail"]
+    assert "Team" in res.json()["detail"]

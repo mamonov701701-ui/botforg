@@ -31,6 +31,11 @@ const LIMIT_LABELS: Array<{ key: string; label: string; format: (v: unknown) => 
     format: v => (v == null ? null : String(v)),
   },
   {
+    key: 'ai_credits',
+    label: 'ИИ-кредиты',
+    format: v => (v == null ? null : String(v)),
+  },
+  {
     key: 'analytics_history_days',
     label: 'История аналитики',
     format: v => (v == null ? null : `${v} дн.`),
@@ -108,6 +113,7 @@ const PRICING_CARD_CORE_KEYS = [
   'active_bots',
   'monthly_messages',
   'team_members',
+  'ai_credits',
   'analytics_history_days',
 ] as const;
 

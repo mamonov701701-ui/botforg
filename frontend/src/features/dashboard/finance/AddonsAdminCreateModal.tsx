@@ -32,6 +32,7 @@ import {
   tariffsLabelStyle,
   tariffsSectionTitle,
 } from './tariffsAdminFormLayout';
+import AddonPlanAvailabilitySelector from './AddonPlanAvailabilitySelector';
 
 type FormState = {
   code: string;
@@ -43,7 +44,7 @@ type FormState = {
   currency: string;
   duration_type: string;
   validity_days: string;
-  available_from_plan: string;
+  available_from_plan: string[] | null;
   max_per_period: string;
   is_public: boolean;
   sort_order: string;
@@ -60,7 +61,7 @@ function buildInitial(existing: AdminAddon[]): FormState {
     currency: 'RUB',
     duration_type: 'current_period',
     validity_days: '30',
-    available_from_plan: '',
+    available_from_plan: null,
     max_per_period: '',
     is_public: true,
     sort_order: String(nextAddonDefaultSortOrder(existing)),
@@ -116,15 +117,14 @@ export default function AddonsAdminCreateModal({
     } else if (durationKind === 'capacity') {
       duration_type = 'current_billing_period';
     } else if (durationKind === 'ai_credits') {
-      duration_type = 'unspecified';
+      validity = Number(form.validity_days);
+      if (!Number.isInteger(validity) || validity < 1)
+        throw new Error('Срок действия: целое число дней ≥ 1.');
+      duration_type = 'current_period';
     }
     const sort_order = Number(form.sort_order);
     if (!Number.isInteger(sort_order))
       throw new Error('Позиция в каталоге должна быть целым числом.');
-    const plans = form.available_from_plan
-      .split(/[,;\s]+/)
-      .map(s => s.trim().toLowerCase())
-      .filter(Boolean);
     let max_per_period: number | null = null;
     if (form.max_per_period.trim() !== '') {
       const n = Number(form.max_per_period);
@@ -142,7 +142,7 @@ export default function AddonsAdminCreateModal({
       currency: form.currency.trim().toUpperCase() || 'RUB',
       duration_type,
       validity_days: validity,
-      available_from_plan: plans.length ? plans : null,
+      available_from_plan: form.available_from_plan,
       max_per_period,
       is_public: form.is_public,
       sort_order,
@@ -238,7 +238,17 @@ export default function AddonsAdminCreateModal({
               <select
                 data-testid="addons-admin-create-type"
                 value={form.type}
-                onChange={e => set('type', e.target.value)}
+                onChange={e => {
+                  const type = e.target.value;
+                  setForm(prev => ({
+                    ...prev,
+                    type,
+                    validity_days:
+                      type === 'ai_credits' && prev.validity_days === '30'
+                        ? '365'
+                        : prev.validity_days,
+                  }));
+                }}
                 style={tariffsFieldStyle}
               >
                 {ADDON_TYPE_OPTIONS.map(o => (
@@ -325,7 +335,14 @@ export default function AddonsAdminCreateModal({
               </div>
             ) : (
               <div data-testid="addons-admin-create-ai-duration-hint">
-                <label style={tariffsLabelStyle}>Срок действия</label>
+                <label style={tariffsLabelStyle}>Срок действия, дней</label>
+                <input
+                  data-testid="addons-admin-create-validity-days"
+                  value={form.validity_days}
+                  onChange={e => set('validity_days', e.target.value)}
+                  style={tariffsFieldStyle}
+                  inputMode="numeric"
+                />
                 <p style={tariffsHelpStyle}>{ADDON_AI_DURATION_HELP}</p>
               </div>
             )}
@@ -357,13 +374,11 @@ export default function AddonsAdminCreateModal({
             testId="addons-admin-create-is-public"
             hint="Скрытый пакет не показывается в публичном каталоге."
           />
-          <label style={tariffsLabelStyle}>Доступен с тарифов (коды через запятую)</label>
-          <input
-            data-testid="addons-admin-create-available-from"
+          <AddonPlanAvailabilitySelector
             value={form.available_from_plan}
-            onChange={e => set('available_from_plan', e.target.value)}
-            style={tariffsFieldStyle}
-            placeholder="start, business"
+            onChange={value => set('available_from_plan', value)}
+            isAiCredits={form.type === 'ai_credits'}
+            testId="addons-admin-create-available-from"
           />
           <label style={{ ...tariffsLabelStyle, marginTop: 8 }}>Лимит покупок за период</label>
           <input

@@ -15,6 +15,7 @@ from backend.schemas.tariff import (
     CustomMessagesConfigOut,
     tariff_summary_from_service,
 )
+from backend.schemas.ai_credits import AiCreditBalanceOut, AiCreditClassOut, AiCreditHistoryItemOut, AiCreditHistoryOut
 from backend.services.addon_custom_pack import (
     MAX_CUSTOM_QUANTITY,
     MIN_CUSTOM_QUANTITY,
@@ -213,3 +214,17 @@ async def get_my_tariff_summary(
     """
     summary = get_user_tariff_limits(db, current_user.id)
     return tariff_summary_from_service(summary)
+
+
+@router.get("/me/ai-credits", response_model=AiCreditBalanceOut)
+async def get_my_ai_credits(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from backend.services.ai_credits import get_balance
+    b = get_balance(db, user_id=int(current_user.id))
+    return AiCreditBalanceOut(included=AiCreditClassOut(total=b.included_total, used=b.included_used, expired=b.included_expired, revoked=b.included_revoked, remaining=b.included_remaining, period_end=b.period_end), purchased=AiCreditClassOut(total=b.purchased_total, used=b.purchased_used, expired=b.purchased_expired, revoked=b.purchased_revoked, remaining=b.purchased_remaining), total_spendable=b.total_spendable, nearest_purchased_expiry=b.nearest_purchased_expiry)
+
+
+@router.get("/me/ai-credits/history", response_model=AiCreditHistoryOut)
+async def get_my_ai_credit_history(cursor: int | None = None, limit: int = 50, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from backend.services.ai_credits import history
+    rows = history(db, user_id=int(current_user.id), before_id=cursor, limit=limit)
+    return AiCreditHistoryOut(items=[AiCreditHistoryItemOut(id=r.id, created_at=r.created_at, direction="credit" if r.delta > 0 else "debit", amount=abs(int(r.delta)), category=r.reason_code, capability=r.capability, source=r.source_type) for r in rows], next_cursor=rows[-1].id if len(rows) >= min(max(limit, 1), 100) else None)

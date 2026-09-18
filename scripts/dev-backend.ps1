@@ -31,8 +31,8 @@ function Get-ListenerPids {
 function Get-ProcessCommandLine {
     param([int]$ProcessId)
     try {
-        $wmi = Get-WmiObject Win32_Process -Filter ("ProcessId=" + $ProcessId) -ErrorAction SilentlyContinue
-        if ($wmi) { return $wmi.CommandLine }
+        $processInfo = Get-CimInstance -ClassName Win32_Process -Filter ("ProcessId=" + $ProcessId) -ErrorAction SilentlyContinue
+        if ($processInfo) { return $processInfo.CommandLine }
     } catch {}
     return $null
 }
@@ -90,7 +90,7 @@ if ($listeners.Count -gt 0) {
         }
     }
     # Also stop parent/reloader BotForg uvicorn processes (not always the Listen PID).
-    Get-WmiObject Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+    Get-CimInstance -ClassName Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
         Where-Object { Test-IsBotForgUvicorn -CommandLine $_.CommandLine } |
         ForEach-Object {
             Write-Host ("Stopping BotForg uvicorn tree PID {0}" -f $_.ProcessId) -ForegroundColor Yellow

@@ -34,7 +34,7 @@ from backend.services.tariff_enforcement import (
     ensure_can_connect_channel,
 )
 from backend.services.tariff_limits import get_user_tariff_limits
-from backend.tests.conftest import TestingSessionLocal, register_and_get_token
+from backend.tests.conftest import TestingSessionLocal, activate_test_subscription, register_and_get_token
 from backend.tests.tariff_time import (
     FIXED_TARIFF_NOW,
     freeze_tariff_now,  # noqa: F401 — used via pytestmark
@@ -56,6 +56,7 @@ def _create_user(db, plan_code: str, suffix: str) -> User:
     db.add(user)
     db.commit()
     db.refresh(user)
+    activate_test_subscription(db, user, plan_code)
     return user
 
 

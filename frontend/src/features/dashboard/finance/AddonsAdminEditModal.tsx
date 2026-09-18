@@ -30,6 +30,7 @@ import {
   tariffsLabelStyle,
   tariffsSectionTitle,
 } from './tariffsAdminFormLayout';
+import AddonPlanAvailabilitySelector from './AddonPlanAvailabilitySelector';
 
 type FormState = {
   name_ru: string;
@@ -40,15 +41,19 @@ type FormState = {
   currency: string;
   duration_type: string;
   validity_days: string;
-  available_from_plan: string;
+  available_from_plan: string[] | null;
   max_per_period: string;
   sort_order: string;
 };
 
-function plansToInput(raw: unknown): string {
-  if (raw == null) return '';
-  if (Array.isArray(raw)) return raw.map(String).join(', ');
-  return String(raw);
+function plansFromValue(raw: unknown): string[] | null {
+  if (raw == null) return null;
+  const values = Array.isArray(raw) ? raw : [raw];
+  const parsed = values
+    .map(String)
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean);
+  return parsed.length ? parsed : null;
 }
 
 function fromPkg(pkg: AdminAddon): FormState {
@@ -61,7 +66,7 @@ function fromPkg(pkg: AdminAddon): FormState {
     currency: pkg.currency || 'RUB',
     duration_type: pkg.duration_type || 'current_period',
     validity_days: String(pkg.validity_days || 30),
-    available_from_plan: plansToInput(pkg.available_from_plan),
+    available_from_plan: plansFromValue(pkg.available_from_plan),
     max_per_period: pkg.max_per_period == null ? '' : String(pkg.max_per_period),
     sort_order: String(pkg.sort_order ?? 0),
   };
@@ -104,16 +109,13 @@ export default function AddonsAdminEditModal({
       duration_type = 'current_billing_period';
       validity = 30;
     } else if (durationKind === 'ai_credits') {
-      duration_type = 'unspecified';
-      validity = 30;
+      if (!Number.isInteger(validity) || validity < 1)
+        throw new Error('Срок действия: целое число дней ≥ 1.');
+      duration_type = 'current_period';
     }
     const sort_order = Number(form.sort_order);
     if (!Number.isInteger(sort_order))
       throw new Error('Позиция в каталоге должна быть целым числом.');
-    const plans = form.available_from_plan
-      .split(/[,;\s]+/)
-      .map(s => s.trim().toLowerCase())
-      .filter(Boolean);
     let max_per_period: number | null = null;
     if (form.max_per_period.trim() !== '') {
       const n = Number(form.max_per_period);
@@ -134,8 +136,8 @@ export default function AddonsAdminEditModal({
     }
     if (duration_type !== initial.duration_type) payload.duration_type = duration_type;
     if (String(validity) !== initial.validity_days) payload.validity_days = validity;
-    if (form.available_from_plan !== initial.available_from_plan) {
-      payload.available_from_plan = plans.length ? plans : null;
+    if (JSON.stringify(form.available_from_plan) !== JSON.stringify(initial.available_from_plan)) {
+      payload.available_from_plan = form.available_from_plan;
     }
     if (form.max_per_period !== initial.max_per_period) payload.max_per_period = max_per_period;
     if (form.sort_order !== initial.sort_order) payload.sort_order = sort_order;
@@ -317,7 +319,14 @@ export default function AddonsAdminEditModal({
               </div>
             ) : (
               <div data-testid="addons-admin-edit-ai-duration-hint">
-                <label style={tariffsLabelStyle}>Срок действия</label>
+                <label style={tariffsLabelStyle}>Срок действия, дней</label>
+                <input
+                  data-testid="addons-admin-edit-validity-days"
+                  value={form.validity_days}
+                  onChange={e => set('validity_days', e.target.value)}
+                  style={tariffsFieldStyle}
+                  inputMode="numeric"
+                />
                 <p style={tariffsHelpStyle}>{ADDON_AI_DURATION_HELP}</p>
               </div>
             )}
@@ -342,12 +351,11 @@ export default function AddonsAdminEditModal({
 
         <div style={tariffsFormSectionStyle}>
           <div style={tariffsSectionTitle}>Каталог</div>
-          <label style={tariffsLabelStyle}>Доступен с тарифов (коды через запятую)</label>
-          <input
-            data-testid="addons-admin-edit-available-from"
+          <AddonPlanAvailabilitySelector
             value={form.available_from_plan}
-            onChange={e => set('available_from_plan', e.target.value)}
-            style={tariffsFieldStyle}
+            onChange={value => set('available_from_plan', value)}
+            isAiCredits={form.type === 'ai_credits'}
+            testId="addons-admin-edit-available-from"
           />
           <label style={{ ...tariffsLabelStyle, marginTop: 8 }}>Лимит покупок за период</label>
           <input

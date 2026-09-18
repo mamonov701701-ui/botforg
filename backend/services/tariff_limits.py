@@ -30,11 +30,10 @@ from backend.services.team_usage import count_team_members_for_owner
 
 FALLBACK_PLAN_CODE = "start"
 
-# При равном sort_order выше приоритет у подписки, затем gift, legacy, fallback.
+# Effective entitlement precedence is subscription → plan gift → Start.
 _PLAN_SOURCE_PRIORITY: dict[str, int] = {
     "subscription": 40,
     "gift_plan": 30,
-    "legacy_plan_code": 20,
     "fallback_start": 10,
 }
 
@@ -43,6 +42,8 @@ DEFAULT_NUMERIC_LIMITS: dict[str, int | None] = {
     "active_bots": 1,
     "monthly_messages": 500,
     "team_members": 0,
+    # AI Credits are a metered resource. Missing data must never grant unlimited use.
+    "ai_credits": 0,
 }
 
 MESSAGE_WARNING_THRESHOLDS = (70, 85, 95, 100)
@@ -100,6 +101,11 @@ class TariffLimitsSummary:
     team_members_limit: int | None = None
     team_members_used: int = 0
     team_members_remaining: int | None = None
+    # Foundation only: usage/debit is introduced by the AI Credits ledger stage.
+    ai_credits_limit: int = 0
+    ai_credits_used: int = 0
+    ai_credits_remaining: int = 0
+    ai_credit_details: dict[str, Any] | None = None
     active_addons: list[dict[str, Any]] = field(default_factory=list)
     active_gifts: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[TariffLimitWarning] = field(default_factory=list)
@@ -113,7 +119,7 @@ class TariffLimitsSummary:
     scenario_publish: bool = True
     # Purchase of public addon packages (Business+). Default False = fail-closed.
     addon_purchase: bool = False
-    source: str = "legacy_plan_code"  # subscription | legacy_plan_code | fallback_start
+    source: str = "fallback_start"  # subscription | gift_plan | fallback_start
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -130,6 +136,9 @@ class TariffLimitsSummary:
             "team_members_limit": self.team_members_limit,
             "team_members_used": self.team_members_used,
             "team_members_remaining": self.team_members_remaining,
+            "ai_credits_limit": self.ai_credits_limit,
+            "ai_credits_used": self.ai_credits_used,
+            "ai_credits_remaining": self.ai_credits_remaining,
             "active_addons": self.active_addons,
             "active_gifts": self.active_gifts,
             "warnings": [w.to_dict() for w in self.warnings],
@@ -171,6 +180,7 @@ def get_user_tariff_limits(
     messages_limit = base["monthly_messages"]
     active_bots_limit = base["active_bots"]
     team_members_limit = base["team_members"]
+    ai_credits_limit = base["ai_credits"]
 
     active_addons: list[dict[str, Any]] = []
     addon_bonuses = _sum_active_addons(
@@ -179,6 +189,7 @@ def get_user_tariff_limits(
     messages_limit = _add_int_limit(messages_limit, addon_bonuses["messages"])
     active_bots_limit = _add_int_limit(active_bots_limit, addon_bonuses["active_bots"])
     team_members_limit = _add_int_limit(team_members_limit, addon_bonuses["team_members"])
+    ai_credits_limit = _add_int_limit(ai_credits_limit, addon_bonuses["ai_credits"])
 
     active_gifts: list[dict[str, Any]] = []
     gift_bonuses = _sum_active_gifts(
@@ -187,6 +198,7 @@ def get_user_tariff_limits(
     messages_limit = _add_int_limit(messages_limit, gift_bonuses["messages"])
     active_bots_limit = _add_int_limit(active_bots_limit, gift_bonuses["active_bots"])
     team_members_limit = _add_int_limit(team_members_limit, gift_bonuses["team_members"])
+    ai_credits_limit = _add_int_limit(ai_credits_limit, gift_bonuses["ai_credits"])
 
     usage = _find_usage(db, user_id, period_start, period_end)
     messages_used = usage.messages_used if usage else 0
@@ -202,6 +214,26 @@ def get_user_tariff_limits(
         _enum_value(subscription.status) if subscription else None
     )
 
+    ai_details = None
+    try:
+        from sqlalchemy import inspect
+        from backend.services.ai_credits import get_balance
+        # Use the Session-bound connection so the schema check never opens a
+        # second SQLite StaticPool connection inside an in-flight fulfillment.
+        if inspect(db.connection()).has_table("ai_credit_buckets"):
+            bal = get_balance(db, user_id=user_id, now=at_dt)
+            ai_details = {
+                "included": {"total": bal.included_total, "used": bal.included_used, "expired": bal.included_expired, "revoked": bal.included_revoked, "remaining": bal.included_remaining, "period_end": bal.period_end},
+                "purchased": {"total": bal.purchased_total, "used": bal.purchased_used, "expired": bal.purchased_expired, "revoked": bal.purchased_revoked, "remaining": bal.purchased_remaining, "period_end": None},
+                "total_spendable": bal.total_spendable, "ledger_enabled": True,
+            }
+            ai_credits_limit = bal.included_total + bal.purchased_total
+            ai_credits_used = bal.included_used + bal.purchased_used
+            ai_credits_remaining = bal.total_spendable
+        else:
+            ai_credits_used, ai_credits_remaining = 0, int(ai_credits_limit or 0)
+    except Exception:
+        ai_credits_used, ai_credits_remaining = 0, int(ai_credits_limit or 0)
     summary = TariffLimitsSummary(
         plan_code=plan_code,
         plan_name=plan_name,
@@ -218,6 +250,10 @@ def get_user_tariff_limits(
         team_members_limit=team_members_limit,
         team_members_used=team_members_used,
         team_members_remaining=_remaining(team_members_limit, team_members_used),
+        ai_credits_limit=int(ai_credits_limit or 0),
+        ai_credits_used=ai_credits_used,
+        ai_credits_remaining=ai_credits_remaining,
+        ai_credit_details=ai_details,
         active_addons=active_addons,
         active_gifts=active_gifts,
         analytics_history_days=base.get("analytics_history_days"),
@@ -304,10 +340,6 @@ def _resolve_plan(
         plan = db.query(Plan).filter(Plan.id == subscription.plan_id).first()
         if plan:
             return plan, "subscription"
-    plan_code = (user.plan_code or "").strip() or FALLBACK_PLAN_CODE
-    plan = db.query(Plan).filter(Plan.code == plan_code).first()
-    if plan:
-        return plan, "legacy_plan_code"
     plan = db.query(Plan).filter(Plan.code == FALLBACK_PLAN_CODE).first()
     return plan, "fallback_start"
 
@@ -356,10 +388,10 @@ def _resolve_effective_plan(
     period_end: datetime,
 ) -> tuple[Plan | None, str]:
     """
-    Базовый тариф: подписка / legacy / fallback + активные PLAN gifts.
+    Базовый тариф: подписка / Start fallback + активные PLAN gifts.
 
     Выбирается план с максимальным sort_order; при равенстве — приоритет источника
-    (subscription > gift_plan > legacy_plan_code > fallback_start).
+    (subscription > gift_plan > fallback_start).
     """
     base_plan, base_source = _resolve_plan(db, user, subscription)
     candidates: list[tuple[Plan, str]] = []
@@ -381,7 +413,7 @@ def _resolve_effective_plan(
 
     def _rank(item: tuple[Plan, str]) -> tuple[int, int]:
         plan, source = item
-        return (_plan_sort_order(plan), _PLAN_SOURCE_PRIORITY.get(source, 0))
+        return (_PLAN_SOURCE_PRIORITY.get(source, 0), _plan_sort_order(plan))
 
     return max(candidates, key=_rank)
 
@@ -403,6 +435,8 @@ def _parse_plan_limits(plan: Plan | None) -> dict[str, Any]:
         "team_members": _read_numeric_limit(
             raw, "team_members", legacy_key="max_team_members", default=DEFAULT_NUMERIC_LIMITS["team_members"]
         ),
+        # Unlike generic numeric limits, AI Credits cannot be unlimited at this stage.
+        "ai_credits": _read_ai_credits_limit(raw),
         "analytics_history_days": _read_numeric_limit(raw, "analytics_history_days", default=None),
         "export_reports": bool(raw.get("export_reports", False)),
         "priority_support": bool(raw.get("priority_support", False)),
@@ -427,6 +461,17 @@ def _read_numeric_limit(
     if legacy_key and legacy_key in raw:
         return _coerce_limit_int(raw[legacy_key], default=default, missing_means_default=False)
     return default
+
+
+def _read_ai_credits_limit(raw: dict[str, Any]) -> int:
+    """Read the canonical AI Credits entitlement; missing/null/invalid means zero."""
+    value = raw.get("ai_credits", DEFAULT_NUMERIC_LIMITS["ai_credits"])
+    if isinstance(value, bool):
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _coerce_limit_int(
@@ -459,7 +504,7 @@ def _sum_active_addons(
     period_end: datetime,
     out_list: list[dict[str, Any]],
 ) -> dict[str, int]:
-    bonuses = {"messages": 0, "active_bots": 0, "team_members": 0}
+    bonuses = {"messages": 0, "active_bots": 0, "team_members": 0, "ai_credits": 0}
     rows = (
         db.query(UserAddon, AddonPackage)
         .join(AddonPackage, UserAddon.addon_package_id == AddonPackage.id)
@@ -504,7 +549,7 @@ def _sum_active_gifts(
     period_end: datetime,
     out_list: list[dict[str, Any]],
 ) -> dict[str, int]:
-    bonuses = {"messages": 0, "active_bots": 0, "team_members": 0}
+    bonuses = {"messages": 0, "active_bots": 0, "team_members": 0, "ai_credits": 0}
     grants = (
         db.query(GiftGrant)
         .filter(
@@ -578,6 +623,8 @@ def _apply_addon_bonus(bonuses: dict[str, int], pkg_type: str, amount: int) -> N
         bonuses["active_bots"] += amount
     elif pkg_type == AddonPackageType.TEAM_MEMBER.value:
         bonuses["team_members"] += amount
+    elif pkg_type == AddonPackageType.AI_CREDITS.value:
+        bonuses["ai_credits"] += amount
 
 
 def _enum_value(value: Any) -> str:

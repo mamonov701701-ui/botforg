@@ -54,7 +54,7 @@ describe('addonsAdminDisplay helpers (7.2)', () => {
       /тарифного периода/i
     );
     expect(addonAdminDurationLabel({ type: 'ai_credits', validity_days: 30 })).toMatch(
-      /следующих этапах/i
+      /30\s*дн\.\s*с активации/i
     );
   });
 });

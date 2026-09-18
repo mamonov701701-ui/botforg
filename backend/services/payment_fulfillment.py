@@ -25,7 +25,7 @@ from backend.models.checkout import (
     PaymentWebhookProcessStatus,
 )
 from backend.models.plan import Plan
-from backend.models.tariff import AddonPackage, UserAddonSource
+from backend.models.tariff import AddonPackage, AddonPackageType, UserAddonSource
 from backend.services.addon_custom_pack import (
     is_capacity_addon_type,
     is_custom_messages_code,
@@ -559,7 +559,7 @@ def fulfill_paid_intent(
                             "Срок тарифного периода недоступен для пакета",
                             code="addon_period_unavailable",
                         )
-                elif is_message_addon_type(pkg_type):
+                elif is_message_addon_type(pkg_type) or pkg_type == AddonPackageType.AI_CREDITS.value:
                     days = resolve_addon_validity_days(pkg)
                     p_end = _normalize_dt(p_start + timedelta(days=days))
                 else:

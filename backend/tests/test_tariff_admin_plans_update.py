@@ -212,6 +212,32 @@ def test_partial_limits_syncs_aliases(client, db):
     assert plan2.limits.get("legacy_extra_flag") is True
 
 
+def test_admin_patch_ai_credits_is_live_and_cannot_be_null(client, db):
+    headers, uid = _auth_owner(client, db)
+    plan = _ensure_plan(db, code="edit_ai_credits")
+    user = db.query(User).filter(User.id == uid).one()
+    user.plan_code = plan.code
+    db.commit()
+
+    res = client.patch(
+        f"/api/admin/tariffs/plans/{plan.id}",
+        headers=headers,
+        json={"limits": {"ai_credits": 75}},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["limits"]["ai_credits"] == 75
+    db.expire_all()
+    # legacy plan_code is not a 7.4 spendable AI-credit grant source.
+    assert get_user_tariff_limits(db, uid).ai_credits_remaining == 0
+
+    invalid = client.patch(
+        f"/api/admin/tariffs/plans/{plan.id}",
+        headers=headers,
+        json={"limits": {"ai_credits": None}},
+    )
+    assert invalid.status_code == 422
+
+
 def test_negative_limits_rejected(client, db):
     headers, _ = _auth_owner(client, db)
     plan = _ensure_plan(db, code="edit_neg")

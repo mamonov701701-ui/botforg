@@ -105,6 +105,22 @@ class LimitUsageOut(BaseModel):
     remaining: int | None
 
 
+class AiCreditClassOut(BaseModel):
+    total: int = 0
+    used: int = 0
+    expired: int = 0
+    revoked: int = 0
+    remaining: int = 0
+    period_end: datetime | None = None
+
+
+class AiCreditDetailsOut(BaseModel):
+    included: AiCreditClassOut
+    purchased: AiCreditClassOut
+    total_spendable: int = 0
+    ledger_enabled: bool = False
+
+
 class TariffWarningOut(BaseModel):
     type: str
     threshold: int
@@ -125,6 +141,8 @@ class TariffSummaryOut(BaseModel):
     messages: LimitUsageOut
     active_bots: LimitUsageOut
     team_members: LimitUsageOut
+    ai_credits: LimitUsageOut
+    ai_credit_details: AiCreditDetailsOut | None = None
     active_addons: list[dict[str, Any]] = Field(default_factory=list)
     active_gifts: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[TariffWarningOut] = Field(default_factory=list)
@@ -160,6 +178,12 @@ def tariff_summary_from_service(summary: TariffLimitsSummary) -> TariffSummaryOu
             used=summary.team_members_used,
             remaining=summary.team_members_remaining,
         ),
+        ai_credits=LimitUsageOut(
+            limit=summary.ai_credits_limit,
+            used=summary.ai_credits_used,
+            remaining=summary.ai_credits_remaining,
+        ),
+        ai_credit_details=(AiCreditDetailsOut.model_validate(summary.ai_credit_details) if summary.ai_credit_details else None),
         active_addons=summary.active_addons,
         active_gifts=summary.active_gifts,
         warnings=[

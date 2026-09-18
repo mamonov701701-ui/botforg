@@ -126,7 +126,7 @@ export function hasAccessToSection(
   return SECTION_ACCESS[section].includes(role as any);
 }
 
-/** Действия, требующие тариф Developer (template_publish, marketplace_stats) */
+/** Действия, которые сервер дополнительно проверяет по effective tariff. */
 export const PLAN_DEVELOPER_ACTIONS: ActionKey[] = ['template_publish', 'marketplace_stats'];
 
 /**
@@ -142,8 +142,9 @@ export function hasAccessToAction(
 }
 
 /**
- * Проверяет доступ к действию с учётом тарифа.
- * Для template_publish и marketplace_stats требуется plan_code === 'developer'.
+ * Клиент проверяет только роль. Effective tariff определяется сервером по
+ * subscription → gift → Start; users.plan_code — legacy metadata и не может
+ * быть источником UI-доступа.
  */
 export function hasAccessToPlanRestrictedAction(
   user: { role?: string; plan_code?: string } | null | undefined,
@@ -151,8 +152,7 @@ export function hasAccessToPlanRestrictedAction(
 ): boolean {
   if (!user) return false;
   const roleOk = hasAccessToAction(user.role as RoleValue, action);
-  if (!PLAN_DEVELOPER_ACTIONS.includes(action)) return roleOk;
-  return roleOk && user.plan_code === 'developer';
+  return roleOk;
 }
 
 /**

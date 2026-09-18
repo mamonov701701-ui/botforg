@@ -246,8 +246,8 @@ def test_pay_and_webhook_flow(client, db, monkeypatch):
     intent = CheckoutIntent(
         user_id=user_id,
         product_type=CheckoutProductType.TARIFF.value,
-        product_code="start",
-        product_name="Старт",
+        product_code="business",
+        product_name="Бизнес",
         amount=Decimal("199.00"),
         currency="RUB",
         status=CheckoutIntentStatus.PENDING.value,

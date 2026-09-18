@@ -12,6 +12,7 @@ from backend.models.checkout import (
     PaymentWebhookEvent,
     PaymentWebhookProcessStatus,
 )
+from backend.models.ai_credit import AiCreditBucket
 from backend.models.tariff import (
     AddonPackage,
     AddonPackageType,
@@ -290,6 +291,52 @@ def test_fulfill_addon_replay_does_not_extend_or_duplicate(client, db):
     addons = db.query(UserAddon).filter(UserAddon.user_id == uid).all()
     assert len(addons) == 1
     assert addons[0].period_end == end1
+
+
+def test_fulfill_ai_credit_addon_creates_one_expiring_purchased_bucket(client, db):
+    _, uid = _user(client, db)
+    pkg = AddonPackage(
+        code="ful_ai_credits",
+        name_ru="ИИ-кредиты",
+        type=AddonPackageType.AI_CREDITS,
+        amount=125,
+        price=Decimal("42.00"),
+        currency="RUB",
+        duration_type="current_period",
+        validity_days=45,
+        is_active=True,
+        is_public=True,
+        sort_order=1,
+    )
+    db.add(pkg)
+    db.commit()
+    intent = create_checkout_intent(
+        db,
+        user_id=uid,
+        product_type="addon",
+        code=pkg.code,
+        idempotency_key="ful-ai-credit-intent",
+    )
+
+    first = _fulfill(db, intent, uid, event_id="ful-ai-credit-1", payment_id="pay-ai-credit")
+    second = _fulfill(db, intent, uid, event_id="ful-ai-credit-2", payment_id="pay-ai-credit")
+
+    assert second.already_fulfilled is True
+    addon = db.query(UserAddon).filter(UserAddon.id == first.intent.fulfilled_addon_id).one()
+    bucket = (
+        db.query(AiCreditBucket)
+        .filter(
+            AiCreditBucket.user_id == uid,
+            AiCreditBucket.source_ref_type == "user_addon",
+            AiCreditBucket.source_ref_id == str(addon.id),
+        )
+        .one()
+    )
+    assert bucket.credit_class == "purchased"
+    assert bucket.original_amount == 125
+    assert bucket.remaining_amount == 125
+    assert bucket.expires_at == addon.period_end
+    assert db.query(AiCreditBucket).filter(AiCreditBucket.user_id == uid).count() == 1
 
 
 def test_webhook_replay_is_idempotent(client, db):

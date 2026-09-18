@@ -88,6 +88,11 @@ describe('buildTariffLimitLines', () => {
 });
 
 describe('buildPricingCardLines', () => {
+  it('shows the canonical AI Credits limit when provided', () => {
+    expect(buildTariffLimitLines({ ai_credits: 120 })).toEqual(['ИИ-кредиты: 120']);
+    expect(buildPricingCardLines({ ai_credits: 120 })).toEqual(['ИИ-кредиты: 120']);
+  });
+
   it('keeps core metrics and at most 3 true extras', () => {
     const lines = buildPricingCardLines({
       active_bots: 3,

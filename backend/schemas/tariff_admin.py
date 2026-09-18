@@ -88,6 +88,7 @@ class AdminPlanLimitsOut(BaseModel):
     monthly_messages: int | None = None
     active_bots: int | None = None
     team_members: int | None = None
+    ai_credits: int = 0
     analytics_history_days: int | None = None
     addon_purchase: bool = False
     export_reports: bool = False
@@ -133,6 +134,7 @@ class AdminPlanLimitsPatchIn(BaseModel):
     monthly_messages: int | None = Field(default=None, ge=0)
     active_bots: int | None = Field(default=None, ge=0)
     team_members: int | None = Field(default=None, ge=0)
+    ai_credits: int = Field(default=0, ge=0)
     analytics_history_days: int | None = Field(default=None, ge=0)
     addon_purchase: bool | None = None
     export_reports: bool | None = None
@@ -184,6 +186,7 @@ class AdminPlanLimitsCreateIn(BaseModel):
     monthly_messages: int | None = Field(default=None, ge=0)
     active_bots: int | None = Field(default=None, ge=0)
     team_members: int | None = Field(default=None, ge=0)
+    ai_credits: int = Field(default=0, ge=0)
     analytics_history_days: int | None = Field(default=None, ge=0)
     addon_purchase: bool | None = None
     export_reports: bool | None = None

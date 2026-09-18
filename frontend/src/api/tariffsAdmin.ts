@@ -11,6 +11,7 @@ export interface AdminPlanLimits {
   monthly_messages: number | null;
   active_bots: number | null;
   team_members: number | null;
+  ai_credits: number;
   analytics_history_days: number | null;
   addon_purchase: boolean;
   export_reports: boolean;
@@ -50,6 +51,7 @@ export interface AdminPlanLimitsPatch {
   monthly_messages?: number | null;
   active_bots?: number | null;
   team_members?: number | null;
+  ai_credits?: number;
   analytics_history_days?: number | null;
   addon_purchase?: boolean;
   export_reports?: boolean;
@@ -126,6 +128,7 @@ function normalizeLimits(raw: unknown): AdminPlanLimits {
     monthly_messages: asNullableNumber(o.monthly_messages),
     active_bots: asNullableNumber(o.active_bots),
     team_members: asNullableNumber(o.team_members),
+    ai_credits: Math.max(0, asNullableNumber(o.ai_credits) ?? 0),
     analytics_history_days: asNullableNumber(o.analytics_history_days),
     addon_purchase: asBool(o.addon_purchase, false),
     export_reports: asBool(o.export_reports, false),

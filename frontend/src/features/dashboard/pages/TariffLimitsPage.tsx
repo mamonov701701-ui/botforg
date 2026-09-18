@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Bot,
   Check,
+  Cpu,
   Gift,
   MessageCircle,
   Package,
@@ -16,7 +17,13 @@ import {
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { ApiError } from '../../../api/client';
-import { getTariffSummary, type TariffSummary, type UsageBlock } from '../../../api/tariff';
+import {
+  getAiCreditHistory,
+  getTariffSummary,
+  type AiCreditHistoryItem,
+  type TariffSummary,
+  type UsageBlock,
+} from '../../../api/tariff';
 import {
   addonActiveUntilLine,
   addonDetails,
@@ -214,6 +221,7 @@ export default function TariffLimitsPage() {
   const [summary, setSummary] = useState<TariffSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [aiHistory, setAiHistory] = useState<AiCreditHistoryItem[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -221,6 +229,7 @@ export default function TariffLimitsPage() {
     try {
       const data = await getTariffSummary();
       setSummary(data);
+      if (data.ai_credit_details?.ledger_enabled) setAiHistory(await getAiCreditHistory());
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         setError('Требуется вход в аккаунт. Обновите страницу или войдите снова.');
@@ -344,15 +353,14 @@ export default function TariffLimitsPage() {
                     >
                       Период: {formatBillingPeriod(summary.current_plan.billing_period)}
                     </div>
-                    {summary.current_plan.source &&
-                      summary.current_plan.source !== 'legacy_plan_code' && (
-                        <div
-                          style={{ fontSize: 12, color: 'var(--text-muted)' }}
-                          data-testid="tariff-plan-source"
-                        >
-                          {planSourceLabel(summary.current_plan.source)}
-                        </div>
-                      )}
+                    {summary.current_plan.source && (
+                      <div
+                        style={{ fontSize: 12, color: 'var(--text-muted)' }}
+                        data-testid="tariff-plan-source"
+                      >
+                        {planSourceLabel(summary.current_plan.source)}
+                      </div>
+                    )}
                     {summary.current_plan.subscription_status && (
                       <div
                         style={{ fontSize: 13, color: 'var(--text-muted)' }}
@@ -549,7 +557,89 @@ export default function TariffLimitsPage() {
                       }
                 }
               />
+              <UsageLimitCard
+                title="ИИ-кредиты"
+                icon={Cpu}
+                block={summary.ai_credits}
+                testId="tariff-usage-ai-credits"
+                actionNote={
+                  summary.ai_credit_details?.ledger_enabled
+                    ? 'Баланс учитывает тарифные и дополнительные ИИ-кредиты.'
+                    : 'Баланс ИИ-кредитов будет доступен после подключения журнала.'
+                }
+                action={{
+                  label: 'Докупить ИИ-кредиты',
+                  to: '/pricing?tab=addons&resource=ai_credits',
+                  testId: 'tariff-ai-credits-buy',
+                }}
+              />
             </div>
+            {summary.ai_credit_details?.ledger_enabled && (
+              <Card data-testid="tariff-ai-credit-details">
+                <h2 style={{ fontSize: '16px', fontWeight: 600, margin: '0 0 10px' }}>
+                  ИИ-кредиты
+                </h2>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>По тарифу</div>
+                    <strong>
+                      {summary.ai_credit_details.included.remaining} из{' '}
+                      {summary.ai_credit_details.included.total}
+                    </strong>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                      Использовано: {summary.ai_credit_details.included.used}; истекло:{' '}
+                      {summary.ai_credit_details.included.expired}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Дополнительно</div>
+                    <strong>{summary.ai_credit_details.purchased.remaining}</strong>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                      Использовано: {summary.ai_credit_details.purchased.used}; истекло:{' '}
+                      {summary.ai_credit_details.purchased.expired}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Доступно всего</div>
+                    <strong>{summary.ai_credit_details.total_spendable}</strong>
+                  </div>
+                </div>
+                {aiHistory.length > 0 && (
+                  <div style={{ marginTop: 14 }} data-testid="tariff-ai-credit-history">
+                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 6 }}>
+                      Последние операции
+                    </div>
+                    {aiHistory.slice(0, 5).map(item => (
+                      <div
+                        key={item.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          fontSize: 13,
+                          padding: '5px 0',
+                          borderTop: '1px solid var(--border)',
+                        }}
+                      >
+                        <span>
+                          {item.direction === 'credit' ? '+' : '−'}
+                          {item.amount} · {item.capability || item.category}
+                        </span>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          {new Date(item.created_at).toLocaleDateString('ru-RU')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+            )}
 
             <div
               style={{ display: 'flex', flexDirection: 'column', gap: 12 }}

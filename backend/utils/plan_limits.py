@@ -33,8 +33,11 @@ def get_plan_limits(db: Session, plan_code: str) -> dict[str, Any]:
 
 
 def get_user_plan_limits(db: Session, user: User) -> dict[str, Any]:
-    """Лимиты текущего тарифа пользователя."""
-    return get_plan_limits(db, user.plan_code or "free")
+    """Лимиты effective тарифа пользователя, без legacy users.plan_code."""
+    from backend.services.tariff_limits import get_user_tariff_limits
+
+    summary = get_user_tariff_limits(db, int(user.id))
+    return get_plan_limits(db, summary.plan_code)
 
 
 def check_max_bots(db: Session, user: User) -> None:
@@ -80,41 +83,49 @@ def check_can_use_analytics(db: Session, user: User) -> None:
 
 def check_can_publish_templates(db: Session, user: User) -> None:
     """Проверить право публикации шаблонов. При отсутствии — 403."""
-    limits = get_user_plan_limits(db, user)
-    if not limits.get("can_publish_templates", False):
+    from backend.services.tariff_limits import get_user_tariff_limits
+
+    summary = get_user_tariff_limits(db, int(user.id))
+    if summary.plan_code not in {"team", "corporate"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Публикация шаблонов доступна на тарифе Developer. Перейдите на Developer.",
+            detail="Публикация шаблонов доступна на тарифе Team. Перейдите на Team.",
         )
 
 
 def check_can_sell_templates(db: Session, user: User) -> None:
     """Проверить право продажи шаблонов (mock). При отсутствии — 403."""
-    limits = get_user_plan_limits(db, user)
-    if not limits.get("can_sell_templates", False):
+    from backend.services.tariff_limits import get_user_tariff_limits
+
+    summary = get_user_tariff_limits(db, int(user.id))
+    if summary.plan_code not in {"team", "corporate"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Продажа шаблонов доступна на тарифе Developer. Перейдите на Developer.",
+            detail="Продажа шаблонов доступна на тарифе Team. Перейдите на Team.",
         )
 
 
 def require_developer_plan(db: Session, user: User) -> None:
-    """Проверить тариф Developer. При отсутствии — 403."""
-    limits = get_user_plan_limits(db, user)
-    if not limits.get("can_view_marketplace_stats", False):
+    """Проверить effective доступ к кабинету автора шаблонов. При отсутствии — 403."""
+    from backend.services.tariff_limits import get_user_tariff_limits
+
+    summary = get_user_tariff_limits(db, int(user.id))
+    if summary.plan_code not in {"team", "corporate"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Кабинет разработчика доступен на тарифе Developer. Перейдите на Developer.",
+            detail="Кабинет автора доступен на тарифе Team. Перейдите на Team.",
         )
 
 
 def check_can_view_marketplace_stats(db: Session, user: User) -> None:
     """Проверить право просмотра статистики маркетплейса. При отсутствии — 403."""
-    limits = get_user_plan_limits(db, user)
-    if not limits.get("can_view_marketplace_stats", False):
+    from backend.services.tariff_limits import get_user_tariff_limits
+
+    summary = get_user_tariff_limits(db, int(user.id))
+    if summary.plan_code not in {"team", "corporate"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Статистика маркетплейса доступна на тарифе Developer. Перейдите на Developer.",
+            detail="Статистика маркетплейса доступна на тарифе Team. Перейдите на Team.",
         )
 
 

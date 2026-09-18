@@ -92,6 +92,21 @@ def _month_period(at: datetime | None = None) -> tuple[datetime, datetime]:
     return start, end
 
 
+def _activate_plan(db, user: User, code: str, at: datetime) -> None:
+    plan = _get_plan(db, code)
+    start, end = _month_period(at)
+    db.add(
+        UserSubscription(
+            user_id=user.id,
+            plan_id=plan.id,
+            status=SubscriptionStatus.ACTIVE,
+            current_period_start=start,
+            current_period_end=end,
+        )
+    )
+    db.commit()
+
+
 @pytest.fixture
 def db(client):
     """Изолированная сессия БД (client очищает таблицы перед тестом)."""
@@ -113,12 +128,12 @@ def test_no_subscription_unknown_plan_fallback_start(db, client):
     assert summary.team_members_limit == 0
 
 
-def test_legacy_plan_code_business(db, client):
+def test_plan_code_is_not_an_effective_entitlement_fallback(db, client):
     user = _create_user(db, plan_code="business", email_suffix="business")
     summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
-    assert summary.plan_code == "business"
-    assert summary.source == "legacy_plan_code"
-    assert summary.messages_limit == 3000
+    assert summary.plan_code == "start"
+    assert summary.source == "fallback_start"
+    assert summary.messages_limit == 500
     assert summary.active_bots_limit == 1
 
 
@@ -194,6 +209,7 @@ def test_active_bot_addon(db, client):
 
 def test_active_team_member_addon(db, client):
     user = _create_user(db, plan_code="team", email_suffix="addon_member")
+    _activate_plan(db, user, "team", _utc(2026, 6, 15))
     pkg = _ensure_addon(db, "member_1", AddonPackageType.TEAM_MEMBER, 1)
     period_start, period_end = _month_period()
     db.add(
@@ -210,6 +226,61 @@ def test_active_team_member_addon(db, client):
     db.commit()
     summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
     assert summary.team_members_limit == 5 + 1
+
+
+def test_ai_credits_plan_limit_defaults_to_zero_and_addon_is_entitled(db, client):
+    plan = Plan(
+        code="ai_credits_entitled_plan",
+        name="AI Credits entitled",
+        limits={
+            "monthly_messages": 500,
+            "active_bots": 1,
+            "team_members": 0,
+            "ai_credits": 120,
+        },
+    )
+    db.add(plan)
+    db.commit()
+    user = _create_user(
+        db, plan_code="ai_credits_entitled_plan", email_suffix="ai_credits"
+    )
+    pkg = _ensure_addon(db, "ai_credits_30", AddonPackageType.AI_CREDITS, 30)
+    period_start, period_end = _month_period()
+    db.add(
+        UserAddon(
+            user_id=user.id,
+            addon_package_id=pkg.id,
+            amount=30,
+            period_start=period_start,
+            period_end=period_end,
+            status=UserAddonStatus.ACTIVE,
+            source=UserAddonSource.PURCHASE,
+        )
+    )
+    db.commit()
+
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    # Legacy-only fixture has no durable subscription/addon bucket grant.
+    assert summary.ai_credits_limit == 0
+    assert summary.ai_credits_used == 0
+    assert summary.ai_credits_remaining == 0
+    assert summary.active_addons[0]["type"] == AddonPackageType.AI_CREDITS.value
+
+
+def test_missing_ai_credits_limit_is_zero(db, client):
+    plan = Plan(
+        code="ai_credits_default_plan",
+        name="AI Credits default",
+        limits={"monthly_messages": 500, "active_bots": 1, "team_members": 0},
+    )
+    db.add(plan)
+    db.commit()
+    user = _create_user(
+        db, plan_code="ai_credits_default_plan", email_suffix="ai_credits_default"
+    )
+    summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
+    assert summary.ai_credits_limit == 0
+    assert summary.ai_credits_remaining == 0
 
 
 def test_expired_addon_not_counted(db, client):
@@ -298,6 +369,7 @@ def test_expired_gift_not_counted(db, client):
 
 def test_usage_counter_reduces_remaining(db, client):
     user = _create_user(db, plan_code="business", email_suffix="usage")
+    _activate_plan(db, user, "business", _utc(2026, 6, 15))
     period_start, period_end = _month_period()
     db.add(
         Bot(
@@ -427,6 +499,7 @@ def test_corporate_unlimited_limits(db, client):
     }
     db.commit()
     user = _create_user(db, plan_code="corporate", email_suffix="corp")
+    _activate_plan(db, user, "corporate", _utc(2026, 6, 15))
     summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
     assert summary.messages_limit is None
     assert summary.messages_remaining is None
@@ -546,7 +619,7 @@ def test_expired_plan_gift_not_applied(db, client):
     )
     summary = get_user_tariff_limits(db, user.id, at=_utc(2026, 6, 15))
     assert summary.plan_code == "start"
-    assert summary.source == "legacy_plan_code"
+    assert summary.source == "fallback_start"
     assert summary.messages_limit == 500
     assert summary.active_gifts == []
 
@@ -636,6 +709,7 @@ def test_subscription_beats_lower_plan_gift(db, client):
 
 def test_team_members_used_from_team_table_not_counter(db, client):
     user = _create_user(db, plan_code="team", email_suffix="team_used_real")
+    _activate_plan(db, user, "team", _utc(2026, 6, 15))
     member_a = _create_user(db, plan_code="free", email_suffix="team_member_a")
     member_b = _create_user(db, plan_code="free", email_suffix="team_member_b")
     db.add(

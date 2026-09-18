@@ -3,6 +3,9 @@ Tests for auth endpoints (email/register, email/login).
 """
 import pytest
 from fastapi.testclient import TestClient
+from jose import jwt
+
+from backend.settings import settings
 
 
 def test_register_and_login(client: TestClient):
@@ -23,7 +26,19 @@ def test_register_and_login(client: TestClient):
     assert res.status_code == 200
     data = res.json()
     assert "access_token" in data
-    assert "token_type" in data
+    assert data["token_type"] == "bearer"
+
+    payload = jwt.decode(data["access_token"], settings.JWT_SECRET, algorithms=["HS256"])
+    assert payload["sub"].isdigit()
+    assert payload["tv"] == 0
+    assert "iat" in payload
+    assert "exp" in payload
+
+    me = client.get(
+        "/me", headers={"Authorization": f"Bearer {data['access_token']}"}
+    )
+    assert me.status_code == 200
+    assert me.json()["email"] == email
 
 
 def test_login_invalid_credentials(client: TestClient):

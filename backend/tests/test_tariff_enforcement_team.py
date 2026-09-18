@@ -30,7 +30,7 @@ from backend.services.tariff_enforcement import (
     ensure_can_add_team_member,
 )
 from backend.services.tariff_limits import get_user_tariff_limits
-from backend.tests.conftest import TestingSessionLocal
+from backend.tests.conftest import TestingSessionLocal, activate_test_subscription
 from backend.utils.plan_limits import check_max_team_members, get_user_plan_limits
 
 
@@ -56,6 +56,7 @@ def _create_user(db, plan_code: str, suffix: str, *, role: str = "user") -> User
     db.add(user)
     db.commit()
     db.refresh(user)
+    activate_test_subscription(db, user, plan_code)
     return user
 
 

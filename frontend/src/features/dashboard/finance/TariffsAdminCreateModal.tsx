@@ -42,6 +42,7 @@ type FormState = {
   monthly_messages: string;
   active_bots: string;
   team_members: string;
+  ai_credits: string;
   analytics_history_days: string;
   addon_purchase: boolean;
   export_reports: boolean;
@@ -61,6 +62,12 @@ function parseOptionalNonNegInt(raw: string): number | null {
   return n;
 }
 
+function parseRequiredNonNegInt(raw: string): number {
+  const value = parseOptionalNonNegInt(raw);
+  if (value === null) throw new Error('invalid_required_int');
+  return value;
+}
+
 function buildInitial(existingPlans: AdminPlan[]): FormState {
   return {
     code: '',
@@ -76,6 +83,7 @@ function buildInitial(existingPlans: AdminPlan[]): FormState {
     monthly_messages: '500',
     active_bots: '1',
     team_members: '0',
+    ai_credits: '0',
     analytics_history_days: '7',
     addon_purchase: false,
     export_reports: false,
@@ -152,6 +160,7 @@ export default function TariffsAdminCreateModal({
         monthly_messages: parseOptionalNonNegInt(form.monthly_messages),
         active_bots: parseOptionalNonNegInt(form.active_bots),
         team_members: parseOptionalNonNegInt(form.team_members),
+        ai_credits: parseRequiredNonNegInt(form.ai_credits),
         analytics_history_days: parseOptionalNonNegInt(form.analytics_history_days),
         addon_purchase: form.addon_purchase,
         export_reports: form.export_reports,
@@ -161,7 +170,7 @@ export default function TariffsAdminCreateModal({
         scenario_publish: form.scenario_publish,
       };
     } catch {
-      throw new Error('Лимиты должны быть целыми числами ≥ 0 (пусто = без ограничения).');
+      throw new Error('Лимиты должны быть целыми числами ≥ 0 (ИИ-кредиты обязательны).');
     }
 
     return {
@@ -352,6 +361,16 @@ export default function TariffsAdminCreateModal({
                 value={form.team_members}
                 onChange={e => set('team_members', e.target.value)}
                 style={tariffsFieldStyle}
+              />
+            </div>
+            <div>
+              <label style={tariffsLabelStyle}>ИИ-кредиты</label>
+              <input
+                data-testid="tariffs-admin-create-ai-credits"
+                value={form.ai_credits}
+                onChange={e => set('ai_credits', e.target.value)}
+                style={tariffsFieldStyle}
+                inputMode="numeric"
               />
             </div>
             <div>

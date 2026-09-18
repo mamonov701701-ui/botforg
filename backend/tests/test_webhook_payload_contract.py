@@ -22,7 +22,7 @@ from backend.services.tariff_message_enforcement import (
     REASON_MISSING_STABLE_MESSAGE_ID,
     REASON_UNSUPPORTED_MESSAGE_TYPE,
 )
-from backend.tests.conftest import TestingSessionLocal
+from backend.tests.conftest import TestingSessionLocal, activate_test_subscription
 from backend.tests.tariff_time import (
     FIXED_TARIFF_NOW,
     freeze_tariff_now,  # noqa: F401 — used via pytestmark
@@ -53,6 +53,7 @@ def _create_user(db, *, plan_code: str = "start") -> User:
     db.add(user)
     db.commit()
     db.refresh(user)
+    activate_test_subscription(db, user, plan_code)
     return user
 
 

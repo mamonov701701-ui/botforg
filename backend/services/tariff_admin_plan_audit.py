@@ -58,6 +58,7 @@ _LIMIT_LABELS_RU: dict[str, str] = {
     "monthly_messages": "Сообщений в месяц",
     "active_bots": "Активных ботов",
     "team_members": "Участников команды",
+    "ai_credits": "ИИ-кредиты",
     "analytics_history_days": "История аналитики, дней",
     "addon_purchase": "Покупка доп. пакетов",
     "export_reports": "Экспорт отчётов",

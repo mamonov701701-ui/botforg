@@ -176,7 +176,9 @@ def test_create_messages_bots_alias_and_ai_credits(client, db):
     public_codes = {row["code"] for row in public.json()}
     assert "adm_create_msg" in public_codes
     assert "adm_create_bots" in public_codes
-    assert "adm_create_ai" not in public_codes
+    # AI-credit packages are public purchasable addons when an administrator
+    # publishes them; their entitlement is fulfilled through the AI ledger.
+    assert "adm_create_ai" in public_codes
 
     detail = client.get(f"/api/admin/tariffs/addons/{ai.json()['id']}", headers=headers)
     assert detail.status_code == 200

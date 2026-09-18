@@ -296,7 +296,7 @@ async def change_plan(
     if not plan:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Тариф '{body.plan_code}' не найден. Доступные: free, pro, team.",
+            detail=f"Тариф '{body.plan_code}' не найден.",
         )
     current_user.plan_code = body.plan_code
     db.commit()
