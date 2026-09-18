@@ -1,3 +1,7 @@
+# HISTORICAL — user database structure
+
+> Tariff statements in this document predate migration 041. Current entitlement semantics are defined by [Effective Entitlement (фактические права пользователя)](../billing/effective-entitlement.md); `users.plan_code` is not an entitlement source.
+
 # Структура базы данных пользователей BotForg
 
 **Версия:** 1.0  

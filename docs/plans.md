@@ -1,3 +1,7 @@
+# SUPERSEDED — historical tariff catalogue
+
+> Replaced by [Effective Entitlement (фактические права пользователя)](billing/effective-entitlement.md). The `free`, `pro` and `developer` catalogue below is historical and must not be used as an entitlement contract.
+
 # Тарифные планы BotForg
 
 ## Обзор

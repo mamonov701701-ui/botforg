@@ -1,297 +1,48 @@
-# 📖 Документация BotForg
+# BotForg Documentation
 
-> Полное руководство по созданию чат-ботов без программирования
+## CURRENT / CANONICAL
 
----
+These documents are the technical source of truth for their domains. Where an older stage document conflicts, the canonical document wins.
 
-## 📅 Последнее обновление: 21.04.2026
+### Architecture
+- [AI Credits Architecture (архитектура ИИ-кредитов)](architecture/ai-credits.md) — credits, ledger, buckets, allocations and provider boundary.
 
-### ✅ Добавлено:
-- **Финальная модель сценариев** — зафиксирован единый поток: бот как рабочая среда, "Мои сценарии" как хранилище шаблонов, сохранение из бота через `Сохранить в мои сценарии`, использование в боте только как копия, отдельный маршрут редактора `editor/scenario/:scenarioId`.
-- **CRM — документация и справка** — публичная вкладка «Возможности» → **CRM** (`/features?tab=crm`), полная инструкция в ЛК (`/dashboard/help/crm`), репозиторий: [CRM_GUIDE_RU.md](./CRM_GUIDE_RU.md); для ассистента: `frontend/src/knowledge/crm/` (`CRM_AGENT_RULES_RU`). Исходник секций: `frontend/src/content/crmGuideData.ts`.
-- **Валидация редактора и диагностика сценария** — стабильные селекторы store, сравнение результатов перед записью (без лишних циклов рендера), безопасная загрузка определений переменных при ошибках API, модалка «Проверка сценария» и связанные утилиты. См. [development/EDITOR_VALIDATION_AND_DIAGNOSTICS.md](./development/EDITOR_VALIDATION_AND_DIAGNOSTICS.md).
-- **Раздел «Возможности» → «Блоки редактора»** (`/features`, вкладка с подписью «Блоки редактора») — карточки блоков в режиме аккордеона: краткое описание и единый текст инструкции по всем блокам из исходника `frontend/src/pages/features/blockGuideRu.ts`. Обзор для агента: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md); отчёт о приведении к одному формату: [technical/EDITOR_BLOCKS_STANDARDIZATION_REPORT.md](./technical/EDITOR_BLOCKS_STANDARDIZATION_REPORT.md). Подробности в разделе 4.3 файла [EDITOR_BLOCKS_DOCUMENTATION.md](./EDITOR_BLOCKS_DOCUMENTATION.md).
-- **Редактор V2 — хаб сценариев** — компактное меню сценария бота, модалки «новый сценарий» и «добавить из моих» (копия в текущего бота), нормализация рёбер под handles узлов, предпросмотр без краша по контракту `context` / `RunStepResult`. См. [EDITOR_V2_SCENARIO_AND_PREVIEW.md](./development/EDITOR_V2_SCENARIO_AND_PREVIEW.md).
-- **Авторизация и middleware** — практические заметки по цепочке запросов и телу `POST`: [development/AUTH_AND_MIDDLEWARE.md](./development/AUTH_AND_MIDDLEWARE.md).
+### Billing
+- [Effective Entitlement (фактические права пользователя)](billing/effective-entitlement.md) — base-plan resolver and legacy boundary.
+- [Refund Technical Policy (техническая политика возвратов)](billing/refunds-technical-policy.md) — technical refund and entitlement behavior.
 
-### ✅ Ранее в продукте:
-- **Модерация шаблонов маркетплейса** — жизненный цикл: draft → pending → approved/rejected
-- **Кабинет разработчика** — статусы модерации, кнопка «На модерацию», причина отказа
-- **Админ-эндпоинты** — approve/reject шаблонов (только owner)
+### API
+- [API documentation](technical/API_DOCS.md) — existing REST contracts. AI Credits API scope is recorded in the architecture document above.
 
-### ✅ Исправления:
-- **Предпросмотр сценария** — контракт `context` из `scenarioRunner`, нормализация handles рёбер
-- **Редактор сценариев** - исправлена проблема с исчезновением блоков после перетаскивания
-- **Авторизация и локальный запуск** — доработаны маршруты входа, middleware и скрипт `start-dev`; подробности в [LOGIN_TROUBLESHOOTING.md](./LOGIN_TROUBLESHOOTING.md) и [AUTH_AND_MIDDLEWARE.md](./development/AUTH_AND_MIDDLEWARE.md)
-- **Документация** - обновлены инструкции по входу, портам и справке блоков редактора
+### Operations
+- [Database Migration Chain (цепочка миграций БД)](operations/migrations.md) — current migration head and 040/041.
+- [Development ports](DEV_PORTS.md) — local service ports.
 
-### 👤 Данные для входа:
-```
-📧 Email:    mamonov701701@mail.ru
-🔑 Password: Test123456!
-```
+### Security
+- [Security](SECURITY.md) — existing security technical material.
+- [Auth and middleware](development/AUTH_AND_MIDDLEWARE.md) — runtime auth request handling.
 
----
+### Legal inputs
+- [Technical Facts for Legal Inputs (технические факты для юридических входных данных)](legal-inputs/technical-facts.md) — verified technical facts; not a legal policy.
 
-## 🎯 Быстрый доступ
+### ADR
+No current ADRs have been established in this repository. Add future decision records under `adr/`.
 
-### **Для новичков:**
-1. 📘 [Пошаговая инструкция по сценариям](./USER_MANUAL_SCENARIOS.md) - **НАЧНИТЕ ЗДЕСЬ**
-2. 📇 [CRM в BotForg — полная справка](./CRM_GUIDE_RU.md) — контакты, обзор, поля, теги, статусы, режимы prod/dev/all (в продукте: `/dashboard/help/crm`; краткий обзор: `/features?tab=crm`)
-3. ⚡ [Быстрая справка](./QUICK_REFERENCE.md) - шпаргалка на одну страницу
-4. 📚 [Полное руководство по сценариям](./SCENARIOS_GUIDE.md) - все детали
-5. 🔐 [Безопасность простыми словами](./SECURITY_USER_GUIDE.md) - защита от угроз
-6. 🚀 [Быстрый старт](./user/QUICK_START.md) - запуск за 3 шага
-7. 📖 [Основная инструкция по работе](./user/ИНСТРУКЦИЯ.md) - полное руководство
+## HISTORICAL / SUPERSEDED
 
-### **Для опытных:**
-- 🔧 [Безопасность - техническая документация](./SECURITY.md)
-- 🤖 [Инструкции для ChatGPT по разработке сценариев](./CHATGPT_SCENARIOS_DEVELOPMENT.md) - **для разработчиков сценариев**
-- 🧩 [Создание кастомных блоков](#) (в разработке)
-- 🚀 [Продвинутые техники](#) (в разработке)
+Stage reports and older implementation notes remain evidence of their original work; they are not current contracts. See markers in [plans.md](plans.md), [USER_DATABASE_STRUCTURE.md](technical/USER_DATABASE_STRUCTURE.md) and [POSTGRES_MIGRATION_CHAIN_CLEANUP.md](POSTGRES_MIGRATION_CHAIN_CLEANUP.md). The `TARIFFS_STAGE_*` documents are historical unless a canonical document explicitly incorporates their current behavior.
 
-### **Для разработчиков:**
-- 📡 [API Документация](./technical/API_DOCS.md) - полное описание API
-- 🔄 [Миграции базы данных](./technical/APPLY_MIGRATION.md) - инструкции по миграциям
-- 🧪 [Тестирование сценариев](./user/TESTING_SCENARIOS.md) - руководство по тестированию
-- ✅ [Статус готовности системы](./development/SYSTEM_READY.md) - текущее состояние проекта
+## Documentation Definition of Done (критерий готовности документации)
 
----
+Every future stage must check:
 
-## 📁 Структура документации
-
-### **Корень `docs/`**
-- [CRM в BotForg (полная справка, RU)](./CRM_GUIDE_RU.md) — дублирует встроенную справку `/dashboard/help/crm`; краткий публичный обзор: `/features?tab=crm`
-
-### **Пользовательские инструкции** (`user/`)
-- [Основная инструкция по работе](./user/ИНСТРУКЦИЯ.md) - полное руководство для пользователей
-- [Быстрый старт](./user/QUICK_START.md) - запуск системы сценариев за 3 шага
-- [Тестирование сценариев](./user/TESTING_SCENARIOS.md) - инструкция по тестированию
-- [Указатель на справку по блоку «Сообщение»](./user/editor_block_message.md) — актуальный текст в коде: `blockGuideRu.ts`; техническая справка агента: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md)
-- [Указатель на справку по блоку «Выбор»](./user/editor_block_choice.md) — тот же источник: `blockGuideRu.ts`, ключ `condition`; техническая справка: [technical/editor_blocks_bf_agent.md](./technical/editor_blocks_bf_agent.md)
-
-### **Техническая документация** (`technical/`)
-- [Реляционное ядро конструктора (ctor_* таблицы)](./technical/CONSTRUCTOR_CORE_DB.md) — `platform_users`, граф блоков, переменные и события
-- [API Документация](./technical/API_DOCS.md) - полное описание REST API
-- [Применение миграций](./technical/APPLY_MIGRATION.md) - инструкции по миграциям БД
-- [Миграция базовых ролей](./technical/MIGRATION_BASE_ROLES.md) - детали миграции ролей
-
-### **Документация разработки** (`development/`)
-- [Статус готовности системы](./development/SYSTEM_READY.md) - текущее состояние проекта
-- [Редактор V2: сценарии и предпросмотр](./development/EDITOR_V2_SCENARIO_AND_PREVIEW.md) — store, handles, BotSimulator
-- [Редактор V2: валидация и диагностика](./development/EDITOR_VALIDATION_AND_DIAGNOSTICS.md) — пайплайн проверки, Zustand, устойчивость к ошибкам API переменных
-- [Авторизация и middleware (uvicorn, POST-тело)](./development/AUTH_AND_MIDDLEWARE.md) — почему нельзя два BaseHTTPMiddleware подряд с Session
-
----
-
-## 📚 Основные разделы
-
-### 1. Работа со сценариями
-**Сценарии** - основа создания ботов в BotForg
-
-- [Что такое сценарии и зачем они нужны](./SCENARIOS_GUIDE.md#что-такое-сценарий)
-- [Создание первого сценария](./USER_MANUAL_SCENARIOS.md#шаг-1-создаем-главное-меню)
-- [Связывание сценариев](./USER_MANUAL_SCENARIOS.md#шаг-3-связываем-сценарии)
-- [Мои сценарии](./SCENARIOS_GUIDE.md#-мои-сценарии-в-личном-кабинете)
-
-### 2. Блоки
-**Блоки** - кирпичики для построения логики
-
-- Базовые блоки (Начало, Сообщение, Кнопки)
-- Бизнес-блоки (Оплата, Форма, Календарь)
-- Системные блоки (Условие, Переход, Переменные)
-- AI блоки (ChatGPT, распознавание речи)
-
-### 3. Интеграции
-**Интеграции** - подключение внешних сервисов
-
-- Telegram Bot API
-- WhatsApp Business
-- Платежные системы (ЮKassa, Stripe)
-- Google Sheets, Airtable
-- Custom API
-
-### 4. Публикация и управление
-**От разработки к продакшену**
-
-- Тестирование бота
-- Подключение к мессенджерам
-- Мониторинг и аналитика
-- Обновление без остановки
-
----
-
-## 🎬 Видео-уроки (план)
-
-### **Базовый уровень:**
-1. ✅ Первый бот за 5 минут
-2. ✅ Работа со сценариями
-3. ⏳ Каталог блоков (в производстве)
-4. ⏳ Интеграции и настройки (в производстве)
-
-### **Продвинутый уровень:**
-1. ⏳ Переменные и условия
-2. ⏳ Работа с данными
-3. ⏳ Интеграция с CRM
-4. ⏳ Монетизация ботов
-
-### **Отраслевые гайды:**
-1. ⏳ Бот для интернет-магазина
-2. ⏳ Бот для ресторана
-3. ⏳ Образовательный бот
-4. ⏳ Бот службы поддержки
-
-**Подписка:** [YouTube канал BotForg](#)
-
----
-
-## 🎓 Уровни обучения
-
-### **Уровень 1: Новичок** (1-2 часа)
-**Что освоите:**
-- Создание простого бота
-- Работа с базовыми блоками
-- Один сценарий из 5-10 блоков
-
-**Материалы:**
-- [Быстрая справка](./QUICK_REFERENCE.md)
-- Видео: "Первый бот за 5 минут"
-
----
-
-### **Уровень 2: Пользователь** (2-4 часа)
-**Что освоите:**
-- Множественные сценарии
-- Переходы между сценариями
-- Экспорт/импорт
-- Мои сценарии (шаблоны)
-
-**Материалы:**
-- [Пошаговая инструкция](./USER_MANUAL_SCENARIOS.md)
-- Видео: "Работа со сценариями"
-
----
-
-### **Уровень 3: Мастер** (8-12 часов практики)
-**Что освоите:**
-- Сложная логика с условиями
-- Работа с переменными
-- Интеграции с внешними API
-- Командная разработка
-
-**Материалы:**
-- [Полное руководство](./SCENARIOS_GUIDE.md)
-- Видео: Серия "Продвинутый уровень"
-
----
-
-## 📊 Примеры реальных проектов
-
-### **Кейс 1: Бот службы поддержки** 
-**Задача:** Автоматизировать 80% обращений в поддержку
-
-**Структура (7 сценариев):**
-- 🏠 Главная - роутинг по типу вопроса
-- ❓ FAQ - топ-20 вопросов
-- 🔧 Техподдержка - диагностика проблемы
-- 💬 Живой оператор - передача оператору
-- 📝 Отзыв - оценка качества помощи
-- 🎫 Создать тикет - если вопрос сложный
-- ✅ Решение найдено - завершение
-
-**Результат:** 
-- Время ответа: с 15 минут до 30 секунд
-- Нагрузка на операторов: -70%
-
----
-
-### **Кейс 2: Бот магазина одежды**
-**Задача:** Принимать заказы 24/7 без менеджера
-
-**Структура (9 сценариев):**
-- 🏠 Главная
-- 👔 Каталог мужское
-- 👗 Каталог женское
-- 🔍 Поиск по артикулу
-- 🛒 Корзина
-- 💳 Оплата
-- 📍 Выбор доставки
-- 🎁 Промокоды
-- 📦 Отслеживание заказа
-
-**Результат:**
-- Заказы: +40% в нерабочее время
-- Конверсия: 12% → 18%
-
----
-
-## 🆘 Поддержка
-
-### **База знаний:**
-- [Часто задаваемые вопросы (FAQ)](./FAQ.md)
-- [Решение типовых проблем](./TROUBLESHOOTING.md)
-- [Глоссарий терминов](./SCENARIOS_GUIDE.md#-глоссарий-терминов)
-
-### **Контакты:**
-- 💬 **Telegram чат:** [@botforg_community](https://t.me/botforg_community)
-- 👨‍💻 **Техподдержка:** [@botforg_support](https://t.me/botforg_support)
-- 📧 **Email:** support@botforg.ru
-- 📞 **Звонок:** +7 (XXX) XXX-XX-XX (будни 10:00-19:00 МСК)
-
-### **Обучение:**
-- 🎓 **Онлайн-курсы:** [botforg.ru/courses](https://botforg.ru/courses)
-- 📹 **YouTube:** [BotForg Channel](#)
-- 📝 **Блог с туториалами:** [botforg.ru/blog](https://botforg.ru/blog)
-
----
-
-## 🗺️ Roadmap документации
-
-### **✅ Готово (ноябрь 2024):**
-- Руководство по сценариям
-- Быстрая справка
-- Глоссарий
-
-### **⏳ В разработке (декабрь 2024):**
-- Полный каталог блоков с примерами
-- Гайды по интеграциям
-- Видео-курс для начинающих
-
-### **📅 Планируется (Q1 2025):**
-- Отраслевые шаблоны
-- Продвинутые техники
-- Case studies успешных проектов
-
----
-
-## 💬 Обратная связь
-
-Нашли ошибку в документации? Хотите добавить пример?
-
-- 📧 Напишите: docs@botforg.ru
-- 💬 Telegram: @botforg_docs
-- 🐛 GitHub Issues: [botforg/docs/issues](#)
-
-**Ваша обратная связь помогает улучшать документацию для всех!**
-
----
-
-## 📄 Лицензия
-
-Документация BotForg распространяется под лицензией [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
-
-Вы можете:
-- ✅ Делиться ссылками
-- ✅ Копировать для обучения
-- ✅ Переводить на другие языки
-
-С указанием источника: BotForg.ru
-
----
-
-**Версия документации:** 1.1.0  
-**Последнее обновление:** 13 марта 2026  
-**Язык:** Русский
-
-[English version](./README_EN.md) | [中文版本](./README_CN.md)
-
+- architecture/scope;
+- data contract;
+- API contract;
+- lifecycle/invariants;
+- UI contract;
+- operations/rollout;
+- tests;
+- legal impact note;
+- docs index update;
+- supersession marker for obsolete documentation.

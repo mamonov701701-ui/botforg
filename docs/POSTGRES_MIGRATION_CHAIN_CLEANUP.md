@@ -1,3 +1,7 @@
+# HISTORICAL — PostgreSQL migration chain cleanup
+
+> This report ends at an earlier head. Current migration status, including 040/041, is [Database Migration Chain (цепочка миграций БД)](operations/migrations.md). It does not prove current PostgreSQL readiness.
+
 # BotForg — PostgreSQL migration chain cleanup
 
 ## 1. Причина этапа
