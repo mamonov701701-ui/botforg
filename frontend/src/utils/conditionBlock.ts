@@ -21,8 +21,12 @@ export function resolveConditionYesNoEdges(outgoing: Edge[]): {
   yes: Edge | null;
   no: Edge | null;
 } {
-  const yesList = outgoing.filter(e => getEdgeConditionBranch(e) === 'true');
-  const noList = outgoing.filter(e => getEdgeConditionBranch(e) === 'false');
+  const yesList = outgoing.filter(
+    e => getEdgeConditionBranch(e) === 'true' || e.sourceHandle === 'condition_yes'
+  );
+  const noList = outgoing.filter(
+    e => getEdgeConditionBranch(e) === 'false' || e.sourceHandle === 'condition_no'
+  );
   if (yesList.length > 0 && noList.length > 0) {
     return {
       yes: orderConditionOutgoingEdges(yesList)[0] ?? null,
@@ -137,13 +141,13 @@ export function evaluateConditionSettings(
       const a = Number(actual);
       const b = Number(settings.value);
       if (!Number.isNaN(a) && !Number.isNaN(b)) return a > b;
-      return strTrim(actual) > strTrim(settings.value);
+      return false;
     }
     case 'lessThan': {
       const a = Number(actual);
       const b = Number(settings.value);
       if (!Number.isNaN(a) && !Number.isNaN(b)) return a < b;
-      return strTrim(actual) < strTrim(settings.value);
+      return false;
     }
     case 'isEmpty':
       return isConditionallyEmpty(actual);

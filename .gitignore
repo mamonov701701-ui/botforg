@@ -38,6 +38,10 @@ htmlcov/
 botforg.db
 botforg.db.*
 test_botforg.db
+test_botforg_*.db
+test_botforg_*.db-journal
+test_botforg_*.db-shm
+test_botforg_*.db-wal
 
 # --- Node / Frontend build ---
 node_modules/

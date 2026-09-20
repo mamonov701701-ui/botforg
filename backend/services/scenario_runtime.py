@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from backend.models.scenario import Scenario, SCENARIO_STATUS_PUBLISHED
 from backend.models.event import Event, ScenarioExecution, ScenarioEvent, UserSession
 from backend.models.bot_user_state import BotUserState
+from backend.services.scenario_flow.block_contracts import discover_start_node
 
 
 logger = logging.getLogger(__name__)
@@ -124,15 +125,30 @@ class ScenarioRuntime:
         content = self._get_execution_content(scenario)
         if not content or "nodes" not in content:
             return None
-        
-        for node in content["nodes"]:
-            node_data = node.get("data", {})
-            if node_data.get("blockId") == "start":
-                return node
-        
-        # Если нет блока start, возвращаем первый узел
-        nodes = content.get("nodes", [])
-        return nodes[0] if nodes else None
+
+        start, diagnostic = discover_start_node(content)
+        if diagnostic:
+            raise ScenarioRuntimeError(f"Invalid scenario start: {diagnostic}")
+        return start
+
+    @staticmethod
+    def is_terminal_node(node: Dict[str, Any] | None) -> bool:
+        """Canonical End stops general runtime execution independently of edges."""
+        data = (node or {}).get("data") or {}
+        return isinstance(data, dict) and str(data.get("blockId", "")).lower() == "end"
+
+    def get_next_node(self, scenario: Scenario, node: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Resolve the next node while preserving legacy no-edge termination."""
+        if self.is_terminal_node(node):
+            return None
+        content = self._get_execution_content(scenario) or {}
+        node_id = str(node.get("id"))
+        edges = content.get("edges") if isinstance(content.get("edges"), list) else []
+        target_id = next(
+            (str(edge.get("target")) for edge in edges if isinstance(edge, dict) and str(edge.get("source")) == node_id),
+            None,
+        )
+        return self.get_node_by_id(scenario, target_id) if target_id else None
     
     def get_node_by_id(self, scenario: Scenario, node_id: str) -> Optional[Dict[str, Any]]:
         """Найти узел по ID"""
@@ -401,4 +417,3 @@ def process_go_to_scenario_block(
     """
     runtime = ScenarioRuntime(db)
     return runtime.execute_go_to_scenario(context, block_settings)
-

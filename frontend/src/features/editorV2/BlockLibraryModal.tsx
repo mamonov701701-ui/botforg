@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { nanoid } from 'nanoid';
 import { ROLE_NAMES } from '../../constants/roles';
+import { blockFieldDisplayLabel, blockFieldTypeLabel } from '../../utils/blockCatalogPresentation';
 
 // Category names mapping
 const CATEGORY_LABELS: Record<string, string> = {
@@ -64,7 +65,7 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
   }, [hoverTimeout]);
 
   const visibleCatalog = useMemo(
-    () => getFilteredCatalog(),
+    () => getFilteredCatalog().filter(block => block.id !== 'variable' && block.id !== 'action'),
     [catalog, searchQuery, getFilteredCatalog]
   );
 
@@ -500,9 +501,6 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                     <div style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
                       {selectedBlock.title}
                     </div>
-                    <div style={{ fontSize: 12, color: '#9ca3af' }}>
-                      Идентификатор: {selectedBlock.id}
-                    </div>
                   </div>
                 </div>
 
@@ -534,10 +532,11 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                           }}
                         >
                           <div style={{ color: '#fff', fontWeight: 600 }}>
-                            {param.label || param.name}
+                            {blockFieldDisplayLabel(selectedBlock.id, param)}
                           </div>
                           <div style={{ color: '#9ca3af', fontSize: 11 }}>
-                            {param.type} {param.required ? '(обязательно)' : '(опционально)'}
+                            {blockFieldTypeLabel(param.type)}{' '}
+                            {param.required ? '(обязательно)' : '(необязательно)'}
                           </div>
                         </div>
                       ))}

@@ -5,12 +5,13 @@ Pytest configuration and shared fixtures for backend tests.
 import os
 import sys
 import uuid
+import re
 from unittest.mock import Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import create_engine, event, select
+from sqlalchemy.orm import close_all_sessions, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Ensure we can import the FastAPI app from backend/main.py
@@ -22,16 +23,39 @@ if PROJECT_ROOT not in sys.path:
 # Do NOT insert BACKEND_DIR: it creates a second top-level `models` package
 # (models.user.User vs backend.models.user.User) and breaks SQLAlchemy mappers.
 
-# Use file-based test DB so Alembic can run migrations (includes token_version)
-_test_db_path = os.path.abspath(os.path.join(PROJECT_ROOT, "test_botforg.db"))
+# Pytest can load this file as top-level ``conftest`` while many legacy tests
+# import helpers through ``backend.tests.conftest``.  Without the alias Python
+# executes this module twice, creating a second engine/database and replacing
+# the app dependency override.  The autouse reset then cleans one database
+# while requests and test sessions use the other, leaking rows between tests.
+sys.modules.setdefault("backend.tests.conftest", sys.modules[__name__])
+
+# Use one file-based DB per pytest run/xdist worker so another pytest process
+# cannot delete or migrate a database while this process still uses it.
+_test_run_id = os.environ.get("BOTFORG_TEST_RUN_ID") or uuid.uuid4().hex
+_test_worker_id = os.environ.get("PYTEST_XDIST_WORKER") or f"pid{os.getpid()}"
+_safe_test_run_id = re.sub(r"[^a-zA-Z0-9_-]", "_", _test_run_id)
+_safe_test_worker_id = re.sub(r"[^a-zA-Z0-9_-]", "_", _test_worker_id)
+_test_db_path = os.path.abspath(
+    os.path.join(PROJECT_ROOT, f"test_botforg_{_safe_test_run_id}_{_safe_test_worker_id}.db")
+)
+_dev_db_path = os.path.abspath(os.path.join(PROJECT_ROOT, "botforg.db"))
+if os.path.normcase(_test_db_path) == os.path.normcase(_dev_db_path):
+    raise RuntimeError("Refusing to use the development database as a test database")
 TEST_DATABASE_URL = "sqlite:///" + _test_db_path.replace("\\", "/")
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["TESTING"] = "true"
 # Enable mock /me/plan and /billing/quota for existing tests (non-production).
 os.environ.setdefault("ALLOW_DEV_TARIFF_FULFILLMENT", "true")
 
+# Import after setting DATABASE_URL.  Alembic's env.py reads the singleton
+# settings object, so pin it too before importing backend.database/app.
+from backend.settings import settings  # noqa: E402
+settings.DATABASE_URL = TEST_DATABASE_URL
+from backend.payments.registry import clear_provider_cache  # noqa: E402
+
 # Import after setting DATABASE_URL
-from backend.database import Base, get_db  # noqa: E402
+from backend.database import Base, engine as app_engine, get_db  # noqa: E402
 import backend.models  # noqa: F401 - ensure all models registered with Base
 from backend.main import app  # noqa: E402
 from backend.auth.rate_limit import rate_limit_store  # noqa: E402
@@ -59,6 +83,13 @@ test_engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+# Plans are migration-managed reference data.  Snapshot exactly the rows at
+# head, then restore that baseline for every test instead of retaining plans
+# created by earlier tests.
+from backend.models.plan import Plan  # noqa: E402
+with test_engine.connect() as _seed_connection:
+    _PLAN_SEED_ROWS = [dict(row) for row in _seed_connection.execute(select(Plan.__table__)).mappings()]
 
 
 def activate_test_subscription(db, user, plan_code: str):
@@ -96,7 +127,16 @@ def activate_test_subscription(db, user, plan_code: str):
 
 def pytest_sessionfinish(session, exitstatus):
     """Close DB connections to avoid PermissionError on Windows."""
+    close_all_sessions()
     test_engine.dispose()
+    app_engine.dispose()
+    try:
+        if os.path.exists(_test_db_path):
+            os.remove(_test_db_path)
+    except OSError:
+        # A failed test process can leave a handle behind on Windows; the next
+        # run has its own path and never reuses this database.
+        pass
 
 
 def override_get_db():
@@ -111,32 +151,50 @@ def override_get_db():
 app.dependency_overrides[get_db] = override_get_db
 
 
-@pytest.fixture(scope="function")
-def client():
-    """Create a TestClient with isolated test database."""
+@pytest.fixture(scope="function", autouse=True)
+def reset_test_database():
+    """Reset the run-specific test database for every test, even without client."""
     # Clear rate limit store
     rate_limit_store.clear()
+    # Providers are cached process-globally.  A previous test may have built a
+    # provider while settings/env were monkeypatched or its DB connection existed.
+    clear_provider_cache()
     
-    # Clear all data before each test (only tables that exist in migrated DB)
-    # Исключаем plans — справочные данные, не очищаем.
-    # Один connection + отключение FK на SQLite, иначе остаются orphans (reuse user id=1 → лимит ботов).
+    # Clear all data before each test, then restore only the migration-managed
+    # plan baseline.  Retaining arbitrary plans leaked test state across tests.
+    # One connection + disabled FKs on SQLite avoids leftover orphans.
     from sqlalchemy import inspect, text
 
     inspector = inspect(test_engine)
     existing_tables = set(inspector.get_table_names())
-    skip_tables = {"plans"}
     with test_engine.begin() as conn:
         if conn.dialect.name == "sqlite":
             conn.execute(text("PRAGMA foreign_keys=OFF"))
         for table in reversed(Base.metadata.sorted_tables):
-            if table.name in existing_tables and table.name not in skip_tables:
+            if table.name in existing_tables:
                 conn.execute(text(f"DELETE FROM {table.name}"))
+        if _PLAN_SEED_ROWS:
+            conn.execute(Plan.__table__.insert(), _PLAN_SEED_ROWS)
         if conn.dialect.name == "sqlite":
             conn.execute(text("PRAGMA foreign_keys=ON"))
+
+    yield
+
+    # Do not let a provider built during this test survive monkeypatch teardown
+    # into the next test's clean database.
+    clear_provider_cache()
+
+
+@pytest.fixture(scope="function")
+def client():
+    """Create a TestClient backed by the function-isolated test database."""
+    # Clear rate limit store
+    rate_limit_store.clear()
     
     # Patch rate limiter to do nothing
     with patch("backend.auth.email_routes.check_rate_limit", lambda req, action: None):
-        yield TestClient(app)
+        with TestClient(app) as test_client:
+            yield test_client
 
 
 def register_and_get_token(client: TestClient) -> str:

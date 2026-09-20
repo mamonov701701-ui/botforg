@@ -261,8 +261,8 @@ export function validateInputAnswer(
 
   switch (vt) {
     case 'number': {
-      if (!/^\d+$/.test(text)) {
-        return { ok: false, message: s.error_message?.trim() || 'Введите только цифры' };
+      if (!/^-?\d+(?:\.\d+)?$/.test(text)) {
+        return { ok: false, message: s.error_message?.trim() || 'Ожидается число' };
       }
       const n = Number(text);
       return { ok: true, storedValue: n, lastInputText: text };

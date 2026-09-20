@@ -19,6 +19,8 @@ import {
   Landmark,
   Menu,
   Scale,
+  LibraryBig,
+  Boxes,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { ROLE_NAMES, type SectionKey } from '../../constants/roles';
@@ -38,6 +40,8 @@ interface NavItem {
     | 'platform_analytics'
     | 'platform_finance'
     | 'platform_legal'
+    | 'platform_blocks'
+    | 'block_library'
     | 'account_legal';
   label: string;
   path: string;
@@ -61,6 +65,13 @@ const PROJECT_NAV_ITEMS: NavItem[] = [
     label: 'Шаблоны',
     path: '/dashboard/templates',
     icon: FileText,
+    mode: 'projects',
+  },
+  {
+    id: 'block_library',
+    label: 'Библиотека блоков',
+    path: '/dashboard/block-library',
+    icon: LibraryBig,
     mode: 'projects',
   },
   {
@@ -129,6 +140,13 @@ const PLATFORM_NAV_ITEMS: NavItem[] = [
     label: 'Финансы',
     path: '/dashboard/platform/finance',
     icon: Landmark,
+    mode: 'platform',
+  },
+  {
+    id: 'platform_blocks',
+    label: 'Управление блоками',
+    path: '/dashboard/platform/blocks',
+    icon: Boxes,
     mode: 'platform',
   },
   {

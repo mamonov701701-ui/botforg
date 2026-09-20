@@ -295,6 +295,23 @@
     ]
   },
   {
+    "id": "set_variable",
+    "title": "Установить переменную",
+    "category": "system",
+    "description": "Сохраняет значение в переменной текущего сценария.",
+    "icon": "🗄️",
+    "color": "#673AB7",
+    "planAccess": ["free", "pro", "enterprise"],
+    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
+    "configSchema": [
+      {"name": "key", "type": "string", "label": "Имя переменной", "required": true, "description": "Только lowercase snake_case, например order_total."},
+      {"name": "value", "type": "text", "label": "Значение", "required": false},
+      {"name": "value_type", "type": "select", "label": "Тип значения", "required": true, "default": "string", "options": [{"value": "string", "label": "Текст"}, {"value": "number", "label": "Число"}, {"value": "boolean", "label": "true / false"}, {"value": "json", "label": "JSON"}]},
+      {"name": "interpolation", "type": "boolean", "label": "Разрешить подстановку переменных", "required": false, "default": false},
+      {"name": "overwrite", "type": "boolean", "label": "Перезаписывать существующее значение", "required": false, "default": true}
+    ]
+  },
+  {
     "id": "variable",
     "title": "Переменная",
     "category": "system",
@@ -376,5 +393,16 @@
         "description": "Можно ввести строку подстановки последнего ответа пользователя из подсказки редактора к этому полю."
       }
     ]
+  }
+  ,{
+    "id": "end",
+    "title": "Завершение",
+    "category": "basic",
+    "description": "Явно завершает текущую ветку сценария.",
+    "icon": "⏹️",
+    "color": "#64748B",
+    "planAccess": ["free", "pro", "enterprise"],
+    "permissions": ["owner", "admin", "manager_template", "developer", "support", "viewer"],
+    "configSchema": []
   }
 ]

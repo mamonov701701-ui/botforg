@@ -6,13 +6,14 @@
  * тогда логирует "Couldn't create edge for target handle id: 'left'" и рёбра ломаются.
  */
 import type { Node, Edge } from 'reactflow';
+import { BLOCK_CONNECTION_CONTRACT, getNodeBlockCode } from './blockContracts';
 
 export function getNodeHandleSets(node: Node): {
   targetHandles: Set<string>;
   sourceHandles: Set<string>;
 } {
   const data: any = node.data || {};
-  const blockId = (data.blockId || data.type || '').toString().toLowerCase();
+  const blockId = getNodeBlockCode(node as Node);
   const isStart = blockId === 'start';
   const isMessage = blockId === 'message';
   const isInput = blockId === 'input';
@@ -21,8 +22,14 @@ export function getNodeHandleSets(node: Node): {
 
   if (isStart) {
     return {
-      targetHandles: new Set(['top']),
+      targetHandles: new Set(),
       sourceHandles: new Set(['bottom']),
+    };
+  }
+  if (blockId === 'end') {
+    return {
+      targetHandles: new Set(['top', 'left']),
+      sourceHandles: new Set(),
     };
   }
   if (isMessage && hasButtons) {
@@ -81,9 +88,15 @@ function normalizeOneEdge(edge: Edge, byId: Map<string, Node>): Edge {
 
   if (src) {
     const s = getNodeHandleSets(src);
-    const srcBlock = ((src.data as any)?.blockId || (src.data as any)?.type || '')
-      .toString()
-      .toLowerCase();
+    const srcBlock = getNodeBlockCode(src);
+    if (
+      BLOCK_CONNECTION_CONTRACT[srcBlock as keyof typeof BLOCK_CONNECTION_CONTRACT]?.outgoingMax ===
+      0
+    ) {
+      // Keep persisted invalid End edges intact so preview/publish can report
+      // them instead of converting them into a valid-looking connection.
+      return { ...edge, sourceHandle, targetHandle: edge.targetHandle };
+    }
     if (
       srcBlock === 'input' &&
       (sourceHandle === 'right' ||
@@ -112,9 +125,7 @@ function normalizeOneEdge(edge: Edge, byId: Map<string, Node>): Edge {
   let targetHandle =
     edge.targetHandle === '' || edge.targetHandle == null ? undefined : edge.targetHandle;
   if (tgt) {
-    const tgtBlock = ((tgt.data as any)?.blockId || (tgt.data as any)?.type || '')
-      .toString()
-      .toLowerCase();
+    const tgtBlock = getNodeBlockCode(tgt);
     if (tgtBlock === 'condition' && targetHandle === 'left') {
       targetHandle = 'top';
     }
@@ -139,12 +150,28 @@ export function listInvalidFlowEdges(nodes: Node[], edges: Edge[]): string[] {
     const th = e.targetHandle && e.targetHandle !== '' ? e.targetHandle : null;
     if (src) {
       const s = getNodeHandleSets(src);
+      const sourceCode = getNodeBlockCode(src);
+      if (
+        BLOCK_CONNECTION_CONTRACT[sourceCode as keyof typeof BLOCK_CONNECTION_CONTRACT]
+          ?.outgoingMax === 0
+      ) {
+        issues.push(
+          `ребро ${e.id}: исходящая связь терминального блока «${sourceCode}» недопустима`
+        );
+      }
       if (sh && !s.sourceHandles.has(sh)) {
         issues.push(`ребро ${e.id}: несовместимый sourceHandle «${sh}»`);
       }
     }
     if (tgt) {
       const t = getNodeHandleSets(tgt);
+      const targetCode = getNodeBlockCode(tgt);
+      if (
+        BLOCK_CONNECTION_CONTRACT[targetCode as keyof typeof BLOCK_CONNECTION_CONTRACT]
+          ?.incomingMax === 0
+      ) {
+        issues.push(`ребро ${e.id}: входящая связь блока «${targetCode}» недопустима`);
+      }
       if (th && !t.targetHandles.has(th)) {
         issues.push(`ребро ${e.id}: несовместимый targetHandle «${th}»`);
       }

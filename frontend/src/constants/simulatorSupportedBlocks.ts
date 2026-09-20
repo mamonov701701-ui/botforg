@@ -10,6 +10,7 @@ export const SIMULATOR_SUPPORTED_BLOCK_IDS = [
   'action',
   'go_to_scenario',
   'variable',
+  'set_variable',
   'wait',
 ] as const;
 

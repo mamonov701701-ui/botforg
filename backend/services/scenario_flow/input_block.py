@@ -97,8 +97,9 @@ def validate_input_answer(
 
     if vt == "number":
         try:
-            normalized = text.replace(",", ".")
-            n = float(normalized)
+            if not re.fullmatch(r"-?\d+(?:\.\d+)?", text):
+                raise ValueError
+            n = float(text)
             if n != n:  # NaN
                 raise ValueError
             return True, None, n

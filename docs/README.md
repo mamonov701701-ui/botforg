@@ -1,12 +1,24 @@
 # BotForg Documentation
 
+- [Custom Block Lifecycle](architecture/custom-block-lifecycle.md) — CURRENT / CANONICAL: immutable versions, passport, archive/restore and EditorV2 references.
+- [Custom Block Engineering Contract](development/CUSTOM_BLOCK_ENGINEERING.md) — правила добавления и версионирования типов.
+- [Как создать свой блок](user/CUSTOM_BLOCKS.md) — пользовательский lifecycle и мастер.
+
 ## CURRENT / CANONICAL
 
 These documents are the technical source of truth for their domains. Where an older stage document conflicts, the canonical document wins.
 
 ### Architecture
+- [Block Contracts Foundation](architecture/block-contracts.md) — 7.6A.1/7.6A.2 canonical contracts, Start/End runtime semantics and validation boundaries.
 - [AI Credits Architecture (архитектура ИИ-кредитов)](architecture/ai-credits.md) — credits, ledger, buckets, allocations and provider boundary.
 - [AI Provider Layer](architecture/ai-provider-layer.md) — canonical provider-neutral routing, invocation accounting and reserve → call → settle lifecycle.
+
+### Development
+- [Block Engineering Contract](development/BLOCK_ENGINEERING_CONTRACT.md) — required production block layers, parity, legacy and future Passport rules.
+- [Block Library UI](BLOCK_LIBRARY_FRONTEND.md) — canonical user/admin catalog surfaces and their data-source boundaries.
+
+### User guides
+- [Библиотека блоков](user/BLOCK_LIBRARY.md) — поиск, инструкции и переход в редактор.
 
 ### Billing
 - [Effective Entitlement (фактические права пользователя)](billing/effective-entitlement.md) — base-plan resolver and legacy boundary.

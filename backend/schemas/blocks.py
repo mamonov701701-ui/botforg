@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
@@ -89,6 +90,14 @@ class BlockCatalogItem(BaseModel):
         default=False,
         description="Если true — блок не показывается в редакторе и API каталога",
     )
+    source: str = "system"
+    stableBlockId: Optional[str] = None
+    blockVersionId: Optional[int] = None
+    version: Optional[int] = None
+    lifecycleStatus: Optional[str] = None
+    runtimeBlockId: Optional[str] = None
+    passport: Optional[Dict[str, Any]] = None
+    userGuide: Optional[Dict[str, Any]] = None
 
     @field_validator("planAccess")
     @classmethod
@@ -113,3 +122,52 @@ class BlockCatalogResponse(BaseModel):
     blocks: List[BlockCatalogItem]
     total: int
     filtered: bool = Field(default=False, description="Была ли применена фильтрация")
+
+
+class CustomBlockDraftPayload(BaseModel):
+    title: str = ""
+    description: str = ""
+    purpose: str = ""
+    when_to_use: str = ""
+    category: str = "custom"
+    inputs: List[Dict[str, Any]] = Field(default_factory=list)
+    outputs: List[Dict[str, Any]] = Field(default_factory=list)
+    config_schema: List[BlockConfigField] = Field(default_factory=list)
+    connection_rules: Dict[str, Any] = Field(default_factory=lambda: {"max_inputs": 1, "max_outputs": 1})
+    runtime_compatibility: str = "message"
+    simulator_compatibility: bool = True
+    supported_channels: List[str] = Field(default_factory=lambda: ["telegram"])
+    limitations: List[str] = Field(default_factory=list)
+    examples: List[str] = Field(default_factory=list)
+    user_guide: Dict[str, Any] = Field(default_factory=dict)
+    internal_code: Optional[str] = None
+    runtime_definition: Dict[str, Any] = Field(default_factory=lambda: {"kind": "message"})
+
+
+class CustomBlockVersionOut(BaseModel):
+    id: int
+    stable_block_id: str
+    owner_user_id: int
+    version: int
+    parent_version_id: Optional[int] = None
+    status: str
+    status_label: str
+    title: str
+    description: str
+    category: str
+    passport: Dict[str, Any]
+    user_guide: Dict[str, Any]
+    runtime_kind: str
+    runtime_definition: Dict[str, Any]
+    validation_result: Optional[Dict[str, Any]] = None
+    usage_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+    published_at: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
+
+
+class CustomBlockValidationOut(BaseModel):
+    valid: bool
+    errors: List[str]
+    warnings: List[str]

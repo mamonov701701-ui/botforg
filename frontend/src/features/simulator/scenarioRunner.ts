@@ -1,5 +1,6 @@
 import type { Node, Edge } from 'reactflow';
 import { normalizeScenarioEdges } from '../../utils/flowHandleCompatibility';
+import { discoverStartNode } from '../../utils/blockContracts';
 import {
   findMessageButtonByPayload,
   normalizeMessageButtonAction,
@@ -18,6 +19,7 @@ import {
 } from '../../utils/inputBlock';
 import { evaluateConditionSettings, resolveConditionYesNoEdges } from '../../utils/conditionBlock';
 import { normalizeActionSettings } from '../../utils/actionBlock';
+import { convertSetVariableValue, normalizeSetVariableSettings } from '../../utils/setVariable';
 
 /**
  * Формальная модель исполнения сценария для симулятора.
@@ -34,7 +36,9 @@ export type NodeKind =
   | 'action'
   | 'go_to_scenario'
   | 'variable'
+  | 'set_variable'
   | 'wait'
+  | 'end'
   | 'unknown';
 
 export interface SimulatorMessage {
@@ -245,7 +249,7 @@ function pickConditionTargetId(context: RuntimeContext, node: Node): string | nu
       ? evaluateTagConditionForPreview(settings, context.variables)
       : evaluateConditionSettings(settings, conditionCompareValue(context, settings));
   if (condOk) return yesEdge?.target ?? null;
-  return noEdge?.target ?? yesEdge?.target ?? null;
+  return noEdge?.target ?? null;
 }
 
 function ctxFromState(state: SimulatorState): RuntimeContext {
@@ -262,19 +266,13 @@ function ctxFromState(state: SimulatorState): RuntimeContext {
 }
 
 export function findStartNode(nodes: Node[]): Node | null {
-  const explicit = nodes.find(n => {
-    const data: any = n.data || {};
-    return data.blockId === 'start' || data.type === 'start';
-  });
-  if (explicit) return explicit;
-  if (nodes.length === 0) return null;
-  return nodes[0];
+  return discoverStartNode(nodes).node;
 }
 
 function getNodeKind(node?: Node | null): NodeKind {
   if (!node) return 'unknown';
   const data: any = node.data || {};
-  const t = (data.type || data.blockId || '').toString().toLowerCase();
+  const t = (data.blockId || data.type || '').toString().toLowerCase();
   if (t === 'start') return 'start';
   if (t === 'message') return 'message';
   if (t === 'input') return 'input';
@@ -282,7 +280,9 @@ function getNodeKind(node?: Node | null): NodeKind {
   if (t === 'action') return 'action';
   if (t === 'go_to_scenario') return 'go_to_scenario';
   if (t === 'variable') return 'variable';
+  if (t === 'set_variable') return 'set_variable';
   if (t === 'wait') return 'wait';
+  if (t === 'end') return 'end';
   return 'unknown';
 }
 
@@ -326,15 +326,6 @@ function appendExecutionTrace(
     note: entry.note || '',
   });
   return { ...variables, [PREVIEW_EXECUTION_TRACE_VARIABLE]: list };
-}
-
-function findExplicitStartNode(nodes: Node[]): Node | null {
-  return (
-    nodes.find(n => {
-      const data: any = n.data || {};
-      return data.blockId === 'start' || data.type === 'start';
-    }) || null
-  );
 }
 
 /** Старт без текста и без кнопок не показываем в чате (как в мессенджере: вход сразу в первый шаг). */
@@ -524,9 +515,23 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
     if (context.history.length > 0) {
       return { context, waitingForUser: false };
     }
-    const start = findStartNode(graph.nodes);
+    const startResult = discoverStartNode(graph.nodes);
+    const start = startResult.node;
     if (!start) {
-      return { context, waitingForUser: false };
+      return {
+        context: {
+          ...context,
+          history: [
+            ...context.history,
+            systemLine(
+              `Не удалось определить стартовый блок: ${startResult.diagnostic || 'missing_start'}.`,
+              'error'
+            ),
+          ],
+        },
+        waitingForUser: false,
+        stopReason: 'Некорректный стартовый блок',
+      };
     }
     const kind = getNodeKind(start);
     const msg = buildMessageFromNode(start, kind, context);
@@ -694,6 +699,34 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
     case 'action': {
       const data: any = node.data || {};
       const settings: any = data.settings || {};
+      const legacyVariable = normalizeSetVariableSettings(settings, 'action');
+      if (legacyVariable) {
+        try {
+          const value = convertSetVariableValue(
+            legacyVariable,
+            text => renderForSimulator(text, context).renderedText
+          );
+          const vars =
+            legacyVariable.overwrite ||
+            !Object.prototype.hasOwnProperty.call(context.variables, legacyVariable.key)
+              ? { ...context.variables, [legacyVariable.key]: value }
+              : context.variables;
+          return {
+            context: {
+              ...context,
+              variables: vars,
+              currentNodeId: resolveNextNodeId({ ...context, variables: vars }, node, {}),
+            },
+            waitingForUser: false,
+          };
+        } catch (error) {
+          return {
+            context: { ...context, currentNodeId: null },
+            waitingForUser: false,
+            stopReason: error instanceof Error ? error.message : 'Некорректное значение переменной',
+          };
+        }
+      }
       const normalized = normalizeActionSettings(settings);
       let vars = context.variables;
 
@@ -799,20 +832,35 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
       return { context, waitingForUser: false };
     }
 
+    case 'set_variable':
     case 'variable': {
       const data: any = node.data || {};
       const settings: any = data.settings || {};
-      const varName: string | undefined = settings.name;
-      const raw = settings.value;
-      let value = raw;
-      if (raw === '$lastUserInput') {
-        value = context.lastUserInput ?? null;
+      const normalized = normalizeSetVariableSettings(settings, kind);
+      if (!normalized)
+        return {
+          context: { ...context, currentNodeId: null },
+          waitingForUser: false,
+          stopReason: 'Некорректные настройки переменной',
+        };
+      let value: unknown;
+      try {
+        value = convertSetVariableValue(
+          normalized,
+          text => renderForSimulator(text, context).renderedText
+        );
+      } catch (error) {
+        return {
+          context: { ...context, currentNodeId: null },
+          waitingForUser: false,
+          stopReason: error instanceof Error ? error.message : 'Некорректное значение переменной',
+        };
       }
       let vars = context.variables;
-      if (varName) {
+      if (normalized.overwrite || !Object.prototype.hasOwnProperty.call(vars, normalized.key)) {
         vars = {
           ...context.variables,
-          [varName]: value,
+          [normalized.key]: value,
         };
       }
       const nextId = resolveNextNodeId({ ...context, variables: vars }, node, {});
@@ -821,7 +869,7 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
         hist = [
           ...hist,
           systemLine(
-            'В сценарии нет перехода после блока «Переменная». Подключите исходящую связь.',
+            'В сценарии нет перехода после блока «Установить переменную». Ветка завершена.',
             'error'
           ),
         ];
@@ -895,8 +943,8 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
         entry = normalizedTarget.nodes.some(n => n.id === targetNodeId) ? targetNodeId : null;
       }
       if (!entry) {
-        const st = findExplicitStartNode(normalizedTarget.nodes);
-        entry = st?.id ?? null;
+        const st = discoverStartNode(normalizedTarget.nodes);
+        entry = st.node?.id ?? null;
       }
 
       if (!entry) {
@@ -961,6 +1009,14 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
         waitingForUser: false,
         deadEndFromStart: nextId === null,
         stopReason: nextId === null ? 'Нет исходящего ребра из стартового блока' : undefined,
+      };
+    }
+
+    case 'end': {
+      return {
+        context: { ...context, currentNodeId: null },
+        waitingForUser: false,
+        stopReason: 'Сценарий завершён блоком «Завершение»',
       };
     }
 

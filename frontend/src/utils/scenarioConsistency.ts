@@ -14,6 +14,8 @@ import {
 } from './inputBlock';
 import { validateNodeSettings } from './schemaValidation';
 import { collectLocalInputVariables } from './scenarioVariableSuggestions';
+import { BLOCK_CONNECTION_CONTRACT, getNodeBlockCode } from './blockContracts';
+import { validateSetVariableSettings } from './setVariable';
 
 /** Поля профиля user.* — зеркало backend message_template/diagnostics USER_PROFILE_PLACEHOLDER_FIELDS */
 const USER_PROFILE_PLACEHOLDER_FIELDS = new Set([
@@ -38,6 +40,7 @@ export type ScenarioDiagnosticCode =
   | 'ConditionUnknownVariable'
   | 'ConditionTooManyBranches'
   | 'ConditionSecondBranchMissing'
+  | 'BlockConnectionContractViolation'
   | 'MissingOutgoingEdge'
   | 'RequiredFieldMissing';
 
@@ -145,6 +148,41 @@ export function validateScenarioConsistency(
     const block = blockByNodeId.get(node.id);
     const settings = (node.data?.settings || {}) as Record<string, unknown>;
     const title = (node.data?.title as string) || block?.title || blockId || node.id;
+    const contract =
+      BLOCK_CONNECTION_CONTRACT[
+        getNodeBlockCode(node as Node) as keyof typeof BLOCK_CONNECTION_CONTRACT
+      ];
+    const outgoingForContract = getOutgoingEdges(edges, node.id);
+    const incomingForContract = edges.filter(edge => edge.target === node.id);
+
+    if (contract?.outgoingMax === 0 && outgoingForContract.length > 0) {
+      diags.push({
+        severity: 'error',
+        blockId: node.id,
+        code: 'BlockConnectionContractViolation',
+        message: `Блок «${title}»: из терминального блока нельзя создавать исходящие связи`,
+      });
+    }
+    if (contract?.incomingMax === 0 && incomingForContract.length > 0) {
+      diags.push({
+        severity: 'error',
+        blockId: node.id,
+        code: 'BlockConnectionContractViolation',
+        message: `Блок «${title}»: входящие связи недопустимы`,
+      });
+    }
+    if (
+      contract?.outgoingMax != null &&
+      contract.outgoingMax > 0 &&
+      outgoingForContract.length > contract.outgoingMax
+    ) {
+      diags.push({
+        severity: 'error',
+        blockId: node.id,
+        code: 'BlockConnectionContractViolation',
+        message: `Блок «${title}»: допускается не более ${contract.outgoingMax} исходящей связи`,
+      });
+    }
 
     if (blockId === 'input') {
       const migrated = migrateInputNodeSettings({ ...settings });
@@ -189,6 +227,19 @@ export function validateScenarioConsistency(
           code: 'RequiredFieldMissing',
           message: `Блок «${title}»: ${msg}`,
           meta: { fieldLabel: msg },
+        });
+      }
+    }
+
+    if (blockId === 'set_variable') {
+      const error = validateSetVariableSettings(settings);
+      if (error) {
+        diags.push({
+          severity: 'error',
+          blockId: node.id,
+          code: 'RequiredFieldMissing',
+          message: `Блок «${title}»: ${error}`,
+          meta: { fieldLabel: error },
         });
       }
     }

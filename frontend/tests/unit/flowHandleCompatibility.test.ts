@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import type { Node, Edge } from 'reactflow';
 import {
+  getNodeHandleSets,
   normalizeScenarioEdges,
   listInvalidFlowEdges,
-  getNodeHandleSets,
 } from '@/utils/flowHandleCompatibility';
 
 function n(id: string, blockId: string, extra: { buttons?: { label: string }[] } = {}): Node {
@@ -21,9 +21,14 @@ function n(id: string, blockId: string, extra: { buttons?: { label: string }[] }
 }
 
 describe('flowHandleCompatibility', () => {
-  it('start node only exposes top target and bottom source', () => {
+  it('renders End as terminal and Start without an incoming handle', () => {
+    expect(getNodeHandleSets(n('end', 'end')).sourceHandles.size).toBe(0);
+    expect(getNodeHandleSets(n('end', 'end')).targetHandles.has('top')).toBe(true);
+    expect(getNodeHandleSets(n('start', 'start')).targetHandles.size).toBe(0);
+  });
+  it('start node only exposes bottom source', () => {
     const sets = getNodeHandleSets(n('s', 'start'));
-    expect([...sets.targetHandles]).toEqual(['top']);
+    expect([...sets.targetHandles]).toEqual([]);
     expect([...sets.sourceHandles]).toEqual(['bottom']);
   });
 
@@ -51,11 +56,15 @@ describe('flowHandleCompatibility', () => {
     expect(out[0].targetHandle).toBe('top');
   });
 
-  it('normalizes targetHandle left -> top for start node', () => {
+  it('reports persisted invalid connections involving Start and End', () => {
     const nodes = [n('s', 'start')];
-    const edges: Edge[] = [{ id: 'e1', source: 'a', target: 's', targetHandle: 'left' } as Edge];
-    const out = normalizeScenarioEdges(nodes, edges);
-    expect(out[0].targetHandle).toBe('top');
+    const startIssues = listInvalidFlowEdges(nodes, [
+      { id: 'e1', source: 'a', target: 's' } as Edge,
+    ]);
+    expect(startIssues.some(issue => issue.includes('входящая связь'))).toBe(true);
+    const end = n('e', 'end');
+    const endIssues = listInvalidFlowEdges([end], [{ id: 'e2', source: 'e', target: 'x' } as Edge]);
+    expect(endIssues.some(issue => issue.includes('терминального'))).toBe(true);
   });
 
   it('maps invalid source bottom on message+buttons to button_0', () => {

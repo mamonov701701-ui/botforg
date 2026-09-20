@@ -570,25 +570,22 @@ export default function BlockSettingsPanel({
             <div style={{ opacity: 0.7, fontSize: 13, lineHeight: 1.4, marginBottom: 4 }}>
               {block.description}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ opacity: 0.5, fontSize: 11 }}>ID: {selectedNode.id}</span>
-              {hasChanges && !isReadOnly && (
-                <span
-                  style={{
-                    fontSize: 10,
-                    padding: '2px 6px',
-                    background: 'rgba(251, 191, 36, 0.15)',
-                    color: '#fbbf24',
-                    borderRadius: 999,
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.3,
-                  }}
-                >
-                  Локальные изменения
-                </span>
-              )}
-            </div>
+            {hasChanges && !isReadOnly && (
+              <span
+                style={{
+                  fontSize: 10,
+                  padding: '2px 6px',
+                  background: 'rgba(251, 191, 36, 0.15)',
+                  color: '#fbbf24',
+                  borderRadius: 999,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.3,
+                }}
+              >
+                Локальные изменения
+              </span>
+            )}
           </div>
           {/* Header buttons */}
           <div style={{ display: 'flex', gap: 4 }}>

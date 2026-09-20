@@ -3,6 +3,7 @@ import type { Node, Edge } from 'reactflow';
 import {
   createInitialRuntimeContext,
   createInitialSimulatorState,
+  findStartNode,
   stepFromCurrentNode,
   applyUserChoice,
   completeWaitStep,
@@ -61,6 +62,51 @@ describe('scenarioRunner execution model', () => {
     };
     const ctx = createInitialRuntimeContext(graph);
     expect(ctx.currentNodeId).toBe('n0');
+  });
+
+  it('fails closed for a canonical graph without exactly one Start and preserves legacy fallback', () => {
+    expect(findStartNode([node('m', 'message')])).toBeNull();
+    expect(findStartNode([node('s1', 'start'), node('s2', 'start')])).toBeNull();
+    const legacy = [{ id: 'old', type: 'message', position: { x: 0, y: 0 }, data: {} } as Node];
+    expect(findStartNode(legacy)?.id).toBe('old');
+  });
+
+  it('End terminates without following a persisted outgoing edge', () => {
+    const graph: ScenarioGraph = {
+      nodes: [node('end', 'end'), node('after', 'message', { text: 'must not run' })],
+      edges: [edge('invalid', 'end', 'after')],
+    };
+    const result = stepFromCurrentNode(S(graph, { currentNodeId: 'end' }));
+    expect(result.context.currentNodeId).toBeNull();
+    expect(result.stopReason).toContain('Завершение');
+    expect(result.context.history).toHaveLength(0);
+  });
+
+  it('Set Variable writes typed values, respects overwrite, and Condition reads the value', () => {
+    const graph: ScenarioGraph = {
+      nodes: [
+        node('set', 'set_variable', { key: 'route', value: '2', value_type: 'number' }),
+        node('condition', 'condition', { variable: 'route', operator: 'equals', value: '2' }),
+        node('yes', 'end'),
+        node('no', 'end'),
+      ],
+      edges: [
+        edge('a', 'set', 'condition'),
+        edge('y', 'condition', 'yes', { sourceHandle: 'condition_yes' }),
+        edge('n', 'condition', 'no', { sourceHandle: 'condition_no' }),
+      ],
+    };
+    const first = stepFromCurrentNode(S(graph, { currentNodeId: 'set' }));
+    expect(first.context.variables.route).toBe(2);
+    expect(first.context.currentNodeId).toBe('condition');
+    expect(stepFromCurrentNode({ ...S(graph), ...first.context }).context.currentNodeId).toBe(
+      'yes'
+    );
+    graph.nodes[0].data.settings.overwrite = false;
+    const preserved = stepFromCurrentNode(
+      S(graph, { currentNodeId: 'set', variables: { route: 7 } })
+    );
+    expect(preserved.context.variables.route).toBe(7);
   });
 
   it('message node with buttons waits for user', () => {

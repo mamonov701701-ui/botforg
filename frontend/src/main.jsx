@@ -46,6 +46,12 @@ import PlatformLegalPage from './features/dashboard/pages/PlatformLegalPage';
 import AccountLegalPage from './features/dashboard/pages/AccountLegalPage';
 import UserDetailPage from './features/dashboard/pages/UserDetailPage';
 import MessagesPage from './features/dashboard/pages/MessagesPage';
+import BlockLibraryPage from './features/dashboard/pages/BlockLibraryPage';
+import BlockLibraryDetailPage from './features/dashboard/pages/BlockLibraryDetailPage';
+import PlatformBlocksPage from './features/dashboard/pages/PlatformBlocksPage';
+import CustomBlockWizardPage from './features/dashboard/pages/CustomBlockWizardPage';
+import CustomBlockCreationGuidePage from './features/dashboard/pages/CustomBlockCreationGuidePage';
+import CustomBlockVersionDetailPage from './features/dashboard/pages/CustomBlockVersionDetailPage';
 import {
   LegalArchiveRoute,
   LegalDocumentRoute,
@@ -174,6 +180,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="scenarios/:scenarioId" element={<ScenarioDetailPage />} />
             <Route path="templates" element={<TemplatesPage />} />
+            <Route path="block-library" element={<BlockLibraryPage />} />
+            <Route path="block-library/create" element={<CustomBlockWizardPage />} />
+            <Route path="block-library/guide/create" element={<CustomBlockCreationGuidePage />} />
+            <Route
+              path="block-library/custom/:versionId/edit"
+              element={<CustomBlockWizardPage />}
+            />
+            <Route
+              path="block-library/custom/:versionId"
+              element={<CustomBlockVersionDetailPage />}
+            />
+            <Route path="block-library/:blockId" element={<BlockLibraryDetailPage />} />
             <Route path="finance" element={<TariffLimitsPage />} />
             <Route path="finance/purchases" element={<MyPurchasesPage />} />
             <Route path="finance/purchases/:purchaseId" element={<PurchaseDetailPage />} />
@@ -221,6 +239,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="platform/users/:userId" element={<UserDetailPage />} />
             <Route path="platform/analytics" element={<PlatformAnalyticsPage />} />
             <Route path="platform/finance" element={<PlatformFinancePage />} />
+            <Route path="platform/blocks" element={<PlatformBlocksPage />} />
             <Route path="platform/legal" element={<PlatformLegalPage />} />
             <Route path="platform/settings" element={<SettingsPage />} />
           </Route>

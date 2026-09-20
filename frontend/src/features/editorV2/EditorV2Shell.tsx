@@ -54,9 +54,15 @@ import ValidationModal from './ValidationModal';
 import ExportConfirmModal from './ExportConfirmModal';
 import BlockLibraryModal from './BlockLibraryModal';
 import { normalizeScenarioEdges } from '../../utils/flowHandleCompatibility';
+import { connectionContractViolation, getNodeBlockCode } from '../../utils/blockContracts';
 import { ensureConditionEdgeBranches } from '../../utils/conditionBlock';
 import { actionSummaryText, normalizeActionSettings } from '../../utils/actionBlock';
 import { resolveNewNodePosition } from './utils/nodePlacement';
+import {
+  catalogBlockDefaultSettings,
+  catalogBlockRuntimeId,
+  customBlockNodeSnapshot,
+} from '../../utils/blockCatalogNode';
 
 // Connection line component - временная линия при создании соединения
 const ConnectionLine = ({
@@ -125,6 +131,7 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
         ? 'Выбор'
         : (data?.title ?? 'Блок');
   const isStartNode = data?.blockId === 'start';
+  const isEndNode = data?.blockId === 'end';
   const isMessageNode = data?.blockId === 'message';
   const isInputNode = data?.blockId === 'input';
   const isConditionNode = data?.blockId === 'condition';
@@ -216,27 +223,9 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
         /* Убираем isolation: 'isolate' чтобы handles могли быть выше границы */
       }}
     >
-      {/* Для стартового блока - только 2 Handle (сверху и снизу) */}
+      {/* Start has only an outgoing handle; End has only an incoming handle. */}
       {isStartNode ? (
         <>
-          {/* Top - входящий (зелёный) */}
-          <Handle
-            id="top"
-            type="target"
-            position={Position.Top}
-            isConnectable={true}
-            style={{
-              background: '#00ff00',
-              width: 19.4,
-              height: 19.4,
-              border: '3px solid #fff',
-              top: -9.7,
-              zIndex: 10000,
-              transition: 'all 0.2s ease',
-            }}
-            className="react-flow__handle-visible"
-          />
-          {/* Bottom - исходящий (оранжевый) */}
           <Handle
             id="bottom"
             type="source"
@@ -254,6 +243,23 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             className="react-flow__handle-visible"
           />
         </>
+      ) : isEndNode ? (
+        <Handle
+          id="top"
+          type="target"
+          position={Position.Top}
+          isConnectable={true}
+          style={{
+            background: '#00ff00',
+            width: 19.4,
+            height: 19.4,
+            border: '3px solid #fff',
+            top: -9.7,
+            zIndex: 10000,
+            transition: 'all 0.2s ease',
+          }}
+          className="react-flow__handle-visible"
+        />
       ) : isMessageNode && hasButtons ? (
         /* Для блока message с кнопками - только входной хэндл сверху,
            выходы будут от самих кнопок */
@@ -2131,9 +2137,24 @@ function InnerEditor() {
       }
 
       const sourceNode = nodes.find(n => n.id === params.source);
+      const targetNode = nodes.find(n => n.id === params.target);
+      const currentEdges = edgesRef.current;
+      const violation = connectionContractViolation(
+        getNodeBlockCode(sourceNode),
+        getNodeBlockCode(targetNode),
+        currentEdges.filter(edge => edge.source === params.source).length
+      );
+      if (violation) {
+        const message = {
+          end_outgoing: 'Из блока «Завершение» нельзя создать исходящую связь',
+          start_incoming: 'У блока «Начало» не может быть входящей связи',
+          start_outgoing: 'У блока «Начало» может быть только одна исходящая связь',
+        }[violation];
+        showToast(message, 'warning');
+        return;
+      }
       const isConditionSource = sourceNode?.data?.blockId === 'condition';
       // Берём актуальные рёбра из ref, чтобы не назначать ветки по устаревшему snapshot.
-      const currentEdges = edgesRef.current;
       const existingFromSource = currentEdges.filter(e => e.source === params.source);
       let conditionBranch: 'true' | 'false' | undefined;
       if (isConditionSource) {
@@ -2266,7 +2287,8 @@ function InnerEditor() {
       // Get current plan and role from store
       const { plan, role } = useEditorStore.getState();
 
-      if (!isSimulatorSupportedBlockId(block.id)) {
+      const runtimeBlockId = catalogBlockRuntimeId(block);
+      if (!isSimulatorSupportedBlockId(runtimeBlockId)) {
         showToast('Этот тип блока не поддерживается в редакторе и предпросмотре', 'error');
         return;
       }
@@ -2292,13 +2314,15 @@ function InnerEditor() {
           nodes: nds,
           fallbackCenter: position,
         });
+        const customDefaults = catalogBlockDefaultSettings(block);
         const newNode: Node = {
           id: nanoid(),
           type: 'default',
           position: resolvedPosition,
           data: {
-            blockId: block.id,
-            title: block.id === 'condition' ? 'Выбор' : block.title,
+            blockId: runtimeBlockId,
+            ...customBlockNodeSnapshot(block),
+            title: runtimeBlockId === 'condition' ? 'Выбор' : block.title,
             icon: block.icon,
             color: block.color,
             settings:
@@ -2320,7 +2344,17 @@ function InnerEditor() {
                       tag: '',
                       message: '',
                     }
-                  : {},
+                  : block.id === 'set_variable'
+                    ? {
+                        key: '',
+                        value: '',
+                        value_type: 'string',
+                        interpolation: false,
+                        overwrite: true,
+                      }
+                    : block.source === 'custom'
+                      ? customDefaults
+                      : {},
           },
           style: {
             borderColor: block.color,

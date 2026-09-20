@@ -4,7 +4,7 @@ export { message } from './blocks/message';
 export { input } from './blocks/input';
 export { choice } from './blocks/choice';
 export { userData } from './blocks/user-data';
-export { variable } from './blocks/variable';
+export { variable, variable as setVariable } from './blocks/variable';
 export { wait } from './blocks/wait';
 
 export { contacts } from './crm/contacts';

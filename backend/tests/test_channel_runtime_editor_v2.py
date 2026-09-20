@@ -44,8 +44,13 @@ def test_find_start_node_by_is_start_when_no_start_block():
     assert start["id"] == "a"
 
 
-def test_find_start_node_fallback_first_node():
+def test_find_start_node_canonical_missing_start_returns_none():
     nodes = [{"id": "only", "type": "default", "data": {"blockId": "message"}}]
+    assert _find_start_node(nodes) is None
+
+
+def test_find_start_node_legacy_fallback_first_node():
+    nodes = [{"id": "only", "type": "message", "data": {}}]
     start = _find_start_node(nodes)
     assert start is not None
     assert start["id"] == "only"

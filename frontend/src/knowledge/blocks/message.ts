@@ -142,7 +142,7 @@ export const message: KnowledgeEntity = {
     'Есть переход к следующему шагу.',
   ],
 
-  related: ['blocks.input', 'blocks.choice', 'blocks.variable', 'blocks.wait'],
+  related: ['blocks.input', 'blocks.choice', 'blocks.set_variable', 'blocks.wait'],
 
   entry: ['Редактор сценария → Добавить блок → Сообщение'],
 

@@ -6,6 +6,7 @@ import { BlockCatalogItem, PlanType, RoleType } from '../types/blocks';
 import { fetchBlocksCatalog } from '../api/blocks';
 import { isSimulatorSupportedBlockId } from '../constants/simulatorSupportedBlocks';
 import { mergeClientCatalogBlocks } from '../constants/clientCatalogMerge';
+import { catalogBlockRuntimeId } from '../utils/blockCatalogNode';
 
 export type ToastType = 'info' | 'warning' | 'error' | 'success';
 
@@ -277,7 +278,9 @@ export const useEditorStore = create<EditorStore>()(
         const { catalog, searchQuery } = get();
         let list = catalog.filter(
           block =>
-            isSimulatorSupportedBlockId(block.id) && !block.disabled && !isBlockedLegacyBlock(block)
+            isSimulatorSupportedBlockId(catalogBlockRuntimeId(block)) &&
+            !block.disabled &&
+            !isBlockedLegacyBlock(block)
         );
 
         if (!searchQuery.trim()) return list;
@@ -295,7 +298,7 @@ export const useEditorStore = create<EditorStore>()(
         return catalog.filter(
           block =>
             favoriteBlockIds.includes(block.id) &&
-            isSimulatorSupportedBlockId(block.id) &&
+            isSimulatorSupportedBlockId(catalogBlockRuntimeId(block)) &&
             !isBlockedLegacyBlock(block) &&
             !block.disabled
         );
@@ -308,7 +311,7 @@ export const useEditorStore = create<EditorStore>()(
           .filter(
             (block): block is BlockCatalogItem =>
               block !== undefined &&
-              isSimulatorSupportedBlockId(block.id) &&
+              isSimulatorSupportedBlockId(catalogBlockRuntimeId(block)) &&
               !isBlockedLegacyBlock(block) &&
               !block.disabled
           );

@@ -3,8 +3,8 @@
  * All endpoints use the unified HTTP client with proper error handling
  */
 
-import { get } from './client';
-import { BlockCatalogItem } from '../types/blocks';
+import { del, get, post, put } from './client';
+import { BlockCatalogItem, CustomBlockDraftPayload, CustomBlockVersion } from '../types/blocks';
 
 import { apiOrigin } from './devApiOrigin';
 
@@ -68,6 +68,37 @@ export async function fetchBlocksCatalog(
   return get(url);
 }
 
+/** Полный read-only каталог для платформенной админки. */
+export async function fetchAdminBlocksCatalog(): Promise<BlockCatalogItem[]> {
+  return get('/blocks/admin-catalog');
+}
+
 export async function fetchCategories(): Promise<string[]> {
   return get('/blocks/categories');
 }
+
+export const fetchMyCustomBlocks = (): Promise<CustomBlockVersion[]> => get('/blocks/custom/mine');
+export const fetchAllCustomBlocksAdmin = (): Promise<CustomBlockVersion[]> =>
+  get('/blocks/custom/admin');
+export const fetchCustomBlock = (id: number): Promise<CustomBlockVersion> =>
+  get(`/blocks/custom/${id}`);
+export const createCustomBlockDraft = (
+  payload: CustomBlockDraftPayload
+): Promise<CustomBlockVersion> => post('/blocks/custom/drafts', payload);
+export const updateCustomBlockDraft = (
+  id: number,
+  payload: CustomBlockDraftPayload
+): Promise<CustomBlockVersion> => put(`/blocks/custom/${id}`, payload);
+export const validateCustomBlock = (
+  id: number
+): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> =>
+  post(`/blocks/custom/${id}/validate`, {});
+export const publishCustomBlock = (id: number): Promise<CustomBlockVersion> =>
+  post(`/blocks/custom/${id}/publish`, {});
+export const createCustomBlockVersion = (id: number): Promise<CustomBlockVersion> =>
+  post(`/blocks/custom/${id}/versions`, {});
+export const archiveCustomBlock = (id: number): Promise<CustomBlockVersion> =>
+  post(`/blocks/custom/${id}/archive`, {});
+export const restoreCustomBlock = (id: number): Promise<CustomBlockVersion> =>
+  post(`/blocks/custom/${id}/restore`, {});
+export const deleteCustomBlockDraft = (id: number): Promise<void> => del(`/blocks/custom/${id}`);

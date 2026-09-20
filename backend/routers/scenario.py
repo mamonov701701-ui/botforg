@@ -23,6 +23,8 @@ from backend.models.bot import Bot
 from backend.models.event import ScenarioExecution
 from backend.utils.bot_access import check_bot_access, check_bot_edit_permission
 from backend.utils.plan_limits import check_can_publish
+from backend.services.scenario_flow.block_contracts import validate_canonical_graph
+from backend.services.custom_blocks import content_version_ids, validate_scenario_custom_block_references
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -323,6 +325,7 @@ def create_scenario(
                 Scenario.is_main == True
             ).update({"is_main": False})
     
+    validate_scenario_custom_block_references(db, scenario_data.content or {"nodes": [], "edges": []})
     # Создаем сценарий
     scenario = Scenario(
         user_id=current_user.id,
@@ -424,6 +427,12 @@ def update_scenario(
     # Обновляем поля
     update_data = scenario_data.model_dump(exclude_unset=True)
     content_updated = "content" in update_data
+    if content_updated:
+        validate_scenario_custom_block_references(
+            db,
+            update_data.get("content"),
+            previously_referenced=content_version_ids(scenario.content),
+        )
     
     for field, value in update_data.items():
         setattr(scenario, field, value)
@@ -704,6 +713,16 @@ def publish_scenario(
             detail="Нет содержимого для публикации. Сохраните черновик сначала."
         )
 
+    diagnostics = validate_canonical_graph(scenario.content)
+    # Legacy content remains executable through its existing compatibility path.
+    # Canonical and unsafe mixed content must not be published with ambiguous
+    # start or terminal semantics.
+    if diagnostics and diagnostics != ["legacy_content"]:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "block_contract_invalid", "diagnostics": diagnostics},
+        )
+
     scenario.published_content = scenario.content
     scenario.status = "published"
     _create_scenario_version(scenario, db, version_type=VERSION_TYPE_PUBLISHED)
@@ -815,4 +834,3 @@ def use_scenario_in_bot(
     db.refresh(bot_scenario)
     setattr(bot_scenario, "usage_bots_count", 0)
     return bot_scenario
-

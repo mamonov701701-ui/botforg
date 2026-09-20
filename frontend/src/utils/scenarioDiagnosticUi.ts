@@ -21,6 +21,7 @@ const CODE_TITLES: Record<ScenarioDiagnosticCode, string> = {
   ConditionUnknownVariable: 'Неизвестное значение для блока «Выбор»',
   ConditionTooManyBranches: 'Слишком много веток у блока «Выбор»',
   ConditionSecondBranchMissing: 'Нет второй ветки у блока «Выбор»',
+  BlockConnectionContractViolation: 'Недопустимое соединение блоков',
   MissingOutgoingEdge: 'Нет исходящей связи',
   RequiredFieldMissing: 'Обязательное поле',
 };

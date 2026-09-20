@@ -21,6 +21,7 @@
 
 import type { Node, Edge } from 'reactflow';
 import { migrateInputNodeSettings } from './inputBlock';
+import { normalizeBlockCode } from './blockContracts';
 
 /**
  * Нормализованный вид одного runtime‑узла.
@@ -96,7 +97,9 @@ export function normalizeNodeForRuntime(node: Node): RuntimeNode {
 
   return {
     id: node.id,
-    blockId: String(data.blockId || data.type || 'unknown'),
+    blockId:
+      normalizeBlockCode(data.blockId || data.type) ||
+      String(data.blockId || data.type || 'unknown'),
     title: typeof data.title === 'string' ? data.title : undefined,
     settings: settings as Record<string, unknown>,
   };

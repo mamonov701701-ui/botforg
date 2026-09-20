@@ -22,6 +22,12 @@ from backend.services.scenario_flow.input_block import (
     pick_error_target_id,
     pick_success_target_id,
 )
+from backend.services.scenario_flow.block_contracts import discover_start_node
+from backend.services.scenario_flow.set_variable import (
+    SetVariableSettingsError,
+    convert_value,
+    settings_from_node,
+)
 from backend.utils.ctor_bot_resolve import ensure_ctor_bot_id, resolve_ctor_bot_id
 
 STATE_NODE_KEY = "sys_runtime_node_id"
@@ -75,19 +81,8 @@ def resolve_node_kind(node: dict[str, Any]) -> str:
 
 
 def _find_start_node(nodes: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
-    for node in nodes:
-        data = node.get("data") or {}
-        if not isinstance(data, dict):
-            data = {}
-        if str(data.get("blockId", "")).lower() == "start":
-            return node
-    for node in nodes:
-        data = node.get("data") or {}
-        if not isinstance(data, dict):
-            data = {}
-        if data.get("is_start") is True:
-            return node
-    return nodes[0] if nodes else None
+    start, _diagnostic = discover_start_node({"nodes": nodes})
+    return start
 
 
 def _edge_label(edge: dict[str, Any]) -> str:
@@ -206,6 +201,38 @@ def _apply_action(
                 user.status = "active"
                 db.commit()
                 mark_crm_overview_dirty(user.bot_id, user.environment)
+
+
+def _apply_set_variable(
+    db: Session, *, ctor_user_id: int, block_code: str, settings: dict[str, Any]
+) -> bool:
+    """Apply canonical or safe legacy variable mutation; invalid data never no-ops."""
+    try:
+        contract = settings_from_node(block_code, settings)
+        if contract is None:
+            return False
+        value = convert_value(
+            contract,
+            lambda text: render_outbound_message_text(
+                db, bot_user_id=ctor_user_id, template_text=text, session_id=None
+            ),
+        )
+    except SetVariableSettingsError:
+        return False
+    vs = VariableService(db)
+    if not contract.overwrite:
+        existing = vs.get_user_variable_by_key(ctor_user_id, contract.key)
+        if existing.ok and existing.data and any(
+            value is not None
+            for value in (
+                existing.data.value_text,
+                existing.data.value_number,
+                existing.data.value_boolean,
+                existing.data.value_json,
+            )
+        ):
+            return True
+    return bool(vs.set_user_variable(ctor_user_id, contract.key, value, commit=True).ok)
 
 
 def _condition_is_empty(value: Any) -> bool:
@@ -415,6 +442,11 @@ def process_channel_update(
     button_label = user_text
     next_node: Optional[dict[str, Any]] = None
     current_kind = resolve_node_kind(current)
+    if current_kind == "end":
+        # End is an explicit terminal: persisted invalid outgoing edges must
+        # not cause a fallback transition during channel execution.
+        vs.set_user_variable(user.id, STATE_NODE_KEY, "", commit=True)
+        return
     outgoing = _next_edges(edges, str(current.get("id")))
 
     if current_kind == "input":
@@ -458,13 +490,25 @@ def process_channel_update(
     while next_node and guard < max_steps:
         guard += 1
         transit_kind = resolve_node_kind(next_node)
-        if transit_kind == "action":
-            _apply_action(
+        if transit_kind == "end":
+            next_node = None
+        elif transit_kind in {"set_variable", "variable"}:
+            if not _apply_set_variable(
                 db,
                 ctor_user_id=user.id,
+                block_code=transit_kind,
                 settings=((next_node.get("data") or {}).get("settings") or {}),
-                last_input_text=user_text,
-            )
+            ):
+                next_node = None
+                continue
+            out2 = _next_edges(edges, str(next_node.get("id")))
+            next_node = _find_node(nodes, str(out2[0].get("target"))) if out2 else None
+        elif transit_kind == "action":
+            action_settings = ((next_node.get("data") or {}).get("settings") or {})
+            if not _apply_set_variable(
+                db, ctor_user_id=user.id, block_code="action", settings=action_settings
+            ):
+                _apply_action(db, ctor_user_id=user.id, settings=action_settings, last_input_text=user_text)
             out2 = _next_edges(edges, str(next_node.get("id")))
             next_node = _find_node(nodes, str(out2[0].get("target"))) if out2 else None
         elif transit_kind == "condition":

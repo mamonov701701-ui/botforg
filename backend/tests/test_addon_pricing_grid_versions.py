@@ -17,7 +17,12 @@ from backend.tests.addon_pricing_grid_seed import (
     clear_pricing_grids,
     seed_active_message_grid,
 )
-from backend.tests.conftest import TestingSessionLocal, get_user_id, register_and_get_token
+from backend.tests.conftest import (
+    TestingSessionLocal,
+    get_user_id,
+    register_and_get_token,
+    reset_test_database,
+)
 
 
 @pytest.fixture
@@ -43,7 +48,7 @@ def _auth_owner(client, db):
 
 
 @pytest.fixture(autouse=True)
-def _clean(db):
+def _clean(reset_test_database, db):
     clear_pricing_grids(db)
     yield
     clear_pricing_grids(db)

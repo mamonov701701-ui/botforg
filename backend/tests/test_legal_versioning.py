@@ -647,7 +647,7 @@ def test_migration_head_includes_legal_versioning(db):
     )
     script = ScriptDirectory.from_config(cfg)
     heads = set(script.get_heads())
-    assert "ai_provider_layer_042" in heads
-    assert rev == "ai_provider_layer_042"
+    assert "custom_block_lifecycle_043" in heads
+    assert rev == "custom_block_lifecycle_043"
     all_revs = {r.revision for r in script.walk_revisions()}
     assert "legal_versioning_029" in all_revs
