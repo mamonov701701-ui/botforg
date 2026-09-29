@@ -180,6 +180,16 @@ const BlockCard: React.FC<BlockCardProps> = ({
       >
         {highlight(block.description)}
       </div>
+      <div
+        style={{
+          marginTop: 6,
+          paddingLeft: 26,
+          fontSize: 10,
+          color: block.source === 'custom' ? '#c4b5fd' : '#93c5fd',
+        }}
+      >
+        {block.source === 'custom' ? 'Пользовательский' : 'Системный'}
+      </div>
       {(block.planAccess || block.permissions) && (
         <div
           style={{

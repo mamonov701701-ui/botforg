@@ -7,6 +7,7 @@
  */
 import type { Node, Edge } from 'reactflow';
 import { BLOCK_CONNECTION_CONTRACT, getNodeBlockCode } from './blockContracts';
+import { customBlockConnectionContract } from './customBlockConnections';
 
 export function getNodeHandleSets(node: Node): {
   targetHandles: Set<string>;
@@ -19,6 +20,14 @@ export function getNodeHandleSets(node: Node): {
   const isInput = blockId === 'input';
   const buttons = isMessage && Array.isArray(data.settings?.buttons) ? data.settings.buttons : [];
   const hasButtons = buttons.length > 0;
+
+  if (blockId === 'custom') {
+    const contract = customBlockConnectionContract(data.customBlockPassport);
+    return {
+      targetHandles: contract.inputCount === 1 ? new Set(['top']) : new Set(),
+      sourceHandles: new Set(contract.outputs.map(output => output.name)),
+    };
+  }
 
   if (isStart) {
     return {

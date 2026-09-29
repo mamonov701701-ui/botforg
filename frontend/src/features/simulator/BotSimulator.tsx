@@ -7,6 +7,7 @@ import {
   runUntilUserPauseOrEnd,
   applyUserChoice,
   completeWaitStep,
+  applyServerCustomResult,
   findStartNode,
   PREVIEW_USER_FIELDS_VARIABLE,
   PREVIEW_USER_STATUS_VARIABLE,
@@ -19,7 +20,13 @@ import { normalizeScenarioEdges, listInvalidFlowEdges } from '../../utils/flowHa
 import { getVisiblePreviewHistory } from './historyVisibility';
 import { crmPreviewSync, validateTagKey } from '../../api/botCrm';
 import { post, ApiError } from '../../api/client';
+import { previewCustomBlockExecution } from '../../api/blocks';
 import { toast } from '../../utils/toast';
+import {
+  previewHandleCompatibilityNotice,
+  previewPreparationFailure,
+  customPreviewErrorMessage,
+} from './previewPreparation';
 
 interface BotSimulatorProps {
   isOpen: boolean;
@@ -68,8 +75,39 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
   const simRef = useRef<SimulatorState | null>(null);
   const isOpenRef = useRef(isOpen);
   const lastPreviewSyncSignatureRef = useRef<string>('');
+  const customPreviewInFlightRef = useRef<string | null>(null);
   simRef.current = simState;
   isOpenRef.current = isOpen;
+
+  useEffect(() => {
+    if (!isOpen || !simState || stopReason !== '__custom_server__') return;
+    const node: any = simState.graph.nodes.find(n => n.id === simState.currentNodeId);
+    const data = node?.data;
+    if (!data?.customBlockVersionId || customPreviewInFlightRef.current === node.id) return;
+    customPreviewInFlightRef.current = node.id;
+    void previewCustomBlockExecution(Number(data.customBlockVersionId), {
+      stableBlockId: String(data.customBlockStableId || ''),
+      version: Number(data.customBlockVersion || 0),
+      input:
+        data.settings?.input && typeof data.settings.input === 'object' ? data.settings.input : {},
+      settings: Object.fromEntries(
+        Object.entries(data.settings || {}).filter(([key]) => key !== 'input')
+      ),
+    })
+      .then(result => {
+        const applied = applyServerCustomResult(simState, result);
+        const continued = runUntilUserPauseOrEnd(contextToSimulatorState(applied.context));
+        setSimState(contextToSimulatorState(continued.context));
+        setWaitingForUser(Boolean(continued.waitingForUser));
+        setStopReason(continued.stopReason ?? null);
+      })
+      .catch(error => {
+        setFatalPreviewError(customPreviewErrorMessage(error));
+      })
+      .finally(() => {
+        customPreviewInFlightRef.current = null;
+      });
+  }, [isOpen, simState, stopReason]);
 
   const previewBundle = useMemo(() => {
     const graphsByScenarioId: Record<number, ScenarioGraph> = {};
@@ -143,9 +181,11 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     const stepResult = runUntilUserPauseOrEnd(initial);
     const ctx = stepResult?.context;
 
-    if (!ctx) {
+    const preparationFailure = previewPreparationFailure(nodes, handleIssues, stepResult);
+    if (!ctx || preparationFailure) {
       setFatalPreviewError(
-        'Не удалось запустить предпросмотр сценария: не удалось построить состояние выполнения.'
+        preparationFailure ||
+          'Не удалось запустить предпросмотр сценария: не удалось построить состояние выполнения.'
       );
       setHandleCompatNotice(null);
       setTransitionNotice(null);
@@ -161,25 +201,8 @@ const BotSimulator: React.FC<BotSimulatorProps> = ({ isOpen, onClose }) => {
     const w = Boolean(stepResult.waitingForUser);
     setShowManualContinue(Boolean(stepResult.stalledMaxSteps));
 
-    if (nextState.history.length === 0) {
-      setFatalPreviewError(
-        'Не удалось запустить предпросмотр: в сценарии есть некорректные связи или блоки. Проверьте соединения между блоками.'
-      );
-      setHandleCompatNotice(null);
-      setTransitionNotice(null);
-      setSimState(nextState);
-      setWaitingForUser(false);
-      setShowManualContinue(false);
-      setWaitDelayMs(null);
-      return;
-    }
-
     setFatalPreviewError(null);
-    setHandleCompatNotice(
-      handleIssues.length > 0
-        ? 'Часть связей была подстроена под текущий редактор (устаревшие точки подключения).'
-        : null
-    );
+    setHandleCompatNotice(previewHandleCompatibilityNotice(handleIssues));
     setTransitionNotice(
       stepResult.stalledMaxSteps
         ? 'Слишком много шагов подряд — проверьте сценарий на зацикливание (цепочка без ввода пользователя).'

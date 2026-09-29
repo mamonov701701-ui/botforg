@@ -31,6 +31,9 @@ from backend.services.custom_blocks import (
     usage_count,
     validate_version,
 )
+from backend.services.custom_block_execution.service import (
+    ControlledExecutionFailure, execute_version, resolve_authorized_version,
+)
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.orm import Session
 
@@ -263,6 +266,56 @@ def delete_custom_block_draft(
         db.delete(block)
     db.commit()
     return None
+
+
+@router.post("/custom/{version_id}/preview-execution")
+def preview_custom_block_execution(
+    version_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Server-side simulator path. It accepts no scenario graph or platform context."""
+    try:
+        version = resolve_authorized_version(
+            db,
+            scenario_owner_id=current_user.id,
+            version_id=version_id,
+            stable_id=str(payload.get("stableBlockId") or ""),
+            version_number=int(payload.get("version") or 0),
+            existing_reference=True,
+        )
+        result = execute_version(
+            db, version=version, mode="simulator",
+            input_data=payload.get("input") if isinstance(payload.get("input"), dict) else {},
+            settings_data=payload.get("settings") if isinstance(payload.get("settings"), dict) else {},
+        )
+        return {"outputs": result.outputs, "route": result.route, "logs": [item.model_dump() for item in result.logs]}
+    except ControlledExecutionFailure as exc:
+        safe_messages = {
+            "runner_feature_disabled": "Безопасное выполнение кастомных блоков не включено",
+            "runner_url_missing": "Адрес сервиса безопасного выполнения не настроен",
+            "runner_connection_refused": "Сервис безопасного выполнения не принимает соединение",
+            "runner_unavailable": "Сервис безопасного выполнения временно недоступен",
+            "runner_authentication_failed": "Сервис безопасного выполнения настроен неверно",
+            "timeout": "Выполнение кастомного блока превысило допустимое время",
+            "resource_limit": "Кастомный блок превысил допустимые лимиты ресурсов",
+            "policy_violation": "Выполнение остановлено политикой безопасности",
+            "runtime_error": "Пользовательский код завершился с ошибкой",
+            "invalid_output": "Пользовательский код вернул некорректный результат",
+            "validation_error": "Спецификация выполнения кастомного блока некорректна",
+            "authorization_error": "Эта версия кастомного блока недоступна для выполнения",
+        }
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": exc.category,
+                "message": safe_messages.get(
+                    exc.category,
+                    "Выполнение кастомного блока остановлено политикой безопасности",
+                ),
+            },
+        ) from exc
 
 
 @router.get("", response_model=List[BlockCatalogItem])

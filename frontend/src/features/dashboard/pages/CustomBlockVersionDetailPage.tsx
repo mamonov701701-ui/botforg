@@ -4,6 +4,7 @@ import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { fetchCustomBlock } from '../../../api/blocks';
 import type { CustomBlockVersion } from '../../../types/blocks';
+import { customBlockConnectionContract } from '../../../utils/customBlockConnections';
 
 export default function CustomBlockVersionDetailPage() {
   const { versionId } = useParams();
@@ -27,6 +28,8 @@ export default function CustomBlockVersionDetailPage() {
       </DashboardPage>
     );
   const passport = item.passport;
+  const connections = customBlockConnectionContract(passport);
+  const isJavaScript = item.runtime_kind === 'javascript';
   return (
     <DashboardPage
       title={item.title}
@@ -61,11 +64,34 @@ export default function CustomBlockVersionDetailPage() {
           <Card>
             <h2 className="font-semibold">О версии</h2>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Блок отправляет настроенное сообщение и поддерживается в предпросмотре.
+              Выполнение:{' '}
+              {isJavaScript
+                ? 'JavaScript Runtime (изолированное выполнение JavaScript)'
+                : 'Message fallback (резервное выполнение сообщением)'}
+              .
+            </p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Входов: {connections.inputCount}. Выходов: {connections.outputs.length}.
             </p>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Использований в сценариях: {item.usage_count}
             </p>
+          </Card>
+          <Card>
+            <h2 className="font-semibold">Соединения этой версии</h2>
+            {connections.outputs.length ? (
+              <ul className="mt-2 space-y-1 text-sm text-[var(--text-muted)]">
+                {connections.outputs.map(output => (
+                  <li key={output.name}>
+                    {output.display_name} · маршрут <code>{output.name}</code>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Выходов нет: это Terminal Block (терминальный блок).
+              </p>
+            )}
           </Card>
           <Card>
             <h2 className="font-semibold">Ограничения</h2>

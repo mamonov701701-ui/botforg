@@ -38,6 +38,7 @@ export type NodeKind =
   | 'variable'
   | 'set_variable'
   | 'wait'
+  | 'custom'
   | 'end'
   | 'unknown';
 
@@ -282,6 +283,7 @@ function getNodeKind(node?: Node | null): NodeKind {
   if (t === 'variable') return 'variable';
   if (t === 'set_variable') return 'set_variable';
   if (t === 'wait') return 'wait';
+  if (t === 'custom') return 'custom';
   if (t === 'end') return 'end';
   return 'unknown';
 }
@@ -897,6 +899,12 @@ export function stepFromCurrentNode(state: SimulatorState): RunStepResult {
       };
     }
 
+    case 'custom': {
+      // User code is deliberately never evaluated in the browser. BotSimulator
+      // recognizes this marker and calls the server-side preview endpoint.
+      return { context, waitingForUser: false, stopReason: '__custom_server__' };
+    }
+
     case 'go_to_scenario': {
       const settings: any = node.data?.settings || {};
       const targetScenarioId = parseTargetScenarioId(settings.targetScenarioId);
@@ -1064,6 +1072,34 @@ function getActiveScenarioGraph(state: SimulatorState): ScenarioGraph {
   return state.graph;
 }
 
+/** Apply only the already-validated server result; the browser never sees source execution. */
+export function applyServerCustomResult(
+  state: SimulatorState,
+  result: { outputs: Record<string, unknown>; route: string | null }
+): RunStepResult {
+  const graph = getActiveScenarioGraph(state);
+  const node = graph.nodes.find(n => n.id === state.currentNodeId);
+  if (!node || getNodeKind(node) !== 'custom') {
+    return { context: ctxFromState(state), waitingForUser: false };
+  }
+  const edge =
+    result.route == null
+      ? undefined
+      : graph.edges.find(e => e.source === node.id && e.sourceHandle === result.route);
+  const context: RuntimeContext = {
+    ...ctxFromState(state),
+    graph,
+    variables: { ...state.variables, ...result.outputs },
+    currentNodeId: edge?.target ?? null,
+  };
+  return {
+    context,
+    waitingForUser: false,
+    stopReason:
+      result.route == null ? undefined : edge ? undefined : 'Нет связи для выхода кастомного блока',
+  };
+}
+
 /**
  * После реальной задержки в UI: добавить отметку о паузе и перейти к следующему узлу.
  */
@@ -1147,6 +1183,11 @@ export function runUntilUserPauseOrEnd(
       variables: c.variables,
       lastUserInput: c.lastUserInput,
     };
+    // Custom user code is executed only by the Backend Preview API. Stop the
+    // local loop immediately and let BotSimulator cross that server boundary.
+    if (last.stopReason === '__custom_server__') {
+      return last;
+    }
     if (last.waitingForUser) {
       return { ...last, context: c, stopReason: 'Блок ожидает ввод пользователя' };
     }

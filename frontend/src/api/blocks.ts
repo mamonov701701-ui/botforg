@@ -102,3 +102,16 @@ export const archiveCustomBlock = (id: number): Promise<CustomBlockVersion> =>
 export const restoreCustomBlock = (id: number): Promise<CustomBlockVersion> =>
   post(`/blocks/custom/${id}/restore`, {});
 export const deleteCustomBlockDraft = (id: number): Promise<void> => del(`/blocks/custom/${id}`);
+export const previewCustomBlockExecution = (
+  id: number,
+  payload: {
+    stableBlockId: string;
+    version: number;
+    input: Record<string, unknown>;
+    settings: Record<string, unknown>;
+  }
+): Promise<{
+  outputs: Record<string, unknown>;
+  route: string | null;
+  logs: { level: string; message: string }[];
+}> => post(`/blocks/custom/${id}/preview-execution`, payload);

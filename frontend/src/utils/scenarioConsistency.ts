@@ -16,6 +16,7 @@ import { validateNodeSettings } from './schemaValidation';
 import { collectLocalInputVariables } from './scenarioVariableSuggestions';
 import { BLOCK_CONNECTION_CONTRACT, getNodeBlockCode } from './blockContracts';
 import { validateSetVariableSettings } from './setVariable';
+import { resolveNodeCatalogBlock } from './blockCatalogNode';
 
 /** Поля профиля user.* — зеркало backend message_template/diagnostics USER_PROFILE_PLACEHOLDER_FIELDS */
 const USER_PROFILE_PLACEHOLDER_FIELDS = new Set([
@@ -139,8 +140,7 @@ export function validateScenarioConsistency(
 
   const blockByNodeId = new Map<string, BlockCatalogItem | undefined>();
   for (const node of nodes) {
-    const bid = node.data?.blockId as string | undefined;
-    blockByNodeId.set(node.id, bid ? catalog.find(b => b.id === bid) : undefined);
+    blockByNodeId.set(node.id, resolveNodeCatalogBlock(catalog, node.data));
   }
 
   for (const node of nodes) {

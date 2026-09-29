@@ -12,7 +12,7 @@ class ScenarioFormat(StrEnum):
     MIXED_UNSAFE = "mixed_unsafe"
 
 
-CANONICAL_BLOCK_CODES = frozenset({"start", "message", "input", "condition", "set_variable", "end"})
+CANONICAL_BLOCK_CODES = frozenset({"start", "message", "input", "condition", "set_variable", "custom", "end"})
 LEGACY_ALIASES = {"variable": "set_variable", "button": "message", "action": "action"}
 CONDITION_HANDLES = frozenset({"condition_yes", "condition_no"})
 
@@ -22,6 +22,9 @@ BLOCK_CONTRACTS = {
     "input": {"terminal": False, "incoming_max": None, "outgoing_max": None, "handles": frozenset({"success", "error"}), "required_settings": frozenset({"variable_key"}), "reads": frozenset(), "writes": frozenset({"variable"})},
     "condition": {"terminal": False, "incoming_max": None, "outgoing_max": 2, "handles": CONDITION_HANDLES, "required_settings": frozenset({"variable", "operator"}), "reads": frozenset({"variable"}), "writes": frozenset()},
     "set_variable": {"terminal": False, "incoming_max": None, "outgoing_max": 1, "handles": frozenset(), "required_settings": frozenset({"key", "value"}), "reads": frozenset(), "writes": frozenset({"variable"})},
+    # Exact version and declared output routes are validated against the DB by
+    # custom-block validation, never inferred from node data alone.
+    "custom": {"terminal": False, "incoming_max": None, "outgoing_max": None, "handles": frozenset(), "required_settings": frozenset(), "reads": frozenset(), "writes": frozenset({"variable"})},
     "end": {"terminal": True, "incoming_max": None, "outgoing_max": 0, "handles": frozenset(), "required_settings": frozenset(), "reads": frozenset(), "writes": frozenset()},
 }
 

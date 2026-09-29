@@ -59,6 +59,11 @@ class CustomBlockVersion(Base):
     user_guide = Column(JSON, nullable=False)
     runtime_kind = Column(String(48), nullable=False, default="message")
     runtime_definition = Column(JSON, nullable=False)
+    # A schema-bound execution artifact for javascript versions.  Legacy
+    # message-like blocks intentionally retain a null specification.
+    execution_spec = Column(JSON, nullable=True)
+    execution_artifact_hash = Column(String(64), nullable=True, index=True)
+    execution_state = Column(String(32), nullable=False, default="enabled", index=True)
     validation_result = Column(JSON, nullable=True)
     created_at = Column(DateTime, nullable=False, default=utcnow)
     updated_at = Column(DateTime, nullable=False, default=utcnow, onupdate=utcnow)
@@ -67,3 +72,25 @@ class CustomBlockVersion(Base):
 
     block = relationship("CustomBlock", back_populates="versions", foreign_keys=[custom_block_id])
     parent_version = relationship("CustomBlockVersion", remote_side=[id], foreign_keys=[parent_version_id])
+
+
+class CustomBlockExecutionAudit(Base):
+    """Metadata-only audit trail. Payloads and source code are never stored here."""
+
+    __tablename__ = "custom_block_execution_audits"
+
+    id = Column(Integer, primary_key=True)
+    execution_id = Column(String(64), nullable=False, unique=True, index=True)
+    custom_block_version_id = Column(
+        Integer, ForeignKey("custom_block_versions.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    artifact_hash = Column(String(64), nullable=False)
+    execution_mode = Column(String(16), nullable=False)
+    runner_profile = Column(String(64), nullable=False)
+    status = Column(String(24), nullable=False)
+    error_category = Column(String(32), nullable=True)
+    input_size_bytes = Column(Integer, nullable=False, default=0)
+    output_size_bytes = Column(Integer, nullable=False, default=0)
+    duration_ms = Column(Integer, nullable=True)
+    started_at = Column(DateTime, nullable=False, default=utcnow)
+    finished_at = Column(DateTime, nullable=True)

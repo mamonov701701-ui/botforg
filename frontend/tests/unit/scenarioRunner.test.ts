@@ -7,6 +7,7 @@ import {
   stepFromCurrentNode,
   applyUserChoice,
   completeWaitStep,
+  applyServerCustomResult,
   runUntilUserPauseOrEnd,
   valuesEqualForConditionRoute,
   PREVIEW_USER_TAGS_VARIABLE,
@@ -16,6 +17,11 @@ import {
   type SimulatorState,
   type RuntimeContext,
 } from '../../src/features/simulator/scenarioRunner';
+import {
+  customPreviewErrorMessage,
+  previewHandleCompatibilityNotice,
+  previewPreparationFailure,
+} from '../../src/features/simulator/previewPreparation';
 
 function node(id: string, kind: string, settings: any = {}): Node {
   return {
@@ -531,6 +537,24 @@ describe('valuesEqualForConditionRoute', () => {
 });
 
 describe('preview scenarios (runUntilUserPauseOrEnd)', () => {
+  it.each([
+    ['runner_feature_disabled', 'не включено'],
+    ['runner_url_missing', 'не получил адрес'],
+    ['runner_connection_refused', 'не принимает соединение'],
+    ['runner_unavailable', 'Development Runner'],
+    ['runner_authentication_failed', 'настроен неверно'],
+    ['timeout', 'время выполнения'],
+    ['invalid_output', 'некорректный результат'],
+  ])('shows safe Custom Block preview diagnostics for %s', (code, expected) => {
+    const message = customPreviewErrorMessage({
+      code,
+      message: 'http://internal:8090 secret-token',
+    });
+    expect(message).toContain(expected);
+    expect(message).not.toContain('http://internal:8090');
+    expect(message).not.toContain('secret-token');
+  });
+
   it('A: Start → Message → конец', () => {
     const graph: ScenarioGraph = {
       nodes: [node('s', 'start'), node('m', 'message', { text: 'Привет' })],
@@ -784,5 +808,84 @@ describe('preview scenarios (runUntilUserPauseOrEnd)', () => {
     expect(r.stalledMaxSteps).toBeFalsy();
     expect(r.context.currentNodeId).toBeNull();
     expect(r.context.history.some(m => m.text.includes('нет блока'))).toBe(true);
+  });
+
+  it('Start → exact Custom Block pauses for server preview and follows the returned route', () => {
+    const custom = node('custom-v3', 'custom');
+    custom.data.customBlockVersionId = 43;
+    custom.data.customBlockStableId = 'router';
+    custom.data.customBlockVersion = 3;
+    custom.data.customBlockPassport = {
+      connection_rules: { input_count: 1, output_count: 2 },
+      outputs: [
+        { name: 'success', display_name: 'Успех' },
+        { name: 'error', display_name: 'Ошибка' },
+      ],
+    };
+    const graph: ScenarioGraph = {
+      nodes: [
+        node('start', 'start'),
+        custom,
+        node('success-message', 'message', { text: 'Готово' }),
+        node('error-message', 'message', { text: 'Ошибка' }),
+      ],
+      edges: [
+        edge('start-custom', 'start', 'custom-v3', { sourceHandle: 'bottom', targetHandle: 'top' }),
+        edge('custom-success', 'custom-v3', 'success-message', { sourceHandle: 'success' }),
+        edge('custom-error', 'custom-v3', 'error-message', { sourceHandle: 'error' }),
+      ],
+    };
+
+    const prepared = runUntilUserPauseOrEnd(createInitialSimulatorState(graph));
+    expect(prepared.stopReason).toBe('__custom_server__');
+    expect(prepared.context.currentNodeId).toBe('custom-v3');
+    expect(prepared.context.history).toHaveLength(0);
+    expect(previewPreparationFailure(graph.nodes, [], prepared)).toBeNull();
+
+    const applied = applyServerCustomResult(contextToSim(prepared.context), {
+      outputs: { result: 1 },
+      route: 'success',
+    });
+    expect(applied.context.currentNodeId).toBe('success-message');
+    const completed = runUntilUserPauseOrEnd(contextToSim(applied.context));
+    expect(completed.context.history.some(item => item.text === 'Готово')).toBe(true);
+  });
+
+  it('maps multiple custom routes exactly and rejects an unknown returned route', () => {
+    const graph: ScenarioGraph = {
+      nodes: [
+        node('custom', 'custom'),
+        node('success-target', 'message'),
+        node('error-target', 'message'),
+        node('third-target', 'message'),
+      ],
+      edges: [
+        edge('success-edge', 'custom', 'success-target', { sourceHandle: 'success' }),
+        edge('error-edge', 'custom', 'error-target', { sourceHandle: 'error' }),
+        edge('third-edge', 'custom', 'third-target', { sourceHandle: 'third_route' }),
+      ],
+    };
+    const base = S(graph, { currentNodeId: 'custom' });
+    expect(
+      applyServerCustomResult(base, { outputs: {}, route: 'error' }).context.currentNodeId
+    ).toBe('error-target');
+    expect(
+      applyServerCustomResult(base, { outputs: {}, route: 'third_route' }).context.currentNodeId
+    ).toBe('third-target');
+    const unknown = applyServerCustomResult(base, { outputs: {}, route: 'unknown_route' });
+    expect(unknown.context.currentNodeId).toBeNull();
+    expect(unknown.stopReason).toContain('Нет связи');
+  });
+
+  it('reports the exact edge and handle when preview preparation cannot continue', () => {
+    const graph: ScenarioGraph = { nodes: [node('custom', 'custom')], edges: [] };
+    const result = {
+      context: { ...createInitialRuntimeContext(graph), currentNodeId: 'custom' },
+      waitingForUser: false,
+      stopReason: 'Некорректный маршрут',
+    };
+    const issue = 'ребро edge-7: несовместимый sourceHandle «missing_route»';
+    expect(previewPreparationFailure(graph.nodes, [issue], result)).toContain(issue);
+    expect(previewHandleCompatibilityNotice([issue])).toContain(issue);
   });
 });

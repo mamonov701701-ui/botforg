@@ -125,6 +125,14 @@ class Settings(BaseSettings):
     MAX_WEBHOOK_BASE_URL: str = ""  # https://YOUR_DOMAIN — обязателен в prod для включения канала MAX
     MAX_WEBHOOK_SECRET_LEN: int = 48  # длина генерируемого webhook_secret (A-Za-z0-9_-)
 
+    # Custom Block Execution Runtime (Stage 7.7).  The feature is deliberately
+    # opt-in: an unavailable runner must never fall back to backend execution.
+    CUSTOM_BLOCK_EXECUTION_ENABLED: bool = False
+    CUSTOM_BLOCK_RUNNER_URL: str = ""
+    CUSTOM_BLOCK_RUNNER_TIMEOUT_SECONDS: float = 1.5
+    CUSTOM_BLOCK_RUNNER_SHARED_TOKEN: str = ""
+    CUSTOM_BLOCK_MAX_CONCURRENT_PER_VERSION: int = 2
+
     # WhatsApp Meta Cloud API (Graph API)
     WHATSAPP_GRAPH_API_BASE: str = "https://graph.facebook.com/v19.0"
 

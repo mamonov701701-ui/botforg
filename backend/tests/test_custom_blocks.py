@@ -1,4 +1,5 @@
 from copy import deepcopy
+import re
 
 from backend.models.custom_block import CustomBlockVersion
 from backend.models.scenario import Scenario
@@ -30,6 +31,61 @@ def _valid_payload(title="Подтверждение заказа"):
     }
 
 
+def _javascript_payload(output_count=15):
+    payload = _valid_payload("Маршрутизатор заказа")
+    outputs = [
+        {
+            "name": "success" if index == 0 else f"route_{index + 1}",
+            "display_name": "Успех" if index == 0 else f"Маршрут {index + 1}",
+            "type": "json",
+        }
+        for index in range(output_count)
+    ]
+    payload.update({
+        "outputs": outputs,
+        "config_schema": [],
+        "connection_rules": {
+            "input_count": 1,
+            "output_count": output_count,
+            "max_inputs": 1,
+            "max_outputs": output_count,
+        },
+        "runtime_compatibility": "javascript",
+        "runtime_definition": {"kind": "javascript"},
+        "execution_spec": {
+            "schema_version": 1,
+            "language": "javascript",
+            "runtime_profile": "quickjs-wasm-v1",
+            "source": f"function run(envelope) {{ return {{ outputs: {{}}, route: '{outputs[0]['name']}', logs: [] }}; }}",
+            "inputs": payload["inputs"],
+            "outputs": outputs,
+            "settings_schema": [],
+            "capabilities": {
+                "network": False,
+                "filesystem": False,
+                "secrets": False,
+                "database": False,
+                "persistence": False,
+                "dependencies": False,
+                "subprocess": False,
+                "platform_api": False,
+            },
+            "resource_profile": {
+                "wall_clock_ms": 750,
+                "cpu_ms": 500,
+                "memory_mb": 32,
+                "max_source_bytes": 32768,
+                "max_input_bytes": 16384,
+                "max_output_bytes": 16384,
+                "max_log_entries": 20,
+                "max_log_entry_bytes": 512,
+                "max_log_bytes": 4096,
+            },
+        },
+    })
+    return payload
+
+
 def _create(client, headers, payload=None):
     response = client.post("/blocks/custom/drafts", headers=headers, json=payload or _valid_payload())
     assert response.status_code == 201, response.text
@@ -59,6 +115,166 @@ def test_invalid_draft_cannot_publish(client):
     response = client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={})
     assert response.status_code == 422
     assert "Блок не прошёл проверку" in response.text
+
+
+def test_message_fallback_rejects_multiple_outputs(client):
+    headers = _headers(client)
+    payload = _valid_payload()
+    payload["outputs"] = [
+        {"name": "success", "display_name": "Успех"},
+        {"name": "error", "display_name": "Ошибка"},
+    ]
+    payload["connection_rules"] = {"input_count": 1, "output_count": 2}
+    draft = _create(client, headers, payload)
+    validation = client.post(f"/blocks/custom/{draft['id']}/validate", headers=headers, json={})
+    assert validation.status_code == 200
+    assert validation.json()["valid"] is False
+    assert any("Message fallback" in error for error in validation.json()["errors"])
+    assert client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={}).status_code == 422
+
+
+def test_javascript_mode_round_trip_validates_and_publishes_with_fifteen_outputs(client):
+    headers = _headers(client)
+    draft = _create(client, headers, _valid_payload())
+
+    changed = client.put(
+        f"/blocks/custom/{draft['id']}",
+        headers=headers,
+        json=_javascript_payload(),
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["runtime_kind"] == "javascript"
+    assert changed.json()["runtime_definition"]["kind"] == "javascript"
+    assert changed.json()["execution_spec"]["source"].startswith("function run")
+
+    reloaded = client.get(f"/blocks/custom/{draft['id']}", headers=headers)
+    assert reloaded.status_code == 200
+    assert reloaded.json()["runtime_kind"] == "javascript"
+    assert reloaded.json()["runtime_definition"]["kind"] == "javascript"
+    assert len(reloaded.json()["execution_spec"]["outputs"]) == 15
+
+    validation = client.post(f"/blocks/custom/{draft['id']}/validate", headers=headers, json={})
+    assert validation.json() == {"valid": True, "errors": [], "warnings": []}
+    published = client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={})
+    assert published.status_code == 200, published.text
+    assert published.json()["runtime_kind"] == "javascript"
+
+
+def test_draft_round_trip_preserves_multiline_javascript_and_wizard_step(client):
+    headers = _headers(client)
+    payload = _javascript_payload()
+    source = """function run(envelope) {
+  return {
+    outputs: {},
+    route: "success",
+    logs: []
+  };
+}"""
+    payload["execution_spec"]["source"] = source
+    payload["wizard_step"] = 7
+    draft = _create(client, headers, payload)
+    assert draft["execution_spec"]["source"] == source
+    assert draft["passport"]["wizard_step"] == 7
+    reloaded = client.get(f"/blocks/custom/{draft['id']}", headers=headers).json()
+    assert reloaded["execution_spec"]["source"] == source
+    assert reloaded["passport"]["wizard_step"] == 7
+
+
+def test_too_long_input_display_name_is_sanitized_in_russian(client):
+    headers = _headers(client)
+    payload = _javascript_payload()
+    payload["inputs"][0]["display_name"] = "А" * 97
+    payload["execution_spec"]["inputs"] = payload["inputs"]
+    response = client.post("/blocks/custom/drafts", headers=headers, json=payload)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "слишком длинное" in detail
+    assert "96" in detail
+    assert "String should" not in detail
+
+
+def test_execution_spec_rejects_invalid_input_identifier_without_raw_schema_error(client):
+    headers = _headers(client)
+    payload = _javascript_payload()
+    payload["inputs"] = [{"name": "Текст сообщения", "display_name": "Текст сообщения"}]
+    payload["execution_spec"]["inputs"] = payload["inputs"]
+
+    response = client.post("/blocks/custom/drafts", headers=headers, json=payload)
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail == "Шаг 5 «Выполнение»: некорректный машинный ключ входа 1"
+    assert "pattern" not in detail.lower()
+    assert "^[a-z]" not in detail
+
+
+def test_generated_execution_identifiers_match_backend_contract():
+    payload = _javascript_payload()
+    identifiers = [
+        port["name"]
+        for port in payload["execution_spec"]["inputs"] + payload["execution_spec"]["outputs"]
+    ]
+    assert identifiers
+    assert all(re.fullmatch(r"[a-z][a-z0-9_]*", identifier) for identifier in identifiers)
+
+
+def test_execution_mode_can_toggle_from_javascript_back_to_message(client):
+    headers = _headers(client)
+    draft = _create(client, headers, _javascript_payload())
+    assert client.post(f"/blocks/custom/{draft['id']}/validate", headers=headers, json={}).json()["valid"] is True
+
+    message_payload = _valid_payload("Снова сообщение")
+    changed = client.put(f"/blocks/custom/{draft['id']}", headers=headers, json=message_payload)
+    assert changed.status_code == 200, changed.text
+    assert changed.json()["runtime_kind"] == "message"
+    assert changed.json()["runtime_definition"]["kind"] == "message"
+    assert changed.json()["execution_spec"] is None
+    assert client.post(f"/blocks/custom/{draft['id']}/validate", headers=headers, json={}).json()["valid"] is True
+
+
+def test_message_fallback_with_fifteen_outputs_stays_invalid(client):
+    headers = _headers(client)
+    payload = _valid_payload()
+    payload["outputs"] = _javascript_payload()["outputs"]
+    payload["connection_rules"] = {
+        "input_count": 1,
+        "output_count": 15,
+        "max_inputs": 1,
+        "max_outputs": 15,
+    }
+    draft = _create(client, headers, payload)
+    validation = client.post(f"/blocks/custom/{draft['id']}/validate", headers=headers, json={}).json()
+    assert validation["valid"] is False
+    assert any("Message fallback" in error for error in validation["errors"])
+
+
+def test_server_generates_safe_unique_machine_keys_from_russian_names(client):
+    payload = _valid_payload()
+    payload["outputs"] = [
+        {"name": "Текст сообщения", "display_name": "Текст сообщения"},
+        {"name": "Текст сообщения", "display_name": "Текст сообщения 2"},
+    ]
+    payload["runtime_compatibility"] = "javascript"
+    payload["config_schema"] = []
+    payload["runtime_definition"] = {"kind": "javascript"}
+    payload["connection_rules"] = {"input_count": 1, "output_count": 2}
+    payload["execution_spec"] = {
+        "schema_version": 1,
+        "language": "javascript",
+        "runtime_profile": "quickjs-wasm-v1",
+        "source": "function run(envelope) { return { outputs: {}, route: 'tekst_soobshcheniya', logs: [] }; }",
+        "inputs": payload["inputs"],
+        "outputs": [
+            {"name": "tekst_soobshcheniya", "display_name": "Текст сообщения"},
+            {"name": "tekst_soobshcheniya_2", "display_name": "Текст сообщения 2"},
+        ],
+        "settings_schema": [],
+        "capabilities": {"network": False, "filesystem": False, "secrets": False, "database": False, "persistence": False, "dependencies": False, "subprocess": False, "platform_api": False},
+        "resource_profile": {"wall_clock_ms": 750, "cpu_ms": 500, "memory_mb": 32, "max_source_bytes": 32768, "max_input_bytes": 16384, "max_output_bytes": 16384, "max_log_entries": 20, "max_log_entry_bytes": 512, "max_log_bytes": 4096},
+    }
+    draft = _create(client, _headers(client), payload)
+    assert [port["name"] for port in draft["passport"]["outputs"]] == [
+        "tekst_soobshcheniya", "tekst_soobshcheniya_2",
+    ]
 
 
 def test_owner_only_and_system_code_collision(client):

@@ -54,6 +54,8 @@ import ValidationModal from './ValidationModal';
 import ExportConfirmModal from './ExportConfirmModal';
 import BlockLibraryModal from './BlockLibraryModal';
 import { normalizeScenarioEdges } from '../../utils/flowHandleCompatibility';
+import { customBlockConnectionContract } from '../../utils/customBlockConnections';
+import { CustomBlockNodeContent, customBlockNodeLayout } from './CustomBlockNodeContent';
 import { connectionContractViolation, getNodeBlockCode } from '../../utils/blockContracts';
 import { ensureConditionEdgeBranches } from '../../utils/conditionBlock';
 import { actionSummaryText, normalizeActionSettings } from '../../utils/actionBlock';
@@ -136,6 +138,16 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
   const isInputNode = data?.blockId === 'input';
   const isConditionNode = data?.blockId === 'condition';
   const isActionNode = data?.blockId === 'action';
+  const isCustomNode = data?.blockId === 'custom';
+  const customConnections = isCustomNode
+    ? customBlockConnectionContract(data?.customBlockPassport)
+    : { inputCount: 0 as const, outputs: [] };
+  const customInputCount = customConnections.inputCount;
+  const customRoutes = customConnections.outputs.map(item => ({
+    key: item.name,
+    label: item.display_name,
+  }));
+  const customLayout = customBlockNodeLayout(customRoutes.length);
   const conditionSummary = isConditionNode
     ? conditionSummaryText((data?.settings as Record<string, unknown>) || {})
     : '';
@@ -202,7 +214,7 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
         padding: '16px 20px',
         minWidth: 264,
         maxWidth: 400,
-        minHeight: 72,
+        minHeight: isCustomNode ? customLayout.minHeight : 72,
         color: '#000',
         position: 'relative',
         boxShadow: selected
@@ -215,7 +227,7 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: isCustomNode ? 'flex-start' : 'center',
         overflow: 'visible' /* Разрешаем handles выходить за границы */,
         boxSizing: 'border-box',
         zIndex: 1,
@@ -282,7 +294,7 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
             className="react-flow__handle-visible"
           />
         </>
-      ) : isInputNode ? (
+      ) : isCustomNode ? null : isInputNode ? (
         <>
           <Handle
             id="top"
@@ -481,7 +493,14 @@ const CustomNode = React.memo(({ data, id, selected }: any) => {
         </div>
       )}
 
-      {isConditionNode ? (
+      {isCustomNode ? (
+        <CustomBlockNodeContent
+          title={title}
+          icon={data?.icon}
+          inputCount={customInputCount}
+          routes={customRoutes}
+        />
+      ) : isConditionNode ? (
         <>
           <div
             style={{

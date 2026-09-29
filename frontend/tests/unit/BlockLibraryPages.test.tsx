@@ -56,12 +56,47 @@ const legacyAction = {
   configSchema: [],
 };
 
+const customCatalogBlock = {
+  ...messageBlock,
+  id: 'custom-route',
+  title: 'Пользовательский маршрут',
+  source: 'custom' as const,
+  category: 'basic' as const,
+  configSchema: [],
+};
+
+const ownedVersion = (
+  id: number,
+  title: string,
+  status: 'draft' | 'published' | 'archived',
+  updatedAt: string
+) => ({
+  id,
+  stable_block_id: `custom_${id}`,
+  owner_user_id: 7,
+  version: 1,
+  status,
+  status_label: status === 'draft' ? 'Черновик' : status === 'published' ? 'Опубликован' : 'Архив',
+  title,
+  description: title,
+  category: 'custom',
+  passport: {},
+  user_guide: {},
+  runtime_kind: 'javascript',
+  runtime_definition: {},
+  execution_spec: null,
+  validation_result: null,
+  usage_count: 0,
+  created_at: updatedAt,
+  updated_at: updatedAt,
+});
+
 beforeEach(() => {
   fetchBlocksCatalog.mockReset();
   fetchAdminBlocksCatalog.mockReset();
   fetchMyCustomBlocks.mockReset();
   fetchAllCustomBlocksAdmin.mockReset();
-  fetchBlocksCatalog.mockResolvedValue([messageBlock, legacyAction]);
+  fetchBlocksCatalog.mockResolvedValue([messageBlock, legacyAction, customCatalogBlock]);
   fetchAdminBlocksCatalog.mockResolvedValue([messageBlock, legacyAction]);
   fetchMyCustomBlocks.mockResolvedValue([]);
   fetchAllCustomBlocksAdmin.mockResolvedValue([]);
@@ -96,12 +131,104 @@ describe('Пользовательская библиотека блоков', (
     expect(screen.queryByText('Action')).toBeNull();
     expect(document.body.textContent).not.toContain('button_list');
     expect(document.body.textContent).not.toContain('Идентификатор: message');
+    expect(screen.getByText('Пользовательский')).toBeTruthy();
+    expect(screen.getAllByText('Системный').length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toContain('Пользовательский · Базовые');
+    expect(document.body.textContent).not.toContain('Системный · Базовые');
+    expect(screen.queryByTestId('blocks-category')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('blocks-origin'), { target: { value: 'custom' } });
+    expect(screen.getByText('Пользовательский маршрут')).toBeTruthy();
+    expect(screen.queryByText('Сообщение')).toBeNull();
+    fireEvent.change(screen.getByTestId('blocks-search'), { target: { value: 'QA' } });
+    expect(screen.getByText('Подходящие блоки не найдены')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('blocks-search'), { target: { value: 'маршрут' } });
+    expect(screen.getByText('Пользовательский маршрут')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('blocks-origin'), { target: { value: 'system' } });
+    expect(screen.getByText('Подходящие блоки не найдены')).toBeTruthy();
+    fireEvent.change(screen.getByTestId('blocks-search'), { target: { value: '' } });
+    expect(screen.getByText('Сообщение')).toBeTruthy();
+    expect(screen.queryByText('Пользовательский маршрут')).toBeNull();
+    fireEvent.change(screen.getByTestId('blocks-origin'), { target: { value: 'all' } });
 
     fireEvent.change(screen.getByTestId('blocks-search'), { target: { value: 'несуществующий' } });
     expect(screen.getByText('Подходящие блоки не найдены')).toBeTruthy();
     fireEvent.change(screen.getByTestId('blocks-search'), { target: { value: '' } });
     fireEvent.click(screen.getByTestId('blocks-open-editor'));
     expect(screen.getByText('Редактор открыт')).toBeTruthy();
+  });
+
+  it('показывает Category Filter только для нескольких фактических категорий', async () => {
+    fetchBlocksCatalog.mockResolvedValue([
+      messageBlock,
+      { ...messageBlock, id: 'business-block', title: 'Бизнес-блок', category: 'business' },
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    await screen.findByText('Бизнес-блок');
+    const category = screen.getByTestId('blocks-category') as HTMLSelectElement;
+    expect(category).toBeTruthy();
+    expect(Array.from(category.options).map(option => option.textContent)).toEqual([
+      'Все категории',
+      'Базовые',
+      'Бизнес',
+    ]);
+    fireEvent.change(category, { target: { value: 'business' } });
+    expect(screen.getByText('Бизнес-блок')).toBeTruthy();
+    expect(screen.queryByText('Сообщение')).toBeNull();
+  });
+
+  it('filters, searches and sorts My Blocks with newest as the default', async () => {
+    fetchMyCustomBlocks.mockResolvedValue([
+      ownedVersion(1, 'Бета', 'draft', '2026-09-01T00:00:00Z'),
+      ownedVersion(2, 'Альфа', 'published', '2026-09-03T00:00:00Z'),
+      ownedVersion(3, 'Гамма', 'archived', '2026-09-02T00:00:00Z'),
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('my-custom-blocks').querySelectorAll('h3')).toHaveLength(3)
+    );
+    const cards = screen.getByTestId('my-custom-blocks').querySelectorAll('h3');
+    expect(Array.from(cards).map(node => node.textContent)).toEqual(['Альфа', 'Гамма', 'Бета']);
+    fireEvent.click(screen.getByRole('tab', { name: 'Черновики: 1' }));
+    expect(screen.getByRole('heading', { name: 'Бета' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Альфа' })).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Опубликованные: 1' }));
+    expect(screen.getByRole('heading', { name: 'Альфа' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Гамма' })).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Архивные: 1' }));
+    expect(screen.getByRole('heading', { name: 'Гамма' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Альфа' })).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Все: 3' }));
+    fireEvent.change(screen.getByTestId('my-blocks-search'), { target: { value: 'гам' } });
+    expect(screen.getByRole('heading', { name: 'Гамма' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Бета' })).toBeNull();
+    fireEvent.change(screen.getByTestId('my-blocks-search'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('my-blocks-sort'), { target: { value: 'az' } });
+    expect(
+      Array.from(screen.getByTestId('my-custom-blocks').querySelectorAll('h3')).map(
+        node => node.textContent
+      )
+    ).toEqual(['Альфа', 'Бета', 'Гамма']);
+    fireEvent.change(screen.getByTestId('my-blocks-sort'), { target: { value: 'za' } });
+    expect(
+      Array.from(screen.getByTestId('my-custom-blocks').querySelectorAll('h3')).map(
+        node => node.textContent
+      )
+    ).toEqual(['Гамма', 'Бета', 'Альфа']);
+    fireEvent.change(screen.getByTestId('my-blocks-sort'), { target: { value: 'oldest' } });
+    expect(
+      Array.from(screen.getByTestId('my-custom-blocks').querySelectorAll('h3')).map(
+        node => node.textContent
+      )
+    ).toEqual(['Бета', 'Гамма', 'Альфа']);
   });
 
   it('использует русскую инструкцию и понятные типы параметров', async () => {

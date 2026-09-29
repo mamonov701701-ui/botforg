@@ -1,5 +1,6 @@
 export interface CustomBlockWizardStep {
   id: string;
+  navigationTitle: string;
   title: string;
   explanation: string;
   why: string;
@@ -11,6 +12,7 @@ export interface CustomBlockWizardStep {
 export const CUSTOM_BLOCK_WIZARD_STEPS: CustomBlockWizardStep[] = [
   {
     id: 'identity',
+    navigationTitle: 'Название',
     title: 'Название и назначение',
     explanation: 'Дайте блоку понятное русское название и кратко опишите его задачу.',
     why: 'Так блок легко найти и правильно выбрать в библиотеке.',
@@ -19,6 +21,7 @@ export const CUSTOM_BLOCK_WIZARD_STEPS: CustomBlockWizardStep[] = [
   },
   {
     id: 'when',
+    navigationTitle: 'Назначение',
     title: 'Когда использовать блок',
     explanation: 'Опишите ситуацию, в которой этот блок полезен.',
     why: 'Подсказка помогает выбрать подходящий шаг сценария.',
@@ -27,6 +30,7 @@ export const CUSTOM_BLOCK_WIZARD_STEPS: CustomBlockWizardStep[] = [
   },
   {
     id: 'inputs',
+    navigationTitle: 'Данные',
     title: 'Какие данные блок получает',
     explanation: 'Перечислите данные, нужные блоку для выполнения.',
     why: 'Это фиксирует входной контракт версии.',
@@ -34,55 +38,48 @@ export const CUSTOM_BLOCK_WIZARD_STEPS: CustomBlockWizardStep[] = [
     commonMistake: 'Указывать данные, которые сценарий не может передать.',
   },
   {
-    id: 'outputs',
-    title: 'Какие данные блок передаёт дальше',
-    explanation: 'Перечислите результаты выполнения блока.',
-    why: 'Следующие шаги смогут опираться на понятный результат.',
-    example: 'Текст подтверждения.',
-    commonMistake: 'Обещать переменную, которую блок фактически не создаёт.',
-  },
-  {
-    id: 'settings',
-    title: 'Настройки блока',
-    explanation: 'Настройки — это поля, которые пользователь увидит в редакторе.',
-    why: 'Для первого варианта блока используется безопасный шаблон сообщения с обязательным текстом.',
-    example: '«Текст сообщения» — «Ваш заказ принят».',
-    commonMistake: 'Удалять обязательный параметр текста.',
-  },
-  {
     id: 'connections',
+    navigationTitle: 'Связи',
     title: 'Как блок соединяется с другими блоками',
-    explanation: 'Укажите понятный путь до и после блока.',
-    why: 'Исполнитель должен однозначно продолжить сценарий.',
-    example: 'Один вход и один выход.',
-    commonMistake: 'Заявлять две ветки для типа, который поддерживает одну.',
+    explanation:
+      'Выберите 0 или 1 вход и от 0 до 32 именованных выходов — результатов, которые блок передаёт дальше.',
+    why: 'Контракт закрепляет результаты и точки соединения конкретной версии в EditorV2.',
+    example: 'Один вход; результаты «Успех» и «Ошибка» ведут по разным маршрутам.',
+    commonMistake:
+      'Оставлять выход без понятного названия или обещать результат, который блок не создаёт.',
   },
   {
     id: 'runtime',
+    navigationTitle: 'Выполнение',
     title: 'Как выполняется блок',
-    explanation: 'Выберите только реально поддерживаемое выполнение.',
-    why: 'Сейчас кастомный блок безопасно выполняется как сообщение.',
-    example: 'Отправить настроенный текст и перейти дальше.',
-    commonMistake: 'Заявлять произвольный код или внешнее действие.',
+    explanation:
+      'Выберите Message fallback или изолированное выполнение JavaScript; настройки доступны коду только через envelope.settings.',
+    why: 'JavaScript получает контролируемые входные данные и настройки и запускается в Runner без сети, пакетов, файлов и секретов.',
+    example: 'run(envelope) возвращает route «success».',
+    commonMistake: 'Возвращать route, которого нет среди выходов шага 4.',
   },
   {
     id: 'limitations',
+    navigationTitle: 'Ограничения',
     title: 'Ограничения',
-    explanation: 'Честно перечислите границы блока.',
+    explanation:
+      'Системные ограничения показаны автоматически; добавьте только ограничения автора.',
     why: 'Ограничения защищают автора сценария от неверных ожиданий.',
     example: 'Не изменяет CRM и имеет один выход.',
-    commonMistake: 'Оставлять ограничения неописанными.',
+    commonMistake: 'Повторять системные ограничения вручную.',
   },
   {
     id: 'examples',
+    navigationTitle: 'Примеры',
     title: 'Примеры использования',
-    explanation: 'Добавьте хотя бы один короткий пример.',
+    explanation: 'Добавьте хотя бы один реальный пример простым языком, по одному на строке.',
     why: 'Пример быстрее всего объясняет назначение.',
     example: 'После «Ввода» показать подтверждение.',
     commonMistake: 'Использовать пример, несовместимый с реальным выполнением.',
   },
   {
     id: 'guide',
+    navigationTitle: 'Инструкция',
     title: 'Пользовательская инструкция',
     explanation: 'Напишите пошаговую инструкцию для этой версии.',
     why: 'Инструкция сохраняется вместе с версией и не изменится у старых сценариев.',
@@ -91,6 +88,7 @@ export const CUSTOM_BLOCK_WIZARD_STEPS: CustomBlockWizardStep[] = [
   },
   {
     id: 'review',
+    navigationTitle: 'Проверка',
     title: 'Проверка и публикация',
     explanation: 'Проверьте описание, настройки, ошибки и предупреждения перед публикацией.',
     why: 'Опубликованная версия неизменяема; для правок создаётся новая.',
@@ -98,6 +96,12 @@ export const CUSTOM_BLOCK_WIZARD_STEPS: CustomBlockWizardStep[] = [
     commonMistake: 'Публиковать неполную инструкцию или пример.',
   },
 ];
+
+export function customBlockWizardStepNumber(id: string): number {
+  const index = CUSTOM_BLOCK_WIZARD_STEPS.findIndex(step => step.id === id);
+  if (index < 0) throw new Error(`Unknown custom block wizard step: ${id}`);
+  return index + 1;
+}
 
 export const CUSTOM_BLOCK_LIFECYCLE_FACTS = [
   'Черновик можно редактировать и безопасно удалить, пока он не используется.',

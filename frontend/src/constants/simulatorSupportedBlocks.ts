@@ -12,6 +12,7 @@ export const SIMULATOR_SUPPORTED_BLOCK_IDS = [
   'variable',
   'set_variable',
   'wait',
+  'custom',
 ] as const;
 
 export type SimulatorSupportedBlockId = (typeof SIMULATOR_SUPPORTED_BLOCK_IDS)[number];

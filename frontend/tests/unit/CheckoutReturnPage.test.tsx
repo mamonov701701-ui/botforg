@@ -172,7 +172,7 @@ describe('CheckoutReturnPage', () => {
         /обрабатывается|Ожидает/i
       );
     });
-    expect(screen.getByText(/обновлять вручную не нужно/i)).toBeTruthy();
+    expect(screen.getByRole('banner')).toHaveTextContent(/обновлять вручную не нужно/i);
     expect(getCheckoutPaymentStatus).toHaveBeenCalledWith(42);
     expect(screen.queryByText(/yookassa/i)).toBeNull();
   });
@@ -186,7 +186,9 @@ describe('CheckoutReturnPage', () => {
         /Оплачено|активировано/i
       );
     });
-    expect(screen.getByRole('heading', { name: /Оплата прошла успешно/i })).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /Оплата прошла успешно/i })).toBeInTheDocument();
+    });
     expect(screen.getByTestId('checkout-return-to-finance')).toBeTruthy();
     expect(screen.getByTestId('checkout-return-to-pricing').textContent).toBe('Тарифы');
     expect(screen.getByTestId('checkout-return-to-finance').getAttribute('href')).toBe(

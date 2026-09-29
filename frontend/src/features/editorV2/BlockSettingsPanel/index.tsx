@@ -35,6 +35,7 @@ import {
 } from '../../../stores/scenarioDiagnosticsStore';
 import { getScenarioDiagnosticUiModel } from '../../../utils/scenarioDiagnosticUi';
 import type { ScenarioDiagnostic } from '../../../utils/scenarioConsistency';
+import { resolveNodeCatalogBlock } from '../../../utils/blockCatalogNode';
 
 interface Props {
   selectedNode: Node;
@@ -134,8 +135,8 @@ export default function BlockSettingsPanel({
 
   // Find block definition from catalog
   const block = useMemo(
-    () => catalog.find(b => b.id === selectedNode.data.blockId),
-    [catalog, selectedNode.data.blockId]
+    () => resolveNodeCatalogBlock(catalog, selectedNode.data),
+    [catalog, selectedNode.data]
   );
 
   // Reset local state when node changes
@@ -1187,9 +1188,9 @@ export default function BlockSettingsPanel({
           >
             <CheckCircle size={32} color="#22c55e" style={{ marginBottom: 12 }} />
             <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>
-              Настройки не требуются
+              Для этого блока дополнительные настройки не требуются
             </div>
-            <div style={{ fontSize: 12, opacity: 0.6 }}>Этот блок работает автоматически</div>
+            <div style={{ fontSize: 12, opacity: 0.6 }}>Блок использует контракт своей версии</div>
           </div>
         )}
       </div>

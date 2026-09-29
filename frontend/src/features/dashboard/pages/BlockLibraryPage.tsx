@@ -37,7 +37,11 @@ export default function BlockLibraryPage() {
   const { blocks, loading, error, reload } = useUserBlockCatalog();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
+  const [origin, setOrigin] = useState<'all' | 'system' | 'custom'>('all');
   const [mine, setMine] = useState<CustomBlockVersion[]>([]);
+  const [mineStatus, setMineStatus] = useState<'all' | CustomBlockVersion['status']>('all');
+  const [mineQuery, setMineQuery] = useState('');
+  const [mineSort, setMineSort] = useState<'newest' | 'oldest' | 'az' | 'za'>('newest');
   const [actionMessage, setActionMessage] = useState('');
   const navigate = useNavigate();
   const loadMine = () =>
@@ -64,6 +68,8 @@ export default function BlockLibraryPage() {
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase('ru-RU');
     return blocks.filter(block => {
+      const blockOrigin = block.source === 'custom' ? 'custom' : 'system';
+      if (origin !== 'all' && blockOrigin !== origin) return false;
       if (category !== 'all' && block.category !== category) return false;
       if (!needle) return true;
       return [blockDisplayTitle(block), blockSummary(block), block.description]
@@ -71,7 +77,32 @@ export default function BlockLibraryPage() {
         .toLocaleLowerCase('ru-RU')
         .includes(needle);
     });
-  }, [blocks, category, query]);
+  }, [blocks, category, origin, query]);
+  const mineCounts = useMemo(
+    () => ({
+      all: mine.length,
+      draft: mine.filter(item => item.status === 'draft').length,
+      published: mine.filter(item => item.status === 'published').length,
+      archived: mine.filter(item => item.status === 'archived').length,
+    }),
+    [mine]
+  );
+  const visibleMine = useMemo(() => {
+    const needle = mineQuery.trim().toLocaleLowerCase('ru-RU');
+    const rows = mine.filter(
+      item =>
+        (mineStatus === 'all' || item.status === mineStatus) &&
+        (!needle || item.title.toLocaleLowerCase('ru-RU').includes(needle))
+    );
+    return [...rows].sort((left, right) => {
+      if (mineSort === 'az' || mineSort === 'za') {
+        const value = left.title.localeCompare(right.title, 'ru-RU');
+        return mineSort === 'az' ? value : -value;
+      }
+      const value = new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
+      return mineSort === 'newest' ? value : -value;
+    });
+  }, [mine, mineQuery, mineSort, mineStatus]);
 
   return (
     <DashboardPage
@@ -114,105 +145,166 @@ export default function BlockLibraryPage() {
             </p>
           </Card>
         ) : (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {mine.map(item => (
-              <Card key={item.id}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold">{item.title}</h3>
-                    <p className="mt-1 text-xs text-[var(--text-muted)]">
-                      Версия {item.version} · изменён{' '}
-                      {new Date(item.updated_at).toLocaleDateString('ru-RU')}
-                    </p>
+          <>
+            <div
+              role="tablist"
+              aria-label="Статус моих блоков"
+              className="mb-3 flex flex-wrap gap-2"
+            >
+              {(
+                [
+                  ['all', 'Все'],
+                  ['draft', 'Черновики'],
+                  ['published', 'Опубликованные'],
+                  ['archived', 'Архивные'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={mineStatus === value}
+                  onClick={() => setMineStatus(value)}
+                  className={`min-h-11 rounded-lg border px-3 py-2 text-sm ${mineStatus === value ? 'border-[var(--accent)] bg-[var(--accent)]/10' : 'border-[var(--border)]'}`}
+                >
+                  {label}: {mineCounts[value]}
+                </button>
+              ))}
+            </div>
+            <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+              <label>
+                <span className="sr-only">Поиск по моим блокам</span>
+                <input
+                  data-testid="my-blocks-search"
+                  value={mineQuery}
+                  onChange={event => setMineQuery(event.target.value)}
+                  placeholder="Найти по названию"
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                />
+              </label>
+              <label>
+                <span className="sr-only">Сортировка моих блоков</span>
+                <select
+                  data-testid="my-blocks-sort"
+                  value={mineSort}
+                  onChange={event => setMineSort(event.target.value as typeof mineSort)}
+                  className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"
+                >
+                  <option value="newest">Сначала новые</option>
+                  <option value="oldest">Сначала старые</option>
+                  <option value="az">А–Я</option>
+                  <option value="za">Я–А</option>
+                </select>
+              </label>
+            </div>
+            {visibleMine.length === 0 ? (
+              <Card>
+                <p>Подходящие пользовательские блоки не найдены.</p>
+              </Card>
+            ) : null}
+            <div className="grid gap-3 lg:grid-cols-2">
+              {visibleMine.map(item => (
+                <Card
+                  key={item.id}
+                  style={item.status === 'archived' ? { opacity: 0.72 } : undefined}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold">{item.title}</h3>
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        Версия {item.version} · изменён{' '}
+                        {new Date(item.updated_at).toLocaleDateString('ru-RU')}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full px-2 py-1 text-xs ${item.status === 'published' ? 'bg-emerald-500/15 text-emerald-400' : item.status === 'archived' ? 'bg-slate-500/15 text-slate-300' : 'bg-amber-500/15 text-amber-400'}`}
+                    >
+                      {item.status_label}
+                    </span>
                   </div>
-                  <span
-                    className={`rounded-full px-2 py-1 text-xs ${item.status === 'published' ? 'bg-emerald-500/15 text-emerald-400' : item.status === 'archived' ? 'bg-slate-500/15 text-slate-300' : 'bg-amber-500/15 text-amber-400'}`}
-                  >
-                    {item.status_label}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm text-[var(--text-muted)]">
-                  {item.description || 'Описание пока не заполнено.'}
-                </p>
-                <p className="mt-2 text-xs text-[var(--text-muted)]">
-                  Использований: {item.usage_count} · Инструкция:{' '}
-                  {item.user_guide?.content ? 'есть' : 'нет'}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
-                    to={`/dashboard/block-library/custom/${item.id}`}
-                    className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
-                  >
-                    <BookOpen size={14} /> Просмотреть
-                  </Link>
-                  {item.status === 'draft' ? (
-                    <>
-                      <Link
-                        to={`/dashboard/block-library/custom/${item.id}/edit`}
-                        className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
-                      >
-                        <Pencil size={14} /> Редактировать
-                      </Link>
-                      <button
-                        onClick={() =>
-                          void validateCustomBlock(item.id).then(result =>
-                            setActionMessage(
-                              result.valid
-                                ? 'Блок прошёл проверку.'
-                                : `Найдены ошибки: ${result.errors.join('; ')}`
-                            )
-                          )
-                        }
-                        className="rounded border border-[var(--border)] px-3 py-2 text-sm"
-                      >
-                        Проверить
-                      </button>
-                      <button
-                        onClick={() => void act(() => publishCustomBlock(item.id))}
-                        className="rounded border border-[var(--accent)] px-3 py-2 text-sm"
-                      >
-                        Опубликовать
-                      </button>
-                      <button
-                        onClick={() => void act(() => deleteCustomBlockDraft(item.id))}
-                        className="inline-flex items-center gap-1 rounded border border-red-500/40 px-3 py-2 text-sm text-red-400"
-                      >
-                        <Trash2 size={14} /> Удалить
-                      </button>
-                    </>
-                  ) : null}
-                  {item.status === 'published' ? (
-                    <>
-                      <button
-                        onClick={() =>
-                          void createCustomBlockVersion(item.id).then(next =>
-                            navigate(`/dashboard/block-library/custom/${next.id}/edit`)
-                          )
-                        }
-                        className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
-                      >
-                        <CopyPlus size={14} /> Создать новую версию
-                      </button>
-                      <button
-                        onClick={() => void act(() => archiveCustomBlock(item.id))}
-                        className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
-                      >
-                        <Archive size={14} /> Архивировать
-                      </button>
-                    </>
-                  ) : null}
-                  {item.status === 'archived' ? (
-                    <button
-                      onClick={() => void act(() => restoreCustomBlock(item.id))}
+                  <p className="mt-3 text-sm text-[var(--text-muted)]">
+                    {item.description || 'Описание пока не заполнено.'}
+                  </p>
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    Использований: {item.usage_count} · Инструкция:{' '}
+                    {item.user_guide?.content ? 'есть' : 'нет'}
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Link
+                      to={`/dashboard/block-library/custom/${item.id}`}
                       className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
                     >
-                      <RotateCcw size={14} /> Восстановить
-                    </button>
-                  ) : null}
-                </div>
-              </Card>
-            ))}
-          </div>
+                      <BookOpen size={14} /> Просмотреть
+                    </Link>
+                    {item.status === 'draft' ? (
+                      <>
+                        <Link
+                          to={`/dashboard/block-library/custom/${item.id}/edit`}
+                          className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                        >
+                          <Pencil size={14} /> Редактировать
+                        </Link>
+                        <button
+                          onClick={() =>
+                            void validateCustomBlock(item.id).then(result =>
+                              setActionMessage(
+                                result.valid
+                                  ? 'Блок прошёл проверку.'
+                                  : `Найдены ошибки: ${result.errors.join('; ')}`
+                              )
+                            )
+                          }
+                          className="rounded border border-[var(--border)] px-3 py-2 text-sm"
+                        >
+                          Проверить
+                        </button>
+                        <button
+                          onClick={() => void act(() => publishCustomBlock(item.id))}
+                          className="rounded border border-[var(--accent)] px-3 py-2 text-sm"
+                        >
+                          Опубликовать
+                        </button>
+                        <button
+                          onClick={() => void act(() => deleteCustomBlockDraft(item.id))}
+                          className="inline-flex items-center gap-1 rounded border border-red-500/40 px-3 py-2 text-sm text-red-400"
+                        >
+                          <Trash2 size={14} /> Удалить
+                        </button>
+                      </>
+                    ) : null}
+                    {item.status === 'published' ? (
+                      <>
+                        <button
+                          onClick={() =>
+                            void createCustomBlockVersion(item.id).then(next =>
+                              navigate(`/dashboard/block-library/custom/${next.id}/edit`)
+                            )
+                          }
+                          className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                        >
+                          <CopyPlus size={14} /> Создать новую версию
+                        </button>
+                        <button
+                          onClick={() => void act(() => archiveCustomBlock(item.id))}
+                          className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                        >
+                          <Archive size={14} /> Архивировать
+                        </button>
+                      </>
+                    ) : null}
+                    {item.status === 'archived' ? (
+                      <button
+                        onClick={() => void act(() => restoreCustomBlock(item.id))}
+                        className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                      >
+                        <RotateCcw size={14} /> Восстановить
+                      </button>
+                    ) : null}
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </>
         )}
       </section>
       {actionMessage ? (
@@ -224,7 +316,9 @@ export default function BlockLibraryPage() {
       <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">
         Системные и опубликованные блоки
       </h2>
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_240px] mb-6">
+      <div
+        className={`grid gap-3 mb-6 ${categories.length > 1 ? 'md:grid-cols-[minmax(0,1fr)_200px_220px]' : 'md:grid-cols-[minmax(0,1fr)_220px]'}`}
+      >
         <label className="relative block">
           <Search
             size={18}
@@ -240,21 +334,36 @@ export default function BlockLibraryPage() {
           />
         </label>
         <label>
-          <span className="sr-only">Категория блоков</span>
+          <span className="sr-only">Тип блока</span>
           <select
-            data-testid="blocks-category"
-            value={category}
-            onChange={event => setCategory(event.target.value)}
+            data-testid="blocks-origin"
+            value={origin}
+            onChange={event => setOrigin(event.target.value as typeof origin)}
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-[var(--text)]"
           >
-            <option value="all">Все категории</option>
-            {categories.map(value => (
-              <option key={value} value={value}>
-                {BLOCK_CATEGORY_LABELS[value]}
-              </option>
-            ))}
+            <option value="all">Все типы</option>
+            <option value="system">Системные</option>
+            <option value="custom">Пользовательские</option>
           </select>
         </label>
+        {categories.length > 1 ? (
+          <label>
+            <span className="sr-only">Категория блоков</span>
+            <select
+              data-testid="blocks-category"
+              value={category}
+              onChange={event => setCategory(event.target.value)}
+              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-[var(--text)]"
+            >
+              <option value="all">Все категории</option>
+              {categories.map(value => (
+                <option key={value} value={value}>
+                  {BLOCK_CATEGORY_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       {loading ? <p className="text-[var(--text-muted)]">Загружаем доступные блоки…</p> : null}
@@ -268,7 +377,7 @@ export default function BlockLibraryPage() {
       {!loading && !error && filtered.length === 0 ? (
         <Card>
           <p className="text-[var(--text)] font-medium">Подходящие блоки не найдены</p>
-          <p className="text-sm text-[var(--text-muted)] mt-1">Измените запрос или категорию.</p>
+          <p className="text-sm text-[var(--text-muted)] mt-1">Измените запрос или фильтры.</p>
         </Card>
       ) : null}
 
@@ -283,9 +392,9 @@ export default function BlockLibraryPage() {
                 <h2 className="text-lg font-semibold text-[var(--text)]">
                   {blockDisplayTitle(block)}
                 </h2>
-                <p className="text-xs text-[var(--accent)] mt-1">
-                  {BLOCK_CATEGORY_LABELS[block.category]}
-                </p>
+                <span className="mt-1 inline-flex rounded-full bg-[var(--accent)]/10 px-2 py-1 text-xs text-[var(--accent)]">
+                  {block.source === 'custom' ? 'Пользовательский' : 'Системный'}
+                </span>
               </div>
             </div>
             <p className="text-sm leading-relaxed text-[var(--text-muted)] mt-4 flex-1">

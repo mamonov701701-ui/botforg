@@ -232,8 +232,9 @@ export default function PlatformBlocksPage() {
 
       <Card style={{ marginTop: 20 }}>
         <p className="text-sm text-[var(--text-muted)]">
-          Изменение системного JSON из интерфейса намеренно недоступно. Управляемый CRUD появится
-          после внедрения Block Passport и Block Registry.
+          System Blocks (системные блоки) управляются через Block Passport (паспорт блока) и Block
+          Registry (реестр блоков) в коде платформы. Интерфейс показывает их действующий контракт, а
+          пользовательские блоки имеют отдельный versioned lifecycle (жизненный цикл версий).
         </p>
       </Card>
 

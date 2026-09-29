@@ -82,12 +82,18 @@ services:
       - CLOUDPAYMENTS_PUBLIC_ID=${CLOUDPAYMENTS_PUBLIC_ID:-}
       - CLOUDPAYMENTS_SECRET_KEY=${CLOUDPAYMENTS_SECRET_KEY:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
+      - CUSTOM_BLOCK_EXECUTION_ENABLED=${CUSTOM_BLOCK_EXECUTION_ENABLED:-false}
+      - CUSTOM_BLOCK_RUNNER_URL=${CUSTOM_BLOCK_RUNNER_URL:-}
+      - CUSTOM_BLOCK_RUNNER_SHARED_TOKEN=${CUSTOM_BLOCK_RUNNER_SHARED_TOKEN:-}
+      - CUSTOM_BLOCK_RUNNER_TIMEOUT_SECONDS=${CUSTOM_BLOCK_RUNNER_TIMEOUT_SECONDS:-1.5}
+      - CUSTOM_BLOCK_MAX_CONCURRENT_PER_VERSION=${CUSTOM_BLOCK_MAX_CONCURRENT_PER_VERSION:-2}
     volumes:
       - backend_logs:/app/logs
     ports:
       - "8001:8001"
     networks:
       - botforg-network
+      - custom-runner-network
 
   # Frontend
   frontend:
@@ -102,6 +108,25 @@ services:
       - "80:80"
     networks:
       - botforg-network
+
+  custom-runner:
+    build:
+      context: ./custom-runner
+    profiles: ["custom-runner"]
+    environment:
+      CUSTOM_BLOCK_RUNNER_SHARED_TOKEN: ${CUSTOM_BLOCK_RUNNER_SHARED_TOKEN:-}
+      CUSTOM_BLOCK_MAX_CONCURRENT: ${CUSTOM_BLOCK_MAX_CONCURRENT:-2}
+      CUSTOM_BLOCK_RUNNER_HOST: 0.0.0.0
+      CUSTOM_BLOCK_RUNNER_PORT: 8090
+    read_only: true
+    tmpfs: ["/tmp:noexec,nosuid,size=16m"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 96m
+    cpus: 0.50
+    networks:
+      - custom-runner-network
 
   # Nginx Reverse Proxy (optional, for HTTPS)
   nginx:
@@ -133,4 +158,7 @@ volumes:
 networks:
   botforg-network:
     driver: bridge
+  custom-runner-network:
+    driver: bridge
+    internal: true
 

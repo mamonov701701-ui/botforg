@@ -8,6 +8,7 @@ import {
 } from './messageMedia';
 import { validateInputBlockConfigFields, migrateInputNodeSettings } from './inputBlock';
 import { normalizeActionSettings } from './actionBlock';
+import { resolveNodeCatalogBlock } from './blockCatalogNode';
 
 export interface ValidationResult {
   nodeId: string;
@@ -227,7 +228,7 @@ export function validateAllNodesWithSchema(
   scenarios?: Array<{ id: number; name: string }>
 ): ValidationResult[] {
   return nodes.map(node => {
-    const block = catalog.find(b => b.id === node.data.blockId);
+    const block = resolveNodeCatalogBlock(catalog, node.data);
     return validateNodeSettings(node, block, scenarios);
   });
 }

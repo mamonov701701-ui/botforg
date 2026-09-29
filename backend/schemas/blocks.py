@@ -142,6 +142,8 @@ class CustomBlockDraftPayload(BaseModel):
     user_guide: Dict[str, Any] = Field(default_factory=dict)
     internal_code: Optional[str] = None
     runtime_definition: Dict[str, Any] = Field(default_factory=lambda: {"kind": "message"})
+    execution_spec: Optional[Dict[str, Any]] = None
+    wizard_step: int = Field(default=0, ge=0, le=8)
 
 
 class CustomBlockVersionOut(BaseModel):
@@ -159,6 +161,9 @@ class CustomBlockVersionOut(BaseModel):
     user_guide: Dict[str, Any]
     runtime_kind: str
     runtime_definition: Dict[str, Any]
+    execution_spec: Optional[Dict[str, Any]] = None
+    execution_artifact_hash: Optional[str] = None
+    execution_state: str = "enabled"
     validation_result: Optional[Dict[str, Any]] = None
     usage_count: int = 0
     created_at: datetime

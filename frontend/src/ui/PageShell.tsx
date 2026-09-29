@@ -58,6 +58,7 @@ export default function PageShell({
       {breadcrumbs && breadcrumbs.length > 0 && (
         <div
           className="bf-page-shell__breadcrumbs"
+          data-testid="bf-page-shell-breadcrumbs"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -65,7 +66,7 @@ export default function PageShell({
             marginBottom: hasHeader ? 12 : 0,
             fontSize: 14,
             color: 'var(--text-muted)',
-            padding: framed ? undefined : undefined,
+            overflow: 'visible',
           }}
         >
           {breadcrumbs.map((crumb, index) => (

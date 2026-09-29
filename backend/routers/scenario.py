@@ -325,7 +325,9 @@ def create_scenario(
                 Scenario.is_main == True
             ).update({"is_main": False})
     
-    validate_scenario_custom_block_references(db, scenario_data.content or {"nodes": [], "edges": []})
+    validate_scenario_custom_block_references(
+        db, scenario_data.content or {"nodes": [], "edges": []}, scenario_owner_id=current_user.id
+    )
     # Создаем сценарий
     scenario = Scenario(
         user_id=current_user.id,
@@ -432,6 +434,7 @@ def update_scenario(
             db,
             update_data.get("content"),
             previously_referenced=content_version_ids(scenario.content),
+            scenario_owner_id=scenario.user_id,
         )
     
     for field, value in update_data.items():
@@ -722,6 +725,10 @@ def publish_scenario(
             status_code=422,
             detail={"code": "block_contract_invalid", "diagnostics": diagnostics},
         )
+    validate_scenario_custom_block_references(
+        db, scenario.content, previously_referenced=content_version_ids(scenario.content),
+        scenario_owner_id=scenario.user_id,
+    )
 
     scenario.published_content = scenario.content
     scenario.status = "published"

@@ -3,7 +3,9 @@ import type { BlockCatalogItem } from '../types/blocks';
 /**
  * Клиентская нормализация каталога:
  * - убираем legacy-блок id=choice
- * - все блоки показываем как «Базовые»
+ * - сохраняем фактическую функциональную категорию из каталога
+ * - legacy category=custom у пользовательского блока считаем базовой категорией,
+ *   потому что происхождение уже передаётся отдельным полем source
  */
 export function mergeClientCatalogBlocks(apiCatalog: BlockCatalogItem[]): BlockCatalogItem[] {
   return apiCatalog
@@ -26,7 +28,6 @@ export function mergeClientCatalogBlocks(apiCatalog: BlockCatalogItem[]): BlockC
           ...b,
           title: 'Выбор',
           description: 'Направляет пользователя по разным веткам в зависимости от значения',
-          category: 'basic',
         };
       }
       if (
@@ -41,6 +42,9 @@ export function mergeClientCatalogBlocks(apiCatalog: BlockCatalogItem[]): BlockC
           category: 'basic',
         };
       }
-      return { ...b, category: 'basic' };
+      if (b.source === 'custom' && b.category === 'custom') {
+        return { ...b, category: 'basic' };
+      }
+      return b;
     });
 }

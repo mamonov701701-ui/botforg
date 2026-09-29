@@ -78,6 +78,8 @@ export interface CustomBlockDraftPayload {
   user_guide: Record<string, unknown>;
   internal_code?: string;
   runtime_definition: Record<string, unknown>;
+  execution_spec?: Record<string, unknown> | null;
+  wizard_step?: number;
 }
 
 export interface CustomBlockVersion {
@@ -95,6 +97,7 @@ export interface CustomBlockVersion {
   user_guide: Record<string, any>;
   runtime_kind: string;
   runtime_definition: Record<string, any>;
+  execution_spec?: Record<string, any> | null;
   validation_result?: { valid: boolean; errors: string[]; warnings: string[] } | null;
   usage_count: number;
   created_at: string;

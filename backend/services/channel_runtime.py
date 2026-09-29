@@ -28,6 +28,9 @@ from backend.services.scenario_flow.set_variable import (
     convert_value,
     settings_from_node,
 )
+from backend.services.custom_block_execution.service import (
+    ControlledExecutionFailure, execute_version, resolve_authorized_version,
+)
 from backend.utils.ctor_bot_resolve import ensure_ctor_bot_id, resolve_ctor_bot_id
 
 STATE_NODE_KEY = "sys_runtime_node_id"
@@ -324,6 +327,38 @@ def _get_user_variable_text(db: Session, ctor_user_id: int, key: str) -> Optiona
     return None
 
 
+def _execute_custom_node(
+    db: Session, *, scenario: Scenario, node: dict[str, Any], edges: list[dict[str, Any]],
+    ctor_user_id: int,
+) -> Optional[dict[str, Any]]:
+    """Run only an already-authorized exact version through the remote runner."""
+    data = node.get("data") or {}
+    settings = data.get("settings") or {}
+    if not isinstance(data, dict) or not isinstance(settings, dict):
+        return None
+    try:
+        version = resolve_authorized_version(
+            db, scenario_owner_id=scenario.user_id, version_id=int(data.get("customBlockVersionId")),
+            stable_id=str(data.get("customBlockStableId") or ""), version_number=int(data.get("customBlockVersion")),
+            existing_reference=True,
+        )
+        # Input is explicitly supplied by node settings; no CRM object or graph is exposed.
+        raw_input = settings.get("input", {})
+        result = execute_version(
+            db, version=version, mode="runtime", input_data=raw_input if isinstance(raw_input, dict) else {},
+            settings_data={k: v for k, v in settings.items() if k != "input"},
+        )
+    except (ControlledExecutionFailure, TypeError, ValueError):
+        return None
+    vs = VariableService(db)
+    for key, value in result.outputs.items():
+        # The platform, not User Code, persists typed JSON-compatible outputs.
+        vs.set_user_variable(ctor_user_id, key, value, commit=True)
+    outgoing = _next_edges(edges, str(node.get("id")))
+    target = next((edge.get("target") for edge in outgoing if str(edge.get("sourceHandle") or "") == result.route), None)
+    return _find_node((scenario.published_content or scenario.content or {}).get("nodes") or [], str(target)) if target else None
+
+
 def _evaluate_tag_condition(db: Session, *, ctor_user_id: int, settings: dict[str, Any]) -> bool:
     op = str(settings.get("operator") or "equals")
     selected = str(settings.get("variable") or "").strip()
@@ -514,6 +549,10 @@ def process_channel_update(
         elif transit_kind == "condition":
             target_id = _resolve_condition_target(db, user.id, next_node, edges)
             next_node = _find_node(nodes, str(target_id)) if target_id else None
+        elif transit_kind == "custom":
+            next_node = _execute_custom_node(
+                db, scenario=scenario, node=next_node, edges=edges, ctor_user_id=user.id
+            )
         else:
             break
 

@@ -4,6 +4,41 @@
 
 ## Доступные скрипты
 
+### Custom Block Development Runner (раннер разработки кастомных блоков)
+
+Для Preview (предпросмотра) JavaScript Custom Block запустите отдельный изолированный Runner перед Backend:
+
+```powershell
+.\scripts\dev-custom-runner.ps1
+.\scripts\dev-backend.ps1
+# Frontend запускается отдельно из каталога frontend:
+Set-Location .\frontend
+npm.cmd run dev
+Set-Location ..
+.\scripts\check-custom-runner.ps1
+```
+
+Канонический локальный адрес Runner — `http://127.0.0.1:8090`. При каждом запуске Runner создаёт новый случайный development token (токен разработки) в локальном gitignored-файле `scripts/.dev-custom-runner-token`; значение не хранится в репозитории и не выводится в консоль. Production (боевое окружение) обязано задавать отдельный секрет и Production-grade Isolation Provider (провайдер промышленной изоляции). Docker сам по себе не считается достаточной Production Security Boundary (границей промышленной безопасности).
+
+`dev-backend.ps1` запускает Backend (бэкенд) через `dev-backend-runtime-env.cmd`. Wrapper (обёртка) передаёт Feature Flag (флаг включения), Runner URL (адрес раннера) и development token (токен разработки) фактическому Uvicorn reload child process (дочернему процессу автоперезагрузки), не выводя токен в консоль.
+
+Если `http://127.0.0.1:8090/healthz` отвечает успешно, но Preview (предпросмотр) не выполняется, перезапустите Backend каноническим скриптом и ориентируйтесь на конкретную безопасную ошибку Preview: функция выключена, адрес не настроен, соединение отклонено, ошибка авторизации или таймаут. Успешный `/healthz` подтверждает готовность Runner, но сам по себе не подтверждает конфигурацию Backend ↔ Runner.
+
+`check-custom-runner.ps1` проверяет четыре факта: Runner health, Backend health, конфигурацию фактического Backend worker (воркера бэкенда) и реальное аутентифицированное выполнение минимального JavaScript через QuickJS/WASM. Service Token (сервисный токен) не выводится; показывается только короткий fingerprint (отпечаток).
+
+| Симптом | Diagnostic code (код диагностики) | Действие |
+| --- | --- | --- |
+| Runner не отвечает | `runner_not_running` | Запустить `dev-custom-runner.ps1` |
+| Backend не отвечает | `backend_not_running` | Запустить `dev-backend.ps1` |
+| Ответил старый или конкурирующий worker | `backend_process_conflict` | Повторно запустить исправленный `dev-backend.ps1` |
+| Feature Flag выключен | `feature_disabled` | Использовать канонический Backend launcher |
+| Runner URL отсутствует | `runner_url_missing` | Использовать канонический Backend launcher |
+| Токены не совпадают | `auth_mismatch` | Перезапустить Runner, затем Backend канонически |
+| Соединение отклонено | `connection_refused` | Проверить Runner на `127.0.0.1:8090` |
+| Превышен таймаут | `timeout` | Проверить нагрузку Runner и код блока |
+| Некорректный ответ | `invalid_runner_response` | Проверить Runner profile/version |
+| Прочая ошибка handshake | `backend_runner_handshake_failed` | Проверить Backend log и Runner log без публикации токенов |
+
 ### 1. `install-deps.ps1` - Установка зависимостей
 
 **Первоначальная настройка проекта**

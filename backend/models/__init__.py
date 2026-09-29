@@ -54,7 +54,7 @@ from backend.models.legal import (
 from backend.models.plan import Plan
 from backend.models.ai_credit import AiCreditBucket, AiCreditDebitAllocation, AiCreditLedgerEntry
 from backend.models.ai_provider import AiCreditReservation, AiInvocation, AiModelCatalog, AiProviderConfig
-from backend.models.custom_block import CustomBlock, CustomBlockVersion
+from backend.models.custom_block import CustomBlock, CustomBlockVersion, CustomBlockExecutionAudit
 from backend.models.checkout import (
     CheckoutIntent,
     CheckoutIntentStatus,

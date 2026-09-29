@@ -93,6 +93,72 @@ describe('flowHandleCompatibility', () => {
     expect([...sets.sourceHandles].sort()).toEqual(['condition_no', 'condition_yes']);
   });
 
+  it('keeps more than six exact custom routes and terminal custom blocks', () => {
+    const outputs = Array.from({ length: 15 }, (_, index) => ({
+      name: `route_${index + 1}`,
+      display_name: `Маршрут ${index + 1}`,
+    }));
+    const custom = n('custom', 'custom');
+    custom.data.customBlockPassport = {
+      connection_rules: { input_count: 1, output_count: 15 },
+      outputs,
+    };
+    const sets = getNodeHandleSets(custom);
+    expect([...sets.targetHandles]).toEqual(['top']);
+    expect([...sets.sourceHandles]).toHaveLength(15);
+    expect(sets.sourceHandles.has('route_15')).toBe(true);
+
+    const reloaded = JSON.parse(JSON.stringify(custom)) as Node;
+    const routed = normalizeScenarioEdges(
+      [reloaded, n('target', 'message')],
+      [{ id: 'custom-route', source: 'custom', target: 'target', sourceHandle: 'route_15' } as Edge]
+    );
+    expect([...getNodeHandleSets(reloaded).sourceHandles]).toHaveLength(15);
+    expect(routed[0].sourceHandle).toBe('route_15');
+
+    custom.data.customBlockPassport = {
+      connection_rules: { input_count: 0, output_count: 0 },
+      outputs: [],
+    };
+    const terminal = getNodeHandleSets(custom);
+    expect(terminal.targetHandles.size).toBe(0);
+    expect(terminal.sourceHandles.size).toBe(0);
+  });
+
+  it('keeps multiple exact custom route keys across save/reload and reports unknown routes', () => {
+    const custom = n('custom', 'custom');
+    custom.data.customBlockPassport = {
+      connection_rules: { input_count: 1, output_count: 3 },
+      outputs: [
+        { name: 'success', display_name: 'Успех' },
+        { name: 'error', display_name: 'Ошибка' },
+        { name: 'third_route', display_name: 'Третий маршрут' },
+      ],
+    };
+    const nodes = JSON.parse(
+      JSON.stringify([n('start', 'start'), custom, n('message', 'message'), n('other', 'message')])
+    ) as Node[];
+    const edges = JSON.parse(
+      JSON.stringify([
+        {
+          id: 'start-custom',
+          source: 'start',
+          target: 'custom',
+          sourceHandle: 'bottom',
+          targetHandle: 'top',
+        },
+        { id: 'success', source: 'custom', target: 'message', sourceHandle: 'success' },
+        { id: 'third', source: 'custom', target: 'other', sourceHandle: 'third_route' },
+      ])
+    ) as Edge[];
+    const normalized = normalizeScenarioEdges(nodes, edges);
+    expect(normalized.map(item => item.sourceHandle)).toEqual(['bottom', 'success', 'third_route']);
+    expect(listInvalidFlowEdges(nodes, normalized)).toEqual([]);
+
+    const invalid = [{ ...normalized[2], sourceHandle: 'unknown_route' }] as Edge[];
+    expect(listInvalidFlowEdges(nodes, invalid)[0]).toContain('unknown_route');
+  });
+
   it('normalizes condition exit using conditionBranch when handles are legacy', () => {
     const nodes = [n('c', 'condition')];
     const edges: Edge[] = [
