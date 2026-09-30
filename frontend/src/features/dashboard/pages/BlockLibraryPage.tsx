@@ -28,10 +28,17 @@ import {
   deleteCustomBlockDraft,
   fetchMyCustomBlocks,
   publishCustomBlock,
+  submitCustomBlockReview,
   restoreCustomBlock,
   validateCustomBlock,
 } from '../../../api/blocks';
 import { useNavigate } from 'react-router-dom';
+import {
+  primaryVersionStatusLabel,
+  reviewDecisionLabel,
+  reviewStateLabel,
+  securityReportLabel,
+} from '../../../utils/customBlockReviewPresentation';
 
 export default function BlockLibraryPage() {
   const { blocks, loading, error, reload } = useUserBlockCatalog();
@@ -219,7 +226,7 @@ export default function BlockLibraryPage() {
                     <span
                       className={`rounded-full px-2 py-1 text-xs ${item.status === 'published' ? 'bg-emerald-500/15 text-emerald-400' : item.status === 'archived' ? 'bg-slate-500/15 text-slate-300' : 'bg-amber-500/15 text-amber-400'}`}
                     >
-                      {item.status_label}
+                      {primaryVersionStatusLabel(item)}
                     </span>
                   </div>
                   <p className="mt-3 text-sm text-[var(--text-muted)]">
@@ -229,6 +236,25 @@ export default function BlockLibraryPage() {
                     Использований: {item.usage_count} · Инструкция:{' '}
                     {item.user_guide?.content ? 'есть' : 'нет'}
                   </p>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Процесс проверки: {reviewStateLabel(item.review_state)}.
+                  </p>
+                  {item.latest_security_report ? (
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Проверка безопасности: {securityReportLabel(item)}
+                    </p>
+                  ) : null}
+                  {item.review_history?.length ? (
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Последнее решение:{' '}
+                      {reviewDecisionLabel(
+                        item.review_history[item.review_history.length - 1].decision
+                      )}
+                      {item.review_history[item.review_history.length - 1].comment
+                        ? ` — ${item.review_history[item.review_history.length - 1].comment}`
+                        : ''}
+                    </p>
+                  ) : null}
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Link
                       to={`/dashboard/block-library/custom/${item.id}`}
@@ -236,7 +262,7 @@ export default function BlockLibraryPage() {
                     >
                       <BookOpen size={14} /> Просмотреть
                     </Link>
-                    {item.status === 'draft' ? (
+                    {item.status === 'draft' && item.review_state === 'draft' ? (
                       <>
                         <Link
                           to={`/dashboard/block-library/custom/${item.id}/edit`}
@@ -259,10 +285,10 @@ export default function BlockLibraryPage() {
                           Проверить
                         </button>
                         <button
-                          onClick={() => void act(() => publishCustomBlock(item.id))}
+                          onClick={() => void act(() => submitCustomBlockReview(item.id))}
                           className="rounded border border-[var(--accent)] px-3 py-2 text-sm"
                         >
-                          Опубликовать
+                          Отправить на проверку
                         </button>
                         <button
                           onClick={() => void act(() => deleteCustomBlockDraft(item.id))}
@@ -271,6 +297,25 @@ export default function BlockLibraryPage() {
                           <Trash2 size={14} /> Удалить
                         </button>
                       </>
+                    ) : null}
+                    {item.status === 'draft' && item.review_state === 'approved' ? (
+                      <button
+                        onClick={() => void act(() => publishCustomBlock(item.id))}
+                        className="rounded border border-emerald-500/50 px-3 py-2 text-sm text-emerald-400"
+                      >
+                        Опубликовать
+                      </button>
+                    ) : null}
+                    {item.status === 'draft' &&
+                    ['needs_changes', 'rejected', 'security_review_failed'].includes(
+                      item.review_state || ''
+                    ) ? (
+                      <Link
+                        to={`/dashboard/block-library/custom/${item.id}/edit`}
+                        className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                      >
+                        <Pencil size={14} /> Редактировать
+                      </Link>
                     ) : null}
                     {item.status === 'published' ? (
                       <>

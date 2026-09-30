@@ -5,7 +5,7 @@ import Card from '../components/Card';
 import {
   createCustomBlockDraft,
   fetchCustomBlock,
-  publishCustomBlock,
+  submitCustomBlockReview,
   updateCustomBlockDraft,
   validateCustomBlock,
 } from '../../../api/blocks';
@@ -87,7 +87,7 @@ export default function CustomBlockWizardPage() {
   const [busy, setBusy] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [hydrated, setHydrated] = useState(!versionId);
-  const [published, setPublished] = useState<null | { id: number; version: number }>(null);
+  const [submitted, setSubmitted] = useState<null | { id: number; version: number }>(null);
   const savedIdRef = useRef<number | null>(versionId ? Number(versionId) : null);
   const observedRef = useRef<{ draft: CustomBlockDraftPayload; step: number }>({
     draft: initialDraft,
@@ -101,7 +101,11 @@ export default function CustomBlockWizardPage() {
     setHydrated(false);
     void fetchCustomBlock(Number(versionId))
       .then(item => {
-        if (item.status !== 'draft') {
+        if (
+          item.status !== 'draft' ||
+          item.review_state === 'admin_review_pending' ||
+          item.review_state === 'approved'
+        ) {
           navigate(`/dashboard/block-library/custom/${item.id}`, { replace: true });
           return;
         }
@@ -208,7 +212,7 @@ export default function CustomBlockWizardPage() {
   );
 
   useEffect(() => {
-    if (!hydrated || published) return;
+    if (!hydrated || submitted) return;
     if (observedRef.current.draft === draft && observedRef.current.step === step) return;
     observedRef.current = { draft, step };
     revisionRef.current += 1;
@@ -217,7 +221,7 @@ export default function CustomBlockWizardPage() {
       void persistSnapshot(draft, step, revision);
     }, 4000);
     return () => window.clearTimeout(timer);
-  }, [draft, hydrated, persistSnapshot, published, step]);
+  }, [draft, hydrated, persistSnapshot, submitted, step]);
 
   const save = async () => {
     setBusy(true);
@@ -239,15 +243,15 @@ export default function CustomBlockWizardPage() {
       setMessage(userFacingRequestError(error, 'Не удалось проверить блок.'));
     }
   };
-  const publish = async () => {
+  const submitReview = async () => {
     const id = await save();
     if (!id) return;
     try {
       const result = await validateCustomBlock(id);
       setValidation(result);
       if (!result.valid) return;
-      const item = await publishCustomBlock(id);
-      setPublished({ id: item.id, version: item.version });
+      const item = await submitCustomBlockReview(id);
+      setSubmitted({ id: item.id, version: item.version });
     } catch (error: any) {
       setMessage(userFacingRequestError(error, 'Не удалось опубликовать блок.'));
     }
@@ -616,11 +620,11 @@ export default function CustomBlockWizardPage() {
       subtitle={`Шаг ${step + 1} из ${CUSTOM_BLOCK_WIZARD_STEPS.length}: ${current.title}`}
     >
       <div className="mx-auto max-w-4xl space-y-4" data-testid="custom-block-wizard">
-        {published ? (
+        {submitted ? (
           <Card>
-            <h2 className="text-xl font-semibold text-emerald-500">Блок успешно опубликован</h2>
+            <h2 className="text-xl font-semibold text-emerald-500">Блок отправлен на проверку</h2>
             <p className="mt-2">
-              {draft.title} · версия {published.version} · статус «Опубликован».
+              {draft.title} · версия {submitted.version} · ожидает ручной проверки администратором.
             </p>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Входов: {Number(draft.connection_rules.input_count ?? 1)}. Выходы:{' '}
@@ -631,7 +635,7 @@ export default function CustomBlockWizardPage() {
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button
-                onClick={() => navigate(`/dashboard/block-library/custom/${published.id}`)}
+                onClick={() => navigate(`/dashboard/block-library/custom/${submitted.id}`)}
                 className="rounded-lg border border-[var(--border)] px-4 py-2"
               >
                 Открыть блок
@@ -651,7 +655,7 @@ export default function CustomBlockWizardPage() {
             </div>
           </Card>
         ) : null}
-        {!published ? (
+        {!submitted ? (
           <div className="min-w-0" data-testid="wizard-navigation-content-layout">
             <div
               className="custom-block-wizard__active-page-shell"
@@ -755,7 +759,7 @@ export default function CustomBlockWizardPage() {
               </div>
             </div>
             <div className="mt-4 min-w-0 space-y-4" data-testid="wizard-content-stack">
-              {!published && validation?.errors.length ? (
+              {!submitted && validation?.errors.length ? (
                 <div
                   role="alert"
                   className="rounded-lg border border-red-500 bg-red-950/30 p-4 text-red-200"
@@ -818,10 +822,10 @@ export default function CustomBlockWizardPage() {
                         Проверить
                       </button>
                       <button
-                        onClick={() => void publish()}
+                        onClick={() => void submitReview()}
                         className="rounded-lg bg-[var(--accent)] px-4 py-2 font-semibold text-[#0A1B3D]"
                       >
-                        Опубликовать
+                        Отправить на проверку
                       </button>
                     </>
                   )}

@@ -93,6 +93,15 @@ export const validateCustomBlock = (
   id: number
 ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> =>
   post(`/blocks/custom/${id}/validate`, {});
+export const submitCustomBlockReview = (id: number): Promise<CustomBlockVersion> =>
+  post(`/blocks/custom/${id}/submit-review`, {});
+export const fetchCustomBlockReviewQueue = (): Promise<CustomBlockVersion[]> =>
+  get('/blocks/custom/admin/review-queue');
+export const decideCustomBlockReview = (
+  id: number,
+  decision: 'approve' | 'needs_changes' | 'reject',
+  comment: string
+): Promise<CustomBlockVersion> => post(`/blocks/custom/${id}/admin-review`, { decision, comment });
 export const publishCustomBlock = (id: number): Promise<CustomBlockVersion> =>
   post(`/blocks/custom/${id}/publish`, {});
 export const createCustomBlockVersion = (id: number): Promise<CustomBlockVersion> =>

@@ -55,10 +55,21 @@ class FakeRunner(RunnerProvider):
 def _headers(client): return {"Authorization": register_and_get_token(client)}
 
 
+def _publish(client, headers, version_id):
+    assert client.post(f"/blocks/custom/{version_id}/submit-review", headers=headers, json={}).status_code == 200
+    with TestingSessionLocal() as db:
+        from backend.models.user import User
+        version = db.query(CustomBlockVersion).filter(CustomBlockVersion.id == version_id).one()
+        db.query(User).filter(User.id == version.block.owner_user_id).one().role = "admin"
+        db.commit()
+    assert client.post(f"/blocks/custom/{version_id}/admin-review", headers=headers, json={"decision": "approve"}).status_code == 200
+    return client.post(f"/blocks/custom/{version_id}/publish", headers=headers, json={})
+
+
 def _published(client):
     headers = _headers(client)
     draft = client.post("/blocks/custom/drafts", headers=headers, json=executable_payload()).json()
-    assert client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, draft['id']).status_code == 200
     return headers, draft
 
 
@@ -241,7 +252,7 @@ def test_preview_api_executes_exact_version_in_live_quickjs_runner(
     payload["execution_spec"]["outputs"] = deepcopy(payload["outputs"])
     headers = _headers(client)
     draft = client.post("/blocks/custom/drafts", headers=headers, json=payload).json()
-    assert client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, draft['id']).status_code == 200
     response = client.post(
         f"/blocks/custom/{draft['id']}/preview-execution",
         headers=headers,
@@ -283,7 +294,7 @@ def test_preview_api_reports_live_runner_timeout(client, monkeypatch, live_quick
     )
     headers = _headers(client)
     draft = client.post("/blocks/custom/drafts", headers=headers, json=payload).json()
-    assert client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, draft['id']).status_code == 200
     response = client.post(
         f"/blocks/custom/{draft['id']}/preview-execution",
         headers=headers,
@@ -386,7 +397,7 @@ def test_multi_output_requires_a_declared_route_and_keeps_exact_contract(client)
     payload["execution_spec"]["outputs"] = deepcopy(payload["outputs"])
     headers = _headers(client)
     draft = client.post("/blocks/custom/drafts", headers=headers, json=payload).json()
-    assert client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, draft['id']).status_code == 200
     with TestingSessionLocal() as db:
         version = db.query(CustomBlockVersion).filter_by(id=draft["id"]).one()
         missing_route = {"result": {"outputs": {}, "logs": []}, "duration_ms": 1, "runner_profile": "test"}
@@ -406,7 +417,7 @@ def test_javascript_catalog_and_scenario_keep_exact_named_routes(client):
     payload["execution_spec"]["outputs"] = deepcopy(payload["outputs"])
     headers = _headers(client)
     draft = client.post("/blocks/custom/drafts", headers=headers, json=payload).json()
-    assert client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, draft['id']).status_code == 200
     catalog_item = next(
         item for item in client.get("/blocks", headers=headers).json()
         if item.get("blockVersionId") == draft["id"]
@@ -438,7 +449,7 @@ def test_terminal_contract_accepts_no_route(client):
     payload["execution_spec"]["source"] = "function run(envelope) { return { outputs: {}, logs: [] }; }"
     headers = _headers(client)
     draft = client.post("/blocks/custom/drafts", headers=headers, json=payload).json()
-    assert client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, draft['id']).status_code == 200
     with TestingSessionLocal() as db:
         version = db.query(CustomBlockVersion).filter_by(id=draft["id"]).one()
         assert execute_version(db, version=version, mode="runtime", input_data={}, settings_data={}, provider=FakeRunner({"result": {"outputs": {}, "logs": []}, "duration_ms": 1, "runner_profile": "test"})).route is None

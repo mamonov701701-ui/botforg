@@ -9,6 +9,7 @@ from backend.schemas.blocks import (
     BlockCatalogItem,
     CustomBlockDraftPayload,
     CustomBlockValidationOut,
+    CustomBlockReviewDecisionPayload,
     CustomBlockVersionOut,
 )
 from backend.database import get_db
@@ -19,6 +20,7 @@ from backend.models.custom_block import (
     CUSTOM_BLOCK_ARCHIVED,
     CUSTOM_BLOCK_DRAFT,
     CUSTOM_BLOCK_PUBLISHED,
+    CUSTOM_BLOCK_REVIEW_APPROVED,
     CustomBlockVersion,
 )
 from backend.services.custom_blocks import (
@@ -26,6 +28,8 @@ from backend.services.custom_blocks import (
     create_new_version,
     require_owner,
     serialize_version,
+    submit_for_review,
+    record_manual_decision,
     to_catalog_item,
     update_draft,
     usage_count,
@@ -118,6 +122,19 @@ def get_all_custom_blocks_admin(
     return [serialize_version(db, row) for row in rows]
 
 
+@router.get("/custom/admin/review-queue", response_model=List[CustomBlockVersionOut])
+def get_custom_block_review_queue(
+    db: Session = Depends(get_db), _admin: User = Depends(require_tariff_admin)
+):
+    """Admin-only queue; reports and decisions are returned with their exact version."""
+    from backend.models.custom_block import CUSTOM_BLOCK_REVIEW_ADMIN_PENDING
+    rows = (db.query(CustomBlockVersion)
+            .filter(CustomBlockVersion.status == CUSTOM_BLOCK_DRAFT,
+                    CustomBlockVersion.review_state == CUSTOM_BLOCK_REVIEW_ADMIN_PENDING)
+            .order_by(CustomBlockVersion.updated_at.asc()).all())
+    return [serialize_version(db, row) for row in rows]
+
+
 @router.post("/custom/drafts", response_model=CustomBlockVersionOut, status_code=201)
 def create_custom_block_draft(
     payload: CustomBlockDraftPayload,
@@ -147,7 +164,7 @@ def update_custom_block_draft(
 ):
     version = _version_or_404(db, version_id)
     require_owner(version, current_user)
-    update_draft(version, payload)
+    update_draft(version, payload, actor_user_id=current_user.id, db=db)
     db.commit()
     db.refresh(version)
     return serialize_version(db, version)
@@ -167,6 +184,28 @@ def validate_custom_block(
     return result
 
 
+@router.post("/custom/{version_id}/submit-review", response_model=CustomBlockVersionOut)
+def submit_custom_block_review(
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    version = _version_or_404(db, version_id)
+    require_owner(version, current_user)
+    return submit_for_review(db, version, actor_user_id=current_user.id)
+
+
+@router.post("/custom/{version_id}/admin-review", response_model=CustomBlockVersionOut)
+def decide_custom_block_review(
+    version_id: int,
+    payload: CustomBlockReviewDecisionPayload,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_tariff_admin),
+):
+    version = _version_or_404(db, version_id)
+    return record_manual_decision(db, version, admin, payload.decision, payload.comment)
+
+
 @router.post("/custom/{version_id}/publish", response_model=CustomBlockVersionOut)
 def publish_custom_block(
     version_id: int,
@@ -177,16 +216,38 @@ def publish_custom_block(
     require_owner(version, current_user)
     if version.status != CUSTOM_BLOCK_DRAFT:
         raise HTTPException(status_code=409, detail="Опубликованную версию нельзя изменить или опубликовать повторно")
+    if version.review_state != CUSTOM_BLOCK_REVIEW_APPROVED:
+        raise HTTPException(status_code=409, detail="Публикация возможна только после одобрения администратором")
     result = validate_version(version)
     version.validation_result = result
     if not result["valid"]:
         db.commit()
         raise HTTPException(status_code=422, detail={"message": "Блок не прошёл проверку", **result})
+    from backend.models.custom_block import CustomBlockReviewDecision
+    approval = (db.query(CustomBlockReviewDecision)
+                .filter(CustomBlockReviewDecision.custom_block_version_id == version.id,
+                        CustomBlockReviewDecision.decision == "approve",
+                        CustomBlockReviewDecision.artifact_hash == version.execution_artifact_hash)
+                .order_by(CustomBlockReviewDecision.id.desc()).first())
+    if approval is None:
+        raise HTTPException(status_code=409, detail="Одобрение этой версии отсутствует или устарело")
+    from backend.models.custom_block import CustomBlockSecurityReport
+    report = (db.query(CustomBlockSecurityReport)
+              .filter(CustomBlockSecurityReport.custom_block_version_id == version.id,
+                      CustomBlockSecurityReport.artifact_hash == version.execution_artifact_hash,
+                      CustomBlockSecurityReport.status == "succeeded")
+              .order_by(CustomBlockSecurityReport.id.desc()).first())
+    if report is None:
+        raise HTTPException(status_code=409, detail="AI Security Agent отчёт для текущего артефакта отсутствует или недоступен")
     version.status = CUSTOM_BLOCK_PUBLISHED
     version.published_at = datetime.now(timezone.utc)
     passport = dict(version.passport or {})
     passport["lifecycle_status"] = CUSTOM_BLOCK_PUBLISHED
     version.passport = passport
+    from backend.services.custom_blocks import _record_review_event
+    _record_review_event(db, version, event_type="publish_completed", previous_state=version.review_state,
+                         resulting_state=version.review_state, actor_type="author",
+                         actor_user_id=current_user.id)
     db.commit()
     db.refresh(version)
     return serialize_version(db, version)

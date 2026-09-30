@@ -15,7 +15,8 @@ import {
   deleteCustomBlockDraft,
   fetchAdminBlocksCatalog,
   fetchAllCustomBlocksAdmin,
-  publishCustomBlock,
+  fetchCustomBlockReviewQueue,
+  decideCustomBlockReview,
   restoreCustomBlock,
   validateCustomBlock,
 } from '../../../api/blocks';
@@ -31,10 +32,15 @@ import {
   blockHasGuide,
 } from '../../../utils/blockCatalogPresentation';
 import { Link, useNavigate } from 'react-router-dom';
+import {
+  reviewStateLabel,
+  securityReportLabel,
+} from '../../../utils/customBlockReviewPresentation';
 
 export default function PlatformBlocksPage() {
   const [blocks, setBlocks] = useState<BlockCatalogItem[]>([]);
   const [customBlocks, setCustomBlocks] = useState<CustomBlockVersion[]>([]);
+  const [reviewQueue, setReviewQueue] = useState<CustomBlockVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -47,13 +53,15 @@ export default function PlatformBlocksPage() {
     setLoading(true);
     setError(null);
     try {
-      const [items, custom] = await Promise.all([
+      const [items, custom, queue] = await Promise.all([
         fetchAdminBlocksCatalog(),
         fetchAllCustomBlocksAdmin(),
+        fetchCustomBlockReviewQueue(),
       ]);
       if (mountedRef.current) {
         setBlocks(items);
         setCustomBlocks(custom);
+        setReviewQueue(queue);
       }
     } catch (requestError: any) {
       if (mountedRef.current)
@@ -244,6 +252,92 @@ export default function PlatformBlocksPage() {
           {customNotice}
         </p>
       ) : null}
+      <section className="mb-6" data-testid="admin-custom-block-review-queue">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold">Очередь ручной проверки</h3>
+          <span className="text-sm text-[var(--text-muted)]">
+            Ожидают проверки: {reviewQueue.length}
+          </span>
+        </div>
+        {reviewQueue.length === 0 ? (
+          <Card>
+            <p className="text-sm text-[var(--text-muted)]">
+              Версий, ожидающих ручной проверки, нет.
+            </p>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {reviewQueue.map(item => (
+              <Card key={item.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h4 className="font-semibold">
+                      {item.title}{' '}
+                      <span className="text-xs font-normal text-[var(--text-muted)]">
+                        {item.stable_block_id} · v{item.version} · #{item.id}
+                      </span>
+                    </h4>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                      Автор #{item.owner_user_id} · отправлено{' '}
+                      {new Date(item.updated_at).toLocaleString('ru-RU')}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Автоматическая проверка:{' '}
+                      {item.validation_result?.valid ? 'пройдена' : 'нет данных'} · Проверка
+                      безопасности: {securityReportLabel(item)}
+                    </p>
+                    <Link
+                      to={`/dashboard/block-library/custom/${item.id}`}
+                      className="mt-2 inline-flex text-sm text-[var(--accent)]"
+                    >
+                      Открыть детали проверки
+                    </Link>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() =>
+                        void runCustomAction(
+                          () => decideCustomBlockReview(item.id, 'approve', ''),
+                          'Версия одобрена.'
+                        )
+                      }
+                      className="rounded border border-emerald-500/50 px-3 py-2 text-sm text-emerald-400"
+                    >
+                      Одобрить
+                    </button>
+                    <button
+                      onClick={() => {
+                        const comment = window.prompt('Что автору нужно изменить?') || '';
+                        if (comment.trim())
+                          void runCustomAction(
+                            () => decideCustomBlockReview(item.id, 'needs_changes', comment),
+                            'Автору отправлены замечания.'
+                          );
+                      }}
+                      className="rounded border border-amber-500/50 px-3 py-2 text-sm text-amber-400"
+                    >
+                      Нужны изменения
+                    </button>
+                    <button
+                      onClick={() => {
+                        const comment = window.prompt('Причина отклонения (необязательно):') || '';
+                        if (window.confirm('Отклонить версию? Это административное решение.'))
+                          void runCustomAction(
+                            () => decideCustomBlockReview(item.id, 'reject', comment),
+                            'Версия отклонена.'
+                          );
+                      }}
+                      className="rounded border border-red-500/50 px-3 py-2 text-sm text-red-400"
+                    >
+                      Отклонить
+                    </button>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
       <div className="space-y-3" data-testid="admin-custom-blocks">
         {customBlocks.length === 0 ? (
           <Card>
@@ -265,12 +359,37 @@ export default function PlatformBlocksPage() {
                     {item.status_label}
                   </p>
                   <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    Процесс проверки: {reviewStateLabel(item.review_state)}
+                  </p>
+                  {item.latest_security_report ? (
+                    <details className="mt-2 text-xs text-[var(--text-muted)]">
+                      <summary>Проверка безопасности: {securityReportLabel(item)}</summary>
+                      {item.latest_security_report.findings.length ? (
+                        <ul className="mt-2 list-disc pl-5">
+                          {item.latest_security_report.findings.map((finding, index) => (
+                            <li key={`${finding.location}-${index}`}>
+                              {finding.severity}: {finding.finding} ({finding.location}) —{' '}
+                              {finding.why}. {finding.recommendation}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-2">
+                          Структурированных находок нет; отчёт только advisory.
+                        </p>
+                      )}
+                    </details>
+                  ) : null}
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
                     Источник: пользовательский · Использований: {item.usage_count} · Паспорт: есть ·
                     Инструкция: {item.user_guide?.content ? 'есть' : 'нет'}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {item.status === 'draft' ? (
+                  {item.status === 'draft' &&
+                  ['draft', 'needs_changes', 'rejected', 'security_review_failed'].includes(
+                    item.review_state || 'draft'
+                  ) ? (
                     <>
                       <Link
                         to={`/dashboard/block-library/custom/${item.id}/edit`}
@@ -295,17 +414,6 @@ export default function PlatformBlocksPage() {
                       <button
                         onClick={() =>
                           void runCustomAction(
-                            () => publishCustomBlock(item.id),
-                            'Блок опубликован.'
-                          )
-                        }
-                        className="rounded border border-[var(--accent)] px-3 py-2 text-sm"
-                      >
-                        Опубликовать
-                      </button>
-                      <button
-                        onClick={() =>
-                          void runCustomAction(
                             () => deleteCustomBlockDraft(item.id),
                             'Черновик удалён.'
                           )
@@ -315,6 +423,13 @@ export default function PlatformBlocksPage() {
                         Удалить
                       </button>
                     </>
+                  ) : item.status === 'draft' && item.review_state === 'admin_review_pending' ? (
+                    <Link
+                      to={`/dashboard/block-library/custom/${item.id}`}
+                      className="rounded border border-[var(--border)] px-3 py-2 text-sm"
+                    >
+                      Открыть в очереди проверки
+                    </Link>
                   ) : null}
                   {item.status === 'published' ? (
                     <>

@@ -5,6 +5,13 @@ import Card from '../components/Card';
 import { fetchCustomBlock } from '../../../api/blocks';
 import type { CustomBlockVersion } from '../../../types/blocks';
 import { customBlockConnectionContract } from '../../../utils/customBlockConnections';
+import {
+  reviewActorLabel,
+  reviewDecisionLabel,
+  reviewEventLabel,
+  reviewStateLabel,
+  securityReportLabel,
+} from '../../../utils/customBlockReviewPresentation';
 
 export default function CustomBlockVersionDetailPage() {
   const { versionId } = useParams();
@@ -76,7 +83,68 @@ export default function CustomBlockVersionDetailPage() {
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Использований в сценариях: {item.usage_count}
             </p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Процесс проверки: {reviewStateLabel(item.review_state)}.
+            </p>
           </Card>
+          {item.latest_security_report ? (
+            <Card>
+              <h2 className="font-semibold">AI Security Agent (ИИ-агент безопасности)</h2>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">{securityReportLabel(item)}</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Статус:{' '}
+                {item.latest_security_report.status === 'failed'
+                  ? 'недоступен; публикация заблокирована'
+                  : 'отчёт готов'}
+                .
+              </p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Отчёт носит рекомендательный характер: окончательное решение принимает
+                администратор.
+              </p>
+              {item.latest_security_report.findings.length ? (
+                <ul className="mt-2 list-disc pl-5 text-sm text-[var(--text-muted)]">
+                  {item.latest_security_report.findings.map((finding, index) => (
+                    <li key={`${finding.location}-${index}`}>
+                      {finding.severity}: {finding.finding} — {finding.recommendation}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </Card>
+          ) : null}
+          {item.review_history?.length ? (
+            <Card>
+              <h2 className="font-semibold">История ручной проверки</h2>
+              <ul className="mt-2 space-y-2 text-sm text-[var(--text-muted)]">
+                {item.review_history.map(event => (
+                  <li key={event.id}>
+                    {reviewDecisionLabel(event.decision)} · администратор #{event.reviewer_user_id}
+                    {event.comment ? ` — ${event.comment}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
+          {item.review_events?.length ? (
+            <Card>
+              <h2 className="font-semibold">История процесса проверки</h2>
+              <ul className="mt-2 space-y-2 text-xs text-[var(--text-muted)]">
+                {item.review_events.map(event => (
+                  <li key={event.id}>
+                    {reviewEventLabel(event.event_type)}
+                    {event.previous_state &&
+                    event.resulting_state &&
+                    event.previous_state !== event.resulting_state
+                      ? `: ${reviewStateLabel(event.previous_state as CustomBlockVersion['review_state'])} → ${reviewStateLabel(event.resulting_state as CustomBlockVersion['review_state'])}`
+                      : ''}
+                    {' · '}
+                    {reviewActorLabel(event.actor_type)}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
           <Card>
             <h2 className="font-semibold">Соединения этой версии</h2>
             {connections.outputs.length ? (

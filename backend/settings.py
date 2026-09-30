@@ -133,6 +133,10 @@ class Settings(BaseSettings):
     CUSTOM_BLOCK_RUNNER_SHARED_TOKEN: str = ""
     CUSTOM_BLOCK_MAX_CONCURRENT_PER_VERSION: int = 2
 
+    # Stage 7.8: production must supply a reviewed AI Security Agent adapter.
+    # The development stub is deliberately non-AI and never an approval authority.
+    CUSTOM_BLOCK_SECURITY_AGENT_PROVIDER: str = "development"
+
     # WhatsApp Meta Cloud API (Graph API)
     WHATSAPP_GRAPH_API_BASE: str = "https://graph.facebook.com/v19.0"
 

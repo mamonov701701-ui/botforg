@@ -98,6 +98,50 @@ export interface CustomBlockVersion {
   runtime_kind: string;
   runtime_definition: Record<string, any>;
   execution_spec?: Record<string, any> | null;
+  execution_artifact_hash?: string | null;
+  review_state?:
+    | 'draft'
+    | 'admin_review_pending'
+    | 'approved'
+    | 'needs_changes'
+    | 'rejected'
+    | 'security_review_failed';
+  latest_security_report?: {
+    id: number;
+    artifact_hash?: string | null;
+    report_kind: string;
+    status?: 'succeeded' | 'failed';
+    provider_code?: string | null;
+    error_code?: string | null;
+    findings: {
+      finding: string;
+      location: string;
+      why: string;
+      severity: string;
+      recommendation: string;
+    }[];
+    summary: string;
+    created_at: string;
+  } | null;
+  review_history?: {
+    id: number;
+    artifact_hash?: string | null;
+    decision: 'approve' | 'needs_changes' | 'reject';
+    comment: string;
+    reviewer_user_id: number;
+    created_at: string;
+  }[];
+  review_events?: {
+    id: number;
+    event_type: string;
+    previous_state?: string | null;
+    resulting_state?: string | null;
+    actor_type: string;
+    actor_user_id?: number | null;
+    artifact_hash?: string | null;
+    metadata: Record<string, unknown>;
+    created_at: string;
+  }[];
   validation_result?: { valid: boolean; errors: string[]; warnings: string[] } | null;
   usage_count: number;
   created_at: string;

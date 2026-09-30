@@ -164,6 +164,10 @@ class CustomBlockVersionOut(BaseModel):
     execution_spec: Optional[Dict[str, Any]] = None
     execution_artifact_hash: Optional[str] = None
     execution_state: str = "enabled"
+    review_state: str = "draft"
+    latest_security_report: Optional[Dict[str, Any]] = None
+    review_history: List[Dict[str, Any]] = Field(default_factory=list)
+    review_events: List[Dict[str, Any]] = Field(default_factory=list)
     validation_result: Optional[Dict[str, Any]] = None
     usage_count: int = 0
     created_at: datetime
@@ -176,3 +180,16 @@ class CustomBlockValidationOut(BaseModel):
     valid: bool
     errors: List[str]
     warnings: List[str]
+
+
+class CustomBlockReviewDecisionPayload(BaseModel):
+    decision: str
+    comment: str = Field(default="", max_length=4000)
+
+    @field_validator("decision")
+    @classmethod
+    def validate_decision(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"approve", "needs_changes", "reject"}:
+            raise ValueError("Допустимы решения: approve, needs_changes, reject")
+        return normalized

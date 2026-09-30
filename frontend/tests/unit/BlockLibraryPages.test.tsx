@@ -7,6 +7,9 @@ const fetchBlocksCatalog = vi.fn();
 const fetchAdminBlocksCatalog = vi.fn();
 const fetchMyCustomBlocks = vi.fn();
 const fetchAllCustomBlocksAdmin = vi.fn();
+const fetchCustomBlockReviewQueue = vi.fn();
+const publishCustomBlock = vi.fn();
+const decideCustomBlockReview = vi.fn();
 let currentUser = { id: 7, name: 'Тест', role: 'owner', public_id: 101 };
 
 vi.mock('@/api/blocks', () => ({
@@ -14,6 +17,11 @@ vi.mock('@/api/blocks', () => ({
   fetchAdminBlocksCatalog: (...args: unknown[]) => fetchAdminBlocksCatalog(...args),
   fetchMyCustomBlocks: (...args: unknown[]) => fetchMyCustomBlocks(...args),
   fetchAllCustomBlocksAdmin: (...args: unknown[]) => fetchAllCustomBlocksAdmin(...args),
+  fetchCustomBlockReviewQueue: (...args: unknown[]) => fetchCustomBlockReviewQueue(...args),
+  decideCustomBlockReview: (...args: unknown[]) => decideCustomBlockReview(...args),
+  publishCustomBlock: (...args: unknown[]) => publishCustomBlock(...args),
+  validateCustomBlock: vi.fn().mockResolvedValue({ valid: true, errors: [], warnings: [] }),
+  submitCustomBlockReview: vi.fn(),
   archiveCustomBlock: vi.fn(),
   restoreCustomBlock: vi.fn(),
   createCustomBlockVersion: vi.fn(),
@@ -96,10 +104,14 @@ beforeEach(() => {
   fetchAdminBlocksCatalog.mockReset();
   fetchMyCustomBlocks.mockReset();
   fetchAllCustomBlocksAdmin.mockReset();
+  fetchCustomBlockReviewQueue.mockReset();
+  publishCustomBlock.mockReset().mockResolvedValue({});
+  decideCustomBlockReview.mockReset().mockResolvedValue({});
   fetchBlocksCatalog.mockResolvedValue([messageBlock, legacyAction, customCatalogBlock]);
   fetchAdminBlocksCatalog.mockResolvedValue([messageBlock, legacyAction]);
   fetchMyCustomBlocks.mockResolvedValue([]);
   fetchAllCustomBlocksAdmin.mockResolvedValue([]);
+  fetchCustomBlockReviewQueue.mockResolvedValue([]);
   currentUser = { id: 7, name: 'Тест', role: 'owner', public_id: 101 };
   localStorage.clear();
   Object.defineProperty(window, 'matchMedia', {
@@ -231,6 +243,59 @@ describe('Пользовательская библиотека блоков', (
     ).toEqual(['Бета', 'Гамма', 'Альфа']);
   });
 
+  it('показывает review state как основной статус и не предлагает повторную отправку', async () => {
+    fetchMyCustomBlocks.mockResolvedValue([
+      {
+        ...ownedVersion(10, 'Ожидающий блок', 'draft', '2026-09-30T10:00:00Z'),
+        review_state: 'admin_review_pending',
+        latest_security_report: {
+          status: 'succeeded',
+          summary: 'raw provider summary',
+          findings: [],
+        },
+        review_history: [],
+      },
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('На проверке')).toBeTruthy();
+    expect(screen.queryByText('Отправить на проверку')).toBeNull();
+    expect(screen.queryByText('Проверить')).toBeNull();
+    expect(document.body.textContent).not.toContain('raw provider summary');
+  });
+
+  it('после одобрения предлагает автору отдельную публикацию', async () => {
+    fetchMyCustomBlocks.mockResolvedValue([
+      {
+        ...ownedVersion(11, 'Одобренный блок', 'draft', '2026-09-30T10:00:00Z'),
+        review_state: 'approved',
+        latest_security_report: { status: 'succeeded', summary: 'raw summary', findings: [] },
+        review_history: [
+          {
+            id: 1,
+            decision: 'approve',
+            comment: '',
+            reviewer_user_id: 1,
+            created_at: '2026-09-30T10:00:00Z',
+          },
+        ],
+      },
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Одобрен')).toBeTruthy();
+    expect(screen.getByText('Последнее решение: Одобрено')).toBeTruthy();
+    fireEvent.click(screen.getByText('Опубликовать'));
+    await waitFor(() => expect(publishCustomBlock).toHaveBeenCalledWith(11));
+    expect(screen.queryByText('Отправить на проверку')).toBeNull();
+  });
+
   it('использует русскую инструкцию и понятные типы параметров', async () => {
     render(
       <MemoryRouter initialEntries={['/dashboard/block-library/message']}>
@@ -261,6 +326,31 @@ describe('Административное управление блоками',
     fireEvent.click(screen.getByTestId('admin-block-details-message'));
     expect(screen.getByTestId('admin-block-expanded-message')).toBeTruthy();
     expect(screen.getByText(/Исходящие связи/)).toBeTruthy();
+    expect(screen.getByTestId('admin-custom-block-review-queue')).toBeTruthy();
+  });
+
+  it('показывает ожидающую версию в отдельной очереди review', async () => {
+    const pending = {
+      ...ownedVersion(44, 'На проверке', 'draft', '2026-09-29T12:00:00Z'),
+      review_state: 'admin_review_pending',
+      validation_result: { valid: true, errors: [], warnings: [] },
+      latest_security_report: { status: 'succeeded', summary: 'Отчёт готов', findings: [] },
+    };
+    fetchCustomBlockReviewQueue.mockResolvedValue([pending]);
+    fetchAllCustomBlocksAdmin.mockResolvedValue([pending]);
+    render(
+      <MemoryRouter>
+        <PlatformBlocksPage />
+      </MemoryRouter>
+    );
+    expect((await screen.findAllByText('На проверке')).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Ожидают проверки: 1/)).toBeTruthy();
+    expect(screen.getByText(/Автоматическая проверка: пройдена/)).toBeTruthy();
+    expect(screen.getAllByText('Одобрить')).toHaveLength(1);
+    expect(screen.getAllByText('Нужны изменения')).toHaveLength(1);
+    expect(screen.getAllByText('Отклонить')).toHaveLength(1);
+    expect(screen.queryByText('Проверить')).toBeNull();
+    expect(screen.getByText('Открыть в очереди проверки')).toBeTruthy();
   });
 
   it('не допускает обычного пользователя к платформенному маршруту', async () => {

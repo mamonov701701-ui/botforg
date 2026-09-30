@@ -15,18 +15,38 @@ from backend.models.custom_block import (
     CUSTOM_BLOCK_ARCHIVED,
     CUSTOM_BLOCK_DRAFT,
     CUSTOM_BLOCK_PUBLISHED,
+    CUSTOM_BLOCK_REVIEW_ADMIN_PENDING,
+    CUSTOM_BLOCK_REVIEW_APPROVED,
+    CUSTOM_BLOCK_REVIEW_DRAFT,
+    CUSTOM_BLOCK_REVIEW_NEEDS_CHANGES,
+    CUSTOM_BLOCK_REVIEW_REJECTED,
+    CUSTOM_BLOCK_REVIEW_SECURITY_FAILED,
     CustomBlock,
+    CustomBlockReviewDecision,
+    CustomBlockReviewEvent,
+    CustomBlockSecurityReport,
     CustomBlockVersion,
 )
 from backend.models.scenario import Scenario
 from backend.schemas.blocks import BlockCatalogItem, CustomBlockDraftPayload
 from backend.services.custom_block_execution.contracts import ExecutionSpec
+from backend.services.custom_block_security_agent import (
+    SecurityAgentUnavailable, get_custom_block_security_agent,
+)
 
 
 STATUS_LABELS = {
     CUSTOM_BLOCK_DRAFT: "Черновик",
     CUSTOM_BLOCK_PUBLISHED: "Опубликован",
     CUSTOM_BLOCK_ARCHIVED: "Архив",
+}
+REVIEW_STATE_LABELS = {
+    CUSTOM_BLOCK_REVIEW_DRAFT: "Черновик",
+    CUSTOM_BLOCK_REVIEW_ADMIN_PENDING: "Ожидает проверки администратора",
+    CUSTOM_BLOCK_REVIEW_APPROVED: "Одобрен администратором",
+    CUSTOM_BLOCK_REVIEW_NEEDS_CHANGES: "Требуются изменения",
+    CUSTOM_BLOCK_REVIEW_REJECTED: "Отклонён",
+    CUSTOM_BLOCK_REVIEW_SECURITY_FAILED: "Проверка AI Security Agent недоступна",
 }
 WIZARD_STEP_NUMBERS = {
     "identity": 1,
@@ -356,9 +376,38 @@ def create_draft(db: Session, user: Any, payload: CustomBlockDraftPayload) -> Cu
     return version
 
 
-def update_draft(version: CustomBlockVersion, payload: CustomBlockDraftPayload) -> None:
+def _record_review_event(
+    db: Session, version: CustomBlockVersion, *, event_type: str,
+    previous_state: str | None, resulting_state: str | None,
+    actor_type: str, actor_user_id: int | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    db.add(CustomBlockReviewEvent(
+        custom_block_version_id=version.id, event_type=event_type,
+        previous_state=previous_state, resulting_state=resulting_state,
+        actor_type=actor_type, actor_user_id=actor_user_id,
+        artifact_hash=version.execution_artifact_hash,
+        metadata_json=metadata or {},
+    ))
+
+
+def update_draft(version: CustomBlockVersion, payload: CustomBlockDraftPayload, *, actor_user_id: int | None = None, db: Session | None = None) -> None:
     if version.status != CUSTOM_BLOCK_DRAFT:
         raise HTTPException(status_code=409, detail="Опубликованную или архивную версию нельзя редактировать")
+    previous_review_material = {
+        "title": version.title,
+        "description": version.description,
+        "category": version.category,
+        "passport": {
+            key: value for key, value in (version.passport or {}).items()
+            if key not in {"wizard_step", "lifecycle_status"}
+        },
+        "user_guide": version.user_guide or {},
+        "runtime_kind": version.runtime_kind,
+        "runtime_definition": version.runtime_definition or {},
+        "execution_spec": version.execution_spec,
+        "execution_artifact_hash": version.execution_artifact_hash,
+    }
     version.title = payload.title.strip() or "Новый блок"
     version.description = payload.description.strip()
     version.category = payload.category or "custom"
@@ -369,7 +418,34 @@ def update_draft(version: CustomBlockVersion, payload: CustomBlockDraftPayload) 
     version.runtime_definition = {**payload.runtime_definition, "kind": runtime_kind}
     version.execution_spec = execution_spec
     version.execution_artifact_hash = artifact_hash
-    version.validation_result = None
+    current_review_material = {
+        "title": version.title,
+        "description": version.description,
+        "category": version.category,
+        "passport": {
+            key: value for key, value in (version.passport or {}).items()
+            if key not in {"wizard_step", "lifecycle_status"}
+        },
+        "user_guide": version.user_guide or {},
+        "runtime_kind": version.runtime_kind,
+        "runtime_definition": version.runtime_definition or {},
+        "execution_spec": version.execution_spec,
+        "execution_artifact_hash": version.execution_artifact_hash,
+    }
+    review_material_changed = previous_review_material != current_review_material
+    if review_material_changed:
+        version.validation_result = None
+    # Only a material authoring change invalidates review. Autosave of the
+    # current wizard step or an identical payload must preserve the decision.
+    if review_material_changed and version.review_state != CUSTOM_BLOCK_REVIEW_DRAFT:
+        previous = version.review_state
+        version.review_state = CUSTOM_BLOCK_REVIEW_DRAFT
+        if db is not None:
+            _record_review_event(
+                db, version, event_type="review_invalidated", previous_state=previous,
+                resulting_state=CUSTOM_BLOCK_REVIEW_DRAFT, actor_type="author",
+                actor_user_id=actor_user_id, metadata={"reason": "draft_changed"},
+            )
 
 
 def create_new_version(db: Session, source: CustomBlockVersion) -> CustomBlockVersion:
@@ -401,6 +477,7 @@ def create_new_version(db: Session, source: CustomBlockVersion) -> CustomBlockVe
         execution_spec=dict(source.execution_spec or {}) if source.execution_spec else None,
         execution_artifact_hash=source.execution_artifact_hash,
         execution_state="enabled",
+        review_state=CUSTOM_BLOCK_REVIEW_DRAFT,
     )
     db.add(draft)
     try:
@@ -483,6 +560,124 @@ def usage_count(db: Session, version_id: int) -> int:
     )
 
 
+def automated_security_validation(version: CustomBlockVersion) -> list[dict[str, str]]:
+    """Deterministic static validation; this is not the AI Security Agent."""
+    source = str((version.execution_spec or {}).get("source") or "")
+    patterns = [
+        (r"\beval\s*\(", "eval", "high", "Dynamic evaluation complicates security analysis", "Avoid dynamic code evaluation."),
+        (r"\bFunction\s*\(", "Function", "high", "Dynamic function construction complicates security analysis", "Use the declared run(envelope) function only."),
+        (r"\b(fetch|XMLHttpRequest|WebSocket)\b", "network API", "medium", "Network-like API reference requires manual review", "Do not rely on network access in Custom Block code."),
+        (r"\b(importScripts|require)\s*\(", "module loading", "medium", "Dynamic module loading requires manual review", "Keep the source self-contained."),
+    ]
+    findings: list[dict[str, str]] = []
+    for pattern, finding, severity, why, recommendation in patterns:
+        match = re.search(pattern, source)
+        if match:
+            findings.append({
+                "finding": finding,
+                "location": f"source offset {match.start()}",
+                "why": why,
+                "severity": severity,
+                "recommendation": recommendation,
+            })
+    return findings
+
+
+def submit_for_review(db: Session, version: CustomBlockVersion, *, actor_user_id: int | None = None) -> dict[str, Any]:
+    if version.status != CUSTOM_BLOCK_DRAFT:
+        raise HTTPException(status_code=409, detail="На проверку можно отправить только черновик")
+    if version.review_state != CUSTOM_BLOCK_REVIEW_DRAFT:
+        raise HTTPException(status_code=409, detail="Перед повторной отправкой измените версию и сохраните новый черновик")
+    result = validate_version(version)
+    version.validation_result = result
+    if not result["valid"]:
+        _record_review_event(
+            db, version, event_type="automated_validation_failed",
+            previous_state=version.review_state, resulting_state=version.review_state,
+            actor_type="author", actor_user_id=actor_user_id,
+            metadata={"error_count": len(result["errors"])},
+        )
+        db.commit()
+        raise HTTPException(status_code=422, detail={"message": "Блок не прошёл проверку", **result})
+    previous = version.review_state
+    _record_review_event(
+        db, version, event_type="review_submitted", previous_state=previous,
+        resulting_state=previous, actor_type="author", actor_user_id=actor_user_id,
+    )
+    static_findings = automated_security_validation(version)
+    _record_review_event(
+        db, version, event_type="automated_validation_completed", previous_state=previous,
+        resulting_state=previous, actor_type="system", metadata={"static_finding_count": len(static_findings)},
+    )
+    agent = get_custom_block_security_agent()
+    source = str((version.execution_spec or {}).get("source") or "")
+    try:
+        agent_report = agent.analyze(version_id=version.id, artifact_hash=version.execution_artifact_hash, source=source)
+    except SecurityAgentUnavailable as exc:
+        report = CustomBlockSecurityReport(
+            custom_block_version_id=version.id, artifact_hash=version.execution_artifact_hash,
+            report_kind="ai_security", status="failed", provider_code=getattr(agent, "provider_code", "unavailable"),
+            error_code=exc.code, findings=[], summary="AI Security Agent is unavailable; publication is blocked.",
+        )
+        db.add(report)
+        version.review_state = CUSTOM_BLOCK_REVIEW_SECURITY_FAILED
+        _record_review_event(db, version, event_type="ai_security_review_failed", previous_state=previous,
+                             resulting_state=version.review_state, actor_type="system", metadata={"error_code": exc.code})
+        db.commit()
+        db.refresh(version)
+        return serialize_version(db, version)
+    report = CustomBlockSecurityReport(
+        custom_block_version_id=version.id,
+        artifact_hash=version.execution_artifact_hash,
+        report_kind="ai_security",
+        status="succeeded", provider_code=agent_report.provider_code,
+        findings=[item.__dict__ for item in agent_report.findings], summary=agent_report.summary,
+    )
+    db.add(report)
+    version.review_state = CUSTOM_BLOCK_REVIEW_ADMIN_PENDING
+    _record_review_event(db, version, event_type="ai_security_review_created", previous_state=previous,
+                         resulting_state=previous, actor_type="system", metadata={"provider": agent_report.provider_code})
+    _record_review_event(db, version, event_type="admin_review_pending", previous_state=previous,
+                         resulting_state=version.review_state, actor_type="system")
+    db.commit()
+    db.refresh(version)
+    return serialize_version(db, version)
+
+
+def record_manual_decision(
+    db: Session, version: CustomBlockVersion, reviewer: Any, decision: str, comment: str
+) -> dict[str, Any]:
+    if version.status != CUSTOM_BLOCK_DRAFT or version.review_state != CUSTOM_BLOCK_REVIEW_ADMIN_PENDING:
+        raise HTTPException(status_code=409, detail="Решение можно принять только для версии, ожидающей проверки")
+    latest_report = (db.query(CustomBlockSecurityReport)
+                     .filter(CustomBlockSecurityReport.custom_block_version_id == version.id,
+                             CustomBlockSecurityReport.artifact_hash == version.execution_artifact_hash,
+                             CustomBlockSecurityReport.status == "succeeded")
+                     .order_by(CustomBlockSecurityReport.id.desc()).first())
+    if latest_report is None:
+        raise HTTPException(status_code=409, detail="Нет успешного AI Security Agent отчёта для текущего артефакта")
+    state_by_decision = {
+        "approve": CUSTOM_BLOCK_REVIEW_APPROVED,
+        "needs_changes": CUSTOM_BLOCK_REVIEW_NEEDS_CHANGES,
+        "reject": CUSTOM_BLOCK_REVIEW_REJECTED,
+    }
+    db.add(CustomBlockReviewDecision(
+        custom_block_version_id=version.id,
+        artifact_hash=version.execution_artifact_hash,
+        decision=decision,
+        comment=comment.strip(),
+        reviewer_user_id=reviewer.id,
+    ))
+    version.review_state = state_by_decision[decision]
+    _record_review_event(db, version, event_type=f"admin_{decision}",
+                         previous_state=CUSTOM_BLOCK_REVIEW_ADMIN_PENDING,
+                         resulting_state=version.review_state, actor_type="admin",
+                         actor_user_id=reviewer.id, metadata={"has_comment": bool(comment.strip())})
+    db.commit()
+    db.refresh(version)
+    return serialize_version(db, version)
+
+
 def to_catalog_item(version: CustomBlockVersion) -> BlockCatalogItem:
     p = version.passport or {}
     schema = p.get("config_schema") or []
@@ -508,6 +703,15 @@ def to_catalog_item(version: CustomBlockVersion) -> BlockCatalogItem:
 
 
 def serialize_version(db: Session, version: CustomBlockVersion) -> dict[str, Any]:
+    report = (db.query(CustomBlockSecurityReport)
+              .filter(CustomBlockSecurityReport.custom_block_version_id == version.id)
+              .order_by(CustomBlockSecurityReport.id.desc()).first())
+    decisions = (db.query(CustomBlockReviewDecision)
+                 .filter(CustomBlockReviewDecision.custom_block_version_id == version.id)
+                 .order_by(CustomBlockReviewDecision.id.asc()).all())
+    events = (db.query(CustomBlockReviewEvent)
+              .filter(CustomBlockReviewEvent.custom_block_version_id == version.id)
+              .order_by(CustomBlockReviewEvent.id.asc()).all())
     return {
         "id": version.id,
         "stable_block_id": version.block.stable_key,
@@ -526,6 +730,23 @@ def serialize_version(db: Session, version: CustomBlockVersion) -> dict[str, Any
         "execution_spec": version.execution_spec,
         "execution_artifact_hash": version.execution_artifact_hash,
         "execution_state": version.execution_state,
+        "review_state": version.review_state,
+        "latest_security_report": ({
+            "id": report.id, "artifact_hash": report.artifact_hash, "report_kind": report.report_kind,
+            "status": report.status, "provider_code": report.provider_code, "error_code": report.error_code,
+            "findings": report.findings or [], "summary": report.summary, "created_at": report.created_at,
+        } if report else None),
+        "review_history": [{
+            "id": item.id, "artifact_hash": item.artifact_hash, "decision": item.decision,
+            "comment": item.comment, "reviewer_user_id": item.reviewer_user_id,
+            "created_at": item.created_at,
+        } for item in decisions],
+        "review_events": [{
+            "id": item.id, "event_type": item.event_type, "previous_state": item.previous_state,
+            "resulting_state": item.resulting_state, "actor_type": item.actor_type,
+            "actor_user_id": item.actor_user_id, "artifact_hash": item.artifact_hash,
+            "metadata": item.metadata_json or {}, "created_at": item.created_at,
+        } for item in events],
         "validation_result": version.validation_result,
         "usage_count": usage_count(db, version.id),
         "created_at": version.created_at,

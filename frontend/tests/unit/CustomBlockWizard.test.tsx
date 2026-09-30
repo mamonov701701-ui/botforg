@@ -6,14 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const createDraft = vi.fn();
 const updateDraft = vi.fn();
 const validateBlock = vi.fn();
-const publishBlock = vi.fn();
+const submitReview = vi.fn();
 const fetchBlock = vi.fn();
 
 vi.mock('@/api/blocks', () => ({
   createCustomBlockDraft: (...args: unknown[]) => createDraft(...args),
   updateCustomBlockDraft: (...args: unknown[]) => updateDraft(...args),
   validateCustomBlock: (...args: unknown[]) => validateBlock(...args),
-  publishCustomBlock: (...args: unknown[]) => publishBlock(...args),
+  submitCustomBlockReview: (...args: unknown[]) => submitReview(...args),
   fetchCustomBlock: (...args: unknown[]) => fetchBlock(...args),
 }));
 
@@ -56,7 +56,7 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation((_id, payload) => Promise.resolve(savedVersion(payload)));
   validateBlock.mockReset().mockResolvedValue({ valid: true, errors: [], warnings: [] });
-  publishBlock.mockReset().mockResolvedValue({ id: 41, version: 1, status: 'published' });
+  submitReview.mockReset().mockResolvedValue({ id: 41, version: 1, status: 'draft' });
   fetchBlock.mockReset();
 });
 
@@ -327,9 +327,9 @@ describe('Мастер кастомного блока', () => {
     fireEvent.click(screen.getByText('Проверить'));
     await waitFor(() => expect(validateBlock).toHaveBeenCalledWith(41));
     expect(screen.getByText('Ошибки')).toBeTruthy();
-    fireEvent.click(screen.getByText('Опубликовать'));
-    await waitFor(() => expect(publishBlock).toHaveBeenCalledWith(41));
-    expect(screen.getByText('Блок успешно опубликован')).toBeTruthy();
+    fireEvent.click(screen.getByText('Отправить на проверку'));
+    await waitFor(() => expect(submitReview).toHaveBeenCalledWith(41));
+    expect(screen.getByText('Блок отправлен на проверку')).toBeTruthy();
     expect(screen.getByText('Вернуться в библиотеку')).toBeTruthy();
   });
 
@@ -621,6 +621,29 @@ describe('Мастер кастомного блока', () => {
     expect(checkbox.checked).toBe(true);
   });
 
+  it('не открывает редактирование версии с активной или завершённой проверкой', async () => {
+    fetchBlock.mockResolvedValue({
+      ...savedVersion({ title: 'На проверке' }),
+      review_state: 'admin_review_pending',
+    });
+    render(
+      <MemoryRouter initialEntries={['/dashboard/block-library/custom/41/edit']}>
+        <Routes>
+          <Route
+            path="/dashboard/block-library/custom/:versionId/edit"
+            element={<CustomBlockWizardPage />}
+          />
+          <Route
+            path="/dashboard/block-library/custom/:versionId"
+            element={<div>Детали защищённой версии</div>}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Детали защищённой версии')).toBeTruthy();
+    expect(updateDraft).not.toHaveBeenCalled();
+  });
+
   it('кнопка «Исправить» открывает новый шаг 5 для ошибки выполнения', async () => {
     validateBlock.mockResolvedValue({
       valid: false,
@@ -659,8 +682,8 @@ describe('Мастер кастомного блока', () => {
       </MemoryRouter>
     );
     for (let index = 0; index < 8; index += 1) fireEvent.click(screen.getByText('Далее'));
-    fireEvent.click(screen.getByText('Опубликовать'));
-    await screen.findByText('Блок успешно опубликован');
+    fireEvent.click(screen.getByText('Отправить на проверку'));
+    await screen.findByText('Блок отправлен на проверку');
     fireEvent.click(screen.getByText('Открыть в редакторе'));
     expect(await screen.findByText('Быстрый вход в EditorV2')).toBeTruthy();
   });

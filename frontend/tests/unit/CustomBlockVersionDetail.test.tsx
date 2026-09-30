@@ -58,4 +58,58 @@ describe('CustomBlockVersionDetailPage', () => {
     expect(screen.getByText(/Повторить · маршрут/)).toBeTruthy();
     expect(screen.queryByText(/отправляет настроенное сообщение/)).toBeNull();
   });
+
+  it('показывает историю проверки русскими пользовательскими названиями', async () => {
+    fetchCustomBlock.mockResolvedValue({
+      ...(await fetchCustomBlock()),
+      status: 'draft',
+      status_label: 'Черновик',
+      review_state: 'admin_review_pending',
+      latest_security_report: {
+        status: 'succeeded',
+        summary:
+          'Development AI Security Agent provider completed; Manual Admin Review is still required.',
+        findings: [],
+      },
+      review_history: [
+        {
+          id: 1,
+          decision: 'approve',
+          reviewer_user_id: 1,
+          comment: '',
+          created_at: '2026-09-30T10:00:00Z',
+        },
+      ],
+      review_events: [
+        {
+          id: 1,
+          event_type: 'admin_review_pending',
+          previous_state: 'draft',
+          resulting_state: 'admin_review_pending',
+          actor_type: 'system',
+          metadata: {},
+          created_at: '2026-09-30T10:00:00Z',
+        },
+      ],
+    });
+    render(
+      <MemoryRouter initialEntries={['/dashboard/block-library/custom/77']}>
+        <Routes>
+          <Route
+            path="/dashboard/block-library/custom/:versionId"
+            element={<CustomBlockVersionDetailPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/Процесс проверки: На проверке/)).toBeTruthy();
+    expect(screen.getByText('История процесса проверки')).toBeTruthy();
+    expect(
+      screen.getByText(/Передано администратору: Черновик → На проверке · Система/)
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toContain('review_submitted');
+    expect(document.body.textContent).not.toContain(
+      'Development AI Security Agent provider completed'
+    );
+  });
 });

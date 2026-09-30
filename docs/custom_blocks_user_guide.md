@@ -22,4 +22,18 @@ You may use plain JavaScript calculations over the supplied `input` and `setting
 
 BotForg preserves JavaScript source exactly as entered, including line breaks and indentation. Preview (предпросмотр) sends the exact published version to the Backend Preview API (API серверного предпросмотра); the browser does not execute the source. The Backend authorizes the version and invokes the separate isolated Development Runner (раннер разработки).
 
-Publishing makes the version and its code immutable. To change code, use Create New Version. Archive removes a block from new insertion but does not break an already saved scenario that references that exact version. Future review and marketplace access workflows are separate and are not part of this stage.
+Перед публикацией отправьте каждую версию в Review Workflow (процесс проверки). Automated Validation (автоматическая валидация) детерминированно проверяет контракт блока. Отдельный AI Security Agent (ИИ-агент безопасности) готовит рекомендательный отчёт: это не одобрение, а временная недоступность агента безопасно блокирует публикацию. Уполномоченный администратор выполняет Manual Admin Review (ручную проверку администратором) и принимает финальное решение для этого цикла.
+
+Статусы для автора означают:
+
+- **Черновик** — продолжайте редактирование или отправьте версию на проверку;
+- **На проверке** — дождитесь администратора; повторная отправка недоступна;
+- **Нужны изменения** — прочитайте комментарий администратора, исправьте Draft (черновик) и отправьте его повторно;
+- **Отклонён** — текущий цикл завершён без одобрения; перед новой отправкой доработайте блок;
+- **Одобрен** — публикация доступна отдельным действием и не выполняется автоматически.
+
+Опубликовать можно только одобренную точную версию с актуальным успешным отчётом AI Security Agent. Реальное изменение содержимого после проверки начинает новый цикл, а фоновое сохранение неизменённых данных не снимает одобрение. Новая версия всегда проходит собственную проверку и не наследует решение предыдущей версии. Review History (история проверки) сохраняется после изменений, публикации, Archive (архивирования) и Restore (восстановления).
+
+Publishing makes the version and its code immutable. To change code, use Create New Version. Archive removes a block from new insertion but does not break an already saved scenario that references that exact version. The Development Runner remains development-only and is not a Production-grade Sandbox. Marketplace/Licensing is outside this workflow.
+
+Mobile Responsive UI (мобильная адаптация интерфейса) при ширине около 390–400 px пока реализован частично. Полная мобильная адаптация — отдельный обязательный этап перед Production; для полного административного процесса Stage 7.8 используйте Desktop UI (настольный интерфейс).

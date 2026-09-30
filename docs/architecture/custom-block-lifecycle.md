@@ -45,4 +45,20 @@ More than one historical version may be published after restore. This is not amb
 
 ## Future boundaries
 
+## Review Workflow (процесс проверки)
+
+Every `CustomBlockVersion` starts with the independent review state `draft`. Sending it for review first runs Automated Validation (автоматическую валидацию): deterministic schema, Passport, runtime contract and static safety checks. This reproducible local check is not an AI Security Agent.
+
+The AI Security Agent (ИИ-агент безопасности) is a separate advisory provider boundary. It appends a structured report for the exact version and artifact hash with `finding`, `location`, `why`, `severity`, and `recommendation`; it never publishes or approves. The current development/test provider is an explicitly named deterministic stub, not a model or static scanner. A production deployment needs a reviewed agent adapter. The existing generic AI provider orchestration is not reused because it owns AI Credits reservation/pricing, which is out of scope for Custom Block review.
+
+If the AI agent is unavailable, review enters `security_review_failed`; a failed report is visible to administrators and blocks manual approval and publication. A successful report moves the version to `admin_review_pending`. An authorized platform administrator records one immutable Manual Admin Review (ручная проверка администратором) decision: `approve`, `needs_changes`, or `reject`. The server verifies all transitions. A real change to reviewable content clears the current review state and returns the version to `draft`; an identical Auto-save (автосохранение) or a change only to `wizard_step` preserves the active or approved review. History remains append-only. A new version always starts in `draft` and receives no report or approval from its parent.
+
+Publishing is fail-closed: it requires a valid current automated validation result, `review_state=approved`, a successful AI report, and an immutable approval record whose artifact hash equals the version's current artifact hash. `CustomBlockReviewEvent` is append-only lifecycle history: submission, validation outcome, AI report outcome, admin-pending transition, decision, draft invalidation and publication. Archive/restore does not change review history, and review of a newer draft cannot alter an already published exact version.
+
+Ordinary authors can view their own safe review status, findings, and comments. Only `owner` / `admin` platform RBAC (including the established BF Administrator role) may see the review queue or make a manual decision. Internal runner details, tokens, paths, and stack traces are not exposed.
+
+Schema revision `custom_block_review_workflow_045` introduces version review state, reports, decisions, and events. `custom_block_review_schema_repair_046` is an idempotent convergence migration for the early development 045 shape; fresh databases already receive the complete 045 schema. The repair downgrade is intentionally a no-op because 045 itself owns the converged objects.
+
+Mobile Responsive UI (мобильная адаптация интерфейса) at approximately 390–400 px remains partial. Full mobile adaptation is a separate mandatory pre-Production stage and does not alter the Review Workflow contract.
+
 Marketplace sales, billing, AI duplicate moderation (`UNIQUE` / `OVERLAP` / `DUPLICATE`), arbitrary executable code, custom network access and advanced runtime kinds remain out of scope. New runtime kinds require a reviewed backend and simulator adapter, contract tests, migration-compatible passport evolution and explicit channel support.

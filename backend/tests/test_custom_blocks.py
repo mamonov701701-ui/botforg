@@ -92,6 +92,20 @@ def _create(client, headers, payload=None):
     return response.json()
 
 
+def _publish(client, headers, version_id):
+    """Stage 7.8 publication contract: submit, then an authorized admin approves."""
+    assert client.post(f"/blocks/custom/{version_id}/submit-review", headers=headers, json={}).status_code == 200
+    with TestingSessionLocal() as db:
+        from backend.models.user import User
+        db.query(User).filter(User.id == 1).one().role = "admin"
+        db.commit()
+    assert client.post(
+        f"/blocks/custom/{version_id}/admin-review", headers=headers,
+        json={"decision": "approve", "comment": "test approval"},
+    ).status_code == 200
+    return client.post(f"/blocks/custom/{version_id}/publish", headers=headers, json={})
+
+
 def test_custom_block_draft_update_validate_publish_and_immutable(client):
     headers = _headers(client)
     draft = _create(client, headers)
@@ -101,7 +115,7 @@ def test_custom_block_draft_update_validate_publish_and_immutable(client):
     assert updated.status_code == 200
     validation = client.post(f"/blocks/custom/{draft['id']}/validate", headers=headers, json={})
     assert validation.json() == {"valid": True, "errors": [], "warnings": []}
-    published = client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={})
+    published = _publish(client, headers, draft['id'])
     assert published.status_code == 200
     assert published.json()["passport"]["lifecycle_status"] == "published"
     assert client.put(f"/blocks/custom/{draft['id']}", headers=headers, json=_valid_payload()).status_code == 409
@@ -112,7 +126,7 @@ def test_invalid_draft_cannot_publish(client):
     payload = _valid_payload()
     payload.update({"purpose": "", "examples": [], "user_guide": {"content": ""}, "config_schema": []})
     draft = _create(client, headers, payload)
-    response = client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={})
+    response = client.post(f"/blocks/custom/{draft['id']}/submit-review", headers=headers, json={})
     assert response.status_code == 422
     assert "Блок не прошёл проверку" in response.text
 
@@ -130,7 +144,7 @@ def test_message_fallback_rejects_multiple_outputs(client):
     assert validation.status_code == 200
     assert validation.json()["valid"] is False
     assert any("Message fallback" in error for error in validation.json()["errors"])
-    assert client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={}).status_code == 422
+    assert client.post(f"/blocks/custom/{draft['id']}/submit-review", headers=headers, json={}).status_code == 422
 
 
 def test_javascript_mode_round_trip_validates_and_publishes_with_fifteen_outputs(client):
@@ -155,7 +169,7 @@ def test_javascript_mode_round_trip_validates_and_publishes_with_fifteen_outputs
 
     validation = client.post(f"/blocks/custom/{draft['id']}/validate", headers=headers, json={})
     assert validation.json() == {"valid": True, "errors": [], "warnings": []}
-    published = client.post(f"/blocks/custom/{draft['id']}/publish", headers=headers, json={})
+    published = _publish(client, headers, draft['id'])
     assert published.status_code == 200, published.text
     assert published.json()["runtime_kind"] == "javascript"
 
@@ -290,7 +304,7 @@ def test_owner_only_and_system_code_collision(client):
 def test_version_archive_restore_and_catalog_selection(client):
     headers = _headers(client)
     v1 = _create(client, headers)
-    assert client.post(f"/blocks/custom/{v1['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, v1['id']).status_code == 200
     catalog = client.get("/blocks", headers=headers).json()
     custom = next(item for item in catalog if item.get("source") == "custom")
     assert custom["blockVersionId"] == v1["id"]
@@ -300,7 +314,7 @@ def test_version_archive_restore_and_catalog_selection(client):
     changed = _valid_payload("Подтверждение заказа — новая версия")
     changed["user_guide"] = {"content": "Инструкция только для версии 2."}
     assert client.put(f"/blocks/custom/{v2['id']}", headers=headers, json=changed).status_code == 200
-    assert client.post(f"/blocks/custom/{v2['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, v2['id']).status_code == 200
     original = client.get(f"/blocks/custom/{v1['id']}", headers=headers).json()
     assert original["title"] == "Подтверждение заказа"
     assert "Добавьте блок" in original["user_guide"]["content"]
@@ -319,7 +333,7 @@ def test_version_archive_restore_and_catalog_selection(client):
 def test_archiving_only_published_version_removes_it_from_new_block_catalog(client):
     headers = _headers(client)
     version = _create(client, headers)
-    assert client.post(f"/blocks/custom/{version['id']}/publish", headers=headers, json={}).status_code == 200
+    assert _publish(client, headers, version['id']).status_code == 200
     assert any(item.get("blockVersionId") == version["id"] for item in client.get("/blocks", headers=headers).json())
 
     assert client.post(f"/blocks/custom/{version['id']}/archive", headers=headers, json={}).status_code == 200
@@ -329,7 +343,7 @@ def test_archiving_only_published_version_removes_it_from_new_block_catalog(clie
 def test_archived_version_remains_referenced_by_existing_scenario(client):
     headers = _headers(client)
     v1 = _create(client, headers)
-    client.post(f"/blocks/custom/{v1['id']}/publish", headers=headers, json={})
+    _publish(client, headers, v1['id'])
     node = {"id": "custom-node", "type": "default", "data": {"blockId": "message", "customBlockVersionId": v1["id"], "customBlockStableId": v1["stable_block_id"], "customBlockVersion": 1, "settings": {"text": "Заказ принят"}}}
     scenario = client.post("/scenarios/", headers=headers, json={"name": "Сценарий", "content": {"nodes": [node], "edges": []}})
     assert scenario.status_code == 201
@@ -347,7 +361,7 @@ def test_safe_delete_only_unused_draft(client):
     draft = _create(client, headers)
     assert client.delete(f"/blocks/custom/{draft['id']}", headers=headers).status_code == 204
     published = _create(client, headers)
-    client.post(f"/blocks/custom/{published['id']}/publish", headers=headers, json={})
+    _publish(client, headers, published['id'])
     assert client.delete(f"/blocks/custom/{published['id']}", headers=headers).status_code == 409
 
 
