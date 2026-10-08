@@ -34,6 +34,8 @@ import {
   unsuspendBot,
   suspendAllUserBots,
   unsuspendAllUserBots,
+  createObjectEnforcement,
+  resolveObjectEnforcement,
   type SuspensionInfo,
   type SuspendRequest,
 } from '../../../api/platformAdmin';
@@ -46,6 +48,41 @@ const SUSPENSION_TYPES = {
   temporary: { label: 'Временная блокировка', color: '#ef4444', icon: Clock },
   permanent: { label: 'Постоянная блокировка', color: '#dc2626', icon: Ban },
 };
+type EnforcementTarget =
+  | 'user'
+  | 'bot'
+  | 'all-bots'
+  | 'listing'
+  | 'scenario'
+  | 'template'
+  | 'market_item';
+
+const actionLabel = (type: 'warning' | 'temporary' | 'permanent') =>
+  type === 'warning'
+    ? 'Вынести предупреждение'
+    : type === 'temporary'
+      ? 'Заблокировать временно'
+      : 'Заблокировать';
+
+const lifecycleLabel = (value: string | null) =>
+  value === 'published'
+    ? 'Опубликовано'
+    : value === 'archived'
+      ? 'Архивировано'
+      : value === 'draft'
+        ? 'Черновик'
+        : 'Нет карточки';
+const reviewLabel = (value: string) =>
+  (
+    ({
+      draft: 'Черновик',
+      pending: 'Ожидает проверки',
+      approved: 'Одобрено',
+      rejected: 'Отклонено',
+      needs_changes: 'Нужны изменения',
+      security_review_failed: 'Проверка безопасности не пройдена',
+    }) as Record<string, string>
+  )[value] || 'Не определено';
 
 export default function UserDetailPage() {
   const { userId } = useParams<{ userId: string }>();
@@ -56,12 +93,16 @@ export default function UserDetailPage() {
 
   // Модальное окно блокировки
   const [showSuspendModal, setShowSuspendModal] = useState(false);
-  const [suspendTarget, setSuspendTarget] = useState<'user' | 'bot' | 'all-bots'>('user');
+  const [suspendTarget, setSuspendTarget] = useState<EnforcementTarget>('user');
   const [suspendTargetId, setSuspendTargetId] = useState<number | null>(null);
+  const [inspectBotId, setInspectBotId] = useState<number | null>(null);
   const [suspendType, setSuspendType] = useState<'warning' | 'temporary' | 'permanent'>('warning');
   const [suspendReason, setSuspendReason] = useState('');
   const [suspendDuration, setSuspendDuration] = useState(7);
   const [suspendLoading, setSuspendLoading] = useState(false);
+  const [marketRestrictionReason, setMarketRestrictionReason] = useState('');
+  const [marketRestrictionDays, setMarketRestrictionDays] = useState(7);
+  const [marketRestrictionLoading, setMarketRestrictionLoading] = useState(false);
 
   useEffect(() => {
     if (userId) {
@@ -93,7 +134,7 @@ export default function UserDetailPage() {
     }
   };
 
-  const openSuspendModal = (target: 'user' | 'bot' | 'all-bots', targetId?: number) => {
+  const openSuspendModal = (target: EnforcementTarget, targetId?: number) => {
     setSuspendTarget(target);
     setSuspendTargetId(targetId || null);
     setSuspendType('warning');
@@ -104,7 +145,7 @@ export default function UserDetailPage() {
 
   const handleSuspend = async () => {
     if (!suspendReason.trim()) {
-      toast.error('Укажите причину блокировки');
+      toast.error('Укажите причину меры');
       return;
     }
 
@@ -118,22 +159,31 @@ export default function UserDetailPage() {
 
       if (suspendTarget === 'user' && userId) {
         await suspendUser(parseInt(userId), data);
-        toast.success('Пользователь заблокирован');
-        loadUserSuspension(parseInt(userId));
+        await loadUserSuspension(parseInt(userId));
       } else if (suspendTarget === 'bot' && suspendTargetId) {
         await suspendBot(suspendTargetId, data);
-        toast.success('Бот заблокирован');
-        loadUserInfo(parseInt(userId!));
       } else if (suspendTarget === 'all-bots' && userId) {
         await suspendAllUserBots(parseInt(userId), data);
-        toast.success('Все боты заблокированы');
-        loadUserInfo(parseInt(userId));
+      } else if (
+        suspendTargetId &&
+        ['listing', 'scenario', 'template', 'market_item'].includes(suspendTarget)
+      ) {
+        await createObjectEnforcement({
+          subject_type: suspendTarget as 'listing' | 'scenario' | 'template' | 'market_item',
+          subject_id: suspendTargetId,
+          action: suspendType === 'warning' ? 'warning' : 'suspend_object',
+          reason: suspendReason.trim(),
+          ...(suspendType === 'temporary' && { duration_days: suspendDuration }),
+        });
       }
+
+      toast.success(suspendType === 'warning' ? 'Предупреждение вынесено' : 'Мера применена');
+      if (userId) await loadUserInfo(parseInt(userId));
 
       setShowSuspendModal(false);
     } catch (error: any) {
       console.error('Failed to suspend:', error);
-      toast.error(error.message || 'Не удалось выполнить блокировку');
+      toast.error(error.message || 'Не удалось применить меру');
     } finally {
       setSuspendLoading(false);
     }
@@ -145,6 +195,7 @@ export default function UserDetailPage() {
       await unsuspendUser(parseInt(userId));
       toast.success('Блокировка снята');
       loadUserSuspension(parseInt(userId));
+      loadUserInfo(parseInt(userId));
     } catch (error: any) {
       toast.error(error.message || 'Не удалось снять блокировку');
     }
@@ -168,6 +219,41 @@ export default function UserDetailPage() {
       loadUserInfo(parseInt(userId));
     } catch (error: any) {
       toast.error(error.message || 'Не удалось снять блокировку');
+    }
+  };
+
+  const handleResolveEnforcement = async (id: number) => {
+    if (!userId) return;
+    try {
+      await resolveObjectEnforcement(id);
+      toast.success('Мера снята');
+      await loadUserInfo(parseInt(userId));
+    } catch (error: any) {
+      toast.error(error.message || 'Не удалось снять меру');
+    }
+  };
+
+  const handleMarketRestriction = async () => {
+    if (!userId || marketRestrictionReason.trim().length < 5) {
+      toast.error('Укажите причину ограничения (не менее 5 символов)');
+      return;
+    }
+    try {
+      setMarketRestrictionLoading(true);
+      await createObjectEnforcement({
+        subject_type: 'user',
+        subject_id: Number(userId),
+        action: 'temporary_market_restriction',
+        reason: marketRestrictionReason.trim(),
+        duration_days: marketRestrictionDays,
+      });
+      setMarketRestrictionReason('');
+      toast.success('Ограничение Маркета применено');
+      await loadUserInfo(Number(userId));
+    } catch (error: any) {
+      toast.error(error.message || 'Не удалось ограничить Маркет');
+    } finally {
+      setMarketRestrictionLoading(false);
     }
   };
 
@@ -222,6 +308,29 @@ export default function UserDetailPage() {
   }
 
   const { user, bots, scenarios, team_memberships, statistics } = userInfo;
+  const templates = userInfo.templates ?? [];
+  const customBlocks = userInfo.custom_blocks ?? [];
+  const receivedBlocks = userInfo.received_custom_blocks ?? [];
+  const blockSummary = userInfo.custom_block_summary;
+  const marketplaceListings = userInfo.marketplace_listings ?? [];
+  const marketItems = userInfo.market_items ?? [];
+  const disputes = userInfo.disputes ?? [];
+  const reports = userInfo.reports ?? [];
+  const enforcements = userInfo.enforcements ?? [];
+  const activeMarketRestriction = enforcements.find(
+    row =>
+      ['temporary_market_restriction', 'prohibit_commercial_market_activity'].includes(
+        row.action
+      ) &&
+      !row.revoked_at &&
+      (!row.expires_at || new Date(row.expires_at).getTime() > Date.now())
+  );
+  const activePaidRestriction = enforcements.some(
+    row =>
+      row.action === 'prohibit_paid_listings' &&
+      !row.revoked_at &&
+      (!row.expires_at || new Date(row.expires_at).getTime() > Date.now())
+  );
 
   return (
     <DashboardPage
@@ -290,12 +399,24 @@ export default function UserDetailPage() {
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ fontSize: '14px' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Имя: </span>
+              <span>{user.name || 'Не указано'}</span>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Mail size={16} style={{ color: 'var(--text-muted)' }} />
               <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Email:</span>
               <span style={{ fontSize: '14px', color: 'var(--text)', fontWeight: 500 }}>
                 {user.email}
               </span>
+            </div>
+            <div style={{ fontSize: '14px' }}>
+              <span style={{ color: 'var(--text-muted)' }}>User ID: </span>
+              <span>{user.id}</span>
+            </div>
+            <div style={{ fontSize: '14px' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Публичный ID: </span>
+              <span>{user.public_id}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Shield size={16} style={{ color: 'var(--text-muted)' }} />
@@ -320,6 +441,12 @@ export default function UserDetailPage() {
                 {user.created_at
                   ? new Date(user.created_at).toLocaleDateString('ru-RU')
                   : 'Не указано'}
+              </span>
+            </div>
+            <div style={{ fontSize: '14px' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Статус аккаунта: </span>
+              <span>
+                {(userSuspension?.is_suspended ?? user.is_suspended) ? 'Заблокирован' : 'Активен'}
               </span>
             </div>
             {user.platform_roles && user.platform_roles.length > 0 && (
@@ -622,6 +749,287 @@ export default function UserDetailPage() {
         </Card>
       </div>
 
+      <div className="grid min-w-0 gap-4 md:grid-cols-2" style={{ marginBottom: '24px' }}>
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold">Сценарии ({scenarios.length})</h3>
+          {scenarios.length ? (
+            scenarios.map(row => (
+              <p key={row.id} className="mb-2 text-sm">
+                {row.name} · ID {row.id} ·{' '}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => openSuspendModal('scenario', row.id)}
+                >
+                  Вынести предупреждение
+                </button>
+              </p>
+            ))
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">Сценариев пока нет.</p>
+          )}
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold">Шаблоны ({templates.length})</h3>
+          {templates.length ? (
+            templates.map(row => (
+              <p key={row.id} className="mb-2 text-sm">
+                {row.name} · ID {row.id} · {row.is_public ? 'Публичный' : 'Приватный'} ·{' '}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => openSuspendModal('template', row.id)}
+                >
+                  Вынести предупреждение
+                </button>
+              </p>
+            ))
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">Шаблонов пока нет.</p>
+          )}
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold">Кастомные блоки — сводка</h3>
+          <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+            {(
+              [
+                ['Создано блоков', blockSummary?.created_blocks],
+                ['Опубликованных версий', blockSummary?.published_versions],
+                ['Черновиков', blockSummary?.draft_versions],
+                ['Архивных', blockSummary?.archived_versions],
+                ['Размещено в Маркете', blockSummary?.marketplace_listings],
+                ['Free', blockSummary?.free_listings],
+                ['Paid', blockSummary?.paid_listings],
+                ['Получено из Маркета', blockSummary?.received_marketplace],
+                ['Получено напрямую', blockSummary?.received_direct],
+                ['Источник не установлен', blockSummary?.received_unverified],
+                ['Установлено в библиотеку', blockSummary?.library_installs],
+                ['Активных прав', blockSummary?.active_rights],
+                ['Отозванных прав', blockSummary?.revoked_rights],
+              ] as const
+            ).map(([label, count]) => (
+              <p key={label}>
+                {label}: {count ?? 0}
+              </p>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold">
+            Созданные пользователем ({customBlocks.length})
+          </h3>
+          {customBlocks.length ? (
+            customBlocks.map(block => (
+              <div
+                key={block.id}
+                className="mb-3 min-w-0 border-b border-[var(--border)] pb-2 text-sm"
+              >
+                <p className="font-semibold break-words">
+                  {block.title} · ID {block.id}
+                </p>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Создан{' '}
+                  {block.created_at ? new Date(block.created_at).toLocaleDateString('ru-RU') : '—'}
+                </p>
+                {block.versions.map(version => (
+                  <p key={version.id} className="mt-1 break-words text-[var(--text-muted)]">
+                    v{version.version} · {lifecycleLabel(version.status)} · проверка:{' '}
+                    {reviewLabel(version.review_state)} · Маркет:{' '}
+                    {lifecycleLabel(version.marketplace_lifecycle)}
+                    {version.commercial_mode === 'paid'
+                      ? ' · Paid'
+                      : version.commercial_mode === 'free'
+                        ? ' · Free'
+                        : ''}{' '}
+                    · активных прав: {version.active_grants_count ?? 0}
+                  </p>
+                ))}
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">Созданных блоков пока нет.</p>
+          )}
+          <p className="text-xs text-[var(--text-muted)]">
+            Санкции для самой версии блока пока не поддерживаются. Для размещения используйте
+            действие в разделе «Активность в Маркете».
+          </p>
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold">
+            Полученные пользователем ({receivedBlocks.length})
+          </h3>
+          {receivedBlocks.length ? (
+            receivedBlocks.map(row => (
+              <p
+                key={row.grant_id}
+                className="mb-3 break-words border-b border-[var(--border)] pb-2 text-sm"
+              >
+                {row.title} · v{row.version} · автор:{' '}
+                {row.original_author_name || `ID ${row.original_author_user_id}`} ·{' '}
+                {row.source_channel === 'direct'
+                  ? 'Получено напрямую'
+                  : row.source_channel === 'unknown'
+                    ? 'Источник не установлен'
+                    : 'Получено из Маркета'}{' '}
+                · {row.grant_status === 'active' ? 'Доступ действует' : 'Доступ отозван'} ·{' '}
+                {row.is_installed ? 'Установлено' : 'Не установлено'} · право распространения:{' '}
+                {row.has_distribution_right ? 'да' : 'нет'}
+                {row.listing_lifecycle
+                  ? ` · Карточка: ${lifecycleLabel(row.listing_lifecycle)}`
+                  : ''}
+                {row.current_commercial_mode === 'paid'
+                  ? ' · Текущие условия карточки: Paid'
+                  : row.current_commercial_mode === 'free'
+                    ? ' · Текущие условия карточки: Free'
+                    : ''}
+              </p>
+            ))
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">Полученных блоков пока нет.</p>
+          )}
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold">Активность в Маркете</h3>
+          {marketplaceListings.map(row => (
+            <p key={`listing-${row.id}`} className="mb-2 break-words text-sm">
+              {row.title} · ID {row.id} · v{row.version ?? '—'} ·{' '}
+              {row.commercial_mode === 'paid'
+                ? `Платно · ${row.price_amount} ${row.price_currency}`
+                : row.commercial_mode === 'free'
+                  ? 'Бесплатно'
+                  : 'Условия прежней модели'}{' '}
+              · {lifecycleLabel(row.lifecycle)} · создана{' '}
+              {row.created_at ? new Date(row.created_at).toLocaleDateString('ru-RU') : '—'} ·
+              активных прав: {row.active_grants_count ?? 0} ·{' '}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => openSuspendModal('listing', row.id)}
+              >
+                Применить меру
+              </button>
+            </p>
+          ))}
+          {marketItems.map(row => (
+            <p key={`item-${row.id}`} className="mb-2 text-sm">
+              {row.title} · {row.item_type} · {row.price} ₽ ·{' '}
+              {row.is_published ? 'Опубликовано' : 'Не опубликовано'} ·{' '}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => openSuspendModal('market_item', row.id)}
+              >
+                Применить меру
+              </button>
+            </p>
+          ))}
+          {!marketplaceListings.length && !marketItems.length && (
+            <p className="text-sm text-[var(--text-muted)]">Размещений пока нет.</p>
+          )}
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold">Жалобы и споры</h3>
+          {reports.map(row => (
+            <p key={`report-${row.id}`} className="mb-2 text-sm">
+              Жалоба #{row.id} · {row.subject_type} #{row.subject_id} · {row.status}
+            </p>
+          ))}
+          {disputes.map(row => (
+            <p key={`dispute-${row.id}`} className="mb-2 text-sm">
+              Спор #{row.id} · карточка #{row.listing_id} · {row.status}
+            </p>
+          ))}
+          {!reports.length && !disputes.length && (
+            <p className="text-sm text-[var(--text-muted)]">Жалоб и споров пока нет.</p>
+          )}
+        </Card>
+        <Card>
+          <h3 className="mb-3 text-lg font-semibold">Ограничение Маркета и история мер</h3>
+          <p className="mb-2 text-sm">
+            Маркет:{' '}
+            {activeMarketRestriction
+              ? 'ограничен'
+              : activePaidRestriction
+                ? 'запрещены новые платные карточки'
+                : 'без ограничения'}
+          </p>
+          {!activeMarketRestriction && (
+            <div className="mb-4 flex flex-wrap items-end gap-2">
+              <label className="min-w-0 flex-1 text-sm">
+                Причина ограничения
+                <input
+                  aria-label="Причина ограничения Маркета"
+                  className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)]"
+                  value={marketRestrictionReason}
+                  onChange={event => setMarketRestrictionReason(event.target.value)}
+                />
+              </label>
+              <label className="text-sm">
+                Срок, дней
+                <select
+                  aria-label="Срок ограничения Маркета"
+                  className="mt-1 block rounded border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)]"
+                  value={marketRestrictionDays}
+                  onChange={event => setMarketRestrictionDays(Number(event.target.value))}
+                >
+                  {[1, 3, 7, 14, 30, 90].map(days => (
+                    <option key={days} value={days}>
+                      {days}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="bf-danger-cta"
+                disabled={marketRestrictionLoading || marketRestrictionReason.trim().length < 5}
+                onClick={() => void handleMarketRestriction()}
+              >
+                Ограничить Маркет
+              </button>
+            </div>
+          )}
+          {enforcements.length ? (
+            enforcements.map(row => (
+              <p key={row.id} className="mb-2 text-sm">
+                {row.action === 'warning'
+                  ? 'Предупреждение'
+                  : row.action === 'suspend_object'
+                    ? 'Блокировка объекта'
+                    : row.action === 'temporary_market_restriction'
+                      ? 'Временное ограничение Маркета'
+                      : row.action === 'prohibit_commercial_market_activity'
+                        ? 'Запрет коммерческой деятельности в Маркете'
+                        : row.action === 'prohibit_paid_listings'
+                          ? 'Запрет платных размещений'
+                          : row.action}{' '}
+                · {row.subject_type} #{row.subject_id} · {row.reason} · администратор #
+                {row.actor_user_id}
+                {row.created_at && ` · ${new Date(row.created_at).toLocaleString('ru-RU')}`}
+                {row.expires_at && ` · до ${new Date(row.expires_at).toLocaleString('ru-RU')}`}
+                {row.revoked_at
+                  ? ` · снята ${new Date(row.revoked_at).toLocaleString('ru-RU')}`
+                  : row.expires_at && new Date(row.expires_at).getTime() <= Date.now()
+                    ? ' · срок истёк'
+                    : ' · действует'}
+                {!row.revoked_at &&
+                  (!row.expires_at || new Date(row.expires_at).getTime() > Date.now()) && (
+                    <button
+                      type="button"
+                      className="ml-2 underline"
+                      onClick={() => void handleResolveEnforcement(row.id)}
+                    >
+                      Снять меру
+                    </button>
+                  )}
+              </p>
+            ))
+          ) : (
+            <p className="text-sm text-[var(--text-muted)]">Мер пока нет.</p>
+          )}
+        </Card>
+      </div>
+
       {/* Боты пользователя */}
       <Card style={{ marginBottom: '24px' }}>
         <div
@@ -677,7 +1085,7 @@ export default function UserDetailPage() {
                     {bot.title}
                   </h4>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {bot.is_suspended && (
+                    {(bot.is_suspended || bot.suspension_type === 'warning') && (
                       <span
                         style={{
                           fontSize: '11px',
@@ -688,7 +1096,11 @@ export default function UserDetailPage() {
                           fontWeight: 600,
                         }}
                       >
-                        Заблокирован
+                        {bot.is_suspended
+                          ? bot.suspension_type === 'temporary' && bot.suspended_until
+                            ? `Временно заблокирован до ${new Date(bot.suspended_until).toLocaleString('ru-RU')}`
+                            : 'Постоянно заблокирован'
+                          : 'Предупреждение вынесено'}
                       </span>
                     )}
                     {bot.is_active ? (
@@ -698,6 +1110,32 @@ export default function UserDetailPage() {
                     )}
                   </div>
                 </div>
+                {bot.suspension_reason &&
+                  (bot.is_suspended || bot.suspension_type === 'warning') && (
+                    <p className="mb-3 text-sm text-[var(--text-muted)]">
+                      Причина: {bot.suspension_reason}
+                    </p>
+                  )}
+                {inspectBotId === bot.id && (
+                  <div
+                    className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-sm"
+                    role="region"
+                    aria-label={`Информация о боте ${bot.title}`}
+                  >
+                    <p>
+                      Бот #{bot.id} · владелец #{user.id}
+                    </p>
+                    <p>
+                      Создан:{' '}
+                      {bot.created_at
+                        ? new Date(bot.created_at).toLocaleString('ru-RU')
+                        : 'нет данных'}
+                    </p>
+                    <p>
+                      Пользователей: {bot.users_count} · сообщений: {bot.messages_count}
+                    </p>
+                  </div>
+                )}
                 <div
                   style={{
                     display: 'flex',
@@ -721,7 +1159,8 @@ export default function UserDetailPage() {
                 </div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button
-                    onClick={() => navigate(`/editor/${bot.id}`)}
+                    onClick={() => setInspectBotId(inspectBotId === bot.id ? null : bot.id)}
+                    aria-expanded={inspectBotId === bot.id}
                     style={{
                       padding: '6px 12px',
                       background: 'rgba(59, 130, 246, 0.2)',
@@ -912,13 +1351,18 @@ export default function UserDetailPage() {
           onClick={() => setShowSuspendModal(false)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Административная мера"
             onClick={e => e.stopPropagation()}
             style={{
-              background: 'var(--card-bg)',
+              background: 'var(--bf-shell-bg-solid)',
               borderRadius: '16px',
               padding: '24px',
               width: '100%',
               maxWidth: '480px',
+              maxHeight: 'calc(100vh - 32px)',
+              overflowY: 'auto',
               border: '1px solid var(--border)',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
             }}
@@ -940,11 +1384,17 @@ export default function UserDetailPage() {
                   {suspendTarget === 'user' && 'Блокировка пользователя'}
                   {suspendTarget === 'bot' && 'Блокировка бота'}
                   {suspendTarget === 'all-bots' && 'Блокировка всех ботов'}
+                  {suspendTarget === 'listing' && 'Мера для размещения'}
+                  {suspendTarget === 'scenario' && 'Мера для сценария'}
+                  {suspendTarget === 'template' && 'Предупреждение для шаблона'}
+                  {suspendTarget === 'market_item' && 'Мера для объекта Маркета'}
                 </h3>
                 <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
                   {suspendTarget === 'user' && user.email}
                   {suspendTarget === 'bot' && bots.find(b => b.id === suspendTargetId)?.title}
                   {suspendTarget === 'all-bots' && `${bots.length} ботов пользователя`}
+                  {['listing', 'scenario', 'template', 'market_item'].includes(suspendTarget) &&
+                    `Объект #${suspendTargetId}`}
                 </p>
               </div>
             </div>
@@ -960,10 +1410,13 @@ export default function UserDetailPage() {
                   color: 'var(--text)',
                 }}
               >
-                Тип блокировки
+                Тип меры
               </label>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {(['warning', 'temporary', 'permanent'] as const).map(type => (
+                {(['template', 'scenario'].includes(suspendTarget)
+                  ? (['warning'] as const)
+                  : (['warning', 'temporary', 'permanent'] as const)
+                ).map(type => (
                   <button
                     key={type}
                     onClick={() => setSuspendType(type)}
@@ -1050,16 +1503,16 @@ export default function UserDetailPage() {
                   color: 'var(--text)',
                 }}
               >
-                Причина блокировки *
+                Причина меры (видна владельцу объекта) *
               </label>
               <textarea
                 value={suspendReason}
                 onChange={e => setSuspendReason(e.target.value)}
-                placeholder="Опишите причину блокировки..."
+                placeholder="Опишите причину меры..."
                 style={{
                   width: '100%',
                   padding: '12px',
-                  background: 'rgba(26, 34, 56, 0.5)',
+                  background: 'var(--surface)',
                   border: '1px solid var(--border)',
                   borderRadius: '8px',
                   color: 'var(--text)',
@@ -1123,7 +1576,7 @@ export default function UserDetailPage() {
                 ) : (
                   <>
                     <Ban size={16} />
-                    Заблокировать
+                    {actionLabel(suspendType)}
                   </>
                 )}
               </button>

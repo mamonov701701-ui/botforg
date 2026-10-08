@@ -1,6 +1,10 @@
 # Database Migration Chain (цепочка миграций БД)
 
-Current single Alembic head: `legacy_plan_codes_to_current_041`.
+Current single Alembic head: `custom_block_trust_schema_repair_052`.
+
+## `custom_block_trust_schema_repair_052`
+
+Repair migration после `custom_block_free_paid_trust_051`: в development SQLite ревизия 051 была записана, но таблица `trust_safety_reports` и её индексы отсутствовали. 052 проверяет объекты схемы 051, создаёт только отсутствующие таблицы/индексы и nullable price columns, а корректные объекты и данные не пересоздаёт. Некорректная структура существующей таблицы вызывает ошибку для отдельного разбора. Downgrade 052 возвращает только revision marker на 051: удалять объекты, принадлежащие 051, или их данные при таком откате нельзя. Миграция 051 остаётся неизменной.
 
 ## `ai_credit_ledger_040`
 

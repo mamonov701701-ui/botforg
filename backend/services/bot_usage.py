@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.models.bot import Bot
 from backend.models.bot_channel import BotChannelConnection
+from backend.services.trust_safety import bot_suspension_active
 
 # Неявный канал Telegram при POST /bots/connect (без BotChannelConnection).
 IMPLICIT_TELEGRAM_CHANNEL = "telegram"
@@ -45,7 +46,7 @@ def is_bot_production_active(bot: Bot, db: Session) -> bool:
 
     Черновик: placeholder token без включённого BotChannelConnection.
     """
-    if bot.is_suspended:
+    if bot_suspension_active(bot):
         return False
     if bot_has_enabled_channel_connection(db, bot.id):
         return True

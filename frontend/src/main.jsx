@@ -13,6 +13,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import CheckoutReturnPage from './pages/CheckoutReturnPage';
 import MarketplacePage from './pages/MarketplacePage';
 import MarketItemDetailPage from './pages/MarketItemDetailPage';
+import CustomBlockMarketplaceManagementPage from './pages/CustomBlockMarketplaceManagementPage';
 import DeveloperTemplatesPage from './pages/DeveloperTemplatesPage';
 import FeaturesPage from './pages/features/FeaturesPage';
 import NotFound from './pages/NotFound';
@@ -47,6 +48,8 @@ import AccountLegalPage from './features/dashboard/pages/AccountLegalPage';
 import UserDetailPage from './features/dashboard/pages/UserDetailPage';
 import MessagesPage from './features/dashboard/pages/MessagesPage';
 import BlockLibraryPage from './features/dashboard/pages/BlockLibraryPage';
+import CustomBlockMarketplacePage from './features/dashboard/pages/CustomBlockMarketplacePage';
+import CustomBlockMarketplaceDetailPage from './features/dashboard/pages/CustomBlockMarketplaceDetailPage';
 import BlockLibraryDetailPage from './features/dashboard/pages/BlockLibraryDetailPage';
 import PlatformBlocksPage from './features/dashboard/pages/PlatformBlocksPage';
 import CustomBlockWizardPage from './features/dashboard/pages/CustomBlockWizardPage';
@@ -121,6 +124,19 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           />
           <Route path="login" element={<Login />} />
           <Route path="market" element={<MarketplacePage />} />
+          <Route path="market/custom-blocks" element={<CustomBlockMarketplacePage />} />
+          <Route
+            path="market/custom-blocks/:listingId"
+            element={<CustomBlockMarketplaceDetailPage />}
+          />
+          <Route
+            path="market/my-listings/custom-blocks"
+            element={
+              <AuthGate>
+                <CustomBlockMarketplaceManagementPage />
+              </AuthGate>
+            }
+          />
           <Route path="market/items/:id" element={<MarketItemDetailPage />} />
           <Route
             path="developer/templates"
@@ -181,6 +197,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="scenarios/:scenarioId" element={<ScenarioDetailPage />} />
             <Route path="templates" element={<TemplatesPage />} />
             <Route path="block-library" element={<BlockLibraryPage />} />
+            <Route
+              path="block-marketplace"
+              element={<Navigate to="/market/custom-blocks" replace />}
+            />
+            <Route
+              path="block-marketplace/:listingId"
+              element={<Navigate to="/market/custom-blocks" replace />}
+            />
             <Route path="block-library/create" element={<CustomBlockWizardPage />} />
             <Route path="block-library/guide/create" element={<CustomBlockCreationGuidePage />} />
             <Route

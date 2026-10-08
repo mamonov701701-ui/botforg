@@ -4,8 +4,7 @@ import type { BlockCatalogItem } from '../types/blocks';
  * Клиентская нормализация каталога:
  * - убираем legacy-блок id=choice
  * - сохраняем фактическую функциональную категорию из каталога
- * - legacy category=custom у пользовательского блока считаем базовой категорией,
- *   потому что происхождение уже передаётся отдельным полем source
+ * - не меняем тип блока: category/source приходят из canonical catalog
  */
 export function mergeClientCatalogBlocks(apiCatalog: BlockCatalogItem[]): BlockCatalogItem[] {
   return apiCatalog
@@ -39,11 +38,7 @@ export function mergeClientCatalogBlocks(apiCatalog: BlockCatalogItem[]): BlockC
           ...b,
           title: 'Данные пользователя',
           description: 'Изменяет теги, статус и поля профиля пользователя',
-          category: 'basic',
         };
-      }
-      if (b.source === 'custom' && b.category === 'custom') {
-        return { ...b, category: 'basic' };
       }
       return b;
     });

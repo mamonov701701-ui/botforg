@@ -595,6 +595,25 @@ export default function BotsPage() {
                         {bot.description}
                       </p>
                     )}
+                    {(bot.is_suspended || bot.suspension_type === 'warning') && (
+                      <div
+                        role="status"
+                        className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-sm text-[var(--text)]"
+                      >
+                        <strong>
+                          {bot.is_suspended
+                            ? bot.suspension_type === 'temporary' && bot.suspended_until
+                              ? `Временно заблокирован до ${new Date(bot.suspended_until).toLocaleString('ru-RU')}`
+                              : 'Постоянно заблокирован'
+                            : 'Предупреждение вынесено'}
+                        </strong>
+                        {bot.suspension_reason && (
+                          <p className="mt-1 text-[var(--text-muted)]">
+                            Причина: {bot.suspension_reason}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -797,10 +816,15 @@ export default function BotsPage() {
                       }}
                     >
                       <button
+                        disabled={!!bot.is_suspended}
                         onClick={e => {
                           e.stopPropagation();
-                          if (!canEdit) {
-                            toast.warning(getAccessDeniedMessage('bot_edit'));
+                          if (!canEdit || bot.is_suspended) {
+                            toast.warning(
+                              bot.is_suspended
+                                ? 'Бот заблокирован администратором'
+                                : getAccessDeniedMessage('bot_edit')
+                            );
                             return;
                           }
                           setEditingBot(bot);
@@ -815,8 +839,8 @@ export default function BotsPage() {
                           textAlign: 'left',
                           cursor: 'pointer',
                           fontSize: '14px',
-                          color: canEdit ? 'var(--text)' : 'var(--text-muted)',
-                          opacity: canEdit ? 1 : 0.7,
+                          color: canEdit && !bot.is_suspended ? 'var(--text)' : 'var(--text-muted)',
+                          opacity: canEdit && !bot.is_suspended ? 1 : 0.7,
                           display: 'flex',
                           alignItems: 'center',
                           gap: '8px',
@@ -827,8 +851,13 @@ export default function BotsPage() {
                         <Edit size={16} /> Редактировать
                       </button>
                       <button
+                        disabled={!!bot.is_suspended}
                         onClick={e => {
                           e.stopPropagation();
+                          if (bot.is_suspended) {
+                            toast.warning('Бот заблокирован администратором');
+                            return;
+                          }
                           navigate(`/editor/${bot.id}`);
                           setMenuOpenId(null);
                         }}
@@ -841,7 +870,7 @@ export default function BotsPage() {
                           textAlign: 'left',
                           cursor: 'pointer',
                           fontSize: '14px',
-                          color: 'var(--text)',
+                          color: bot.is_suspended ? 'var(--text-muted)' : 'var(--text)',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '8px',
@@ -852,10 +881,15 @@ export default function BotsPage() {
                         <ExternalLink size={16} /> Открыть редактор
                       </button>
                       <button
+                        disabled={!!bot.is_suspended}
                         onClick={e => {
                           e.stopPropagation();
-                          if (!canStartStop) {
-                            toast.warning(getAccessDeniedMessage('bot_start_stop'));
+                          if (!canStartStop || bot.is_suspended) {
+                            toast.warning(
+                              bot.is_suspended
+                                ? 'Бот заблокирован администратором'
+                                : getAccessDeniedMessage('bot_start_stop')
+                            );
                             return;
                           }
                           handleToggleStatus(bot);
@@ -870,8 +904,9 @@ export default function BotsPage() {
                           textAlign: 'left',
                           cursor: 'pointer',
                           fontSize: '14px',
-                          color: canStartStop ? 'var(--text)' : 'var(--text-muted)',
-                          opacity: canStartStop ? 1 : 0.7,
+                          color:
+                            canStartStop && !bot.is_suspended ? 'var(--text)' : 'var(--text-muted)',
+                          opacity: canStartStop && !bot.is_suspended ? 1 : 0.7,
                           display: 'flex',
                           alignItems: 'center',
                           gap: '8px',

@@ -50,7 +50,7 @@ The artifact hash is SHA-256 of canonical JSON for the entire Execution Specific
 
 Archive prevents new insertion but an existing exact archived version remains executable. Security disable is a separate execution state for a future review/revocation workflow.
 
-Stage 7.8 can attach review decisions to the immutable hash and capability declaration. Stage 7.9 can replace ownership authorization with licence-based execution rights without changing the execution core. Neither workflow is implemented here.
+Stage 7.8 review decisions and Stage 7.9 exact-version licence-based execution rights are implemented in later layers; this Stage 7.7 document describes only the execution core. See [the current Marketplace licensing architecture](architecture/custom-block-marketplace.md) for the effective rights contract.
 
 ## Developer operation
 

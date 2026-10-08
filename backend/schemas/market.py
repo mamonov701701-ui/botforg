@@ -82,6 +82,7 @@ class MarketItemOut(BaseModel):
 class MarketItemDetailOut(MarketItemOut):
     """Детальная информация о товаре"""
     reviews: List['MarketReviewOut'] = []
+    custom_block_attributions: List[dict] = Field(default_factory=list)
 
 
 class MarketInstallOut(BaseModel):

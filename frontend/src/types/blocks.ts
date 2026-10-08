@@ -54,6 +54,8 @@ export interface BlockCatalogItem {
   stableBlockId?: string;
   blockVersionId?: number;
   version?: number;
+  authorName?: string | null;
+  accessSource?: 'owner' | 'marketplace' | 'direct_grant' | 'unknown' | null;
   lifecycleStatus?: 'draft' | 'published' | 'archived';
   runtimeBlockId?: string;
   passport?: Record<string, unknown>;

@@ -24,7 +24,7 @@ from backend.models.event import ScenarioExecution
 from backend.utils.bot_access import check_bot_access, check_bot_edit_permission
 from backend.utils.plan_limits import check_can_publish
 from backend.services.scenario_flow.block_contracts import validate_canonical_graph
-from backend.services.custom_blocks import content_version_ids, validate_scenario_custom_block_references
+from backend.services.custom_blocks import content_version_counts, content_version_ids, validate_scenario_custom_block_references
 
 router = APIRouter(prefix="/scenarios", tags=["scenarios"])
 
@@ -433,7 +433,7 @@ def update_scenario(
         validate_scenario_custom_block_references(
             db,
             update_data.get("content"),
-            previously_referenced=content_version_ids(scenario.content),
+            previously_referenced=content_version_counts(scenario.content),
             scenario_owner_id=scenario.user_id,
         )
     

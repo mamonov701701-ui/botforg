@@ -297,7 +297,7 @@
   {
     "id": "set_variable",
     "title": "Установить переменную",
-    "category": "system",
+    "category": "basic",
     "description": "Сохраняет значение в переменной текущего сценария.",
     "icon": "🗄️",
     "color": "#673AB7",

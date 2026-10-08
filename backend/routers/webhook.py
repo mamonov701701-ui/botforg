@@ -236,6 +236,11 @@ async def telegram_webhook(
     )
     if not bot:
         raise HTTPException(status_code=404, detail="Бот не найден или неактивен")
+    from backend.models.bot import Bot
+    from backend.services.trust_safety import bot_suspension_active
+    managed_bot = db.query(Bot).filter(Bot.owner_id == bot.user_id, Bot.token == bot.token).first()
+    if managed_bot and bot_suspension_active(managed_bot):
+        raise HTTPException(status_code=403, detail="Бот временно недоступен")
     token = bot.token
     message = update.get("message") or update.get("callback_query", {}).get("message")
     chat_id = message["chat"]["id"] if message else None

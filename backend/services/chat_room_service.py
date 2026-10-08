@@ -103,3 +103,18 @@ def create_system_chat_message(db: Session, room_id: int, content: str) -> ChatM
         room.updated_at = datetime.now(timezone.utc)
 
     return message
+
+
+def create_user_chat_message(db: Session, room_id: int, sender_id: int, content: str) -> ChatMessage:
+    """Persist a user-authored first message created by a marketplace request."""
+    message = ChatMessage(
+        room_id=room_id,
+        sender_id=sender_id,
+        message_type=MessageType.TEXT,
+        content=content,
+    )
+    db.add(message)
+    room = db.query(ChatRoom).filter(ChatRoom.id == room_id).first()
+    if room:
+        room.updated_at = datetime.now(timezone.utc)
+    return message

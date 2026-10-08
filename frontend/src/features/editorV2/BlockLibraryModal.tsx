@@ -3,20 +3,14 @@ import { useEditorStore } from '../../stores/editorStore';
 import { useAuthStore } from '../../stores/authStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { nanoid } from 'nanoid';
-import { ROLE_NAMES } from '../../constants/roles';
 import { blockFieldDisplayLabel, blockFieldTypeLabel } from '../../utils/blockCatalogPresentation';
-
-// Category names mapping
-const CATEGORY_LABELS: Record<string, string> = {
-  basic: 'Базовые',
-  business: 'Бизнесовые',
-  service: 'Сервисные',
-  system: 'Системные',
-  ai: 'ИИ',
-  custom: 'Дополнительные',
-};
-
-const CATEGORY_ORDER = ['basic', 'business', 'service', 'system', 'ai', 'custom'];
+import {
+  BLOCK_TYPE_LABELS,
+  BLOCK_TYPE_ORDER,
+  blockType,
+  customAccessSourceLabel,
+  type BlockType,
+} from '../../utils/blockClassification';
 
 interface Props {
   isOpen: boolean;
@@ -25,9 +19,9 @@ interface Props {
 }
 
 export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props) {
-  const { catalog, plan, role, loadCatalog, getFilteredCatalog, searchQuery, setSearchQuery } =
+  const { catalog, loadCatalog, getFilteredCatalog, searchQuery, setSearchQuery } =
     useEditorStore();
-  const [activeTab, setActiveTab] = useState<string>('basic');
+  const [activeTab, setActiveTab] = useState<BlockType>('basic');
   const [selectedBlock, setSelectedBlock] = useState<BlockCatalogItem | null>(null);
   const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
 
@@ -69,22 +63,24 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
     [catalog, searchQuery, getFilteredCatalog]
   );
 
-  const visibleCategories = useMemo(
-    () => CATEGORY_ORDER.filter(cat => visibleCatalog.some(b => b.category === cat)),
-    [visibleCatalog]
-  );
-
   useEffect(() => {
-    if (!isOpen || visibleCategories.length === 0) return;
-    if (!visibleCategories.includes(activeTab)) {
-      setActiveTab(visibleCategories[0]);
+    if (!isOpen || !searchQuery || visibleCatalog.length === 0) return;
+    if (!visibleCatalog.some(block => blockType(block) === activeTab)) {
+      setActiveTab(blockType(visibleCatalog[0]));
+      setSelectedBlock(null);
     }
-  }, [isOpen, visibleCategories, activeTab]);
+  }, [isOpen, visibleCatalog, activeTab, searchQuery]);
 
   // Filter blocks by active tab and search
   const filteredBlocks = useMemo(() => {
-    return visibleCatalog.filter(block => block.category === activeTab);
+    return visibleCatalog.filter(block => blockType(block) === activeTab);
   }, [visibleCatalog, activeTab]);
+
+  useEffect(() => {
+    if (selectedBlock && !filteredBlocks.some(block => block.id === selectedBlock.id)) {
+      setSelectedBlock(null);
+    }
+  }, [filteredBlocks, selectedBlock]);
 
   const handleBlockClick = (block: BlockCatalogItem) => {
     // Position will be calculated by parent (viewport center or near selected node)
@@ -214,64 +210,6 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
               fontSize: 14,
             }}
           />
-
-          {/* Filters: Plan and Role */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-              <label
-                style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}
-              >
-                Тариф:
-              </label>
-              <select
-                value={plan}
-                onChange={e => useEditorStore.getState().setPlan(e.target.value as any)}
-                style={{
-                  flex: 1,
-                  background: '#1a1a2e',
-                  color: '#fff',
-                  border: '1px solid #374151',
-                  borderRadius: 6,
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="free">Бесплатный</option>
-                <option value="pro">Про</option>
-                <option value="enterprise">Корпоративный</option>
-              </select>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-              <label
-                style={{ color: '#9ca3af', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}
-              >
-                Роль:
-              </label>
-              <select
-                value={role}
-                onChange={e => useEditorStore.getState().setRole(e.target.value as any)}
-                style={{
-                  flex: 1,
-                  background: '#1a1a2e',
-                  color: '#fff',
-                  border: '1px solid #374151',
-                  borderRadius: 6,
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="viewer">{ROLE_NAMES.viewer}</option>
-                <option value="support">{ROLE_NAMES.support}</option>
-                <option value="developer">{ROLE_NAMES.developer}</option>
-                <option value="manager_template">{ROLE_NAMES.templates_manager}</option>
-                <option value="admin">{ROLE_NAMES.admin}</option>
-                <option value="owner">{ROLE_NAMES.owner}</option>
-              </select>
-            </div>
-          </div>
         </div>
 
         {/* Tabs */}
@@ -283,13 +221,16 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
             overflowX: 'auto',
           }}
         >
-          {visibleCategories.map(categoryKey => {
-            const count = visibleCatalog.filter(b => b.category === categoryKey).length;
+          {BLOCK_TYPE_ORDER.map(categoryKey => {
+            const count = visibleCatalog.filter(b => blockType(b) === categoryKey).length;
             const isActive = activeTab === categoryKey;
             return (
               <button
                 key={categoryKey}
-                onClick={() => setActiveTab(categoryKey)}
+                onClick={() => {
+                  setActiveTab(categoryKey);
+                  setSelectedBlock(null);
+                }}
                 style={{
                   padding: '12px 20px',
                   background: isActive ? '#1a1a2e' : 'transparent',
@@ -318,7 +259,7 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                   }
                 }}
               >
-                <span>{CATEGORY_LABELS[categoryKey] || categoryKey}</span>
+                <span>{BLOCK_TYPE_LABELS[categoryKey]}</span>
                 <span
                   style={{
                     background: isActive ? '#3b82f6' : '#374151',
@@ -465,6 +406,12 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                     >
                       {block.description}
                     </div>
+                    {blockType(block) === 'custom' && (
+                      <div style={{ color: '#9ca3af', fontSize: 11, marginTop: 6 }}>
+                        v{block.version} · {block.authorName || 'Автор не указан'} ·{' '}
+                        {customAccessSourceLabel(block)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -512,6 +459,14 @@ export default function BlockLibraryModal({ isOpen, onClose, onAddBlock }: Props
                     {selectedBlock.description}
                   </div>
                 </div>
+
+                {blockType(selectedBlock) === 'custom' && (
+                  <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 16 }}>
+                    Версия: v{selectedBlock.version} · Автор:{' '}
+                    {selectedBlock.authorName || 'не указан'} ·{' '}
+                    {customAccessSourceLabel(selectedBlock)}
+                  </div>
+                )}
 
                 {selectedBlock.configSchema && selectedBlock.configSchema.length > 0 && (
                   <div style={{ marginBottom: 16 }}>

@@ -115,4 +115,19 @@ describe('DashboardLayout mobile drawer', () => {
     expect(tariff.getAttribute('href')).toBe('/dashboard/finance');
     expect(screen.getByTestId('dashboard-user-role').textContent).not.toMatch(/Бизнес/);
   });
+
+  it('does not expose a separate Marketplace блоков sidebar item', () => {
+    localStorage.setItem('dashboard_mode', 'projects');
+    render(
+      <MemoryRouter initialEntries={['/dashboard/block-library']}>
+        <Routes>
+          <Route element={<DashboardLayout />}>
+            <Route path="/dashboard/block-library" element={<div>Library</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+    expect(screen.queryByText('Marketplace блоков')).toBeNull();
+    expect(screen.getByText('Библиотека блоков')).toBeTruthy();
+  });
 });

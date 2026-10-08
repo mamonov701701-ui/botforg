@@ -26,6 +26,12 @@ from backend.models.market_access import (
 )
 from backend.models.bot import Bot
 from backend.models.scenario import Scenario
+from backend.services.trust_safety import active_actions, market_restricted
+from backend.models.custom_block_marketplace import CustomBlockMarketDependency
+from backend.services.custom_block_distribution import (
+    ensure_published_dependencies_unchanged, snapshot_market_dependencies,
+    validate_distribution_dependencies,
+)
 from backend.utils.plan_limits import check_can_publish_templates, require_developer_plan
 from backend.schemas.market import (
     MarketItemCreate, MarketItemUpdate, MarketItemOut, MarketItemDetailOut,
@@ -462,7 +468,15 @@ async def get_market_item(
         "seller": get_seller_info(item.seller),
         "average_rating": avg_rating,
         "rating_count": rating_count,
-        "reviews": reviews_out
+        "reviews": reviews_out,
+        "custom_block_attributions": [
+            {"custom_block_version_id": row.custom_block_version_id,
+             "title": row.block_title, "version": row.version_number,
+             "original_author_user_id": row.original_author_user_id,
+             "original_author_name": (db.query(User).filter_by(id=row.original_author_user_id).first().name
+                                      or f"Пользователь #{row.original_author_user_id}")}
+            for row in db.query(CustomBlockMarketDependency).filter_by(market_item_id=item.id).all()
+        ],
     }
     
     return MarketItemDetailOut(**item_dict)
@@ -480,6 +494,8 @@ async def create_market_item(
         item_type_enum = MarketItemType(item_data.item_type)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid item_type: {item_data.item_type}")
+    if item_data.is_published and market_restricted(db, current_user.id, paid=item_data.price > 0):
+        raise HTTPException(status_code=403, detail="Публикация в Маркете временно ограничена")
 
     # Публикация шаблонов — только тариф Developer
     if item_type_enum == MarketItemType.TEMPLATE:
@@ -494,6 +510,8 @@ async def create_market_item(
             raise HTTPException(status_code=404, detail="Bot not found")
         if bot.owner_id != current_user.id:
             raise HTTPException(status_code=403, detail="You don't own this bot")
+        if "suspend_object" in active_actions(db, subject_type="bot", subject_id=bot.id):
+            raise HTTPException(status_code=403, detail="Публикация этого бота ограничена")
     
     elif item_type_enum == MarketItemType.SCENARIO:
         if not item_data.source_scenario_id:
@@ -503,6 +521,13 @@ async def create_market_item(
             raise HTTPException(status_code=404, detail="Scenario not found")
         if scenario.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="You don't own this scenario")
+        if "suspend_object" in active_actions(db, subject_type="scenario", subject_id=scenario.id):
+            raise HTTPException(status_code=403, detail="Публикация этого сценария ограничена")
+
+    dependencies = (validate_distribution_dependencies(
+        db, seller_id=current_user.id, item_type=item_type_enum,
+        source_bot_id=item_data.source_bot_id, source_scenario_id=item_data.source_scenario_id,
+    ) if item_data.is_published else [])
     
     # Создание товара
     item = MarketItem(
@@ -524,6 +549,9 @@ async def create_market_item(
     )
     
     db.add(item)
+    if item_data.is_published:
+        db.flush()
+        snapshot_market_dependencies(db, item=item, versions=dependencies)
     db.commit()
     db.refresh(item)
     
@@ -558,11 +586,21 @@ async def update_market_item(
         and item_data.is_published is True
     ):
         check_can_publish_templates(db, current_user)
+    publishing = item_data.is_published is True and not item.is_published
+    if publishing and (market_restricted(db, current_user.id, paid=item.price > 0)
+                       or "suspend_object" in active_actions(db, subject_type="market_item", subject_id=item.id)):
+        raise HTTPException(status_code=403, detail="Публикация в Маркете временно ограничена")
+    dependencies = (validate_distribution_dependencies(
+        db, seller_id=current_user.id, item_type=item.item_type,
+        source_bot_id=item.source_bot_id, source_scenario_id=item.source_scenario_id,
+    ) if publishing else [])
     
     # Обновление полей
     update_data = item_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(item, field, value)
+    if publishing:
+        snapshot_market_dependencies(db, item=item, versions=dependencies)
     
     # Если публикуется впервые
     if item_data.is_published and not item.published_at:
@@ -620,6 +658,8 @@ async def install_market_scenario(
         raise HTTPException(status_code=404, detail="Товар-сценарий не найден")
     if not item.is_published:
         raise HTTPException(status_code=403, detail="Товар не опубликован")
+    if "suspend_object" in active_actions(db, subject_type="market_item", subject_id=item.id):
+        raise HTTPException(status_code=403, detail="Товар временно недоступен")
     _ensure_market_install_allowed(db, item, current_user.id)
     if not item.source_scenario_id:
         raise HTTPException(status_code=400, detail="У товара не указан source_scenario_id")
@@ -627,6 +667,7 @@ async def install_market_scenario(
     source_scenario = db.query(Scenario).filter(Scenario.id == item.source_scenario_id).first()
     if not source_scenario:
         raise HTTPException(status_code=404, detail="Исходный сценарий не найден")
+    ensure_published_dependencies_unchanged(db, item=item)
 
     copied_scenario = Scenario(
         user_id=current_user.id,
@@ -676,6 +717,8 @@ async def install_market_bot(
         raise HTTPException(status_code=404, detail="Товар-шаблон не найден")
     if not item.is_published:
         raise HTTPException(status_code=403, detail="Товар не опубликован")
+    if "suspend_object" in active_actions(db, subject_type="market_item", subject_id=item.id):
+        raise HTTPException(status_code=403, detail="Товар временно недоступен")
     _ensure_market_install_allowed(db, item, current_user.id)
     if not item.source_bot_id:
         raise HTTPException(status_code=400, detail="У товара не указан source_bot_id")
@@ -683,6 +726,7 @@ async def install_market_bot(
     source_bot = db.query(Bot).filter(Bot.id == item.source_bot_id).first()
     if not source_bot:
         raise HTTPException(status_code=404, detail="Исходный бот не найден")
+    ensure_published_dependencies_unchanged(db, item=item)
 
     # Установка шаблона создаёт черновик (is_active=False, placeholder) — без лимита active_bots.
 

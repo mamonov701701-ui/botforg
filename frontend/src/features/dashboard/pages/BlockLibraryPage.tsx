@@ -23,6 +23,12 @@ import {
 } from '../../../utils/blockCatalogPresentation';
 import type { CustomBlockVersion } from '../../../types/blocks';
 import {
+  getMyCustomBlockMarketplaceListings,
+  getMyCustomBlockRightsOverview,
+  type CustomBlockMarketplaceListing,
+  type ReceivedCustomBlock,
+} from '../../../api/customBlockMarketplace';
+import {
   archiveCustomBlock,
   createCustomBlockVersion,
   deleteCustomBlockDraft,
@@ -33,6 +39,7 @@ import {
   validateCustomBlock,
 } from '../../../api/blocks';
 import { useNavigate } from 'react-router-dom';
+import { BLOCK_TYPE_LABELS, blockType, type BlockType } from '../../../utils/blockClassification';
 import {
   primaryVersionStatusLabel,
   reviewDecisionLabel,
@@ -44,8 +51,14 @@ export default function BlockLibraryPage() {
   const { blocks, loading, error, reload } = useUserBlockCatalog();
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('all');
-  const [origin, setOrigin] = useState<'all' | 'system' | 'custom'>('all');
+  const [origin, setOrigin] = useState<'all' | BlockType>('all');
   const [mine, setMine] = useState<CustomBlockVersion[]>([]);
+  const [received, setReceived] = useState<ReceivedCustomBlock[]>([]);
+  const [receivedLoading, setReceivedLoading] = useState(true);
+  const [myListings, setMyListings] = useState<CustomBlockMarketplaceListing[]>([]);
+  const [listingsLoading, setListingsLoading] = useState(true);
+  const [listingsError, setListingsError] = useState(false);
+  const [receivedError, setReceivedError] = useState(false);
   const [mineStatus, setMineStatus] = useState<'all' | CustomBlockVersion['status']>('all');
   const [mineQuery, setMineQuery] = useState('');
   const [mineSort, setMineSort] = useState<'newest' | 'oldest' | 'az' | 'za'>('newest');
@@ -57,6 +70,14 @@ export default function BlockLibraryPage() {
       .catch(() => setMine([]));
   useEffect(() => {
     void loadMine();
+    void getMyCustomBlockRightsOverview()
+      .then(setReceived)
+      .catch(() => setReceivedError(true))
+      .finally(() => setReceivedLoading(false));
+    void getMyCustomBlockMarketplaceListings()
+      .then(setMyListings)
+      .catch(() => setListingsError(true))
+      .finally(() => setListingsLoading(false));
   }, []);
   const act = async (action: () => Promise<unknown>) => {
     try {
@@ -72,10 +93,14 @@ export default function BlockLibraryPage() {
     () => Array.from(new Set(blocks.map(block => block.category))).sort(),
     [blocks]
   );
+  const listingsByVersion = useMemo(
+    () => new Map(myListings.map(row => [row.custom_block_version_id, row])),
+    [myListings]
+  );
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase('ru-RU');
     return blocks.filter(block => {
-      const blockOrigin = block.source === 'custom' ? 'custom' : 'system';
+      const blockOrigin = blockType(block);
       if (origin !== 'all' && blockOrigin !== origin) return false;
       if (category !== 'all' && block.category !== category) return false;
       if (!needle) return true;
@@ -144,7 +169,18 @@ export default function BlockLibraryPage() {
       }
     >
       <section className="mb-8" data-testid="my-custom-blocks">
-        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Мои блоки</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xl font-semibold text-[var(--text)]">Созданные мной</h2>
+          <Link
+            to="/market/my-listings/custom-blocks"
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"
+          >
+            Мои размещения{!listingsLoading && !listingsError ? ` (${myListings.length})` : ''}
+          </Link>
+        </div>
+        <p className="mb-3 text-xs text-[var(--text-muted)]">
+          Блоков: {new Set(mine.map(item => item.stable_block_id)).size} · версий: {mine.length}
+        </p>
         {mine.length === 0 ? (
           <Card>
             <p className="text-sm text-[var(--text-muted)]">
@@ -239,6 +275,22 @@ export default function BlockLibraryPage() {
                   <p className="mt-1 text-xs text-[var(--text-muted)]">
                     Процесс проверки: {reviewStateLabel(item.review_state)}.
                   </p>
+                  {listingsByVersion.has(item.id) ? (
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Маркет:{' '}
+                      {listingsByVersion.get(item.id)?.lifecycle === 'published'
+                        ? 'Опубликовано'
+                        : listingsByVersion.get(item.id)?.lifecycle === 'archived'
+                          ? 'Архив'
+                          : 'Черновик'}
+                      .
+                    </p>
+                  ) : null}
+                  {listingsError && item.status === 'published' ? (
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Не удалось загрузить состояние размещения.
+                    </p>
+                  ) : null}
                   {item.latest_security_report ? (
                     <p className="mt-1 text-xs text-[var(--text-muted)]">
                       Проверка безопасности: {securityReportLabel(item)}
@@ -258,15 +310,29 @@ export default function BlockLibraryPage() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Link
                       to={`/dashboard/block-library/custom/${item.id}`}
-                      className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                      className="bf-secondary-cta text-sm"
                     >
                       <BookOpen size={14} /> Просмотреть
                     </Link>
+                    {item.status === 'published' && !listingsLoading && !listingsError && (
+                      <Link
+                        to={
+                          listingsByVersion.has(item.id)
+                            ? `/market/my-listings/custom-blocks?listingId=${listingsByVersion.get(item.id)?.id}`
+                            : `/market/my-listings/custom-blocks?versionId=${item.id}`
+                        }
+                        className="bf-primary-cta inline-flex min-h-11 items-center rounded px-3 py-2 text-sm"
+                      >
+                        {listingsByVersion.has(item.id)
+                          ? 'Управлять размещением'
+                          : 'Разместить в Маркете'}
+                      </Link>
+                    )}
                     {item.status === 'draft' && item.review_state === 'draft' ? (
                       <>
                         <Link
                           to={`/dashboard/block-library/custom/${item.id}/edit`}
-                          className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                          className="bf-secondary-cta text-sm"
                         >
                           <Pencil size={14} /> Редактировать
                         </Link>
@@ -280,19 +346,19 @@ export default function BlockLibraryPage() {
                               )
                             )
                           }
-                          className="rounded border border-[var(--border)] px-3 py-2 text-sm"
+                          className="bf-secondary-cta text-sm"
                         >
                           Проверить
                         </button>
                         <button
                           onClick={() => void act(() => submitCustomBlockReview(item.id))}
-                          className="rounded border border-[var(--accent)] px-3 py-2 text-sm"
+                          className="bf-primary-cta min-h-11 rounded px-3 py-2 text-sm"
                         >
                           Отправить на проверку
                         </button>
                         <button
                           onClick={() => void act(() => deleteCustomBlockDraft(item.id))}
-                          className="inline-flex items-center gap-1 rounded border border-red-500/40 px-3 py-2 text-sm text-red-400"
+                          className="bf-danger-cta text-sm"
                         >
                           <Trash2 size={14} /> Удалить
                         </button>
@@ -301,7 +367,7 @@ export default function BlockLibraryPage() {
                     {item.status === 'draft' && item.review_state === 'approved' ? (
                       <button
                         onClick={() => void act(() => publishCustomBlock(item.id))}
-                        className="rounded border border-emerald-500/50 px-3 py-2 text-sm text-emerald-400"
+                        className="bf-primary-cta min-h-11 rounded px-3 py-2 text-sm"
                       >
                         Опубликовать
                       </button>
@@ -312,7 +378,7 @@ export default function BlockLibraryPage() {
                     ) ? (
                       <Link
                         to={`/dashboard/block-library/custom/${item.id}/edit`}
-                        className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                        className="bf-secondary-cta text-sm"
                       >
                         <Pencil size={14} /> Редактировать
                       </Link>
@@ -325,13 +391,13 @@ export default function BlockLibraryPage() {
                               navigate(`/dashboard/block-library/custom/${next.id}/edit`)
                             )
                           }
-                          className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                          className="bf-secondary-cta text-sm"
                         >
                           <CopyPlus size={14} /> Создать новую версию
                         </button>
                         <button
                           onClick={() => void act(() => archiveCustomBlock(item.id))}
-                          className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                          className="bf-danger-cta text-sm"
                         >
                           <Archive size={14} /> Архивировать
                         </button>
@@ -340,7 +406,7 @@ export default function BlockLibraryPage() {
                     {item.status === 'archived' ? (
                       <button
                         onClick={() => void act(() => restoreCustomBlock(item.id))}
-                        className="inline-flex items-center gap-1 rounded border border-[var(--border)] px-3 py-2 text-sm"
+                        className="bf-primary-cta inline-flex min-h-11 items-center rounded px-3 py-2 text-sm"
                       >
                         <RotateCcw size={14} /> Восстановить
                       </button>
@@ -352,15 +418,61 @@ export default function BlockLibraryPage() {
           </>
         )}
       </section>
+      <section className="mb-8" data-testid="received-custom-blocks">
+        <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">
+          Полученные мной ({received.length})
+        </h2>
+        {receivedLoading ? (
+          <Card>
+            <p className="text-sm text-[var(--text-muted)]">Загружаем полученные блоки…</p>
+          </Card>
+        ) : receivedError ? (
+          <Card>
+            <p role="alert">Не удалось загрузить полученные блоки.</p>
+          </Card>
+        ) : received.length ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {received.map(row => (
+              <Card key={row.grant_id}>
+                <h3 className="break-words font-semibold">
+                  {row.title} · v{row.version}
+                </h3>
+                <p className="mt-2 break-words text-sm text-[var(--text-muted)]">
+                  Автор: {row.original_author_name || `ID ${row.original_author_user_id}`}
+                </p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  {row.source_channel === 'direct'
+                    ? 'Получено напрямую'
+                    : row.source_channel === 'unknown'
+                      ? 'Источник не установлен'
+                      : 'Получено из Маркета'}{' '}
+                  · {row.grant_status === 'active' ? 'Доступ действует' : 'Доступ отозван'} ·{' '}
+                  {row.is_installed ? 'Установлено' : 'Не установлено'}
+                </p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  Право распространения: {row.has_distribution_right ? 'да' : 'нет'}
+                  {row.current_commercial_mode === 'paid'
+                    ? ' · Текущие условия карточки: Paid'
+                    : row.current_commercial_mode === 'free'
+                      ? ' · Текущие условия карточки: Free'
+                      : ''}
+                </p>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <p className="text-sm text-[var(--text-muted)]">Полученных блоков пока нет.</p>
+          </Card>
+        )}
+      </section>
       {actionMessage ? (
         <p role="status" className="mb-4 text-sm text-[var(--text-muted)]">
           {actionMessage}
         </p>
       ) : null}
 
-      <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">
-        Системные и опубликованные блоки
-      </h2>
+      <h2 className="mb-3 text-xl font-semibold text-[var(--text)]">Доступные блоки</h2>
       <div
         className={`grid gap-3 mb-6 ${categories.length > 1 ? 'md:grid-cols-[minmax(0,1fr)_200px_220px]' : 'md:grid-cols-[minmax(0,1fr)_220px]'}`}
       >
@@ -387,8 +499,9 @@ export default function BlockLibraryPage() {
             className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-[var(--text)]"
           >
             <option value="all">Все типы</option>
+            <option value="basic">Базовые</option>
             <option value="system">Системные</option>
-            <option value="custom">Пользовательские</option>
+            <option value="custom">Кастомные</option>
           </select>
         </label>
         {categories.length > 1 ? (
@@ -438,7 +551,7 @@ export default function BlockLibraryPage() {
                   {blockDisplayTitle(block)}
                 </h2>
                 <span className="mt-1 inline-flex rounded-full bg-[var(--accent)]/10 px-2 py-1 text-xs text-[var(--accent)]">
-                  {block.source === 'custom' ? 'Пользовательский' : 'Системный'}
+                  {BLOCK_TYPE_LABELS[blockType(block)]}
                 </span>
               </div>
             </div>

@@ -185,6 +185,7 @@ export interface UserDetailedInfo {
     name: string | null;
     role: string;
     created_at: string | null;
+    is_suspended: boolean;
     platform_roles: Array<{
       id: number;
       role_name: string;
@@ -201,6 +202,7 @@ export interface UserDetailedInfo {
     is_suspended: boolean;
     suspension_type: 'warning' | 'temporary' | 'permanent' | null;
     suspension_reason: string | null;
+    suspended_until: string | null;
     created_at: string | null;
     users_count: number;
     messages_count: number;
@@ -212,6 +214,84 @@ export interface UserDetailedInfo {
     is_main: boolean;
     is_library: boolean;
     created_at: string | null;
+  }>;
+  templates: Array<{ id: number; name: string; is_public: boolean }>;
+  custom_block_summary: {
+    created_blocks: number;
+    published_versions: number;
+    draft_versions: number;
+    archived_versions: number;
+    marketplace_listings: number;
+    free_listings: number;
+    paid_listings: number;
+    received_marketplace: number;
+    received_direct: number;
+    received_unverified: number;
+    library_installs: number;
+    active_rights: number;
+    revoked_rights: number;
+  };
+  received_custom_blocks: Array<{
+    grant_id: number;
+    custom_block_version_id: number;
+    title: string;
+    version: number;
+    original_author_user_id: number;
+    original_author_name: string | null;
+    source_channel: 'marketplace' | 'direct' | 'unknown';
+    grant_status: 'active' | 'revoked';
+    is_installed: boolean;
+    has_distribution_right: boolean;
+    listing_lifecycle: string | null;
+    current_commercial_mode: string | null;
+  }>;
+  custom_blocks: Array<{
+    id: number;
+    stable_key: string;
+    title: string;
+    created_at: string | null;
+    versions: Array<{
+      id: number;
+      version: number;
+      title: string;
+      status: string;
+      review_state: string;
+      marketplace_lifecycle: string | null;
+      commercial_mode: string | null;
+      active_grants_count: number;
+    }>;
+  }>;
+  marketplace_listings: Array<{
+    id: number;
+    custom_block_version_id: number;
+    title: string;
+    commercial_mode: string;
+    price_amount: number | null;
+    price_currency: string | null;
+    lifecycle: string;
+    version: number | null;
+    created_at: string | null;
+    active_grants_count: number;
+  }>;
+  market_items: Array<{
+    id: number;
+    title: string;
+    item_type: string;
+    price: number;
+    is_published: boolean;
+  }>;
+  disputes: Array<{ id: number; status: string; listing_id: number }>;
+  reports: Array<{ id: number; status: string; subject_type: string; subject_id: number }>;
+  enforcements: Array<{
+    id: number;
+    action: string;
+    subject_type: string;
+    subject_id: number;
+    reason: string;
+    actor_user_id: number;
+    created_at: string | null;
+    expires_at: string | null;
+    revoked_at: string | null;
   }>;
   team_memberships: Array<{
     owner_id: number;
@@ -389,6 +469,20 @@ export async function suspendAllUserBots(userId: number, data: SuspendRequest): 
  */
 export async function unsuspendAllUserBots(userId: number): Promise<any> {
   return api.post(`/api/platform-admin/users/${userId}/unsuspend-all-bots`);
+}
+
+export async function createObjectEnforcement(data: {
+  subject_type: 'user' | 'listing' | 'scenario' | 'template' | 'market_item';
+  subject_id: number;
+  action: 'warning' | 'suspend_object' | 'temporary_market_restriction';
+  reason: string;
+  duration_days?: number;
+}): Promise<{ id: number }> {
+  return api.post('/api/trust-safety/admin/enforcements', data);
+}
+
+export async function resolveObjectEnforcement(id: number): Promise<void> {
+  await api.post(`/api/trust-safety/admin/enforcements/${id}/resolve`);
 }
 
 // === Platform Analytics ===

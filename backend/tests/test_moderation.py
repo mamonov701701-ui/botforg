@@ -1,7 +1,7 @@
 """
 Тесты модерации шаблонов маркетплейса.
 """
-from backend.tests.conftest import register_and_get_token, get_user_id, TestingSessionLocal, activate_test_subscription
+from backend.tests.conftest import register_and_get_token, get_user_id, TestingSessionLocal, activate_test_subscription, create_test_bot
 from backend.models.market import MarketItem, MarketItemType, ModerationStatus
 from backend.models.user import User
 
@@ -72,6 +72,7 @@ def test_admin_approve(client):
     auth = register_and_get_token(client)
     client.post("/me/plan", json={"plan_code": "developer"}, headers={"Authorization": auth})
     user_id = get_user_id(client, auth)
+    source_bot_id = create_test_bot(client, auth)
 
     db = TestingSessionLocal()
     try:
@@ -79,6 +80,7 @@ def test_admin_approve(client):
             item_type=MarketItemType.TEMPLATE,
             title="На модерации",
             seller_id=user_id,
+            source_bot_id=source_bot_id,
             price=0,
             moderation_status=ModerationStatus.PENDING,
         )

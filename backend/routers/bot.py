@@ -22,6 +22,7 @@ from backend.services.tariff_enforcement import (
     tariff_limit_to_http,
     ensure_can_activate_bot,
 )
+from backend.services.trust_safety import bot_suspension_active
 from backend.utils.ctor_bot_resolve import resolve_ctor_bot_id
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -358,6 +359,10 @@ async def get_bots(
             username=bot.username,
             webhook_url=bot.webhook_url,
             is_active=bot.is_active,
+            is_suspended=bot_suspension_active(bot),
+            suspension_type=bot.suspension_type,
+            suspension_reason=bot.suspension_reason,
+            suspended_until=bot.suspended_until,
             created_at=bot.created_at,
             updated_at=bot.updated_at,
             owner_id=bot.owner_id,
@@ -427,6 +432,8 @@ async def get_bot(
 ):
     """Получение конкретного бота"""
     bot = check_bot_access(bot_id, current_user.id, db)
+    if isinstance(bot, Bot):
+        return BotOut.model_validate(bot).model_copy(update={"is_suspended": bot_suspension_active(bot)})
     return bot
 
 

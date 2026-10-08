@@ -4,29 +4,20 @@ import { useEditorStore } from '../../stores/editorStore';
 import { useAuthStore } from '../../stores/authStore';
 import { BlockCatalogItem } from '../../types/blocks';
 import { planLabelRu } from './planLabels';
+import {
+  BLOCK_TYPE_LABELS,
+  blockType,
+  customAccessSourceLabel,
+} from '../../utils/blockClassification';
 
 // Category names mapping
 const CATEGORY_LABELS: Record<string, string> = {
   favorites: '⭐ Избранные',
   recent: '🕐 Недавние',
-  basic: 'Базовые',
-  business: 'Бизнесовые',
-  service: 'Сервисные',
-  system: 'Системные',
-  ai: 'ИИ',
-  custom: 'Дополнительные',
+  ...BLOCK_TYPE_LABELS,
 };
 
-const CATEGORY_ORDER = [
-  'favorites',
-  'recent',
-  'basic',
-  'business',
-  'service',
-  'system',
-  'ai',
-  'custom',
-];
+const CATEGORY_ORDER = ['favorites', 'recent', 'basic', 'system', 'custom'];
 
 // Block card component for reuse
 interface BlockCardProps {
@@ -188,7 +179,10 @@ const BlockCard: React.FC<BlockCardProps> = ({
           color: block.source === 'custom' ? '#c4b5fd' : '#93c5fd',
         }}
       >
-        {block.source === 'custom' ? 'Пользовательский' : 'Системный'}
+        {BLOCK_TYPE_LABELS[blockType(block)]}
+        {blockType(block) === 'custom'
+          ? ` · v${block.version} · ${block.authorName || 'Автор не указан'} · ${customAccessSourceLabel(block)}`
+          : ''}
       </div>
       {(block.planAccess || block.permissions) && (
         <div
@@ -275,10 +269,11 @@ const BlockLibrary: React.FC = () => {
 
     // Group by category
     filtered.forEach(block => {
-      if (!groups[block.category]) {
-        groups[block.category] = [];
+      const type = blockType(block);
+      if (!groups[type]) {
+        groups[type] = [];
       }
-      groups[block.category].push(block);
+      groups[type].push(block);
     });
 
     return groups;

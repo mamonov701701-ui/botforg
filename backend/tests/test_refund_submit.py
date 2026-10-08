@@ -749,6 +749,10 @@ def test_open_request_guard_still_blocks(client, db):
 
 
 def test_migration_includes_submit_guards(db):
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
     from sqlalchemy import inspect as sa_inspect
     from sqlalchemy import text
 
@@ -760,4 +764,7 @@ def test_migration_includes_submit_guards(db):
     assert "uq_refund_requests_user_idempotency" in index_names
 
     rev = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
-    assert rev == "custom_block_review_schema_repair_046"
+    root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "backend" / "migrations").replace("\\", "/"))
+    assert rev in ScriptDirectory.from_config(cfg).get_heads()

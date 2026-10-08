@@ -40,6 +40,22 @@ STATUS_LABELS = {
     CUSTOM_BLOCK_PUBLISHED: "Опубликован",
     CUSTOM_BLOCK_ARCHIVED: "Архив",
 }
+
+# Public catalog metadata is an allowlist: older passports may contain extra
+# implementation fields that must not reach consumers through /blocks or Market.
+PUBLIC_PASSPORT_FIELDS = frozenset({
+    "stable_block_id", "version", "owner_user_id", "title_ru", "description",
+    "purpose", "when_to_use", "category", "parameters", "config_schema",
+    "inputs", "outputs", "connection_rules", "supported_channels",
+    "runtime_compatibility", "simulator_compatibility", "limitations",
+    "examples", "lifecycle_status", "wizard_step",
+})
+
+
+def public_passport(passport: dict[str, Any] | None) -> dict[str, Any]:
+    return {key: value for key, value in (passport or {}).items() if key in PUBLIC_PASSPORT_FIELDS}
+
+
 REVIEW_STATE_LABELS = {
     CUSTOM_BLOCK_REVIEW_DRAFT: "Черновик",
     CUSTOM_BLOCK_REVIEW_ADMIN_PENDING: "Ожидает проверки администратора",
@@ -511,17 +527,44 @@ def content_version_ids(content: Any) -> set[int]:
     return result
 
 
+def content_version_counts(content: Any) -> dict[int, int]:
+    """Count exact-version nodes so a revoked licence cannot be re-added.
+
+    A set alone preserves ordinary archive semantics but cannot distinguish an
+    unchanged historical node from a second copy introduced in the same save.
+    """
+    counts: dict[int, int] = {}
+    if not isinstance(content, dict):
+        return counts
+    for node in content.get("nodes") or []:
+        data = node.get("data") if isinstance(node, dict) else None
+        value = data.get("customBlockVersionId") if isinstance(data, dict) else None
+        if isinstance(value, int):
+            counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
 def validate_scenario_custom_block_references(
-    db: Session, content: Any, *, previously_referenced: Iterable[int] = (), scenario_owner_id: int | None = None
+    db: Session, content: Any, *, previously_referenced: Iterable[int] | dict[int, int] = (), scenario_owner_id: int | None = None
 ) -> None:
     """Reject forged/stale custom references while allowing saved archived ones."""
-    previous = set(previously_referenced)
+    previous_counts = dict(previously_referenced) if isinstance(previously_referenced, dict) else {value: 1 for value in previously_referenced}
+    previous = set(previous_counts)
+    current_counts = content_version_counts(content)
     for version_id in content_version_ids(content):
         version = db.query(CustomBlockVersion).filter(CustomBlockVersion.id == version_id).first()
         if not version:
             raise HTTPException(status_code=422, detail="Сценарий ссылается на неизвестную версию блока")
         if scenario_owner_id is not None and version.block.owner_user_id != scenario_owner_id:
-            raise HTTPException(status_code=403, detail="Сценарий не имеет права использовать чужую версию блока")
+            from backend.models.user import User
+            from backend.services.custom_block_marketplace import resolve_custom_block_effective_rights
+            actor = db.query(User).filter(User.id == scenario_owner_id).first()
+            rights = resolve_custom_block_effective_rights(db, user=actor, version=version) if actor else None
+            # A revoked historical node can remain in an otherwise unrelated
+            # scenario save, but no new foreign node may be inserted directly.
+            is_new_reference = current_counts.get(version_id, 0) > previous_counts.get(version_id, 0)
+            if is_new_reference and (not rights or not rights.can_add_new_node):
+                raise HTTPException(status_code=403, detail="Сценарий не имеет права использовать эту версию блока")
         if version.status == CUSTOM_BLOCK_DRAFT:
             raise HTTPException(status_code=422, detail="Черновик блока нельзя использовать в сценарии")
         if version.status == CUSTOM_BLOCK_ARCHIVED and version_id not in previous:
@@ -678,8 +721,8 @@ def record_manual_decision(
     return serialize_version(db, version)
 
 
-def to_catalog_item(version: CustomBlockVersion) -> BlockCatalogItem:
-    p = version.passport or {}
+def to_catalog_item(version: CustomBlockVersion, *, author_name: str | None = None, access_source: str | None = None) -> BlockCatalogItem:
+    p = public_passport(version.passport)
     schema = p.get("config_schema") or []
     return BlockCatalogItem(
         id=f"custom:{version.block.stable_key}:v{version.version}",
@@ -695,6 +738,8 @@ def to_catalog_item(version: CustomBlockVersion) -> BlockCatalogItem:
         stableBlockId=version.block.stable_key,
         blockVersionId=version.id,
         version=version.version,
+        authorName=author_name,
+        accessSource=access_source,
         lifecycleStatus=version.status,
         runtimeBlockId="custom" if version.runtime_kind == "javascript" else "message",
         passport=p,

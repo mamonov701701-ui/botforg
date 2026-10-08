@@ -329,6 +329,14 @@ async def get_user_detailed_info(
     from backend.models.team import TeamMember
     from backend.models.bot_user_state import BotUserState
     from backend.models.message import Message
+    from backend.models.template import Template
+    from backend.models.market import MarketItem
+    from backend.models.custom_block import CustomBlock, CustomBlockVersion
+    from backend.models.custom_block_marketplace import (
+        CustomBlockAccessGrant, CustomBlockMarketplaceListing, MarketplaceDispute, TrustSafetyEnforcement, TrustSafetyReport,
+    )
+    from backend.services.custom_block_overview import received_custom_block_rows
+    from backend.services.trust_safety import bot_suspension_active, record_audit
     from sqlalchemy import func
     
     user = db.query(User).filter(User.id == user_id).first()
@@ -346,6 +354,31 @@ async def get_user_detailed_info(
     
     # Получаем сценарии пользователя
     user_scenarios = db.query(Scenario).filter(Scenario.user_id == user_id).all()
+    user_templates = db.query(Template).filter(Template.user_id == user_id).all()
+    user_blocks = db.query(CustomBlock).filter(CustomBlock.owner_user_id == user_id).all()
+    block_ids = [block.id for block in user_blocks]
+    block_versions = (db.query(CustomBlockVersion).filter(CustomBlockVersion.custom_block_id.in_(block_ids)).all()
+                      if block_ids else [])
+    version_ids = [version.id for version in block_versions]
+    listings = (db.query(CustomBlockMarketplaceListing).filter(
+        CustomBlockMarketplaceListing.custom_block_version_id.in_(version_ids)).all() if version_ids else [])
+    listings_by_version = {listing.custom_block_version_id: listing for listing in listings}
+    received_blocks = received_custom_block_rows(db, user_id)
+    active_grants_by_version = {}
+    if version_ids:
+        for grant in db.query(CustomBlockAccessGrant).filter(
+            CustomBlockAccessGrant.custom_block_version_id.in_(version_ids),
+            CustomBlockAccessGrant.status == "active",
+            CustomBlockAccessGrant.recipient_user_id != user_id,
+        ).all():
+            active_grants_by_version[grant.custom_block_version_id] = active_grants_by_version.get(grant.custom_block_version_id, 0) + 1
+    market_items = db.query(MarketItem).filter(MarketItem.seller_id == user_id).all()
+    disputes = db.query(MarketplaceDispute).filter(
+        (MarketplaceDispute.buyer_user_id == user_id) | (MarketplaceDispute.seller_user_id == user_id)).all()
+    reports = db.query(TrustSafetyReport).filter(
+        (TrustSafetyReport.reporter_user_id == user_id) |
+        ((TrustSafetyReport.subject_type == "user") & (TrustSafetyReport.subject_id == user_id))).all()
+    enforcements = db.query(TrustSafetyEnforcement).filter(TrustSafetyEnforcement.user_id == user_id).all()
     
     # Получаем команды, где пользователь участник
     team_memberships = db.query(TeamMember).filter(TeamMember.user_id == user_id).all()
@@ -397,6 +430,8 @@ async def get_user_detailed_info(
                 "bots_count": len(owner_bots),
             })
     
+    record_audit(db, actor_id=current_user.id, event_type="user_detail_viewed", subject_type="user", subject_id=user_id)
+    db.commit()
     return {
         "user": {
             "id": user.id,
@@ -405,6 +440,7 @@ async def get_user_detailed_info(
             "name": user.name,
             "role": user.role,
             "created_at": user.created_at.isoformat() if user.created_at else None,
+            "is_suspended": bool(user.is_suspended),
             "platform_roles": [
                 {
                     "id": pr.id,
@@ -422,9 +458,10 @@ async def get_user_detailed_info(
                 "title": bot.title,
                 "username": bot.username,
                 "is_active": bot.is_active,
-                "is_suspended": bot.is_suspended or False,
+                "is_suspended": bot_suspension_active(bot),
                 "suspension_type": bot.suspension_type,
                 "suspension_reason": bot.suspension_reason,
+                "suspended_until": bot.suspended_until.isoformat() if bot.suspended_until else None,
                 "created_at": bot.created_at.isoformat() if bot.created_at else None,
                 "users_count": bot_stats.get(bot.id, {}).get("users_count", 0),
                 "messages_count": bot_stats.get(bot.id, {}).get("messages_count", 0),
@@ -442,6 +479,57 @@ async def get_user_detailed_info(
             }
             for scenario in user_scenarios
         ],
+        "templates": [{"id": row.id, "name": row.name, "is_public": row.is_public}
+                      for row in user_templates],
+        "custom_block_summary": {
+            "created_blocks": len(user_blocks),
+            "published_versions": sum(version.status == "published" for version in block_versions),
+            "draft_versions": sum(version.status == "draft" for version in block_versions),
+            "archived_versions": sum(version.status == "archived" for version in block_versions),
+            "marketplace_listings": len(listings),
+            "free_listings": sum(row.commercial_mode == "free" for row in listings),
+            "paid_listings": sum(row.commercial_mode == "paid" for row in listings),
+            "received_marketplace": sum(row["source_channel"] == "marketplace" for row in received_blocks),
+            "received_direct": sum(row["source_channel"] == "direct" for row in received_blocks),
+            "received_unverified": sum(row["source_channel"] == "unknown" for row in received_blocks),
+            "library_installs": sum(row["is_installed"] for row in received_blocks),
+            "active_rights": sum(row["grant_status"] == "active" for row in received_blocks),
+            "revoked_rights": sum(row["grant_status"] == "revoked" for row in received_blocks),
+        },
+        "received_custom_blocks": received_blocks,
+        "custom_blocks": [{
+            "id": block.id, "stable_key": block.stable_key,
+            "created_at": block.created_at.isoformat() if block.created_at else None,
+            "title": next((version.title for version in sorted(block_versions, key=lambda row: row.version, reverse=True)
+                           if version.custom_block_id == block.id), block.stable_key),
+            "versions": [{"id": version.id, "version": version.version, "title": version.title,
+                          "status": version.status, "review_state": version.review_state,
+                          "marketplace_lifecycle": listings_by_version[version.id].lifecycle if version.id in listings_by_version else None,
+                          "commercial_mode": listings_by_version[version.id].commercial_mode if version.id in listings_by_version else None,
+                          "active_grants_count": active_grants_by_version.get(version.id, 0)}
+                         for version in block_versions if version.custom_block_id == block.id],
+        } for block in user_blocks],
+        "marketplace_listings": [{"id": row.id, "custom_block_version_id": row.custom_block_version_id,
+                                  "title": row.title or next((v.title for v in block_versions if v.id == row.custom_block_version_id), ""),
+                                  "commercial_mode": row.commercial_mode, "price_amount": row.price_amount,
+                                  "price_currency": row.price_currency, "lifecycle": row.lifecycle,
+                                  "version": next((v.version for v in block_versions if v.id == row.custom_block_version_id), None),
+                                  "created_at": row.created_at.isoformat() if row.created_at else None,
+                                  "active_grants_count": active_grants_by_version.get(row.custom_block_version_id, 0)}
+                                 for row in listings],
+        "market_items": [{"id": row.id, "title": row.title, "item_type": row.item_type.value if hasattr(row.item_type, "value") else row.item_type,
+                          "price": row.price, "is_published": row.is_published}
+                         for row in market_items],
+        "disputes": [{"id": row.id, "status": row.status, "listing_id": row.listing_id}
+                     for row in disputes],
+        "reports": [{"id": row.id, "status": row.status, "subject_type": row.subject_type,
+                     "subject_id": row.subject_id} for row in reports],
+        "enforcements": [{"id": row.id, "action": row.action, "subject_type": row.subject_type,
+                          "subject_id": row.subject_id, "reason": row.reason,
+                          "actor_user_id": row.actor_user_id, "created_at": row.created_at.isoformat() if row.created_at else None,
+                          "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+                          "revoked_at": row.revoked_at.isoformat() if row.revoked_at else None}
+                         for row in enforcements],
         "team_memberships": projects,
         "statistics": {
             "total_bots": len(user_bots),
@@ -985,8 +1073,11 @@ async def suspend_user(
     Заблокировать/приостановить пользователя
     Типы: warning (предупреждение), temporary (временная), permanent (постоянная)
     """
+    from backend.services.trust_safety import now, record_enforcement
     if request.suspension_type not in ["warning", "temporary", "permanent"]:
         raise HTTPException(status_code=400, detail="Неверный тип блокировки")
+    if not request.reason.strip():
+        raise HTTPException(status_code=400, detail="Укажите причину")
     
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -999,21 +1090,25 @@ async def suspend_user(
     # Вычисляем дату окончания для временной блокировки
     suspended_until = None
     if request.suspension_type == "temporary":
-        if not request.duration_days:
+        if not request.duration_days or request.duration_days < 1:
             raise HTTPException(status_code=400, detail="Для временной блокировки укажите duration_days")
-        suspended_until = datetime.now(timezone.utc) + timedelta(days=request.duration_days)
-    
-    user.is_suspended = True
-    user.suspension_type = request.suspension_type
-    user.suspension_reason = request.reason
-    user.suspended_at = datetime.now(timezone.utc)
-    user.suspended_until = suspended_until
-    user.suspended_by_id = current_user.id
+        suspended_until = now() + timedelta(days=request.duration_days)
+
+    if request.suspension_type != "warning" or not user.is_suspended:
+        user.is_suspended = request.suspension_type != "warning"
+        user.suspension_type = request.suspension_type
+        user.suspension_reason = request.reason.strip()
+        user.suspended_at = now()
+        user.suspended_until = suspended_until
+        user.suspended_by_id = current_user.id
+    record_enforcement(db, actor_id=current_user.id, user_id=user.id, subject_type="user",
+                       subject_id=user.id, action="warning" if request.suspension_type == "warning" else "account_restriction",
+                       reason=request.reason.strip(), expires_at=suspended_until)
     
     db.commit()
     
     return {
-        "detail": "Пользователь заблокирован",
+        "detail": "Предупреждение вынесено" if request.suspension_type == "warning" else "Пользователь заблокирован",
         "user_id": user_id,
         "suspension_type": request.suspension_type,
         "suspended_until": suspended_until.isoformat() if suspended_until else None
@@ -1031,6 +1126,9 @@ async def unsuspend_user(
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     
+    from backend.services.trust_safety import resolve_enforcements
+    resolve_enforcements(db, actor_id=current_user.id, subject_type="user", subject_id=user_id,
+                         actions=("account_restriction",))
     user.is_suspended = False
     user.suspension_type = None
     user.suspension_reason = None
@@ -1083,9 +1181,12 @@ async def suspend_bot(
     Типы: warning (предупреждение), temporary (временная), permanent (постоянная)
     """
     from backend.models.bot import Bot
+    from backend.services.trust_safety import bot_suspension_active, now, record_enforcement
     
     if request.suspension_type not in ["warning", "temporary", "permanent"]:
         raise HTTPException(status_code=400, detail="Неверный тип блокировки")
+    if not request.reason.strip():
+        raise HTTPException(status_code=400, detail="Укажите причину")
     
     bot = db.query(Bot).filter(Bot.id == bot_id).first()
     if not bot:
@@ -1094,16 +1195,20 @@ async def suspend_bot(
     # Вычисляем дату окончания для временной блокировки
     suspended_until = None
     if request.suspension_type == "temporary":
-        if not request.duration_days:
+        if not request.duration_days or request.duration_days < 1:
             raise HTTPException(status_code=400, detail="Для временной блокировки укажите duration_days")
-        suspended_until = datetime.now(timezone.utc) + timedelta(days=request.duration_days)
+        suspended_until = now() + timedelta(days=request.duration_days)
     
-    bot.is_suspended = True
-    bot.suspension_type = request.suspension_type
-    bot.suspension_reason = request.reason
-    bot.suspended_at = datetime.now(timezone.utc)
-    bot.suspended_until = suspended_until
-    bot.suspended_by_id = current_user.id
+    if request.suspension_type != "warning" or not bot_suspension_active(bot):
+        bot.is_suspended = request.suspension_type != "warning"
+        bot.suspension_type = request.suspension_type
+        bot.suspension_reason = request.reason.strip()
+        bot.suspended_at = now()
+        bot.suspended_until = suspended_until
+        bot.suspended_by_id = current_user.id
+    record_enforcement(db, actor_id=current_user.id, user_id=bot.owner_id, subject_type="bot",
+                       subject_id=bot.id, action="warning" if request.suspension_type == "warning" else "suspend_object",
+                       reason=request.reason.strip(), expires_at=suspended_until)
     
     # При блокировке также деактивируем бота
     if request.suspension_type in ["temporary", "permanent"]:
@@ -1112,7 +1217,7 @@ async def suspend_bot(
     db.commit()
     
     return {
-        "detail": "Бот заблокирован",
+        "detail": "Предупреждение вынесено" if request.suspension_type == "warning" else "Бот заблокирован",
         "bot_id": bot_id,
         "suspension_type": request.suspension_type,
         "suspended_until": suspended_until.isoformat() if suspended_until else None
@@ -1132,12 +1237,16 @@ async def unsuspend_bot(
     if not bot:
         raise HTTPException(status_code=404, detail="Бот не найден")
     
+    from backend.services.trust_safety import resolve_enforcements, restore_bot_warning
+    resolve_enforcements(db, actor_id=current_user.id, subject_type="bot", subject_id=bot.id,
+                         actions=("suspend_object",))
     bot.is_suspended = False
     bot.suspension_type = None
     bot.suspension_reason = None
     bot.suspended_at = None
     bot.suspended_until = None
     bot.suspended_by_id = None
+    restore_bot_warning(db, bot)
     # Не меняем is_active автоматически - пусть владелец сам решит
     
     db.commit()
@@ -1153,6 +1262,7 @@ async def get_bot_suspension(
 ):
     """Получить информацию о блокировке бота"""
     from backend.models.bot import Bot
+    from backend.services.trust_safety import bot_suspension_active
     
     bot = db.query(Bot).filter(Bot.id == bot_id).first()
     if not bot:
@@ -1165,7 +1275,7 @@ async def get_bot_suspension(
             suspended_by_email = admin.email
     
     return SuspensionInfo(
-        is_suspended=bot.is_suspended or False,
+        is_suspended=bot_suspension_active(bot),
         suspension_type=bot.suspension_type,
         suspension_reason=bot.suspension_reason,
         suspended_at=bot.suspended_at,
@@ -1184,9 +1294,12 @@ async def suspend_all_user_bots(
 ):
     """Заблокировать все боты пользователя"""
     from backend.models.bot import Bot
+    from backend.services.trust_safety import bot_suspension_active, now, record_enforcement
     
     if request.suspension_type not in ["warning", "temporary", "permanent"]:
         raise HTTPException(status_code=400, detail="Неверный тип блокировки")
+    if not request.reason.strip():
+        raise HTTPException(status_code=400, detail="Укажите причину")
     
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -1196,18 +1309,22 @@ async def suspend_all_user_bots(
     
     suspended_until = None
     if request.suspension_type == "temporary":
-        if not request.duration_days:
+        if not request.duration_days or request.duration_days < 1:
             raise HTTPException(status_code=400, detail="Для временной блокировки укажите duration_days")
-        suspended_until = datetime.now(timezone.utc) + timedelta(days=request.duration_days)
+        suspended_until = now() + timedelta(days=request.duration_days)
     
     count = 0
     for bot in bots:
-        bot.is_suspended = True
-        bot.suspension_type = request.suspension_type
-        bot.suspension_reason = request.reason
-        bot.suspended_at = datetime.now(timezone.utc)
-        bot.suspended_until = suspended_until
-        bot.suspended_by_id = current_user.id
+        if request.suspension_type != "warning" or not bot_suspension_active(bot):
+            bot.is_suspended = request.suspension_type != "warning"
+            bot.suspension_type = request.suspension_type
+            bot.suspension_reason = request.reason.strip()
+            bot.suspended_at = now()
+            bot.suspended_until = suspended_until
+            bot.suspended_by_id = current_user.id
+        record_enforcement(db, actor_id=current_user.id, user_id=bot.owner_id, subject_type="bot",
+                           subject_id=bot.id, action="warning" if request.suspension_type == "warning" else "suspend_object",
+                           reason=request.reason.strip(), expires_at=suspended_until)
         if request.suspension_type in ["temporary", "permanent"]:
             bot.is_active = False
         count += 1
@@ -1230,6 +1347,7 @@ async def unsuspend_all_user_bots(
 ):
     """Снять блокировку со всех ботов пользователя"""
     from backend.models.bot import Bot
+    from backend.services.trust_safety import resolve_enforcements, restore_bot_warning
     
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -1239,12 +1357,15 @@ async def unsuspend_all_user_bots(
     
     count = 0
     for bot in bots:
+        resolve_enforcements(db, actor_id=current_user.id, subject_type="bot", subject_id=bot.id,
+                             actions=("suspend_object",))
         bot.is_suspended = False
         bot.suspension_type = None
         bot.suspension_reason = None
         bot.suspended_at = None
         bot.suspended_until = None
         bot.suspended_by_id = None
+        restore_bot_warning(db, bot)
         count += 1
     
     db.commit()

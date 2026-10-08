@@ -94,6 +94,8 @@ class BlockCatalogItem(BaseModel):
     stableBlockId: Optional[str] = None
     blockVersionId: Optional[int] = None
     version: Optional[int] = None
+    authorName: Optional[str] = None
+    accessSource: Optional[str] = None
     lifecycleStatus: Optional[str] = None
     runtimeBlockId: Optional[str] = None
     passport: Optional[Dict[str, Any]] = None

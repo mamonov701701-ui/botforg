@@ -407,7 +407,12 @@ def get_blocks(
     blocks = load_blocks_catalog()
 
     # Определяем plan пользователя (по умолчанию "free", можно расширить логику)
-    user_plan = plan or "free"
+    # Do not let a browser-selected query value become an authorization input.
+    # Marketplace grants are resolved separately below; system catalog retains
+    # the user's established plan metadata for backwards compatibility.
+    user_plan = (current_user.plan_code or "free").strip().lower()
+    if user_plan not in VALID_PLANS:
+        user_plan = "free"
 
     # Определяем role пользователя из его данных
     # Маппинг ролей из модели User в роли блоков
@@ -420,7 +425,7 @@ def get_blocks(
         "viewer": "viewer",
         "user": "viewer",  # Обычные пользователи имеют права viewer
     }
-    user_role = role or role_mapping.get(current_user.role, "viewer")
+    user_role = role_mapping.get(current_user.role, "viewer")
 
     # Фильтруем блоки по плану пользователя
     filtered_blocks = [
@@ -449,7 +454,45 @@ def get_blocks(
     newest = {}
     for row in custom_rows:
         newest.setdefault(row.custom_block_id, row)
-    return [*filtered_blocks, *(to_catalog_item(row) for row in newest.values())]
+    # Marketplace consumers receive only exact versions for which the backend
+    # resolves a presently insertable licence. Query parameters never grant it.
+    from backend.models.custom_block import CustomBlock
+    from backend.models.custom_block_marketplace import CustomBlockAccessGrant, CustomBlockLibraryInstall
+    from backend.services.custom_block_marketplace import resolve_custom_block_effective_rights
+    marketplace_rows = (
+        db.query(CustomBlockVersion)
+        .join(CustomBlockLibraryInstall, CustomBlockLibraryInstall.custom_block_version_id == CustomBlockVersion.id)
+        .join(CustomBlock, CustomBlock.id == CustomBlockVersion.custom_block_id)
+        .filter(CustomBlock.owner_user_id != current_user.id, CustomBlockLibraryInstall.user_id == current_user.id)
+        .all()
+    )
+    owner_ids = {row.block.owner_user_id for row in marketplace_rows}
+    authors = {user.id: user for user in db.query(User).filter(User.id.in_(owner_ids)).all()} if owner_ids else {}
+    version_ids = [row.id for row in marketplace_rows]
+    grants = {
+        grant.custom_block_version_id: grant
+        for grant in db.query(CustomBlockAccessGrant).filter(
+            CustomBlockAccessGrant.recipient_user_id == current_user.id,
+            CustomBlockAccessGrant.custom_block_version_id.in_(version_ids),
+        ).all()
+    } if version_ids else {}
+    marketplace_items = []
+    for row in marketplace_rows:
+        if not resolve_custom_block_effective_rights(db, user=current_user, version=row).can_add_new_node:
+            continue
+        grant = grants.get(row.id)
+        source = grant.grant_source if grant else None
+        access_source = (
+            "direct_grant" if source in {"direct", "direct_grant"}
+            else "marketplace" if source in {"self_install", "author_approval", "explicit_grant"}
+            else "unknown"
+        )
+        author = authors.get(row.block.owner_user_id)
+        marketplace_items.append(to_catalog_item(
+            row, author_name=(author.name or f"ID {author.id}") if author else None,
+            access_source=access_source,
+        ))
+    return [*filtered_blocks, *(to_catalog_item(row, author_name=current_user.name or f"ID {current_user.id}", access_source="owner") for row in newest.values()), *marketplace_items]
 
 
 @router.get("/categories", response_model=List[str])

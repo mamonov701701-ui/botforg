@@ -56,8 +56,12 @@ def resolve_authorized_version(
     if version.block.stable_key != stable_id or version.version != version_number:
         raise ControlledExecutionFailure("authorization_error")
     if version.block.owner_user_id != scenario_owner_id:
-        # Stage 7.9 will replace this ownership predicate with licence rights.
-        raise ControlledExecutionFailure("authorization_error")
+        from backend.models.user import User
+        from backend.services.custom_block_marketplace import resolve_custom_block_effective_rights
+        user = db.query(User).filter(User.id == scenario_owner_id).first()
+        rights = resolve_custom_block_effective_rights(db, user=user, version=version) if user else None
+        if not rights or not (rights.can_execute_existing_reference if existing_reference else rights.can_add_new_node):
+            raise ControlledExecutionFailure("authorization_error")
     if version.status not in {CUSTOM_BLOCK_PUBLISHED, CUSTOM_BLOCK_ARCHIVED}:
         raise ControlledExecutionFailure("authorization_error")
     if version.status == CUSTOM_BLOCK_ARCHIVED and not existing_reference:

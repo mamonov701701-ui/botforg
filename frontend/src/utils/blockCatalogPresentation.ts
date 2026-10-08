@@ -17,7 +17,7 @@ export const BLOCK_CATEGORY_LABELS: Record<BlockCatalogItem['category'], string>
   service: 'Сервисы и связь',
   system: 'Системные',
   ai: 'Искусственный интеллект',
-  custom: 'Расширения',
+  custom: 'Кастомные',
 };
 
 const FIELD_TYPE_LABELS: Record<BlockConfigField['type'], string> = {

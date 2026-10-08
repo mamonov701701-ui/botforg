@@ -1,16 +1,26 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fetchCustomBlock = vi.fn();
+const grantCustomBlockDirectAccess = vi.fn();
+const getMyCustomBlockMarketplaceListings = vi.fn();
 vi.mock('@/api/blocks', () => ({
   fetchCustomBlock: (...args: unknown[]) => fetchCustomBlock(...args),
+}));
+vi.mock('@/api/customBlockMarketplace', () => ({
+  grantCustomBlockDirectAccess: (...args: unknown[]) => grantCustomBlockDirectAccess(...args),
+  grantCustomBlockDistribution: vi.fn(),
+  getMyCustomBlockMarketplaceListings: (...args: unknown[]) =>
+    getMyCustomBlockMarketplaceListings(...args),
 }));
 
 import CustomBlockVersionDetailPage from '@/features/dashboard/pages/CustomBlockVersionDetailPage';
 
 beforeEach(() => {
+  grantCustomBlockDirectAccess.mockReset().mockResolvedValue({ id: 1 });
+  getMyCustomBlockMarketplaceListings.mockReset().mockResolvedValue([]);
   fetchCustomBlock.mockReset().mockResolvedValue({
     id: 77,
     stable_block_id: 'router',
@@ -39,6 +49,24 @@ beforeEach(() => {
 });
 
 describe('CustomBlockVersionDetailPage', () => {
+  it('uses the Direct Grant action from an owned published version', async () => {
+    render(
+      <MemoryRouter initialEntries={['/dashboard/block-library/custom/77']}>
+        <Routes>
+          <Route
+            path="/dashboard/block-library/custom/:versionId"
+            element={<CustomBlockVersionDetailPage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Публичный ID получателя' }), {
+      target: { value: '12345678' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Выдать право использования' }));
+    await waitFor(() => expect(grantCustomBlockDirectAccess).toHaveBeenCalledWith(77, 12345678));
+    expect(await screen.findByText('Право использования выдано.')).toBeTruthy();
+  });
   it('renders the exact version execution and connections contract', async () => {
     render(
       <MemoryRouter initialEntries={['/dashboard/block-library/custom/77']}>
@@ -57,6 +85,10 @@ describe('CustomBlockVersionDetailPage', () => {
     expect(breadcrumbs).toHaveStyle({ overflow: 'visible' });
     expect(screen.getByText(/Повторить · маршрут/)).toBeTruthy();
     expect(screen.queryByText(/отправляет настроенное сообщение/)).toBeNull();
+    expect(screen.getByRole('link', { name: 'Разместить в Маркете' })).toHaveAttribute(
+      'href',
+      '/market/my-listings/custom-blocks?versionId=77'
+    );
   });
 
   it('показывает историю проверки русскими пользовательскими названиями', async () => {

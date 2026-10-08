@@ -58,6 +58,12 @@ from backend.models.custom_block import (
     CustomBlock, CustomBlockVersion, CustomBlockExecutionAudit,
     CustomBlockSecurityReport, CustomBlockReviewDecision, CustomBlockReviewEvent,
 )
+from backend.models.custom_block_marketplace import (
+    CustomBlockMarketplaceListing, CustomBlockAccessGrant, CustomBlockAccessRequest,
+    CustomBlockMarketplaceReview, CustomBlockMarketplaceAuditEvent, CustomBlockLibraryInstall,
+    CustomBlockDistributionGrant, CustomBlockMarketDependency,
+    MarketplaceDispute, TrustSafetyEnforcement, TrustSafetyAuditEvent, TrustSafetyReport,
+)
 from backend.models.checkout import (
     CheckoutIntent,
     CheckoutIntentStatus,
@@ -242,4 +248,15 @@ __all__ = [
     "UserSession",
     "CustomBlock",
     "CustomBlockVersion",
+    "CustomBlockMarketplaceListing",
+    "CustomBlockAccessGrant",
+    "CustomBlockAccessRequest",
+    "CustomBlockMarketplaceReview",
+    "CustomBlockMarketplaceAuditEvent",
+    "CustomBlockDistributionGrant",
+    "CustomBlockMarketDependency",
+    "MarketplaceDispute",
+    "TrustSafetyEnforcement",
+    "TrustSafetyAuditEvent",
+    "TrustSafetyReport",
 ]

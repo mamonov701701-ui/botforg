@@ -127,6 +127,10 @@ class BotOut(BaseModel):
     username: str
     webhook_url: Optional[str] = None
     is_active: bool
+    is_suspended: bool = False
+    suspension_type: Optional[str] = None
+    suspension_reason: Optional[str] = None
+    suspended_until: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     owner_id: int

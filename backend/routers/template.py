@@ -6,6 +6,9 @@ from backend.dependencies.auth import get_current_user
 from backend.dependencies.roles import require_role
 from backend.models.rating import Rating
 from backend.models.template import Template
+from backend.models.editor import Node
+from backend.services.custom_blocks import content_version_ids
+from backend.services.custom_block_distribution import validate_distribution_version_ids
 from backend.models.user import User as UserModel
 from backend.schemas.template import (
     TemplateCreate,
@@ -20,6 +23,13 @@ from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import Session
 
 router = APIRouter()
+
+
+def _validate_template_distribution(db: Session, template: Template, user_id: int) -> None:
+    ids = content_version_ids(template.content)
+    for node in db.query(Node).filter_by(template_id=template.id).all():
+        ids |= content_version_ids({"nodes": [{"data": node.data}]})
+    validate_distribution_version_ids(db, seller_id=user_id, version_ids=ids)
 
 
 @router.get("/templates/", response_model=List[TemplateOut])
@@ -120,6 +130,8 @@ def publish_template(
     is_public = data.get("is_public")
     if is_public is None:
         raise HTTPException(status_code=400, detail="is_public required")
+    if bool(is_public) and not tpl.is_public:
+        _validate_template_distribution(db, tpl, user.id)
     tpl.is_public = bool(is_public)
     tpl.updated_at = datetime.now(timezone.utc)
     db.commit()
@@ -152,6 +164,8 @@ async def update_template(
         raise HTTPException(status_code=403, detail="Not enough permissions")
 
     update_data = template_update.model_dump(exclude_unset=True)
+    if update_data.get("is_public") is True and not tpl.is_public:
+        _validate_template_distribution(db, tpl, current_user.id)
     # Обновляем только разрешенные поля
     for field_name in ("name", "description", "is_public"):
         if field_name in update_data:

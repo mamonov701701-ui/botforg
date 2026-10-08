@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FileText, Plus, ExternalLink, Send } from 'lucide-react';
 import { getMyTemplates, submitTemplateToModeration, type MyTemplate } from '../api/market';
+import { MarketManagementCard } from '../components/market/MarketCards';
 import { useAuthStore } from '../stores/authStore';
 import { hasAccessToPlanRestrictedAction } from '../constants/roles';
 import { toast } from '../utils/toast';
@@ -97,79 +98,52 @@ export default function DeveloperTemplatesPage() {
           </Link>
         </div>
       ) : (
-        <div className="developer-templates__table-wrap">
-          <table className="developer-templates__table">
-            <thead>
-              <tr>
-                <th>Название</th>
-                <th>Статус модерации</th>
-                <th>Установки</th>
-                <th>Просмотры</th>
-                <th>Дата</th>
-                <th>Действия</th>
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map(t => (
-                <tr key={t.id}>
-                  <td className="developer-templates__name">
-                    <div>{t.name}</div>
-                    {t.moderation_status === 'rejected' && t.moderation_rejection_reason && (
-                      <div className="developer-templates__rejection">
-                        Причина отказа: {t.moderation_rejection_reason}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <span
-                      className={`developer-templates__status developer-templates__status--${t.moderation_status || 'draft'}`}
+        <div className="bf-market-management-grid">
+          {templates.map(t => (
+            <MarketManagementCard
+              key={t.id}
+              kind="template"
+              title={t.name}
+              action={
+                <div className="bf-market-card__action-group">
+                  {(t.moderation_status || 'draft') === 'draft' && (
+                    <button
+                      type="button"
+                      className="bf-primary-cta"
+                      disabled={submittingId === t.id}
+                      onClick={async () => {
+                        setSubmittingId(t.id);
+                        try {
+                          await submitTemplateToModeration(t.id);
+                          toast.success('Шаблон отправлен на модерацию');
+                          loadTemplates();
+                        } catch (err: unknown) {
+                          toast.error((err as { message?: string })?.message || 'Ошибка отправки');
+                        } finally {
+                          setSubmittingId(null);
+                        }
+                      }}
+                      title="Отправить на модерацию"
                     >
-                      {moderationStatusLabel(t.moderation_status || 'draft')}
-                    </span>
-                  </td>
-                  <td>{t.installs_count}</td>
-                  <td>{t.views_count}</td>
-                  <td>{formatDate(t.created_at)}</td>
-                  <td>
-                    <div className="developer-templates__actions">
-                      {(t.moderation_status || 'draft') === 'draft' && (
-                        <button
-                          type="button"
-                          className="developer-templates__submit-btn"
-                          disabled={submittingId === t.id}
-                          onClick={async () => {
-                            setSubmittingId(t.id);
-                            try {
-                              await submitTemplateToModeration(t.id);
-                              toast.success('Шаблон отправлен на модерацию');
-                              loadTemplates();
-                            } catch (err: unknown) {
-                              toast.error(
-                                (err as { message?: string })?.message || 'Ошибка отправки'
-                              );
-                            } finally {
-                              setSubmittingId(null);
-                            }
-                          }}
-                          title="Отправить на модерацию"
-                        >
-                          <Send size={14} />
-                          {submittingId === t.id ? 'Отправка...' : 'На модерацию'}
-                        </button>
-                      )}
-                      <Link
-                        to="/market"
-                        className="developer-templates__action"
-                        title="Маркетплейс"
-                      >
-                        <ExternalLink size={16} />
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <Send size={14} /> {submittingId === t.id ? 'Отправка...' : 'На модерацию'}
+                    </button>
+                  )}
+                  <Link to="/market" className="bf-market-secondary-cta" title="Маркетплейс">
+                    <ExternalLink size={16} /> Маркет
+                  </Link>
+                </div>
+              }
+            >
+              <p>Статус модерации: {moderationStatusLabel(t.moderation_status || 'draft')}</p>
+              <p>
+                Установки: {t.installs_count} · Просмотры: {t.views_count}
+              </p>
+              <p>Создано: {formatDate(t.created_at)}</p>
+              {t.moderation_status === 'rejected' && t.moderation_rejection_reason && (
+                <p>Причина отказа: {t.moderation_rejection_reason}</p>
+              )}
+            </MarketManagementCard>
+          ))}
         </div>
       )}
     </div>

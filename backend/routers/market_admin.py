@@ -10,6 +10,8 @@ from backend.database import get_db
 from backend.dependencies.auth import get_current_user
 from backend.models.user import User
 from backend.models.market import MarketItem, MarketItemType, ModerationStatus
+from backend.services.custom_block_distribution import snapshot_market_dependencies, validate_distribution_dependencies
+from backend.services.trust_safety import active_actions, market_restricted
 from backend.routers.platform_admin import require_owner
 
 router = APIRouter(prefix="/api/admin/market", tags=["Market Admin"])
@@ -43,6 +45,14 @@ async def approve_template(
             status_code=400,
             detail=f"Одобрить можно только шаблон на модерации. Текущий статус: {current_val}",
         )
+    if market_restricted(db, item.seller_id, paid=item.price > 0) or "suspend_object" in active_actions(
+        db, subject_type="bot", subject_id=item.source_bot_id):
+        raise HTTPException(status_code=403, detail="Публикация шаблона временно ограничена")
+    dependencies = validate_distribution_dependencies(
+        db, seller_id=item.seller_id, item_type=item.item_type, source_bot_id=item.source_bot_id,
+        source_scenario_id=item.source_scenario_id,
+    )
+    snapshot_market_dependencies(db, item=item, versions=dependencies)
     item.moderation_status = ModerationStatus.APPROVED
     item.moderation_rejection_reason = None
     item.is_published = True

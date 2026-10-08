@@ -75,6 +75,9 @@ def check_bot_edit_permission(bot: Bot, user_id: int, db: Session) -> bool:
     Returns:
         bool: True если есть право на редактирование
     """
+    from backend.services.trust_safety import bot_suspension_active
+    if isinstance(bot, Bot) and bot_suspension_active(bot):
+        return False
     # Владелец может все
     if bot.owner_id == user_id:
         return True

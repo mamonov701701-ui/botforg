@@ -56,6 +56,11 @@ export default defineConfig({
       allow: [path.resolve(__dirname, '..')],
     },
     proxy: {
+      '/custom-block-marketplace': {
+        target: backendTarget,
+        changeOrigin: true,
+        secure: false,
+      },
       '/dev': {
         target: backendTarget,
         changeOrigin: true,

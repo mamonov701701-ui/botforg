@@ -2,18 +2,8 @@
  * Marketplace Page - Маркетплейс для шаблонов, сценариев, заказов и услуг
  */
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Search,
-  Star,
-  User,
-  DollarSign,
-  ShoppingCart,
-  Briefcase,
-  Users,
-  Plus,
-  X,
-} from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, DollarSign, ShoppingCart, Briefcase, Users, Plus, X } from 'lucide-react';
 import { getBots } from '../api/bot';
 import { getMyScenarios } from '../api/scenarios';
 import {
@@ -44,6 +34,16 @@ import { useUiStore } from '../stores/uiStore';
 import { hasAccessToPlanRestrictedAction } from '../constants/roles';
 import { Link } from 'react-router-dom';
 import PageShell from '../ui/PageShell';
+import {
+  MarketCatalogCard,
+  MarketGrid,
+  MarketStickyToolbar,
+} from '../components/market/MarketCards';
+import {
+  MARKETPLACE_CATEGORIES,
+  MARKET_SECTION_TABS,
+  type MarketSectionId,
+} from '../constants/marketplaceNavigation';
 
 /** Контраст текста на тёмном фоне /market (desktop, без смены глобальной темы) */
 const MARKET_TEXT = {
@@ -53,14 +53,7 @@ const MARKET_TEXT = {
   placeholder: '#9fb0c3',
 } as const;
 
-type MarketTab = 'templates' | 'scenarios' | 'customers' | 'freelancers';
-
-const MARKET_TABS: { id: MarketTab; label: string }[] = [
-  { id: 'templates', label: 'Шаблоны' },
-  { id: 'scenarios', label: 'Сценарии' },
-  { id: 'customers', label: 'Заказчики' },
-  { id: 'freelancers', label: 'Исполнители' },
-];
+type MarketTab = Exclude<MarketSectionId, 'custom-blocks'>;
 
 interface MarketItem {
   id: number;
@@ -120,9 +113,17 @@ interface Freelancer {
 
 export default function MarketplacePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuthStore();
   const { openAuth } = useUiStore();
-  const [activeTab, setActiveTab] = useState<MarketTab>('templates');
+  const requestedSection = searchParams.get('section');
+  const [activeTab, setActiveTab] = useState<MarketTab>(() =>
+    requestedSection === 'scenarios' ||
+    requestedSection === 'customers' ||
+    requestedSection === 'freelancers'
+      ? requestedSection
+      : 'templates'
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [sourceType, setSourceType] = useState<'new' | 'existing'>('existing');
@@ -155,6 +156,28 @@ export default function MarketplacePage() {
 
   const canPublishTemplate = hasAccessToPlanRestrictedAction(user, 'template_publish');
   const canViewMyTemplates = hasAccessToPlanRestrictedAction(user, 'marketplace_stats');
+
+  useEffect(() => {
+    if (
+      requestedSection === 'scenarios' ||
+      requestedSection === 'customers' ||
+      requestedSection === 'freelancers'
+    ) {
+      setActiveTab(requestedSection);
+    } else if (!requestedSection) {
+      setActiveTab('templates');
+    }
+  }, [requestedSection]);
+
+  const selectMarketSection = (id: string) => {
+    if (id === 'custom-blocks') {
+      navigate('/market/custom-blocks');
+      return;
+    }
+    const section = id as MarketTab;
+    setActiveTab(section);
+    setSearchParams(section === 'templates' ? {} : { section }, { replace: true });
+  };
 
   // Загрузка товаров с маркетплейса
   useEffect(() => {
@@ -246,21 +269,6 @@ export default function MarketplacePage() {
     },
   ];
 
-  const renderStars = (rating: number) => {
-    return (
-      <div style={{ display: 'flex', gap: '2px' }}>
-        {[1, 2, 3, 4, 5].map(star => (
-          <Star
-            key={star}
-            size={14}
-            fill={star <= rating ? 'var(--primary)' : 'none'}
-            color={star <= rating ? 'var(--primary)' : 'var(--text-muted)'}
-          />
-        ))}
-      </div>
-    );
-  };
-
   const handleRequestAccess = async (sourceItem: { id: number }) => {
     setInstallingItemId(sourceItem.id);
     try {
@@ -341,266 +349,63 @@ export default function MarketplacePage() {
       price: sourceItem?.price ?? item.price,
       item_type: sourceItem?.item_type,
     });
-
     return (
-      <div
+      <MarketCatalogCard
         key={item.id}
-        role="link"
-        tabIndex={0}
-        data-testid="market-item-card"
-        data-item-id={sourceItem?.id ?? item.id}
-        style={{
-          background: 'var(--card)',
-          border: '1px solid var(--border)',
-          borderRadius: '12px',
-          overflow: 'hidden',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-        }}
-        onClick={() => {
-          const targetId = sourceItem?.id ?? item.id;
-          if (targetId) navigate(`/market/items/${targetId}`);
-        }}
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            const targetId = sourceItem?.id ?? item.id;
-            if (targetId) navigate(`/market/items/${targetId}`);
-          }
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.transform = 'translateY(-4px)';
-          e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.15)';
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = 'none';
-        }}
-      >
-        {/* Image */}
-        <div
-          style={{
-            height: '200px',
-            background: 'var(--surface)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            position: 'relative',
-          }}
-        >
-          {item.isPremium && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '12px',
-                right: '12px',
-                background: 'var(--primary)',
-                color: 'var(--text-on-primary)',
-                padding: '4px 12px',
-                borderRadius: '12px',
-                fontSize: '12px',
-                fontWeight: 600,
-              }}
-            >
-              PREMIUM
-            </div>
-          )}
-          <ShoppingCart size={64} color="var(--text-muted)" />
-        </div>
-
-        {/* Content */}
-        <div style={{ padding: '16px' }}>
-          {/* Title */}
-          <h3
-            style={{
-              fontSize: '16px',
-              fontWeight: 600,
-              color: 'var(--text)',
-              marginBottom: '8px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
+        testId="market-item-card"
+        itemId={sourceItem?.id ?? item.id}
+        kind={sourceItem?.item_type === 'scenario' ? 'scenario' : 'template'}
+        href={`/market/items/${sourceItem?.id ?? item.id}`}
+        title={item.title}
+        description={item.description}
+        author={item.seller.name}
+        meta={
+          <>
+            {item.category}
+            {item.salesCount ? ` · ${item.salesCount} продаж` : ''}
+          </>
+        }
+        rating={item.rating}
+        ratingCount={item.reviewsCount}
+        priceLabel={isPaid ? `${item.price.toLocaleString('ru-RU')} ₽` : 'БЕСПЛАТНО'}
+        free={!isPaid}
+        badge={item.isPremium ? 'PREMIUM' : undefined}
+        action={
+          <button
+            type="button"
+            className="bf-primary-cta"
+            aria-label={actionLabel}
+            title={isPaid ? 'Обсудите доступ с автором во внутреннем чате BotForg' : undefined}
+            onClick={() => handleInstall(sourceItem)}
+            disabled={isInstalling}
           >
-            {item.title}
-          </h3>
-
-          {/* Description */}
-          <p
-            style={{
-              fontSize: '13px',
-              color: 'var(--text-muted)',
-              marginBottom: '12px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              lineHeight: '1.4',
-              height: '36px',
-            }}
-          >
-            {item.description}
-          </p>
-
-          {/* Rating */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            {renderStars(Math.floor(item.rating))}
-            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text)' }}>
-              {item.rating}
-            </span>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              ({item.reviewsCount})
-            </span>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: 'auto' }}>
-              {item.salesCount} продаж
-            </span>
-          </div>
-
-          {/* Seller */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-            <div
-              style={{
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                background: 'var(--surface)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <User size={14} color="var(--text-muted)" />
-            </div>
-            <span style={{ fontSize: '13px', color: 'var(--text)' }}>{item.seller.name}</span>
-            {renderStars(Math.floor(item.seller.rating))}
-          </div>
-
-          {/* Tags */}
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-            {item.tags.slice(0, 3).map(tag => (
-              <span
-                key={tag}
-                style={{
-                  padding: '4px 10px',
-                  background: 'var(--surface)',
-                  borderRadius: '12px',
-                  fontSize: '11px',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-
-          {/* Price and CTA */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              {item.price === 0 ? (
-                <span
-                  style={{
-                    fontSize: '18px',
-                    fontWeight: 700,
-                    color: 'var(--primary)',
-                  }}
-                >
-                  БЕСПЛАТНО
-                </span>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-                  <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text)' }}>
-                    {item.price.toLocaleString('ru-RU')}
-                  </span>
-                  <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>₽</span>
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              aria-label={actionLabel}
-              title={isPaid ? 'Обсудите доступ с автором во внутреннем чате BotForg' : undefined}
-              onClick={e => {
-                e.stopPropagation();
-                handleInstall(sourceItem);
-              }}
-              disabled={isInstalling}
-              style={{
-                padding: '10px 20px',
-                background: isInstalling ? 'var(--surface)' : 'var(--primary)',
-                color: isInstalling ? 'var(--text-muted)' : 'var(--text-on-primary)',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '14px',
-                fontWeight: 600,
-                cursor: isInstalling ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {isInstalling ? 'Отправка...' : actionLabel}
-            </button>
-          </div>
-        </div>
-      </div>
+            {isInstalling ? 'Отправка...' : actionLabel}
+          </button>
+        }
+      />
     );
   };
-
   return (
     <>
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="bf-market-container px-4 py-8">
         <style>{selectStyles}</style>
         <PageShell
           testId="market-page-shell"
+          className="bf-market-shell"
           title="Маркет"
           subtitle="Покупайте и продавайте шаблоны, сценарии, размещайте заказы и находите исполнителей"
-          tabs={MARKET_TABS.map(t => ({
+          tabs={MARKET_SECTION_TABS.map(t => ({
             id: t.id,
             label: t.label,
             testId: `market-tab-${t.id}`,
           }))}
           activeTabId={activeTab}
-          onTabChange={id => setActiveTab(id as MarketTab)}
+          onTabChange={selectMarketSection}
           tabsAriaLabel="Разделы маркета"
           tabsTestId="market-tablist"
         >
-          {/* Search and actions */}
-          <div
-            style={{
-              marginBottom: '24px',
-              display: 'flex',
-              gap: '16px',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <div style={{ position: 'relative', flex: 1, minWidth: '200px', maxWidth: '600px' }}>
-              <Search
-                size={20}
-                style={{
-                  position: 'absolute',
-                  left: '16px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: MARKET_TEXT.muted,
-                }}
-              />
-              <input
-                type="text"
-                className="marketplace-search"
-                placeholder="Поиск..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '14px 16px 14px 48px',
-                  background: 'var(--bf-section-bg)',
-                  border: '1px solid var(--bf-section-border)',
-                  borderRadius: 'var(--bf-section-radius)',
-                  fontSize: '15px',
-                  color: 'var(--text)',
-                }}
-              />
-            </div>
-
+          {/* Marketplace actions stay in document flow; only search follows scrolling. */}
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             {activeTab === 'templates' ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 {canViewMyTemplates && (
@@ -618,7 +423,7 @@ export default function MarketplacePage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      whiteSpace: 'nowrap',
+                      whiteSpace: 'normal',
                     }}
                   >
                     Мои шаблоны
@@ -640,7 +445,7 @@ export default function MarketplacePage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      whiteSpace: 'nowrap',
+                      whiteSpace: 'normal',
                     }}
                   >
                     <Plus size={20} />
@@ -662,7 +467,7 @@ export default function MarketplacePage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '8px',
-                      whiteSpace: 'nowrap',
+                      whiteSpace: 'normal',
                     }}
                   >
                     <Plus size={20} />
@@ -686,7 +491,7 @@ export default function MarketplacePage() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  whiteSpace: 'nowrap',
+                  whiteSpace: 'normal',
                 }}
               >
                 <Plus size={20} />
@@ -696,17 +501,26 @@ export default function MarketplacePage() {
               </button>
             )}
           </div>
-
+          <MarketStickyToolbar>
+            <label className="relative block w-full max-w-xl">
+              <span className="sr-only">Поиск в Маркете</span>
+              <Search
+                size={20}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]"
+              />
+              <input
+                type="text"
+                className="marketplace-search min-h-11 w-full rounded-lg border border-[var(--bf-section-border)] bg-[var(--bf-section-bg)] py-2 pl-10 pr-3 text-[var(--text)]"
+                placeholder="Поиск..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
+            </label>
+          </MarketStickyToolbar>
           {/* Content */}
           {activeTab === 'templates' && (
             <div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                  gap: '24px',
-                }}
-              >
+              <MarketGrid testId="market-template-grid">
                 {isLoadingItems ? (
                   <div
                     style={{
@@ -772,19 +586,13 @@ export default function MarketplacePage() {
                       return renderProductCard(formattedItem, item);
                     })
                 )}
-              </div>
+              </MarketGrid>
             </div>
           )}
 
           {activeTab === 'scenarios' && (
             <div>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
-                  gap: '24px',
-                }}
-              >
+              <MarketGrid testId="market-scenario-grid">
                 {isLoadingItems ? (
                   <div
                     style={{
@@ -852,7 +660,7 @@ export default function MarketplacePage() {
                       return renderProductCard(formattedItem, item);
                     })
                 )}
-              </div>
+              </MarketGrid>
             </div>
           )}
 
@@ -1397,11 +1205,11 @@ export default function MarketplacePage() {
                         }}
                       >
                         <option value="">Выберите категорию</option>
-                        <option value="ecommerce">E-commerce</option>
-                        <option value="support">Поддержка</option>
-                        <option value="automation">Автоматизация</option>
-                        <option value="marketing">Маркетинг</option>
-                        <option value="other">Другое</option>
+                        {MARKETPLACE_CATEGORIES.map(category => (
+                          <option key={category.id} value={category.id}>
+                            {category.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -1669,11 +1477,11 @@ export default function MarketplacePage() {
                       }}
                     >
                       <option value="">Выберите категорию</option>
-                      <option value="ecommerce">E-commerce</option>
-                      <option value="support">Поддержка</option>
-                      <option value="automation">Автоматизация</option>
-                      <option value="marketing">Маркетинг</option>
-                      <option value="other">Другое</option>
+                      {MARKETPLACE_CATEGORIES.map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

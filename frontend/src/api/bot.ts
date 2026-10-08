@@ -11,6 +11,10 @@ export interface Bot {
   username: string;
   webhook_url: string | null;
   is_active: boolean;
+  is_suspended?: boolean;
+  suspension_type?: 'warning' | 'temporary' | 'permanent' | null;
+  suspension_reason?: string | null;
+  suspended_until?: string | null;
   created_at: string;
   updated_at: string;
   owner_id: number;

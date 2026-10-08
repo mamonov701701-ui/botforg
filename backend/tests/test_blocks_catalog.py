@@ -18,6 +18,9 @@ def test_user_catalog_requires_auth_and_hides_disabled(client):
     assert response.status_code == 200
     assert response.json()
     assert all(item["disabled"] is False for item in response.json())
+    by_id = {item["id"]: item for item in response.json()}
+    assert all(by_id[block_id]["category"] == "basic" for block_id in
+               ("start", "message", "input", "condition", "set_variable", "end"))
 
 
 def test_admin_catalog_is_protected_and_returns_full_source(client):

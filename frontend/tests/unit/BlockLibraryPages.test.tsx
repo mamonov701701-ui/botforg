@@ -10,6 +10,8 @@ const fetchAllCustomBlocksAdmin = vi.fn();
 const fetchCustomBlockReviewQueue = vi.fn();
 const publishCustomBlock = vi.fn();
 const decideCustomBlockReview = vi.fn();
+const getMyCustomBlockRightsOverview = vi.fn();
+const getMyCustomBlockMarketplaceListings = vi.fn();
 let currentUser = { id: 7, name: 'Тест', role: 'owner', public_id: 101 };
 
 vi.mock('@/api/blocks', () => ({
@@ -26,6 +28,11 @@ vi.mock('@/api/blocks', () => ({
   restoreCustomBlock: vi.fn(),
   createCustomBlockVersion: vi.fn(),
   deleteCustomBlockDraft: vi.fn(),
+}));
+vi.mock('@/api/customBlockMarketplace', () => ({
+  getMyCustomBlockRightsOverview: (...args: unknown[]) => getMyCustomBlockRightsOverview(...args),
+  getMyCustomBlockMarketplaceListings: (...args: unknown[]) =>
+    getMyCustomBlockMarketplaceListings(...args),
 }));
 vi.mock('@/stores/authStore', () => ({
   useAuthStore: () => ({ user: currentUser, loading: false, clearUser: vi.fn() }),
@@ -69,7 +76,7 @@ const customCatalogBlock = {
   id: 'custom-route',
   title: 'Пользовательский маршрут',
   source: 'custom' as const,
-  category: 'basic' as const,
+  category: 'custom' as const,
   configSchema: [],
 };
 
@@ -110,6 +117,8 @@ beforeEach(() => {
   fetchBlocksCatalog.mockResolvedValue([messageBlock, legacyAction, customCatalogBlock]);
   fetchAdminBlocksCatalog.mockResolvedValue([messageBlock, legacyAction]);
   fetchMyCustomBlocks.mockResolvedValue([]);
+  getMyCustomBlockRightsOverview.mockReset().mockResolvedValue([]);
+  getMyCustomBlockMarketplaceListings.mockReset().mockResolvedValue([]);
   fetchAllCustomBlocksAdmin.mockResolvedValue([]);
   fetchCustomBlockReviewQueue.mockResolvedValue([]);
   currentUser = { id: 7, name: 'Тест', role: 'owner', public_id: 101 };
@@ -126,6 +135,173 @@ beforeEach(() => {
 });
 
 describe('Пользовательская библиотека блоков', () => {
+  it('использует общий тип Basic/System/Custom независимо от источника', async () => {
+    fetchBlocksCatalog.mockResolvedValue([
+      messageBlock,
+      { ...messageBlock, id: 'platform-service', title: 'Служебный блок', category: 'system' },
+      customCatalogBlock,
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Сообщение')).toBeTruthy();
+    expect(screen.getByText('Служебный блок')).toBeTruthy();
+    expect(screen.getByText('Пользовательский маршрут')).toBeTruthy();
+    expect(screen.getAllByText('Базовые').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Системные').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Кастомные').length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByTestId('blocks-origin'), { target: { value: 'system' } });
+    expect(screen.getByText('Служебный блок')).toBeTruthy();
+    expect(screen.queryByText('Сообщение')).toBeNull();
+    expect(screen.queryByText('Пользовательский маршрут')).toBeNull();
+  });
+
+  it('показывает фактический lifecycle карточки: черновик, затем опубликовано', async () => {
+    fetchMyCustomBlocks.mockResolvedValue([
+      ownedVersion(41, 'QA User Block', 'published', '2026-10-06T00:00:00Z'),
+    ]);
+    getMyCustomBlockMarketplaceListings.mockResolvedValue([
+      { id: 71, custom_block_version_id: 41, lifecycle: 'draft' },
+    ]);
+    const view = render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Маркет: Черновик.')).toBeTruthy();
+    view.unmount();
+    getMyCustomBlockMarketplaceListings.mockResolvedValue([
+      { id: 71, custom_block_version_id: 41, lifecycle: 'published' },
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Маркет: Опубликовано.')).toBeTruthy();
+  });
+
+  it('preselects a published exact version with no listing', async () => {
+    fetchMyCustomBlocks.mockResolvedValue([
+      ownedVersion(41, 'QA User Block', 'published', '2026-10-06T00:00:00Z'),
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('link', { name: 'Разместить в Маркете' })).toHaveAttribute(
+      'href',
+      '/market/my-listings/custom-blocks?versionId=41'
+    );
+  });
+
+  it('uses primary, secondary and danger styles for created-block actions', async () => {
+    fetchMyCustomBlocks.mockResolvedValue([
+      ownedVersion(41, 'QA User Block', 'published', '2026-10-06T00:00:00Z'),
+    ]);
+    getMyCustomBlockMarketplaceListings.mockResolvedValue([
+      { id: 71, custom_block_version_id: 41, lifecycle: 'published' },
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole('link', { name: 'Управлять размещением' })).toHaveClass(
+      'bf-primary-cta'
+    );
+    expect(screen.getByRole('link', { name: /Просмотреть/ })).toHaveClass('bf-secondary-cta');
+    expect(screen.getByRole('button', { name: /Создать новую версию/ })).toHaveClass(
+      'bf-secondary-cta'
+    );
+    expect(screen.getByRole('button', { name: /Архивировать/ })).toHaveClass('bf-danger-cta');
+  });
+
+  it.each([
+    ['draft', 'Маркет: Черновик.'],
+    ['published', 'Маркет: Опубликовано.'],
+    ['archived', 'Маркет: Архив.'],
+  ])('opens the existing %s placement instead of creating another', async (lifecycle, label) => {
+    fetchMyCustomBlocks.mockResolvedValue([
+      ownedVersion(41, 'QA User Block', 'published', '2026-10-06T00:00:00Z'),
+    ]);
+    getMyCustomBlockMarketplaceListings.mockResolvedValue([
+      { id: 71, custom_block_version_id: 41, lifecycle },
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(label)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Управлять размещением' })).toHaveAttribute(
+      'href',
+      '/market/my-listings/custom-blocks?listingId=71'
+    );
+  });
+
+  it('разделяет созданные и полученные версии, показывает источник, отзыв и установку', async () => {
+    fetchMyCustomBlocks.mockResolvedValue([
+      ownedVersion(3, 'Мой блок', 'published', '2026-10-01T00:00:00Z'),
+    ]);
+    getMyCustomBlockRightsOverview.mockResolvedValue([
+      {
+        grant_id: 11,
+        title: 'Чужой блок',
+        version: 2,
+        original_author_name: 'Автор',
+        source_channel: 'marketplace',
+        grant_status: 'active',
+        is_installed: true,
+        has_distribution_right: true,
+        current_commercial_mode: 'paid',
+      },
+      {
+        grant_id: 12,
+        title: 'Частный блок',
+        version: 1,
+        original_author_name: 'Другой автор',
+        source_channel: 'direct',
+        grant_status: 'revoked',
+        is_installed: false,
+        has_distribution_right: false,
+        current_commercial_mode: null,
+      },
+      {
+        grant_id: 13,
+        title: 'Старая запись',
+        version: 1,
+        original_author_name: 'Автор',
+        source_channel: 'unknown',
+        grant_status: 'active',
+        is_installed: false,
+        has_distribution_right: false,
+        current_commercial_mode: 'free',
+      },
+    ]);
+    render(
+      <MemoryRouter>
+        <BlockLibraryPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText('Полученные мной (3)')).toBeTruthy();
+    expect(screen.getByText('Созданные мной')).toBeTruthy();
+    expect(screen.getByText('Чужой блок · v2')).toBeTruthy();
+    expect(screen.getByText('Частный блок · v1')).toBeTruthy();
+    expect(document.body.textContent).toContain(
+      'Получено из Маркета · Доступ действует · Установлено'
+    );
+    expect(document.body.textContent).toContain(
+      'Получено напрямую · Доступ отозван · Не установлено'
+    );
+    expect(document.body.textContent).toContain('Источник не установлен · Доступ действует');
+    expect(document.body.textContent).toContain('Текущие условия карточки: Paid');
+    expect(screen.getByText(/Мои размещения/)).toBeTruthy();
+  });
+
   it('показывает русские подписи, скрывает legacy и открывает редактор', async () => {
     render(
       <MemoryRouter initialEntries={['/dashboard/block-library']}>
@@ -137,17 +313,18 @@ describe('Пользовательская библиотека блоков', (
     );
 
     expect(await screen.findByText('Сообщение')).toBeTruthy();
-    expect(screen.getByText('Мои блоки')).toBeTruthy();
+    expect(screen.getByText('Созданные мной')).toBeTruthy();
+    expect(screen.getByText('Полученные мной (0)')).toBeTruthy();
     expect(screen.getByTestId('create-custom-block')).toBeTruthy();
     expect(screen.getByText(/Основные параметры: Текст сообщения · Кнопки/)).toBeTruthy();
     expect(screen.queryByText('Action')).toBeNull();
     expect(document.body.textContent).not.toContain('button_list');
     expect(document.body.textContent).not.toContain('Идентификатор: message');
-    expect(screen.getByText('Пользовательский')).toBeTruthy();
-    expect(screen.getAllByText('Системный').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Кастомные').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Базовые').length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toContain('Пользовательский · Базовые');
     expect(document.body.textContent).not.toContain('Системный · Базовые');
-    expect(screen.queryByTestId('blocks-category')).toBeNull();
+    expect(screen.getByTestId('blocks-category')).toBeTruthy();
 
     fireEvent.change(screen.getByTestId('blocks-origin'), { target: { value: 'custom' } });
     expect(screen.getByText('Пользовательский маршрут')).toBeTruthy();
@@ -159,7 +336,7 @@ describe('Пользовательская библиотека блоков', (
     fireEvent.change(screen.getByTestId('blocks-origin'), { target: { value: 'system' } });
     expect(screen.getByText('Подходящие блоки не найдены')).toBeTruthy();
     fireEvent.change(screen.getByTestId('blocks-search'), { target: { value: '' } });
-    expect(screen.getByText('Сообщение')).toBeTruthy();
+    expect(screen.getByText('Подходящие блоки не найдены')).toBeTruthy();
     expect(screen.queryByText('Пользовательский маршрут')).toBeNull();
     fireEvent.change(screen.getByTestId('blocks-origin'), { target: { value: 'all' } });
 

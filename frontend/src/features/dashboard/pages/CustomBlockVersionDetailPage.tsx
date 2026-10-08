@@ -3,6 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import DashboardPage from '../components/DashboardPage';
 import Card from '../components/Card';
 import { fetchCustomBlock } from '../../../api/blocks';
+import {
+  getMyCustomBlockMarketplaceListings,
+  grantCustomBlockDirectAccess,
+  grantCustomBlockDistribution,
+  type CustomBlockMarketplaceListing,
+} from '../../../api/customBlockMarketplace';
 import type { CustomBlockVersion } from '../../../types/blocks';
 import { customBlockConnectionContract } from '../../../utils/customBlockConnections';
 import {
@@ -17,10 +23,52 @@ export default function CustomBlockVersionDetailPage() {
   const { versionId } = useParams();
   const [item, setItem] = useState<CustomBlockVersion | null>(null);
   const [error, setError] = useState(false);
+  const [recipientPublicId, setRecipientPublicId] = useState('');
+  const [grantNotice, setGrantNotice] = useState('');
+  const [marketListing, setMarketListing] = useState<CustomBlockMarketplaceListing | null>(null);
+  const [marketReady, setMarketReady] = useState(false);
+  const grant = async (distribution: boolean) => {
+    const publicId = Number(recipientPublicId);
+    if (!Number.isInteger(publicId) || publicId <= 0 || !versionId)
+      return setGrantNotice('Укажите публичный ID пользователя.');
+    try {
+      await (distribution
+        ? grantCustomBlockDistribution(Number(versionId), publicId)
+        : grantCustomBlockDirectAccess(Number(versionId), publicId));
+      setGrantNotice(
+        distribution ? 'Право распространения выдано.' : 'Право использования выдано.'
+      );
+    } catch {
+      setGrantNotice(
+        distribution ? 'Сначала выдайте право использования.' : 'Не удалось выдать доступ.'
+      );
+    }
+  };
   useEffect(() => {
+    let active = true;
+    setMarketReady(false);
     void fetchCustomBlock(Number(versionId))
-      .then(setItem)
-      .catch(() => setError(true));
+      .then(row => {
+        if (active) setItem(row);
+      })
+      .catch(() => {
+        if (active) setError(true);
+      });
+    void getMyCustomBlockMarketplaceListings()
+      .then(rows => {
+        if (active) {
+          setMarketListing(
+            rows.find(row => row.custom_block_version_id === Number(versionId)) || null
+          );
+          setMarketReady(true);
+        }
+      })
+      .catch(() => {
+        if (active) setMarketReady(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [versionId]);
   if (error)
     return (
@@ -54,6 +102,72 @@ export default function CustomBlockVersionDetailPage() {
               {String(passport.purpose || item.description)}
             </p>
           </Card>
+          {item.status === 'published' && marketReady && (
+            <Card>
+              <h2 className="font-semibold">Маркет</h2>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Управление размещением находится в общем разделе «Маркет».
+              </p>
+              {marketListing && (
+                <p className="mt-2 text-sm text-[var(--text-muted)]">
+                  Маркет:{' '}
+                  {marketListing.lifecycle === 'published'
+                    ? 'Опубликовано'
+                    : marketListing.lifecycle === 'archived'
+                      ? 'Архив'
+                      : 'Черновик'}
+                </p>
+              )}
+              <Link
+                to={
+                  marketListing
+                    ? `/market/my-listings/custom-blocks?listingId=${marketListing.id}`
+                    : `/market/my-listings/custom-blocks?versionId=${item.id}`
+                }
+                className="mt-3 inline-flex min-h-11 items-center rounded border border-[var(--border)] px-3 py-2 text-sm"
+              >
+                {marketListing ? 'Управлять размещением' : 'Разместить в Маркете'}
+              </Link>
+            </Card>
+          )}
+          {item.status === 'published' && (
+            <Card>
+              <h2 className="font-semibold">Предоставить доступ</h2>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Выдайте точную версию конкретному клиенту без размещения в Маркете. Право
+                распространения выдаётся отдельно.
+              </p>
+              <input
+                aria-label="Публичный ID получателя"
+                inputMode="numeric"
+                className="mt-3 min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)]"
+                value={recipientPublicId}
+                onChange={event => setRecipientPublicId(event.target.value)}
+                placeholder="Публичный ID пользователя"
+              />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="min-h-11 rounded bf-primary-cta px-3 py-2"
+                  onClick={() => void grant(false)}
+                >
+                  Выдать право использования
+                </button>
+                <button
+                  type="button"
+                  className="min-h-11 rounded-lg border border-[var(--border)] px-3 py-2"
+                  onClick={() => void grant(true)}
+                >
+                  Выдать право распространения
+                </button>
+              </div>
+              {grantNotice && (
+                <p role="status" className="mt-2 text-sm">
+                  {grantNotice}
+                </p>
+              )}
+            </Card>
+          )}
           <Card>
             <h2 className="font-semibold">Когда использовать</h2>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
