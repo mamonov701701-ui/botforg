@@ -14,8 +14,9 @@ Set-Location -LiteralPath $root
 
 $BackendPort = 8001
 $BackendHost = '127.0.0.1'
-$logStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$logBackend = Join-Path $PSScriptRoot ".dev-backend-only-$logStamp.log"
+# Bound backend logs to prevent runaway disk usage.
+$MaxLogSizeMB = 50
+$MaxLogFiles = 5
 
 function Get-ListenerOwnerPids {
     param([int]$Port)
@@ -152,21 +153,35 @@ if (-not $cleanupComplete) {
     exit 1
 }
 
-$reloadDir = Join-Path $root 'backend'
 $runtimeEnvWrapper = Join-Path $PSScriptRoot 'dev-backend-runtime-env.cmd'
 if (-not (Test-Path -LiteralPath $runtimeEnvWrapper)) {
     Write-Host "ERROR: missing runtime environment wrapper: $runtimeEnvWrapper" -ForegroundColor Red
     exit 1
 }
+$logRunner = Join-Path $PSScriptRoot 'dev-backend-log-runner.py'
+if (-not (Test-Path -LiteralPath $logRunner)) {
+    Write-Host "ERROR: missing backend log runner: $logRunner" -ForegroundColor Red
+    exit 1
+}
+$logStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+$logBackend = Join-Path $PSScriptRoot ".dev-backend-only-$logStamp.log"
+while (Test-Path -LiteralPath $logBackend) {
+    Start-Sleep -Seconds 1
+    $logStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    $logBackend = Join-Path $PSScriptRoot ".dev-backend-only-$logStamp.log"
+}
+$logFailure = Join-Path $PSScriptRoot ".dev-backend-only-$logStamp.failure.txt"
 
 Write-Host ("Starting backend {0}:{1} with --reload ..." -f $BackendHost, $BackendPort) -ForegroundColor Cyan
 Write-Host ("Log: {0}" -f $logBackend) -ForegroundColor Gray
 
-# cmd redirect (same pattern as start-dev.ps1) — avoids Start-Process same-file stdout/stderr limit on Windows
-$beCmd = 'cd /d "' + $root + '" && call "' + $runtimeEnvWrapper + '" "' + $pyExe + '" -u -m uvicorn backend.main:app --host ' + $BackendHost + ' --port ' + $BackendPort + ' --reload --reload-dir "' + $reloadDir + '"'
-$beWrapper = $beCmd + ' > "' + $logBackend + '" 2>&1'
-$beProc = Start-Process -FilePath 'cmd.exe' `
-    -ArgumentList @('/c', $beWrapper) `
+# The runner keeps reading stdout/stderr after this launcher exits and rotates the active file.
+$maxLogBytes = $MaxLogSizeMB * 1MB
+$runnerArgs = @('-u', ('"' + $logRunner + '"'), '--stamp', $logStamp,
+    '--host', $BackendHost, '--port', $BackendPort,
+    '--max-bytes', $maxLogBytes, '--max-files', $MaxLogFiles)
+$beProc = Start-Process -FilePath $pyExe `
+    -ArgumentList $runnerArgs `
     -WorkingDirectory $root `
     -WindowStyle Hidden `
     -PassThru
@@ -180,6 +195,19 @@ $deadline = (Get-Date).AddSeconds(60)
 $ok = $false
 while ((Get-Date) -lt $deadline) {
     if (Test-BackendUp) { $ok = $true; break }
+    $beProc.Refresh()
+    if ($beProc.HasExited) {
+        Write-Host ("ERROR: backend/log runner exited with code {0}." -f $beProc.ExitCode) -ForegroundColor Red
+        if (Test-Path -LiteralPath $logFailure) {
+            Get-Content -LiteralPath $logFailure -ErrorAction SilentlyContinue
+        }
+        if (Test-Path -LiteralPath $logBackend) {
+            Get-Content -LiteralPath $logBackend -Tail 20 -ErrorAction SilentlyContinue
+        } else {
+            Write-Host ("ERROR: backend log was not created: {0}" -f $logBackend) -ForegroundColor Red
+        }
+        exit 1
+    }
     Start-Sleep -Seconds 1
 }
 
