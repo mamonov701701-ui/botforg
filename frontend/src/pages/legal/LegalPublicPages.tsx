@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import {
   getLegalDocument,
   getLegalDocumentVersion,
@@ -26,6 +26,11 @@ const pageWrap: React.CSSProperties = {
 };
 
 const VALID = new Set<string>(LEGAL_LIST_TABS.map(t => t.id));
+
+function useLegalBasePath(): string {
+  const { pathname } = useLocation();
+  return pathname.startsWith('/dashboard/account/legal/') ? '/dashboard/account/legal' : '/legal';
+}
 
 function tabFromSearch(raw: string | null): LegalListTabId {
   if (raw && VALID.has(raw)) return raw as LegalListTabId;
@@ -168,13 +173,14 @@ function LegalDocBody({
   slug: string;
   publishedAt: string | null;
 }) {
+  const basePath = useLegalBasePath();
   const html = docMarkdownToSafeHtml(bodyMarkdown || '');
   const dateLabel = formatLegalDateShort(publishedAt);
   return (
     <div style={pageWrap} data-testid="legal-public-doc">
       <PageShell
         title={title}
-        breadcrumbs={[{ label: 'Юридические документы', path: '/legal' }, { label: title }]}
+        breadcrumbs={[{ label: 'Юридические документы', path: basePath }, { label: title }]}
       >
         <SectionCard padding={20} testId="legal-doc-meta">
           <div style={{ display: 'grid', gap: 8, fontSize: 14, color: 'var(--text-muted)' }}>
@@ -189,7 +195,7 @@ function LegalDocBody({
             </div>
             <div>
               <Link
-                to={`/legal/${slug}/archive`}
+                to={`${basePath}/${slug}/archive`}
                 data-testid="legal-doc-archive-link"
                 style={{ color: 'var(--accent)' }}
               >
@@ -201,7 +207,7 @@ function LegalDocBody({
         <SectionCard padding={24} testId="legal-doc-body" style={{ marginTop: 16 }}>
           <div
             className="block-doc-md"
-            style={{ lineHeight: 1.65, color: 'var(--text)' }}
+            style={{ lineHeight: 1.65, color: '#f5f7fc' }}
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </SectionCard>
@@ -216,6 +222,7 @@ function LegalDocBody({
 }
 
 export function LegalDocumentPage({ slug }: { slug: string }) {
+  const basePath = useLegalBasePath();
   const [doc, setDoc] = useState<LegalRevisionPublic | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -252,7 +259,7 @@ export function LegalDocumentPage({ slug }: { slug: string }) {
     return (
       <div style={pageWrap} data-testid="legal-public-not-found">
         <p>{error || 'Документ недоступен'}</p>
-        <Link to="/legal" style={{ color: 'var(--accent)' }}>
+        <Link to={basePath} style={{ color: 'var(--accent)' }}>
           К списку документов
         </Link>
       </div>
@@ -270,6 +277,7 @@ export function LegalDocumentPage({ slug }: { slug: string }) {
 }
 
 export function LegalVersionPage({ slug, version }: { slug: string; version: string }) {
+  const basePath = useLegalBasePath();
   const [doc, setDoc] = useState<LegalRevisionPublic | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -306,7 +314,7 @@ export function LegalVersionPage({ slug, version }: { slug: string; version: str
     return (
       <div style={pageWrap} data-testid="legal-version-not-found">
         <p>{error || 'Версия недоступна'}</p>
-        <Link to={`/legal/${slug}`} style={{ color: 'var(--accent)' }}>
+        <Link to={`${basePath}/${slug}`} style={{ color: 'var(--accent)' }}>
           К актуальной версии
         </Link>
       </div>
@@ -324,6 +332,7 @@ export function LegalVersionPage({ slug, version }: { slug: string; version: str
 }
 
 export function LegalArchivePage({ slug }: { slug: string }) {
+  const basePath = useLegalBasePath();
   const [items, setItems] = useState<LegalRevisionListItem[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -351,8 +360,8 @@ export function LegalArchivePage({ slug }: { slug: string }) {
       <PageShell
         title="Архив версий"
         breadcrumbs={[
-          { label: 'Юридические документы', path: '/legal' },
-          { label: 'Документ', path: `/legal/${slug}` },
+          { label: 'Юридические документы', path: basePath },
+          { label: 'Документ', path: `${basePath}/${slug}` },
           { label: 'Архив' },
         ]}
       >
@@ -363,7 +372,7 @@ export function LegalArchivePage({ slug }: { slug: string }) {
         ) : null}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map(item => {
-            const href = `/legal/${item.slug}/v/${encodeURIComponent(item.version)}`;
+            const href = `${basePath}/${item.slug}/v/${encodeURIComponent(item.version)}`;
             return (
               <SectionCard key={item.id} padding={14} testId={`legal-archive-row-${item.id}`}>
                 <div

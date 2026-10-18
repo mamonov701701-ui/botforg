@@ -6,7 +6,10 @@ import PageShell from '../../../ui/PageShell';
 import {
   LEGAL_COLORS,
   LEGAL_LIST_TABS,
+  formatLegalDate,
   formatLegalDateShort,
+  legalDocTypeLabel,
+  legalDocTypeSlug,
   legalPrimaryBtnStyle,
   type LegalListTabId,
 } from '../legal/legalHelpers';
@@ -124,7 +127,7 @@ export default function AccountLegalPage() {
                     </div>
                   </div>
                   <Link
-                    to={`/legal/${doc.slug}`}
+                    to={`/dashboard/account/legal/${doc.slug}`}
                     data-testid={`account-legal-read-${doc.slug}`}
                     style={{
                       ...legalPrimaryBtnStyle,
@@ -170,7 +173,7 @@ export default function AccountLegalPage() {
                     </div>
                   </div>
                   <Link
-                    to={`/legal/${doc.slug}/v/${encodeURIComponent(doc.version)}`}
+                    to={`/dashboard/account/legal/${doc.slug}/v/${encodeURIComponent(doc.version)}`}
                     style={{
                       ...legalPrimaryBtnStyle,
                       textDecoration: 'none',
@@ -181,6 +184,51 @@ export default function AccountLegalPage() {
                   </Link>
                 </div>
               ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {loadState === 'ready' && data ? (
+        <section
+          data-testid="account-legal-consent-history"
+          style={{ width: '100%', marginTop: 24 }}
+        >
+          <h2 style={{ fontSize: 20, marginBottom: 12 }}>История согласий</h2>
+          {(data.consent_history ?? []).length === 0 ? (
+            <p>Согласия пока не зафиксированы.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {data.consent_history.map((item, index) => {
+                const slug = legalDocTypeSlug(item.doc_type);
+                const result =
+                  item.confirmation_result === 'withdrawn'
+                    ? 'Отозвано'
+                    : item.confirmation_result === 'acknowledged'
+                      ? 'Ознакомление подтверждено'
+                      : item.confirmation_result === 'accepted'
+                        ? 'Принято'
+                        : 'Зафиксировано';
+                return (
+                  <div key={`${item.doc_type}-${item.accepted_at}-${index}`} style={rowStyle}>
+                    <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                      <strong>{legalDocTypeLabel(item.doc_type)}</strong>
+                      <div
+                        style={{ fontSize: 13, color: LEGAL_COLORS.textSecondary, marginTop: 4 }}
+                      >
+                        Версия {item.doc_version} · {result} · {formatLegalDate(item.accepted_at)}
+                      </div>
+                    </div>
+                    {slug && item.revision_id !== null ? (
+                      <Link
+                        to={`/dashboard/account/legal/${slug}/v/${encodeURIComponent(item.doc_version)}`}
+                      >
+                        Прочитать редакцию
+                      </Link>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>

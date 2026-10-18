@@ -2,7 +2,8 @@
 Общий email transport (Этап 6.14.10Б).
 
 Не содержит refund-логики. Auth stubs могут позже делегировать сюда.
-В тестах / без SMTP — LoggingEmailTransport (не реальное письмо).
+В тестах и development без SMTP — LoggingEmailTransport (не реальное письмо).
+Production без SMTP получает явную ошибку конфигурации.
 """
 from __future__ import annotations
 
@@ -152,16 +153,20 @@ def _mask_email(email: str) -> str:
 
 def get_email_transport() -> EmailTransport:
     """
-    Production/dev: SMTP if SMTP_HOST set; otherwise logging transport.
-    TESTING=true или pytest — всегда logging (не реальное письмо).
+    Production always selects SMTP and fails if it is not configured.
+    Development без SMTP и TESTING=true используют logging (не реальное письмо).
     """
     import os
+
+    # A stray TESTING flag must never select the log-only sender in Production.
+    if settings.ENVIRONMENT == "production":
+        return SmtpEmailTransport()
 
     testing = (
         os.getenv("TESTING", "").lower() in {"1", "true", "yes"}
         or (settings.ENVIRONMENT or "").lower() in {"test", "testing"}
     )
-    if testing or not (settings.SMTP_HOST or "").strip():
+    if testing or (settings.ENVIRONMENT != "production" and not (settings.SMTP_HOST or "").strip()):
         return LoggingEmailTransport()
     return SmtpEmailTransport()
 

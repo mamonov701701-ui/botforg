@@ -388,3 +388,6 @@ const url = URL.createObjectURL(blob);
 **Дата обновления:** 7 ноября 2024  
 **Автор:** BotForg Security Team
 
+# Stage 8 account security
+
+For the current email verification, session revocation, TOTP, audit and privacy boundaries, see [User Profile & Account Settings](architecture/user-profile-account-settings.md). The material below retains its original historical context.

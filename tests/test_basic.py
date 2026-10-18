@@ -6,6 +6,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
+from conftest import register_verified_test_user
 
 client = TestClient(app)
 
@@ -37,14 +38,8 @@ def test_register_and_login(test_user):
     rate_limit_store.clear()
     
     # Register
-    resp = client.post("/auth/email/register", json={
-        "email": test_user["email"],
-        "password": test_user["password"],
-        "name": test_user["name"]
-    })
-    print("🔍 REGISTER STATUS:", resp.status_code)
-    print("🔍 REGISTER RESPONSE:", resp.text)
-    assert resp.status_code == 200 or resp.status_code == 400  # 400 if already registered
+    resp = register_verified_test_user(client, **test_user)
+    assert resp.status_code == 200
     
     # Login
     resp = client.post("/auth/email/login", json={

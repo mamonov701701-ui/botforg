@@ -23,6 +23,18 @@ export default defineConfig({
         // Отключаем проверку хоста для туннелей
         // Важно: выполняется ДО прокси, не влияет на проксированные запросы
         server.middlewares.use((req, res, next) => {
+          const path = (req.url || '').split('?')[0];
+          const legalSection = path.split('/')[2];
+          const legalPage =
+            (path === '/legal' || path.startsWith('/legal/')) &&
+            !['doc', 'docs', 'documents', 'consent', 'archive', 'account'].includes(legalSection);
+          // React pages need the SPA entry point; legal API and OAuth stay behind the proxy.
+          if (
+            req.method === 'GET' &&
+            (/^\/auth\/(?:verify|verify-pending|two-factor|reset)$/.test(path) || legalPage)
+          ) {
+            req.url = '/index.html';
+          }
           // Подменяем host только для статических файлов, не для API
           if (
             !req.url.startsWith('/api') &&

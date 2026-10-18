@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError as SQLOperationalError
 from backend.main import app
 from backend.database import SessionLocal
 from backend.auth.rate_limit import rate_limit_store
+from conftest import register_verified_test_user
 
 client = TestClient(app)
 
@@ -85,7 +86,7 @@ def auth_headers(channel_list_bot_id):
     uid = uuid.uuid4().hex[:8]
     email = f"secrets_test_{uid}@example.com"
     password = "SecretPass123!"
-    client.post("/auth/email/register", json={"email": email, "password": password, "name": "Secrets Test"})
+    register_verified_test_user(client, email=email, password=password, name="Secrets Test")
     r = client.post("/auth/email/login", json={"email": email, "password": password})
     if r.status_code != 200:
         return None

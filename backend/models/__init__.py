@@ -1,8 +1,12 @@
 # Models package
 # Импортируем все модели для корректной работы SQLAlchemy relationships
 
-from backend.models.user import User, UserSettings
-from backend.models.auth import Account, EmailVerification, PasswordReset
+from backend.models.user import User, UserSettings, ReservedPublicId
+from backend.models.auth import (
+    Account, EmailVerification, PasswordReset, AccountActionToken, AccountSession,
+    DisplayNameHistory, AccountDeletionRequest, SecurityAuditEvent, UserTotp,
+    TotpBackupCode,
+)
 from backend.models.template import Template
 from backend.models.rating import Rating
 from backend.models.comment import Comment

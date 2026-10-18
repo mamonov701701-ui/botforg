@@ -4,9 +4,9 @@ import { useUiStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useNavigate } from 'react-router-dom';
 import {
-  getLoginUrl,
   loginEmail,
   registerEmail,
+  completeTwoFactor,
   requestPasswordReset,
   getMe,
   getConsentStatus,
@@ -29,19 +29,27 @@ export default function AuthModal() {
   const { setUser } = useAuthStore();
   const navigate = useNavigate();
   const modalRef = useRef<HTMLDivElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const confirmInputRef = useRef<HTMLInputElement>(null);
 
   const [tab, setTab] = useState<Tab>('login');
   const [emailMode, setEmailMode] = useState<EmailMode>('login');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
+  const [usernameAvailability, setUsernameAvailability] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [name, setName] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [consentAccepted, setConsentAccepted] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
+  const [personalDataConsentAccepted, setPersonalDataConsentAccepted] = useState(false);
   const [showConsentModal, setShowConsentModal] = useState(false);
   const [consentTargets, setConsentTargets] = useState<{
     privacy: PublishedConsentTarget | null;
@@ -50,9 +58,61 @@ export default function AuthModal() {
 
   // Локальные ошибки валидации для каждого поля
   const [emailError, setEmailError] = useState('');
+  const [nameError, setNameError] = useState('');
   const [usernameError, setUsernameError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [confirmPasswordError, setConfirmPasswordError] = useState('');
+  const [dateOfBirthError, setDateOfBirthError] = useState('');
+
+  const toggleVisibility = (
+    input: HTMLInputElement | null,
+    update: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    const start = input?.selectionStart;
+    const end = input?.selectionEnd;
+    const direction = input?.selectionDirection;
+    update(previous => !previous);
+    window.requestAnimationFrame(() => {
+      if (!input?.isConnected) return;
+      input.focus();
+      if (start !== null && start !== undefined && end !== null && end !== undefined)
+        input.setSelectionRange(start, end, direction ?? undefined);
+    });
+  };
+
+  useEffect(() => {
+    if (authModalOpen) return;
+    setPassword('');
+    setConfirmPassword('');
+    setTwoFactorChallenge(null);
+    setTwoFactorCode('');
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+  }, [authModalOpen]);
+
+  useEffect(() => {
+    setUsernameAvailability('');
+    if (!authModalOpen || tab !== 'register' || username.length < 3) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/auth/email/username-availability?username=${encodeURIComponent(username)}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) return;
+        const result = await response.json();
+        setUsernameAvailability(result.message);
+      } catch (error: any) {
+        if (error?.name !== 'AbortError')
+          setUsernameAvailability('Проверка ника временно недоступна');
+      }
+    }, 600);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [authModalOpen, tab, username]);
 
   // ESC key handler
   useEffect(() => {
@@ -104,9 +164,11 @@ export default function AuthModal() {
       setShowConfirmPassword(false);
       // Очищаем все ошибки
       setEmailError('');
+      setNameError('');
       setUsernameError('');
       setPasswordError('');
       setConfirmPasswordError('');
+      setDateOfBirthError('');
       // Сохраняем email при переключении, но очищаем остальные поля
       if (tab === 'login') {
         // Загружаем сохраненный email если есть
@@ -157,8 +219,20 @@ export default function AuthModal() {
     setUsernameError('');
     setPasswordError('');
     setConfirmPasswordError('');
+    setDateOfBirthError('');
 
     try {
+      if (twoFactorChallenge) {
+        await completeTwoFactor(twoFactorChallenge, twoFactorCode);
+        const verifiedUser = await getMe();
+        if (!verifiedUser) throw new Error('Не удалось завершить вход');
+        setUser(verifiedUser);
+        setTwoFactorChallenge(null);
+        setTwoFactorCode('');
+        closeAuth();
+        navigate(nextPath || '/dashboard');
+        return;
+      }
       if (tab === 'register') {
         let hasErrors = false;
 
@@ -168,9 +242,12 @@ export default function AuthModal() {
           hasErrors = true;
         }
 
-        // Валидация логина
-        if (!username || username.trim().length < 2) {
-          setUsernameError('Логин должен содержать минимум 2 символа');
+        if (!name || name.trim().length < 2) {
+          setNameError('Укажите отображаемое имя (минимум 2 символа)');
+          hasErrors = true;
+        }
+        if (!username || username.length < 3) {
+          setUsernameError('Укажите ник (от 3 до 30 символов)');
           hasErrors = true;
         }
 
@@ -203,9 +280,28 @@ export default function AuthModal() {
           hasErrors = true;
         }
 
-        if (!consentAccepted) {
-          setConfirmPasswordError('Необходимо принять Политику ПДн и Пользовательское соглашение');
+        if (!termsAccepted || !privacyAcknowledged || !personalDataConsentAccepted) {
+          setConfirmPasswordError(
+            'Подтвердите условия, ознакомление с политикой и отдельное согласие'
+          );
           hasErrors = true;
+        }
+        if (!dateOfBirth) {
+          setDateOfBirthError('Укажите дату рождения');
+          hasErrors = true;
+        } else {
+          const birthDate = new Date(`${dateOfBirth}T00:00:00`);
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getFullYear();
+          if (
+            today.getMonth() < birthDate.getMonth() ||
+            (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())
+          )
+            age -= 1;
+          if (!Number.isFinite(age) || age < 18) {
+            setDateOfBirthError('Регистрация доступна только с 18 лет.');
+            hasErrors = true;
+          }
         }
 
         if (hasErrors) {
@@ -214,43 +310,21 @@ export default function AuthModal() {
         }
 
         // Регистрация
-        const response = await registerEmail(email, password, username);
-
-        // Если получили токен - автоматически входим и фиксируем согласие
-        if (response?.access_token) {
-          try {
-            const docs = await listLegalDocuments();
-            const targets = resolvePublishedConsentTargets(docs);
-            if (targets.privacy && targets.terms) {
-              await acceptPublishedConsent(targets.privacy);
-              await acceptPublishedConsent(targets.terms);
-            }
-            // Без published-версий фиктивное согласие не создаём.
-          } catch (_) {}
-          toast.success('Регистрация успешна! Выполняется вход...');
-
-          // Получаем данные пользователя
-          const user = await getMe();
-          if (user) {
-            setUser(user);
-            closeAuth();
-            if (nextPath) {
-              navigate(nextPath);
-            } else {
-              navigate('/dashboard');
-            }
-          } else {
-            // Если не удалось получить пользователя, переключаемся на вкладку входа
-            setTab('login');
-            setPassword('');
-            setConfirmPassword('');
-          }
-        } else {
-          toast.success('Регистрация успешна! Теперь вы можете войти.');
-          setTab('login');
-          setPassword('');
-          setConfirmPassword('');
+        const docs = await listLegalDocuments();
+        const byType = new Map(docs.map(doc => [doc.doc_type, doc]));
+        const required = ['public_offer', 'privacy_policy', 'personal_data_consent'];
+        if (required.some(type => !byType.get(type) || byType.get(type)?.status !== 'published')) {
+          throw new Error('Юридические документы временно недоступны');
         }
+        const revisions = Object.fromEntries(required.map(type => [type, byType.get(type)!.id]));
+        await registerEmail(email, password, name.trim(), username, dateOfBirth, revisions, {
+          termsAccepted,
+          privacyAcknowledged,
+          personalDataConsentAccepted,
+        });
+        sessionStorage.setItem('pendingVerificationEmail', email);
+        closeAuth();
+        navigate('/auth/verify-pending');
       } else if (tab === 'login') {
         let hasErrors = false;
 
@@ -271,17 +345,20 @@ export default function AuthModal() {
 
         // Вход
         const loginResponse = await loginEmail(email, password);
+        if (loginResponse?.requires_2fa) {
+          setTwoFactorChallenge(loginResponse.challenge);
+          toast.success('Введите код из приложения для подтверждения входа');
+          return;
+        }
 
         // Проверяем, что токен сохранился
         const token = localStorage.getItem('auth_token');
         if (!token) {
-          console.error('Токен не был сохранен после входа. Ответ сервера:', loginResponse);
+          console.error('Токен не был сохранен после входа');
           toast.error('Ошибка: токен не был сохранен. Попробуйте еще раз.');
           setLoading(false);
           return;
         }
-
-        console.log('Токен сохранен, длина:', token.length);
 
         // Сохраняем флаг "запомнить меня"
         if (rememberMe) {
@@ -303,8 +380,6 @@ export default function AuthModal() {
           toast.error('Ошибка: токен не был сохранен. Попробуйте еще раз.');
           return;
         }
-
-        console.log('Токен проверен в localStorage:', savedToken.substring(0, 20) + '...');
 
         // Получаем данные пользователя и проверяем согласие (152-ФЗ)
         try {
@@ -330,17 +405,13 @@ export default function AuthModal() {
             if (nextPath) navigate(nextPath);
             else navigate('/dashboard');
           } else {
-            console.error('getMe вернул null, токен:', savedToken.substring(0, 20) + '...');
+            console.error('getMe вернул null после входа');
             setLoading(false);
             localStorage.removeItem('auth_token');
             toast.error('Не удалось получить данные пользователя. Проверьте учетные данные.');
           }
         } catch (meError: any) {
-          console.error('Ошибка при получении данных пользователя:', meError);
-          console.error(
-            'Токен в localStorage:',
-            savedToken ? savedToken.substring(0, 20) + '...' : 'отсутствует'
-          );
+          console.error('Ошибка при получении данных пользователя:', meError?.status ?? 'unknown');
           setLoading(false);
           if (meError.status === 401) {
             localStorage.removeItem('auth_token');
@@ -366,9 +437,7 @@ export default function AuthModal() {
       }
 
       // Переводы некоторых стандартных сообщений и привязка к полям
-      if (errorMessage.toLowerCase().includes('user exists')) {
-        setEmailError('Пользователь с таким email уже существует');
-      } else if (errorMessage.toLowerCase().includes('invalid credentials')) {
+      if (errorMessage.toLowerCase().includes('invalid credentials')) {
         setEmailError('Неверный email или пароль');
         setPasswordError('Неверный email или пароль');
       } else if (errorMessage.toLowerCase().includes('password')) {
@@ -387,12 +456,6 @@ export default function AuthModal() {
       closeAuth();
     }
   };
-
-  const providers = [
-    { id: 'google', name: 'Google', color: '#4285F4', icon: '🔵' },
-    { id: 'yandex', name: 'Яндекс ID', color: '#FC3F1D', icon: '🔴' },
-    { id: 'mailru', name: 'Mail.ru', color: '#005FF9', icon: '📧' },
-  ];
 
   if (!authModalOpen) return null;
 
@@ -461,12 +524,12 @@ export default function AuthModal() {
         <p
           style={{
             color: 'var(--text-muted)',
-            marginBottom: '24px',
+            marginBottom: '16px',
             textAlign: 'center',
             fontSize: '14px',
           }}
         >
-          Выберите способ авторизации
+          Войдите по почте или создайте аккаунт
         </p>
 
         {/* Tabs */}
@@ -514,224 +577,265 @@ export default function AuthModal() {
         </div>
 
         {/* Login Tab */}
-        {tab === 'login' && (
-          <form onSubmit={handleEmailAuth}>
-            <div style={{ marginBottom: '12px' }}>
+        {tab === 'login' &&
+          (emailMode === 'reset' ? (
+            <form
+              onSubmit={async event => {
+                event.preventDefault();
+                setLoading(true);
+                try {
+                  await requestPasswordReset(email);
+                  toast.info(
+                    'Если адрес подтверждён и почта доступна, новое письмо придёт. Откройте последнее письмо.'
+                  );
+                  setEmailMode('login');
+                } catch (reason: any) {
+                  toast.error(
+                    reason?.status === 429
+                      ? reason.message
+                      : 'Не удалось обработать запрос. Попробуйте позже.'
+                  );
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <h3>Восстановление пароля</h3>
+              <p>
+                Введите подтверждённый адрес почты. Если аккаунт существует, придёт ссылка для смены
+                пароля.
+              </p>
+              <label htmlFor="reset-email">Электронная почта</label>
               <input
-                type="text"
-                placeholder="Почта или логин"
-                value={email}
-                onChange={e => {
-                  setEmail(e.target.value);
-                  setEmailError('');
-                }}
+                id="reset-email"
+                type="email"
+                autoComplete="email"
                 required
+                value={email}
+                onChange={event => setEmail(event.target.value)}
                 style={{
                   width: '100%',
-                  padding: '12px',
+                  minHeight: 44,
+                  boxSizing: 'border-box',
+                  margin: '8px 0 16px',
+                  padding: 12,
+                  borderRadius: 10,
                   background: 'var(--card)',
-                  border: emailError ? '1px solid #ef4444' : '1px solid var(--border)',
-                  borderRadius: '20px',
                   color: 'var(--text)',
-                  fontSize: '14px',
                 }}
               />
-              {emailError && (
-                <div
-                  style={{
-                    color: '#ef4444',
-                    fontSize: '12px',
-                    marginTop: '4px',
-                    marginLeft: '12px',
-                  }}
-                >
-                  {emailError}
-                </div>
-              )}
-            </div>
-
-            <div style={{ marginBottom: '12px' }}>
-              <div style={{ position: 'relative' }}>
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  minHeight: 44,
+                  padding: '10px 16px',
+                  background: '#FFB300',
+                  color: '#0A1B3D',
+                  border: 0,
+                  borderRadius: 10,
+                  fontWeight: 700,
+                }}
+              >
+                Отправить ссылку
+              </button>
+              <button
+                type="button"
+                onClick={() => setEmailMode('login')}
+                style={{
+                  marginLeft: 12,
+                  minHeight: 44,
+                  background: 'transparent',
+                  color: 'var(--accent)',
+                  border: 0,
+                }}
+              >
+                Вернуться ко входу
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleEmailAuth}>
+              <div style={{ marginBottom: '12px' }}>
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Пароль"
-                  value={password}
+                  type="text"
+                  placeholder="Электронная почта"
+                  value={email}
+                  disabled={!!twoFactorChallenge}
                   onChange={e => {
-                    setPassword(e.target.value);
-                    setPasswordError('');
+                    setEmail(e.target.value);
+                    setEmailError('');
                   }}
                   required
-                  minLength={8}
                   style={{
                     width: '100%',
-                    padding: '12px 40px 12px 12px',
+                    padding: '12px',
                     background: 'var(--card)',
-                    border: passwordError ? '1px solid #ef4444' : '1px solid var(--border)',
+                    border: emailError ? '1px solid #ef4444' : '1px solid var(--border)',
                     borderRadius: '20px',
                     color: 'var(--text)',
                     fontSize: '14px',
-                    boxSizing: 'border-box',
-                    lineHeight: '1.5',
                   }}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    padding: '0',
-                    width: '32px',
-                    height: '32px',
-                  }}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-              {passwordError && (
-                <div
-                  style={{
-                    color: '#ef4444',
-                    fontSize: '12px',
-                    marginTop: '4px',
-                    marginLeft: '12px',
-                  }}
-                >
-                  {passwordError}
-                </div>
-              )}
-            </div>
-
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                marginBottom: '16px',
-                cursor: 'pointer',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={e => setRememberMe(e.target.checked)}
-                style={{
-                  width: '16px',
-                  height: '16px',
-                  accentColor: 'var(--accent)',
-                  cursor: 'pointer',
-                }}
-              />
-              <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Запомнить меня</span>
-            </label>
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: 'var(--accent)',
-                color: '#000',
-                border: 'none',
-                borderRadius: '20px',
-                fontSize: '16px',
-                fontWeight: 600,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                marginBottom: '16px',
-                opacity: loading ? 0.7 : 1,
-              }}
-            >
-              {loading ? 'Загрузка...' : 'Войти'}
-            </button>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '16px',
-              }}
-            >
-              {providers.map(provider => {
-                const loginUrl = `${getLoginUrl(provider.id as any)}${
-                  nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''
-                }`;
-                return (
-                  <a
-                    key={provider.id}
-                    href={loginUrl}
-                    title={`Войти через ${provider.name}`}
+                {emailError && (
+                  <div
                     style={{
+                      color: '#ef4444',
+                      fontSize: '12px',
+                      marginTop: '4px',
+                      marginLeft: '12px',
+                    }}
+                  >
+                    {emailError}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    ref={passwordInputRef}
+                    aria-label="Пароль для входа"
+                    autoComplete="current-password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Пароль"
+                    value={password}
+                    disabled={!!twoFactorChallenge}
+                    onChange={e => {
+                      setPassword(e.target.value);
+                      setPasswordError('');
+                    }}
+                    required
+                    minLength={8}
+                    style={{
+                      width: '100%',
+                      padding: '12px 40px 12px 12px',
+                      background: 'var(--card)',
+                      border: passwordError ? '1px solid #ef4444' : '1px solid var(--border)',
+                      borderRadius: '20px',
+                      color: 'var(--text)',
+                      fontSize: '14px',
+                      boxSizing: 'border-box',
+                      lineHeight: '1.5',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onMouseDown={event => event.preventDefault()}
+                    onClick={() => toggleVisibility(passwordInputRef.current, setShowPassword)}
+                    aria-label={`${showPassword ? 'Скрыть' : 'Показать'} пароль`}
+                    aria-pressed={showPassword}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      width: '48px',
-                      height: '48px',
-                      background: '#fff',
-                      borderRadius: '50%',
-                      transition: 'all 0.2s',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-muted)',
                       cursor: 'pointer',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.transform = 'scale(1.1)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.transform = 'scale(1)';
+                      padding: '0',
+                      width: '44px',
+                      height: '44px',
                     }}
                   >
-                    {provider.id === 'google' && (
-                      <svg viewBox="0 0 24 24" style={{ width: '32px', height: '32px' }}>
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        />
-                      </svg>
-                    )}
-                    {provider.id === 'yandex' && (
-                      <svg viewBox="0 0 48 48" style={{ width: '32px', height: '32px' }}>
-                        <circle cx="24" cy="24" r="24" fill="#FC3F1D" />
-                        <path
-                          d="M28 13h-4.5c-3.3 0-5.5 1.8-5.5 5 0 2.4 1.5 4.2 3.7 4.6L17 33h3.7l4.2-9.2h1.1V33H28V13zm-2 8.3h-1.3c-1.7 0-2.7-.9-2.7-2.4s1-2.4 2.7-2.4H26v4.8z"
-                          fill="#FFFFFF"
-                        />
-                      </svg>
-                    )}
-                    {provider.id === 'mailru' && (
-                      <svg viewBox="0 0 24 24" style={{ width: '32px', height: '32px' }}>
-                        <path
-                          fill="#168DE2"
-                          d="M11.585 5.267c1.834 0 3.558.811 4.824 2.08v.004c0-.609.41-1.068.979-1.068h.145c.891 0 1.073.842 1.073 1.109l.005 9.475c-.063.621.64.941 1.029.543 1.521-1.564 3.342-8.038-.946-11.79-3.996-3.497-9.357-2.921-12.209-.955-3.031 2.091-4.971 6.718-3.086 11.064 2.054 4.74 7.931 6.152 11.424 4.744 1.769-.715 2.586 1.676.749 2.457-2.776 1.184-10.502 1.064-14.11-5.188C-.977 13.521-.847 6.093 5.62 2.245 10.567-.698 17.09.117 21.022 4.224c4.111 4.294 3.872 12.334-.139 15.461-1.816 1.42-4.516.037-4.498-2.031l-.019-.678c-1.265 1.256-2.948 1.988-4.782 1.988-3.625 0-6.813-3.189-6.813-6.812 0-3.659 3.189-6.885 6.814-6.885zm4.561 6.623c-.137-2.653-2.106-4.249-4.484-4.249h-.09c-2.745 0-4.268 2.159-4.268 4.61 0 2.747 1.842 4.481 4.256 4.481 2.693 0 4.464-1.973 4.592-4.306l-.006-.536z"
-                        />
-                      </svg>
-                    )}
-                  </a>
-                );
-              })}
-            </div>
-          </form>
-        )}
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {passwordError && (
+                  <div
+                    style={{
+                      color: '#ef4444',
+                      fontSize: '12px',
+                      marginTop: '4px',
+                      marginLeft: '12px',
+                    }}
+                  >
+                    {passwordError}
+                  </div>
+                )}
+              </div>
+
+              {twoFactorChallenge && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label htmlFor="login-two-factor">Код из приложения или резервный код</label>
+                  <input
+                    id="login-two-factor"
+                    value={twoFactorCode}
+                    onChange={e => setTwoFactorCode(e.target.value)}
+                    autoComplete="one-time-code"
+                    required
+                    style={{ width: '100%', minHeight: 44, marginTop: 8, boxSizing: 'border-box' }}
+                  />
+                </div>
+              )}
+
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginBottom: '16px',
+                  cursor: 'pointer',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={e => setRememberMe(e.target.checked)}
+                  style={{
+                    width: '16px',
+                    height: '16px',
+                    accentColor: 'var(--accent)',
+                    cursor: 'pointer',
+                  }}
+                />
+                <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>Запомнить меня</span>
+              </label>
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: 'var(--accent)',
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: '20px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  marginBottom: '16px',
+                  opacity: loading ? 0.7 : 1,
+                }}
+              >
+                {loading ? 'Загрузка...' : twoFactorChallenge ? 'Подтвердить вход' : 'Войти'}
+              </button>
+
+              {!twoFactorChallenge && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPassword('');
+                    setEmailMode('reset');
+                  }}
+                  style={{
+                    display: 'block',
+                    minHeight: 44,
+                    background: 'transparent',
+                    color: 'var(--accent)',
+                    border: 0,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Забыли пароль?
+                </button>
+              )}
+            </form>
+          ))}
 
         {/* Register Tab */}
         {tab === 'register' && (
@@ -773,24 +877,24 @@ export default function AuthModal() {
             <div style={{ marginBottom: '12px' }}>
               <input
                 type="text"
-                placeholder="Логин"
-                value={username}
+                placeholder="Отображаемое имя"
+                value={name}
                 onChange={e => {
-                  setUsername(e.target.value);
-                  setUsernameError('');
+                  setName(e.target.value);
+                  setNameError('');
                 }}
                 required
                 style={{
                   width: '100%',
                   padding: '12px',
                   background: 'var(--card)',
-                  border: usernameError ? '1px solid #ef4444' : '1px solid var(--border)',
+                  border: nameError ? '1px solid #ef4444' : '1px solid var(--border)',
                   borderRadius: '20px',
                   color: 'var(--text)',
                   fontSize: '14px',
                 }}
               />
-              {usernameError && (
+              {nameError && (
                 <div
                   style={{
                     color: '#ef4444',
@@ -799,7 +903,71 @@ export default function AuthModal() {
                     marginLeft: '12px',
                   }}
                 >
-                  {usernameError}
+                  {nameError}
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label htmlFor="register-username">
+                Публичный ник — после выбора изменить нельзя
+              </label>
+              <input
+                id="register-username"
+                type="text"
+                value={username}
+                minLength={3}
+                maxLength={30}
+                autoComplete="off"
+                required
+                aria-describedby="register-username-status"
+                onChange={event => {
+                  setUsername(event.target.value);
+                  setUsernameError('');
+                }}
+                style={{
+                  width: '100%',
+                  minHeight: 44,
+                  boxSizing: 'border-box',
+                  padding: 12,
+                  background: 'var(--card)',
+                  color: 'var(--text)',
+                  borderRadius: 20,
+                  border: usernameError ? '1px solid #ef4444' : '1px solid var(--border)',
+                }}
+              />
+              <small>Кириллица или латиница, цифры, _, - и точка; без смешения алфавитов.</small>
+              <div id="register-username-status" role="status" aria-live="polite">
+                {usernameError || usernameAvailability}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label htmlFor="register-date-of-birth" style={{ display: 'block', marginBottom: 6 }}>
+                Дата рождения
+              </label>
+              <input
+                id="register-date-of-birth"
+                className="bf-auth-date-input"
+                type="date"
+                value={dateOfBirth}
+                onChange={e => {
+                  setDateOfBirth(e.target.value);
+                  setDateOfBirthError('');
+                }}
+                required
+                max={new Date().toISOString().slice(0, 10)}
+                aria-invalid={Boolean(dateOfBirthError)}
+                aria-describedby={dateOfBirthError ? 'register-date-of-birth-error' : undefined}
+              />
+              <small>Регистрация доступна с 18 лет.</small>
+              {dateOfBirthError && (
+                <div
+                  id="register-date-of-birth-error"
+                  role="alert"
+                  style={{ color: 'var(--error)', fontSize: 12 }}
+                >
+                  {dateOfBirthError}
                 </div>
               )}
             </div>
@@ -807,6 +975,9 @@ export default function AuthModal() {
             <div style={{ marginBottom: '12px' }}>
               <div style={{ position: 'relative' }}>
                 <input
+                  ref={passwordInputRef}
+                  aria-label="Пароль для регистрации"
+                  autoComplete="new-password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Пароль"
                   value={password}
@@ -830,7 +1001,10 @@ export default function AuthModal() {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => toggleVisibility(passwordInputRef.current, setShowPassword)}
+                  aria-label={`${showPassword ? 'Скрыть' : 'Показать'} пароль`}
+                  aria-pressed={showPassword}
                   style={{
                     position: 'absolute',
                     right: '12px',
@@ -844,8 +1018,8 @@ export default function AuthModal() {
                     color: 'var(--text-muted)',
                     cursor: 'pointer',
                     padding: '0',
-                    width: '32px',
-                    height: '32px',
+                    width: '44px',
+                    height: '44px',
                   }}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -868,6 +1042,9 @@ export default function AuthModal() {
             <div style={{ marginBottom: '16px' }}>
               <div style={{ position: 'relative' }}>
                 <input
+                  ref={confirmInputRef}
+                  aria-label="Подтверждение пароля"
+                  autoComplete="new-password"
                   type={showConfirmPassword ? 'text' : 'password'}
                   placeholder="Повтор пароля"
                   value={confirmPassword}
@@ -891,7 +1068,10 @@ export default function AuthModal() {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => toggleVisibility(confirmInputRef.current, setShowConfirmPassword)}
+                  aria-label={`${showConfirmPassword ? 'Скрыть' : 'Показать'} подтверждение пароля`}
+                  aria-pressed={showConfirmPassword}
                   style={{
                     position: 'absolute',
                     right: '12px',
@@ -905,8 +1085,8 @@ export default function AuthModal() {
                     color: 'var(--text-muted)',
                     cursor: 'pointer',
                     padding: '0',
-                    width: '32px',
-                    height: '32px',
+                    width: '44px',
+                    height: '44px',
                   }}
                 >
                   {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -939,12 +1119,40 @@ export default function AuthModal() {
             >
               <input
                 type="checkbox"
-                checked={consentAccepted}
-                onChange={e => setConsentAccepted(e.target.checked)}
+                checked={termsAccepted}
+                onChange={e => setTermsAccepted(e.target.checked)}
                 style={{ marginTop: '3px', accentColor: 'var(--accent)' }}
               />
               <span>
-                Я согласен с{' '}
+                Я принимаю{' '}
+                <a
+                  href="/legal/public-offer"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Публичную оферту
+                </a>
+              </span>
+            </label>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                marginBottom: 16,
+                color: 'var(--text)',
+                fontSize: 13,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={privacyAcknowledged}
+                onChange={e => setPrivacyAcknowledged(e.target.checked)}
+                style={{ marginTop: 3, accentColor: 'var(--accent)' }}
+              />
+              <span>
+                Я ознакомился с{' '}
                 <a
                   href="/legal/privacy-policy"
                   target="_blank"
@@ -952,15 +1160,34 @@ export default function AuthModal() {
                   style={{ color: 'var(--accent)' }}
                 >
                   Политикой обработки персональных данных
-                </a>{' '}
-                и{' '}
+                </a>
+              </span>
+            </label>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                marginBottom: 16,
+                color: 'var(--text)',
+                fontSize: 13,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={personalDataConsentAccepted}
+                onChange={e => setPersonalDataConsentAccepted(e.target.checked)}
+                style={{ marginTop: 3, accentColor: 'var(--accent)' }}
+              />
+              <span>
+                Я даю отдельное{' '}
                 <a
-                  href="/legal/public-offer"
+                  href="/legal/personal-data-consent"
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--accent)' }}
                 >
-                  Публичной офертой
+                  Согласие на обработку персональных данных
                 </a>
               </span>
             </label>
@@ -984,83 +1211,6 @@ export default function AuthModal() {
             >
               {loading ? 'Загрузка...' : 'Зарегистрироваться'}
             </button>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '16px',
-              }}
-            >
-              {providers.map(provider => {
-                const loginUrl = `${getLoginUrl(provider.id as any)}${
-                  nextPath ? `?next=${encodeURIComponent(nextPath)}` : ''
-                }`;
-                return (
-                  <a
-                    key={provider.id}
-                    href={loginUrl}
-                    title={`Зарегистрироваться через ${provider.name}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: '48px',
-                      height: '48px',
-                      background: '#fff',
-                      borderRadius: '50%',
-                      transition: 'all 0.2s',
-                      cursor: 'pointer',
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.transform = 'scale(1.1)';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.transform = 'scale(1)';
-                    }}
-                  >
-                    {provider.id === 'google' && (
-                      <svg viewBox="0 0 24 24" style={{ width: '32px', height: '32px' }}>
-                        <path
-                          fill="#4285F4"
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        />
-                      </svg>
-                    )}
-                    {provider.id === 'yandex' && (
-                      <svg viewBox="0 0 48 48" style={{ width: '32px', height: '32px' }}>
-                        <circle cx="24" cy="24" r="24" fill="#FC3F1D" />
-                        <path
-                          d="M28 13h-4.5c-3.3 0-5.5 1.8-5.5 5 0 2.4 1.5 4.2 3.7 4.6L17 33h3.7l4.2-9.2h1.1V33H28V13zm-2 8.3h-1.3c-1.7 0-2.7-.9-2.7-2.4s1-2.4 2.7-2.4H26v4.8z"
-                          fill="#FFFFFF"
-                        />
-                      </svg>
-                    )}
-                    {provider.id === 'mailru' && (
-                      <svg viewBox="0 0 24 24" style={{ width: '32px', height: '32px' }}>
-                        <path
-                          fill="#168DE2"
-                          d="M11.585 5.267c1.834 0 3.558.811 4.824 2.08v.004c0-.609.41-1.068.979-1.068h.145c.891 0 1.073.842 1.073 1.109l.005 9.475c-.063.621.64.941 1.029.543 1.521-1.564 3.342-8.038-.946-11.79-3.996-3.497-9.357-2.921-12.209-.955-3.031 2.091-4.971 6.718-3.086 11.064 2.054 4.74 7.931 6.152 11.424 4.744 1.769-.715 2.586 1.676.749 2.457-2.776 1.184-10.502 1.064-14.11-5.188C-.977 13.521-.847 6.093 5.62 2.245 10.567-.698 17.09.117 21.022 4.224c4.111 4.294 3.872 12.334-.139 15.461-1.816 1.42-4.516.037-4.498-2.031l-.019-.678c-1.265 1.256-2.948 1.988-4.782 1.988-3.625 0-6.813-3.189-6.813-6.812 0-3.659 3.189-6.885 6.814-6.885zm4.561 6.623c-.137-2.653-2.106-4.249-4.484-4.249h-.09c-2.745 0-4.268 2.159-4.268 4.61 0 2.747 1.842 4.481 4.256 4.481 2.693 0 4.464-1.973 4.592-4.306l-.006-.536z"
-                        />
-                      </svg>
-                    )}
-                  </a>
-                );
-              })}
-            </div>
           </form>
         )}
 

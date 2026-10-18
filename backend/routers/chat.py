@@ -15,6 +15,7 @@ from sqlalchemy import or_, and_, func, desc
 from backend.dependencies.auth import get_current_user
 from backend.database import get_db
 from backend.models.user import User
+from backend.services.usernames import UsernameError, normalize_username
 from backend.models.chat import (
     Friendship, FriendshipStatus, UserStatus, UserOnlineStatus,
     ChatRoom, ChatRoomType, ChatParticipant, ChatMessage, MessageType,
@@ -32,7 +33,7 @@ class UserBriefOut(BaseModel):
     id: int
     public_id: int
     name: Optional[str]
-    email: str
+    username: Optional[str] = None
     avatar: Optional[str]
     
     class Config:
@@ -57,6 +58,7 @@ class UserSearchResult(BaseModel):
     id: int
     public_id: int
     name: Optional[str]
+    username: Optional[str] = None
     avatar: Optional[str]
     is_friend: bool
     friendship_status: Optional[str]
@@ -144,8 +146,13 @@ async def search_users(
         ).all()
     except ValueError:
         # Поиск по имени
+        cleaned = query.lstrip("@")
+        try:
+            _, username_key = normalize_username(cleaned)
+        except UsernameError:
+            username_key = ""
         users = db.query(User).filter(
-            User.name.ilike(f"%{query}%"),
+            or_(User.name.ilike(f"%{query}%"), User.username_key == username_key),
             User.id != current_user.id
         ).limit(20).all()
     
@@ -173,6 +180,7 @@ async def search_users(
             id=user.id,
             public_id=user.public_id,
             name=user.name,
+            username=user.username,
             avatar=user.avatar,
             is_friend=friendship.status == FriendshipStatus.ACCEPTED if friendship else False,
             friendship_status=friendship.status.value if friendship else None
@@ -657,7 +665,7 @@ async def get_chat_rooms(
                 if ap.user_id != current_user.id:
                     other_user = db.query(User).filter(User.id == ap.user_id).first()
                     if other_user:
-                        room_name = other_user.name or other_user.email
+                        room_name = other_user.name or (f"@{other_user.username}" if other_user.username else f"ID {other_user.public_id}")
                         room_avatar = other_user.avatar
                     break
         
@@ -737,7 +745,7 @@ async def get_chat_room(
             if p.user_id != current_user.id:
                 other_user = db.query(User).filter(User.id == p.user_id).first()
                 if other_user:
-                    room_name = other_user.name or other_user.email
+                    room_name = other_user.name or (f"@{other_user.username}" if other_user.username else f"ID {other_user.public_id}")
                     room_avatar = other_user.avatar
                 break
     

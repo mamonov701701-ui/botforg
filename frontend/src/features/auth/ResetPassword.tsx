@@ -1,24 +1,30 @@
-import React, { useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { resetPassword } from '../../api/auth';
+import PasswordField from '../../components/PasswordField';
 
 export default function ResetPassword() {
-  const [searchParams] = useSearchParams();
+  const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get('token'));
   const navigate = useNavigate();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [completed, setCompleted] = useState(false);
+
+  useEffect(() => {
+    window.history.replaceState(null, '', window.location.pathname);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading || completed) return;
 
     if (newPassword !== confirmPassword) {
       setMessage('❌ Пароли не совпадают');
       return;
     }
 
-    const token = searchParams.get('token');
     if (!token) {
       setMessage('❌ Отсутствует токен сброса');
       return;
@@ -27,10 +33,15 @@ export default function ResetPassword() {
     setLoading(true);
     try {
       await resetPassword(token, newPassword);
-      setMessage('✅ Пароль успешно изменен! Перенаправление...');
-      setTimeout(() => navigate('/dashboard'), 2000);
+      setCompleted(true);
+      setNewPassword('');
+      setConfirmPassword('');
+      setMessage('✅ Пароль изменён. Теперь войдите в аккаунт.');
+      setTimeout(() => navigate('/'), 2000);
     } catch (error: any) {
-      setMessage(`❌ ${error.message}`);
+      setMessage(
+        `❌ ${error.message}. Если ссылка уже использована, запросите новую и откройте последнее письмо.`
+      );
     } finally {
       setLoading(false);
     }
@@ -60,14 +71,17 @@ export default function ResetPassword() {
         }}
       >
         <h1 style={{ marginBottom: '24px', textAlign: 'center' }}>Сброс пароля</h1>
+        <p>Если вы запросили несколько писем, используйте ссылку из последнего.</p>
 
-        <input
-          type="password"
+        <PasswordField
+          id="reset-new-password"
+          label="Новый пароль"
           placeholder="Новый пароль"
           value={newPassword}
           onChange={e => setNewPassword(e.target.value)}
           required
           minLength={8}
+          autoComplete="new-password"
           style={{
             width: '100%',
             padding: '12px',
@@ -79,13 +93,15 @@ export default function ResetPassword() {
           }}
         />
 
-        <input
-          type="password"
+        <PasswordField
+          id="reset-confirm-password"
+          label="Подтвердите пароль"
           placeholder="Подтвердите пароль"
           value={confirmPassword}
           onChange={e => setConfirmPassword(e.target.value)}
           required
           minLength={8}
+          autoComplete="new-password"
           style={{
             width: '100%',
             padding: '12px',
@@ -99,7 +115,7 @@ export default function ResetPassword() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || completed}
           style={{
             width: '100%',
             padding: '12px',

@@ -17,6 +17,25 @@ from backend.models.legal import (
     LegalRevisionStatus,
 )
 from backend.models.tariff import AdminAuditLog
+from backend.settings import settings
+
+
+DEV_TEST_VERSION_PREFIX = "DEV-TEST-"
+DEV_TEST_MARKER = "[DEV TEST]"
+
+
+def is_dev_test_revision(version: str) -> bool:
+    """A reserved CMS version namespace, never eligible as production legal text."""
+    return (version or "").upper().startswith(DEV_TEST_VERSION_PREFIX)
+
+
+def _check_dev_test_revision(version: str, title: str, body: str) -> None:
+    if not is_dev_test_revision(version):
+        return
+    if settings.ENVIRONMENT != "development":
+        raise LegalDocumentError("Test revisions are development-only", code="test_revision_forbidden")
+    if not title.startswith(DEV_TEST_MARKER) or not body.lstrip().startswith(DEV_TEST_MARKER):
+        raise LegalDocumentError("Test revision must be visibly marked", code="test_revision_unmarked")
 
 
 class LegalDocumentError(Exception):
@@ -128,6 +147,7 @@ def create_draft(
     title = (title or "").strip()
     if not title:
         raise LegalDocumentError("title required", code="title_required")
+    _check_dev_test_revision(version, title, body_markdown or "")
 
     existing = (
         db.query(LegalDocumentRevision)
@@ -342,6 +362,7 @@ def publish_revision(
             "Перед публикацией укажите название документа",
             code="title_required",
         )
+    _check_dev_test_revision(rev.version, rev.title, rev.body_markdown or "")
 
     rev.content_sha256 = content_sha256(rev.body_markdown or "")
     now = _utcnow()
@@ -466,7 +487,7 @@ def get_published_by_type(
     db: Session, doc_type: str
 ) -> LegalDocumentRevision | None:
     assert_known_doc_type(doc_type)
-    return (
+    rev = (
         db.query(LegalDocumentRevision)
         .filter(
             LegalDocumentRevision.doc_type == doc_type,
@@ -474,6 +495,9 @@ def get_published_by_type(
         )
         .first()
     )
+    if rev is not None and settings.ENVIRONMENT == "production" and is_dev_test_revision(rev.version):
+        return None
+    return rev
 
 
 def get_published_by_slug(
@@ -505,7 +529,7 @@ def get_public_version(
 
 
 def list_public_documents(db: Session) -> list[LegalDocumentRevision]:
-    return (
+    rows = (
         db.query(LegalDocumentRevision)
         .filter(
             LegalDocumentRevision.status == LegalRevisionStatus.PUBLISHED.value
@@ -513,6 +537,9 @@ def list_public_documents(db: Session) -> list[LegalDocumentRevision]:
         .order_by(LegalDocumentRevision.doc_type.asc())
         .all()
     )
+    if settings.ENVIRONMENT == "production":
+        return [rev for rev in rows if not is_dev_test_revision(rev.version)]
+    return rows
 
 
 def list_public_archive(db: Session, slug: str) -> list[LegalDocumentRevision]:

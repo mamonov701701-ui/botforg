@@ -3,7 +3,7 @@
  * All endpoints use the unified HTTP client with proper error handling
  */
 
-import { get, post, put, patch, ApiError, clearGetResponseCache } from './client';
+import { get, post, put, patch, clearGetResponseCache } from './client';
 
 // --- Типы для настроек личного кабинета (ответ API: snake_case) ---
 export interface ProfileSettingsOut {
@@ -136,13 +136,31 @@ export function getLoginUrl(provider: 'google' | 'yandex' | 'mailru') {
   return `/auth/${provider}/login`;
 }
 
-export async function registerEmail(email: string, password: string, name?: string) {
+export async function registerEmail(
+  email: string,
+  password: string,
+  name: string,
+  username: string,
+  dateOfBirth: string,
+  legalRevisionIds: Record<string, number>,
+  legalAcceptances: {
+    termsAccepted: boolean;
+    privacyAcknowledged: boolean;
+    personalDataConsentAccepted: boolean;
+  }
+) {
   try {
-    const data = await authJsonRequest('/auth/email/register', { email, password, name });
-    if (data.access_token) {
-      saveToken(data.access_token);
-    }
-    return data;
+    return await authJsonRequest('/auth/email/register', {
+      email,
+      password,
+      name,
+      username,
+      date_of_birth: dateOfBirth,
+      legal_revision_ids: legalRevisionIds,
+      terms_accepted: legalAcceptances.termsAccepted,
+      privacy_acknowledged: legalAcceptances.privacyAcknowledged,
+      personal_data_consent_accepted: legalAcceptances.personalDataConsentAccepted,
+    });
   } catch (error: any) {
     throw new Error(error?.message || 'Ошибка регистрации');
   }
@@ -159,6 +177,20 @@ export async function loginEmail(email: string, password: string) {
   return data;
 }
 
+export async function completeTwoFactor(challenge: string | null, code: string) {
+  const data = await authJsonRequest('/auth/email/complete-2fa', { challenge, code });
+  if (data.access_token) saveToken(data.access_token);
+  return data;
+}
+
+export async function resendVerification(email: string) {
+  return authJsonRequest('/auth/email/resend-verification', { email });
+}
+
+export async function correctUnverifiedEmail(email: string, password: string, newEmail: string) {
+  return authJsonRequest('/auth/email/correct-email', { email, password, new_email: newEmail });
+}
+
 export async function requestPasswordReset(email: string) {
   return post('/auth/email/request-reset', { email });
 }
@@ -168,7 +200,11 @@ export async function resetPassword(token: string, newPassword: string) {
 }
 
 export async function verifyEmail(token: string) {
-  return get(`/auth/email/verify?token=${token}`);
+  return authJsonRequest('/auth/email/verify', { token });
+}
+
+export async function previewEmailVerification(token: string) {
+  return authJsonRequest('/auth/email/verify-preview', { token });
 }
 
 // --- 152-ФЗ: юридические документы и согласия ---

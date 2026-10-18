@@ -34,7 +34,7 @@ const listing = {
   description: 'Направляет заявку по правилам.',
   category: 'automation',
   tags: ['crm'],
-  author: { id: 7, name: 'Анна' },
+  author: { id: 7, name: 'Анна', username: 'Anya_7' },
   visibility: 'public' as const,
   access_policy: 'self_install' as const,
   commercial_mode: 'free' as const,
@@ -133,7 +133,7 @@ describe('Custom Block Marketplace pages', () => {
       '/market/custom-blocks/18'
     );
     expect(screen.queryByText('Старая карточка')).toBeNull();
-    expect(screen.getAllByText('Автор: Анна')).toHaveLength(2);
+    expect(screen.getAllByText('Автор: Анна · @Anya_7')).toHaveLength(2);
     expect(screen.getByText('БЕСПЛАТНО')).toBeTruthy();
     expect(screen.getByText(/120\s*₽/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Добавить в мои блоки' })).toBeTruthy();
@@ -202,19 +202,17 @@ describe('Custom Block Marketplace pages', () => {
   });
 
   it('self-install uses one CTA, then shows installed state and library link', async () => {
-    api.getListing
-      .mockResolvedValueOnce(listing)
-      .mockResolvedValue({
-        ...listing,
-        access: {
-          ...listing.access,
-          can_self_install: false,
-          has_active_grant: true,
-          has_grant_history: true,
-          is_installed: true,
-          can_add_new_node: true,
-        },
-      });
+    api.getListing.mockResolvedValueOnce(listing).mockResolvedValue({
+      ...listing,
+      access: {
+        ...listing.access,
+        can_self_install: false,
+        has_active_grant: true,
+        has_grant_history: true,
+        is_installed: true,
+        can_add_new_node: true,
+      },
+    });
     detail();
     expect(
       await screen.findByText('Связанный блок: Исходный маршрутизатор · Точная версия: v1')

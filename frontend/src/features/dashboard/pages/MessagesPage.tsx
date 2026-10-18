@@ -800,7 +800,7 @@ export default function MessagesPage() {
                           {result.name || 'Без имени'}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                          ID: {result.public_id}
+                          {result.username ? `@${result.username} · ` : ''}ID: {result.public_id}
                         </div>
                       </div>
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -1301,7 +1301,10 @@ export default function MessagesPage() {
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                            {req.user.name || req.user.email}
+                            {req.user.name ||
+                              (req.user.username
+                                ? `@${req.user.username}`
+                                : `ID ${req.user.public_id}`)}
                           </div>
                           <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                             ID: {req.user.public_id}
@@ -1390,7 +1393,10 @@ export default function MessagesPage() {
                         </div>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                            {req.user.name || req.user.email}
+                            {req.user.name ||
+                              (req.user.username
+                                ? `@${req.user.username}`
+                                : `ID ${req.user.public_id}`)}
                           </div>
                           <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                             <Clock
@@ -2224,7 +2230,8 @@ export default function MessagesPage() {
 
               {/* ID */}
               <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                ID: {selectedUserProfile.public_id}
+                {selectedUserProfile.username ? `@${selectedUserProfile.username} · ` : ''}User ID:{' '}
+                {selectedUserProfile.public_id}
               </div>
 
               {/* Status */}
@@ -2471,10 +2478,10 @@ export default function MessagesPage() {
                   wordBreak: 'break-all',
                 }}
               >
-                {contactViewUser.email}
+                {contactViewUser.username ? `@${contactViewUser.username}` : 'Ник ещё не выбран'}
               </div>
               <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                ID: {contactViewUser.public_id}
+                User ID: {contactViewUser.public_id}
               </div>
             </div>
 

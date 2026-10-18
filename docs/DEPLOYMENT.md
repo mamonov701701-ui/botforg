@@ -77,6 +77,8 @@ docker-compose exec backend python -m pytest tests/ -v
 
 ## Production деплой
 
+Перед развёртыванием закройте [Production Readiness Checklist (условия готовности к запуску)](operations/PRODUCTION_READINESS_CHECKLIST.md), включая обязательные `PROD-BLOCKER-01` (юридические документы) и `PROD-BLOCKER-02` (реальная почтовая доставка). Локальные тестовые документы и почтовый приёмник не подходят для Production.
+
 ### 1. Подготовка сервера
 
 ```bash

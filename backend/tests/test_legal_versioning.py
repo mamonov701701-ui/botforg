@@ -631,6 +631,44 @@ def test_legal_account_overview_hides_ip_and_shows_snapshots(client, db):
     assert other.status_code in (401, 403)
 
 
+def test_legal_account_overview_returns_full_owner_only_consent_history(client, db):
+    admin_headers, admin_uid = _admin(client, db)
+    headers, uid = _auth(client, db)
+    other_headers, other_uid = _auth(client, db)
+    _publish_required(db, admin_uid)
+    privacy = get_published_by_type(db, LegalDocType.PRIVACY_POLICY.value)
+    assert privacy is not None
+
+    for result in ("accepted", "withdrawn"):
+        record_consent(
+            db, user_id=uid, doc_type=privacy.doc_type,
+            source=LegalConsentSource.LOGIN.value, revision_id=privacy.id,
+            confirmation_result=result, ip="10.0.0.1", user_agent="private-agent",
+        )
+    record_consent(
+        db, user_id=other_uid, doc_type=privacy.doc_type,
+        source=LegalConsentSource.LOGIN.value, revision_id=privacy.id,
+    )
+
+    response = client.get("/legal/account", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["confirmation_result"] for row in body["consent_history"]] == [
+        "withdrawn", "accepted",
+    ]
+    assert all(row["doc_version"] == privacy.version for row in body["consent_history"])
+    assert all(row["revision_id"] == privacy.id for row in body["consent_history"])
+    assert not any(row["doc_type"] == privacy.doc_type for row in body["accepted"])
+    assert "10.0.0.1" not in response.text
+    assert "private-agent" not in response.text
+    assert "user_id" not in response.text
+
+    other = client.get("/legal/account", headers=other_headers)
+    assert len(other.json()["consent_history"]) == 1
+    assert other.json()["consent_history"][0]["confirmation_result"] == "accepted"
+    assert client.get("/legal/account").status_code in (401, 403)
+
+
 def test_migration_head_includes_legal_versioning(db):
     from pathlib import Path
 

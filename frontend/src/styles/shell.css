@@ -179,6 +179,30 @@
   color: var(--text);
 }
 
+.bf-legal-settings-link {
+  color: #ffb300;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 700;
+}
+
+.bf-legal-settings-link:hover,
+.bf-legal-settings-link:focus-visible {
+  color: #ffd36b;
+  outline: 2px solid #ffb300;
+  outline-offset: 3px;
+}
+
+[data-testid='legal-doc-body'] {
+  background: #0a1b3d;
+  color: #f5f7fc;
+}
+
+[data-testid='legal-doc-body'] .block-doc-md,
+[data-testid='legal-doc-body'] .block-doc-md * {
+  color: inherit;
+}
+
 .bf-dashboard-sidebar {
   position: sticky;
   top: 32px;
@@ -230,6 +254,28 @@
   border: 1px solid var(--bf-shell-border);
   border-radius: var(--bf-shell-radius);
   box-shadow: var(--bf-shell-shadow);
+}
+
+.bf-auth-date-input {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  color-scheme: dark;
+}
+
+.bf-auth-date-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.bf-auth-date-input::-webkit-calendar-picker-indicator {
+  opacity: 1;
+  cursor: pointer;
 }
 
 @media (max-width: 768px) {

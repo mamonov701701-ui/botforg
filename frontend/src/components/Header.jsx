@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { getToken } from '../api/auth';
 import { useUiStore } from '../stores/uiStore';
 import { getUnreadCount } from '../api/chat';
 import '../layouts/site-layout.css';
@@ -21,7 +22,7 @@ export default function Header(_props) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleAccountClick = e => {
-    if (!user) {
+    if (!user && !getToken()) {
       e.preventDefault();
       openAuth('/dashboard');
     }

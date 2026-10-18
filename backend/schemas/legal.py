@@ -109,6 +109,16 @@ class LegalConsentAcceptedOut(BaseModel):
     source: str | None = None
 
 
+class LegalConsentHistoryOut(BaseModel):
+    """Вся история владельца без IP, user-agent и служебного аудита."""
+
+    doc_type: str
+    doc_version: str
+    accepted_at: datetime
+    revision_id: int | None = None
+    confirmation_result: str | None = None
+
+
 class LegalPurchaseSnapshotDocOut(BaseModel):
     revision_id: int
     doc_type: str
@@ -136,4 +146,5 @@ class LegalAccountOverviewOut(BaseModel):
     current_documents: list[LegalRevisionListItemOut]
     archived_documents: list[LegalRevisionListItemOut] = []
     accepted: list[LegalConsentAcceptedOut] = []
+    consent_history: list[LegalConsentHistoryOut] = []
     purchase_snapshots: list[LegalPurchaseSnapshotOut] = []

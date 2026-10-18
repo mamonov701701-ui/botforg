@@ -1,5 +1,7 @@
 # OAuth Authentication Implementation
 
+> Историческое описание OAuth. Актуальный Stage 8 email/password contract (контракт входа по почте и паролю), включая нейтральный ответ регистрации, двухшаговое подтверждение и серверные сессии, описан в [User Profile Architecture](architecture/user-profile-account-settings.md). Нижеприведённый ранний flow не является действующим API-контрактом.
+
 **Version**: 1.0
 **Last Updated**: January 14, 2025
 **Status**: Complete
@@ -751,3 +753,7 @@ react-router-dom (for routing)
 
 **Last Updated**: October 14, 2025
 **Maintained by**: BotForg Development Team
+# Stage 8 current contract
+
+The current account authentication, email verification, password and session contracts are documented in [User Profile & Account Settings](architecture/user-profile-account-settings.md). The material below describes earlier implementation history where it differs.
+Stage 8 removed Google, Yandex and Mail.ru buttons from the user interface. Existing Backend OAuth routes and account links remain for transition; the earlier OAuth selection screen described above is historical.

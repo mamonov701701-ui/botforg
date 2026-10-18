@@ -25,6 +25,7 @@ from backend.services.email_transport import (
     get_email_transport,
 )
 from backend.services.notification_templates.refund_email import build_refund_email
+from backend.services.account_security import security_notice_text
 from backend.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -150,6 +151,16 @@ def claim_outbox_batch(
 
 def _render_email(row: NotificationOutbox) -> EmailMessagePayload:
     payload = row.payload_json if isinstance(row.payload_json, dict) else {}
+    if row.notification_type == "account_security":
+        event_type = str(payload.get("event_type") or "")
+        if event_type != row.event_type:
+            raise ValueError("malformed_security_notice")
+        return EmailMessagePayload(
+            to_email=row.recipient_email, subject="Безопасность аккаунта BotForg",
+            body_text=(f"Дата и время события (UTC): {row.created_at:%Y-%m-%d %H:%M}.\n"
+                       + security_notice_text(event_type)
+                       + "\nЕсли действие выполняли не вы, откройте BotForg вручную, проверьте настройки безопасности и обратитесь в поддержку. Не переходите по подозрительным ссылкам."),
+        )
     title = str(payload.get("title") or "Обновление заявки на возврат")
     description = str(payload.get("description") or "")
     status_label = payload.get("status_label")

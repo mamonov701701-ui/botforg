@@ -1,17 +1,44 @@
 import React, { useState } from 'react';
-import { getLoginUrl, loginEmail, registerEmail, requestPasswordReset } from '../../api/auth';
+import { loginEmail, registerEmail, requestPasswordReset } from '../../api/auth';
+import { listLegalDocuments } from '../../api/legal';
+import PasswordField from '../../components/PasswordField';
 
-type Tab = 'oauth' | 'email';
 type EmailMode = 'login' | 'register' | 'reset';
 
 export default function SignIn() {
-  const [tab, setTab] = useState<Tab>('oauth');
   const [emailMode, setEmailMode] = useState<EmailMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameStatus, setUsernameStatus] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAcknowledged, setPrivacyAcknowledged] = useState(false);
+  const [personalDataConsentAccepted, setPersonalDataConsentAccepted] = useState(false);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+
+  React.useEffect(() => {
+    setUsernameStatus('');
+    if (emailMode !== 'register' || username.length < 3) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `/auth/email/username-availability?username=${encodeURIComponent(username)}`,
+          { signal: controller.signal }
+        );
+        if (response.ok) setUsernameStatus((await response.json()).message);
+      } catch (error: any) {
+        if (error?.name !== 'AbortError') setUsernameStatus('Проверка ника временно недоступна');
+      }
+    }, 600);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [emailMode, username]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,8 +47,23 @@ export default function SignIn() {
 
     try {
       if (emailMode === 'register') {
-        await registerEmail(email, password, name);
-        setMessage('✅ Регистрация успешна! Проверьте email для подтверждения.');
+        const docs = await listLegalDocuments();
+        const required = ['public_offer', 'privacy_policy', 'personal_data_consent'];
+        const revisions = Object.fromEntries(
+          required.map(type => {
+            const doc = docs.find(item => item.doc_type === type && item.status === 'published');
+            if (!doc) throw new Error('Юридические документы недоступны');
+            return [type, doc.id];
+          })
+        );
+        if (!termsAccepted || !privacyAcknowledged || !personalDataConsentAccepted)
+          throw new Error('Подтвердите юридические условия');
+        await registerEmail(email, password, name, username, dateOfBirth, revisions, {
+          termsAccepted,
+          privacyAcknowledged,
+          personalDataConsentAccepted,
+        });
+        setMessage('Если регистрация возможна, проверьте почту для подтверждения адреса.');
         setTimeout(() => setEmailMode('login'), 2000);
       } else if (emailMode === 'login') {
         await loginEmail(email, password);
@@ -31,7 +73,9 @@ export default function SignIn() {
         }, 1000);
       } else if (emailMode === 'reset') {
         await requestPasswordReset(email);
-        setMessage('✅ Ссылка для сброса отправлена на email.');
+        setMessage(
+          'Если адрес подтверждён и почта доступна, новое письмо придёт. Откройте последнее письмо.'
+        );
         setTimeout(() => setEmailMode('login'), 2000);
       }
     } catch (error: any) {
@@ -40,12 +84,6 @@ export default function SignIn() {
       setLoading(false);
     }
   };
-
-  const providers = [
-    { id: 'google', name: 'Google', color: '#4285F4', icon: '🔵' },
-    { id: 'yandex', name: 'Яндекс ID', color: '#FC3F1D', icon: '🔴' },
-    { id: 'mailru', name: 'Mail.ru', color: '#005FF9', icon: '📧' },
-  ];
 
   return (
     <div
@@ -64,341 +102,322 @@ export default function SignIn() {
         <h1 style={{ fontSize: '32px', marginBottom: '12px', textAlign: 'center' }}>
           Войдите или зарегистрируйтесь
         </h1>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '24px', textAlign: 'center' }}>
-          Выберите способ авторизации
-        </p>
-
-        {/* Tabs */}
-        <div
-          style={{
-            display: 'flex',
-            gap: '8px',
-            marginBottom: '24px',
-            borderBottom: '2px solid var(--border)',
-          }}
-        >
-          <button
-            onClick={() => setTab('oauth')}
-            style={{
-              flex: 1,
-              padding: '12px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: tab === 'oauth' ? '2px solid var(--accent)' : 'none',
-              color: tab === 'oauth' ? 'var(--accent)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 600,
-            }}
-          >
-            Соцсети
-          </button>
-          <button
-            onClick={() => setTab('email')}
-            style={{
-              flex: 1,
-              padding: '12px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: tab === 'email' ? '2px solid var(--accent)' : 'none',
-              color: tab === 'email' ? 'var(--accent)' : 'var(--text-muted)',
-              cursor: 'pointer',
-              fontSize: '16px',
-              fontWeight: 600,
-            }}
-          >
-            Почта
-          </button>
-        </div>
-
-        {/* OAuth Tab */}
-        {tab === 'oauth' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {providers.map(provider => (
-              <a
-                key={provider.id}
-                href={getLoginUrl(provider.id as any)}
+        <form onSubmit={handleEmailAuth}>
+          {/* Login Mode */}
+          {emailMode === 'login' && (
+            <>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '12px',
-                  padding: '14px 20px',
+                  width: '100%',
+                  padding: '12px',
+                  marginBottom: '12px',
                   background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
                   color: 'var(--text)',
-                  textDecoration: 'none',
+                  fontSize: '14px',
+                }}
+              />
+              <PasswordField
+                id="signin-password"
+                label="Пароль для входа"
+                placeholder="Пароль"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete="current-password"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  marginBottom: '12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  color: 'var(--text)',
+                  fontSize: '14px',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: 'var(--accent)',
+                  color: '#000',
+                  border: 'none',
                   borderRadius: '8px',
                   fontSize: '16px',
                   fontWeight: 600,
-                  border: '2px solid transparent',
-                  transition: 'all 0.2s',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = provider.color;
-                  e.currentTarget.style.background = 'var(--card)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = 'transparent';
-                  e.currentTarget.style.background = 'var(--surface)';
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  marginBottom: '12px',
                 }}
               >
-                <span style={{ fontSize: '20px' }}>{provider.icon}</span>
-                <span>Войти через {provider.name}</span>
-              </a>
-            ))}
-          </div>
-        )}
-
-        {/* Email Tab */}
-        {tab === 'email' && (
-          <form onSubmit={handleEmailAuth}>
-            {/* Login Mode */}
-            {emailMode === 'login' && (
-              <>
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    marginBottom: '12px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    color: 'var(--text)',
-                    fontSize: '14px',
-                  }}
-                />
-                <input
-                  type="password"
-                  placeholder="Пароль"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    marginBottom: '12px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    color: 'var(--text)',
-                    fontSize: '14px',
-                  }}
-                />
+                {loading ? 'Загрузка...' : 'Войти'}
+              </button>
+              <div style={{ textAlign: 'center', fontSize: '14px', color: 'var(--text-muted)' }}>
                 <button
-                  type="submit"
-                  disabled={loading}
+                  type="button"
+                  onClick={() => setEmailMode('register')}
                   style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'var(--accent)',
-                    color: '#000',
+                    background: 'none',
                     border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    marginBottom: '12px',
+                    color: 'var(--accent)',
+                    cursor: 'pointer',
                   }}
                 >
-                  {loading ? 'Загрузка...' : 'Войти'}
+                  Зарегистрироваться
                 </button>
-                <div style={{ textAlign: 'center', fontSize: '14px', color: 'var(--text-muted)' }}>
-                  <button
-                    type="button"
-                    onClick={() => setEmailMode('register')}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--accent)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Зарегистрироваться
-                  </button>
-                  {' | '}
-                  <button
-                    type="button"
-                    onClick={() => setEmailMode('reset')}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--accent)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Забыли пароль?
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* Register Mode */}
-            {emailMode === 'register' && (
-              <>
-                <input
-                  type="text"
-                  placeholder="Имя (необязательно)"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    marginBottom: '12px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    color: 'var(--text)',
-                    fontSize: '14px',
-                  }}
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    marginBottom: '12px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    color: 'var(--text)',
-                    fontSize: '14px',
-                  }}
-                />
-                <input
-                  type="password"
-                  placeholder="Пароль (минимум 8 символов)"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  required
-                  minLength={8}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    marginBottom: '12px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    color: 'var(--text)',
-                    fontSize: '14px',
-                  }}
-                />
+                {' | '}
                 <button
-                  type="submit"
-                  disabled={loading}
+                  type="button"
+                  onClick={() => setEmailMode('reset')}
                   style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'var(--accent)',
-                    color: '#000',
+                    background: 'none',
                     border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    marginBottom: '12px',
+                    color: 'var(--accent)',
+                    cursor: 'pointer',
                   }}
                 >
-                  {loading ? 'Загрузка...' : 'Зарегистрироваться'}
+                  Забыли пароль?
                 </button>
-                <div style={{ textAlign: 'center', fontSize: '14px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setEmailMode('login')}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--accent)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Уже есть аккаунт? Войти
-                  </button>
-                </div>
-              </>
-            )}
+              </div>
+            </>
+          )}
 
-            {/* Reset Mode */}
-            {emailMode === 'reset' && (
-              <>
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    marginBottom: '12px',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '8px',
-                    color: 'var(--text)',
-                    fontSize: '14px',
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'var(--accent)',
-                    color: '#000',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    fontWeight: 600,
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    marginBottom: '12px',
-                  }}
-                >
-                  {loading ? 'Загрузка...' : 'Отправить ссылку'}
-                </button>
-                <div style={{ textAlign: 'center', fontSize: '14px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setEmailMode('login')}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--accent)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Вернуться ко входу
-                  </button>
-                </div>
-              </>
-            )}
-
-            {message && (
-              <div
+          {/* Register Mode */}
+          {emailMode === 'register' && (
+            <>
+              <input
+                type="text"
+                placeholder="Отображаемое имя"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                required
                 style={{
-                  marginTop: '16px',
+                  width: '100%',
                   padding: '12px',
-                  background: message.startsWith('✅') ? 'var(--success)' : 'var(--error)',
+                  marginBottom: '12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
                   borderRadius: '8px',
-                  color: '#fff',
+                  color: 'var(--text)',
                   fontSize: '14px',
                 }}
-              >
-                {message}
+              />
+              <label htmlFor="signin-register-username">
+                Публичный ник — после выбора изменить нельзя
+              </label>
+              <input
+                id="signin-register-username"
+                value={username}
+                onChange={event => setUsername(event.target.value)}
+                minLength={3}
+                maxLength={30}
+                required
+                autoComplete="off"
+                aria-describedby="signin-username-status"
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  marginBottom: 8,
+                  background: 'var(--surface)',
+                  color: 'var(--text)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                }}
+              />
+              <div id="signin-username-status" role="status" aria-live="polite">
+                {usernameStatus}
               </div>
-            )}
-          </form>
-        )}
+              <label>
+                Дата рождения{' '}
+                <input
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={e => setDateOfBirth(e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={e => setTermsAccepted(e.target.checked)}
+                  required
+                />{' '}
+                Принимаю <a href="/legal/public-offer">оферту</a>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={privacyAcknowledged}
+                  onChange={e => setPrivacyAcknowledged(e.target.checked)}
+                  required
+                />{' '}
+                Ознакомился с <a href="/legal/privacy-policy">политикой конфиденциальности</a>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={personalDataConsentAccepted}
+                  onChange={e => setPersonalDataConsentAccepted(e.target.checked)}
+                  required
+                />{' '}
+                Даю <a href="/legal/personal-data-consent">согласие на обработку данных</a>
+              </label>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  marginBottom: '12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  color: 'var(--text)',
+                  fontSize: '14px',
+                }}
+              />
+              <PasswordField
+                id="signin-register-password"
+                label="Пароль для регистрации"
+                placeholder="Пароль (минимум 8 символов)"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete="new-password"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  marginBottom: '12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  color: 'var(--text)',
+                  fontSize: '14px',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: 'var(--accent)',
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  marginBottom: '12px',
+                }}
+              >
+                {loading ? 'Загрузка...' : 'Зарегистрироваться'}
+              </button>
+              <div style={{ textAlign: 'center', fontSize: '14px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEmailMode('login')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Уже есть аккаунт? Войти
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Reset Mode */}
+          {emailMode === 'reset' && (
+            <>
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                required
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  marginBottom: '12px',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  borderRadius: '8px',
+                  color: 'var(--text)',
+                  fontSize: '14px',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: 'var(--accent)',
+                  color: '#000',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  marginBottom: '12px',
+                }}
+              >
+                {loading ? 'Загрузка...' : 'Отправить ссылку'}
+              </button>
+              <div style={{ textAlign: 'center', fontSize: '14px' }}>
+                <button
+                  type="button"
+                  onClick={() => setEmailMode('login')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Вернуться ко входу
+                </button>
+              </div>
+            </>
+          )}
+
+          {message && (
+            <div
+              style={{
+                marginTop: '16px',
+                padding: '12px',
+                background: message.startsWith('❌')
+                  ? 'var(--error)'
+                  : message.startsWith('✅')
+                    ? 'var(--success)'
+                    : 'var(--surface)',
+                borderRadius: '8px',
+                color: '#fff',
+                fontSize: '14px',
+              }}
+            >
+              {message}
+            </div>
+          )}
+        </form>
       </div>
     </div>
   );

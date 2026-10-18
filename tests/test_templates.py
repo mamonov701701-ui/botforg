@@ -5,6 +5,7 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import app
+from conftest import register_verified_test_user
 
 # Clear rate limit at module level
 from backend.auth.rate_limit import rate_limit_store
@@ -19,14 +20,7 @@ def register_and_get_token(client: TestClient) -> str:
     email = f"test_{unique}@example.com"
     password = "SecretPass123!"
     
-    # Register
-    register_payload = {
-        "email": email,
-        "name": "Tester",
-        "password": password,
-    }
-    res_register = client.post("/auth/email/register", json=register_payload)
-    # Registration may return 200 or fail if user exists
+    register_verified_test_user(client, email=email, password=password, name="Tester")
     
     # Login to get token
     login_payload = {

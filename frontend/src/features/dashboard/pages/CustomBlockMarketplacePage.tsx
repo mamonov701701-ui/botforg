@@ -177,7 +177,7 @@ export default function CustomBlockMarketplacePage() {
                 href={`/market/custom-blocks/${item.id}`}
                 title={item.title}
                 description={item.description}
-                author={item.author.name || `Пользователь #${item.author.id}`}
+                author={`${item.author.name || `Пользователь #${item.author.id}`}${item.author.username ? ` · @${item.author.username}` : ''}`}
                 meta={
                   <>
                     v{item.version} · {marketplaceCategoryLabel(item.category)}

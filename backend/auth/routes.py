@@ -3,11 +3,11 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from backend.auth.providers import normalize_user_info, oauth
-from backend.core.security import clear_auth_cookie, create_jwt_token, set_auth_cookie
+from backend.core.security import clear_auth_cookie, create_jwt_token, get_token_from_cookie, read_access_payload, set_auth_cookie
 from backend.database import get_db
-from backend.models.auth import Account
+from backend.models.auth import Account, UserTotp
 from backend.models.user import User
-from backend.services.demo_content import create_demo_content_for_user
+from backend.services.account_security import audit, create_session, issue_action_token, revoke_sessions, utcnow
 from backend.settings import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -21,6 +21,8 @@ async def oauth_login(provider: str, request: Request):
 
     # Preserve next parameter for redirect after auth
     next_path = request.query_params.get("next")
+    if next_path and (not next_path.startswith("/") or next_path.startswith("//") or "\\" in next_path):
+        next_path = None
     redirect_uri = request.url_for("oauth_callback", provider=provider)
 
     # Add next param to callback URL if present
@@ -67,55 +69,46 @@ async def oauth_callback(
         account.name = normalized["name"]
         account.avatar = normalized["avatar"]
         user = account.user
-        is_new_user = False
     else:
-        # Create new user and account
-        # Первый пользователь в системе → owner, остальные → user
-        is_first_user = db.query(User).count() == 0
-        default_role = "owner" if is_first_user else "user"
-
-        user = User(
-            email=normalized["email"],
-            name=normalized["name"],
-            avatar=normalized["avatar"],
-            role=default_role,
-        )
-        db.add(user)
-        db.flush()
-
-        account = Account(
-            user_id=user.id,
-            provider=provider,
-            provider_user_id=normalized["provider_user_id"],
-            email=normalized["email"],
-            name=normalized["name"],
-            avatar=normalized["avatar"],
-        )
-        db.add(account)
-        is_new_user = True
+        # Stage 8 stops new OAuth registrations. Existing linked users keep access
+        # until their verified-email/password transition is complete.
+        raise HTTPException(status_code=403, detail="Новая регистрация через соцсети недоступна")
 
     db.commit()
+    if user.email_verification_required and not user.email_verified_at:
+        raise HTTPException(status_code=403, detail="Подтвердите email перед входом")
 
-    # Демо-контент только для нового пользователя (при первом OAuth-входе)
-    if is_new_user:
-        try:
-            create_demo_content_for_user(db, user.id)
-        except Exception:
-            pass  # Не блокируем вход при ошибке
-
-    # Create JWT and set cookie
-    jwt_token = create_jwt_token(user.id)
-    set_auth_cookie(response, jwt_token)
-
-    # Get next path from query params or default to /account
+    totp = db.get(UserTotp, user.id)
+    if totp and totp.enabled_at:
+        challenge = issue_action_token(db, user, "totp_login", user.email, hours=5 / 60)
+        db.commit()
+        redirect = RedirectResponse(url=f"{settings.FRONTEND_URL}/auth/two-factor")
+        redirect.set_cookie("totp_challenge", challenge, httponly=True, secure=settings.ENVIRONMENT == "production", samesite="lax", max_age=300)
+        return redirect
+    session = create_session(db, user, request.headers.get("user-agent"))
+    audit(db, user.id, "oauth_login")
+    db.commit()
     next_path = request.query_params.get("next", "/account")
-    redirect_url = f"{settings.FRONTEND_URL}{next_path}"
-
-    return RedirectResponse(url=redirect_url)
+    if not next_path.startswith("/") or next_path.startswith("//") or "\\" in next_path:
+        next_path = "/account"
+    redirect = RedirectResponse(url=f"{settings.FRONTEND_URL}{next_path}")
+    set_auth_cookie(redirect, create_jwt_token(user.id, user.token_version, session_id=session.id))
+    return redirect
 
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     """Logout user by clearing session cookie"""
+    token = get_token_from_cookie(request)
+    if not token:
+        header = request.headers.get("authorization", "")
+        token = header[7:] if header.lower().startswith("bearer ") else None
+    payload = read_access_payload(token) if token else None
+    if payload and payload.get("sid"):
+        from backend.models.auth import AccountSession
+        session = db.get(AccountSession, payload["sid"])
+        if session and str(session.user_id) == payload.get("sub"):
+            session.revoked_at = utcnow()
+            db.commit()
     clear_auth_cookie(response)
     return {"message": "Logged out successfully"}

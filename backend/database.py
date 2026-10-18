@@ -24,7 +24,17 @@ else:
 
 engine = create_engine(DATABASE_URL, **_engine_kwargs)
 
-if not _is_sqlite:
+if _is_sqlite:
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+        # SQLite disables FK enforcement per connection unless explicitly enabled.
+        # Apply this before a connection enters the pool or starts a transaction.
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+        finally:
+            cursor.close()
+else:
     @event.listens_for(engine, "connect")
     def _set_postgres_timeouts(dbapi_connection, connection_record):
         try:

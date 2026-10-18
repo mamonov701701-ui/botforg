@@ -2,24 +2,29 @@ import { expect, test } from '@playwright/test';
 
 /**
  * Auth runtime: session + bearer token, transient /me failure, logout, re-login.
- * Регистрация/логин через API — UI-модалка не является единственным источником истины для токена.
+ * Isolated seeded account; no Development DB or production SMTP access.
  */
 test('Auth runtime stability: API session, reload, /me timeout, logout, relogin', async ({
   page,
   request,
   baseURL,
 }) => {
+  test.skip(process.env.QA_IDENTITY_BACKEND !== '1', 'Requires isolated Stage 8 identity QA API');
   expect(baseURL).toBeTruthy();
-  const stamp = Date.now();
-  const email = `final_auth_${stamp}@example.com`;
-  const password = 'Qa!23456';
-
-  const reg = await request.post(`${baseURL}/auth/email/register`, {
-    data: { email, password, name: 'QA Final' },
+  const api = 'http://127.0.0.1:18001';
+  const email = 'qa-owner@example.com';
+  const password = 'QaOwnerPass123!';
+  await page.route('http://127.0.0.1:5173/**', async route => {
+    const url = new URL(route.request().url());
+    if (!/^(\/me(?:\/|$)|\/api\/user\/|\/privacy\/)/.test(url.pathname)) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch({ url: `${api}${url.pathname}${url.search}` });
+    await route.fulfill({ response });
   });
-  expect([200, 400]).toContain(reg.status());
 
-  const login1 = await request.post(`${baseURL}/auth/email/login`, {
+  const login1 = await request.post(`${api}/auth/email/login`, {
     data: { email, password },
   });
   expect(login1.status()).toBe(200);
@@ -55,12 +60,12 @@ test('Auth runtime stability: API session, reload, /me timeout, logout, relogin'
   expect(loginInputs).toBe(0);
   await page.unroute('**/me');
 
-  await request.post(`${baseURL}/auth/logout`);
+  await request.post(`${api}/auth/logout`);
   await page.evaluate(() => localStorage.removeItem('auth_token'));
   await page.reload();
   await page.waitForTimeout(800);
 
-  const login2 = await request.post(`${baseURL}/auth/email/login`, {
+  const login2 = await request.post(`${api}/auth/email/login`, {
     data: { email, password },
   });
   expect(login2.status()).toBe(200);

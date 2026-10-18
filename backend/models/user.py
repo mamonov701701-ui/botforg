@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 import random
+import secrets
 
-from sqlalchemy import Column, DateTime, Integer, String, BigInteger, Boolean, Text, ForeignKey, JSON
+from sqlalchemy import Column, Date, DateTime, Integer, String, BigInteger, Boolean, Text, ForeignKey, JSON, event, text
 from sqlalchemy.orm import relationship
 
 from backend.database import Base
@@ -19,6 +20,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(BigInteger, unique=True, nullable=False, index=True, default=lambda: random.randint(10000000, 99999999))  # 8-значный публичный ID
     email = Column(String, unique=True, nullable=False, index=True)
+    username = Column(String(30), nullable=True)
+    username_key = Column(String(120), unique=True, nullable=True)
     name = Column(String, nullable=True)
     avatar = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -26,6 +29,12 @@ class User(Base):
     password_hash = Column(String, nullable=True)  # Alias for OAuth compatibility
     role = Column(String, default="user", nullable=False)
     email_verified_at = Column(DateTime, nullable=True)
+    email_verification_required = Column(Boolean, default=False, nullable=False)
+    date_of_birth = Column(Date, nullable=True)
+    phone = Column(String(32), nullable=True)
+    phone_verified_at = Column(DateTime, nullable=True)
+    pending_email = Column(String(320), nullable=True)
+    session_required = Column(Boolean, default=False, nullable=False)
     
     # Поля блокировки пользователя
     is_suspended = Column(Boolean, default=False)  # Приостановлен ли аккаунт
@@ -79,3 +88,26 @@ class UserSettings(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="settings")
+
+
+class ReservedPublicId(Base):
+    """Permanent reservation: deleting an account never makes its public ID reusable."""
+    __tablename__ = "reserved_user_public_ids"
+
+    public_id = Column(BigInteger, primary_key=True)
+
+
+@event.listens_for(User, "before_insert")
+def reserve_public_id(_mapper, connection, target):
+    for _ in range(32):
+        candidate = target.public_id or (10_000_000 + secrets.randbelow(90_000_000))
+        result = connection.execute(
+            text("INSERT INTO reserved_user_public_ids (public_id) VALUES (:value) ON CONFLICT DO NOTHING"),
+            {"value": candidate},
+        )
+        if result.rowcount == 1:
+            target.public_id = candidate
+            return
+        if target.public_id is not None:
+            raise ValueError("Public user ID is already reserved")
+    raise RuntimeError("Unable to allocate public user ID")

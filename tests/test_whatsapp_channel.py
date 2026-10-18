@@ -14,6 +14,7 @@ from backend.database import SessionLocal
 from backend.channels.whatsapp.providers.registry import get_whatsapp_provider
 from backend.channels.whatsapp.providers.meta_cloud import MetaCloudProvider
 from backend.auth.rate_limit import rate_limit_store
+from conftest import register_verified_test_user
 from tests.utils_whatsapp_sign import META_SIGNATURE_HEADER, compute_meta_signature
 
 client = TestClient(app)
@@ -143,7 +144,7 @@ def test_whatsapp_enable_with_provider_meta_cloud_returns_ok():
     uid = uuid.uuid4().hex[:8]
     email = f"wa_enable_{uid}@example.com"
     password = "SecretPass123!"
-    client.post("/auth/email/register", json={"email": email, "password": password, "name": "WA Enable"})
+    register_verified_test_user(client, email=email, password=password, name="WA Enable")
     r = client.post("/auth/email/login", json={"email": email, "password": password})
     if r.status_code != 200:
         pytest.skip("Login failed")

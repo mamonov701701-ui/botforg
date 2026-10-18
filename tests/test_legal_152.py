@@ -12,6 +12,7 @@ from backend.main import app
 from backend.database import SessionLocal
 from backend.auth.rate_limit import rate_limit_store
 from backend.services.retention_cleanup import run_retention_cleanup_once
+from conftest import register_verified_test_user
 
 client = TestClient(app)
 
@@ -60,12 +61,8 @@ def test_legal_consent_flow(legal_user):
     """Регистрация, вход, проверка статуса согласий, принятие согласий."""
     rate_limit_store.clear()
     # Регистрация
-    r = client.post("/auth/email/register", json={
-        "email": legal_user["email"],
-        "password": legal_user["password"],
-        "name": legal_user["name"],
-    })
-    assert r.status_code in (200, 400)
+    r = register_verified_test_user(client, **legal_user)
+    assert r.status_code == 200
     # Вход
     r = client.post("/auth/email/login", json={
         "email": legal_user["email"],
@@ -82,11 +79,11 @@ def test_legal_consent_flow(legal_user):
     assert "accepted" in r.json()
 
     # Принять политику и условия
-    r = client.get("/legal/docs")
+    r = client.get("/legal/documents")
     assert r.status_code == 200
-    docs = r.json()
-    v_pp = docs["privacy_policy"]["version"]
-    v_terms = docs["terms"]["version"]
+    docs = {row["doc_type"]: row["version"] for row in r.json()}
+    v_pp = docs["privacy_policy"]
+    v_terms = docs["public_offer"]
 
     r = client.post("/legal/consent", json={"doc_type": "privacy_policy", "doc_version": v_pp}, headers=headers)
     assert r.status_code == 200
@@ -101,19 +98,15 @@ def test_legal_consent_flow(legal_user):
     assert r.status_code == 200
     accepted = {a["doc_type"] for a in r.json()["accepted"]}
     assert "privacy_policy" in accepted
-    assert "terms" in accepted
+    assert "public_offer" in accepted
 
 
 @pytest.mark.skipif(not _has_consents_table(), reason="consents table missing (run: alembic upgrade head)")
 def test_privacy_export(legal_user):
     """POST /privacy/export возвращает данные пользователя."""
     rate_limit_store.clear()
-    r = client.post("/auth/email/register", json={
-        "email": legal_user["email"],
-        "password": legal_user["password"],
-        "name": legal_user["name"],
-    })
-    assert r.status_code in (200, 400)
+    r = register_verified_test_user(client, **legal_user)
+    assert r.status_code == 200
     r = client.post("/auth/email/login", json={
         "email": legal_user["email"],
         "password": legal_user["password"],
@@ -136,27 +129,23 @@ def test_privacy_export(legal_user):
 
 @pytest.mark.skipif(not _has_consents_table(), reason="consents table missing (run: alembic upgrade head)")
 def test_privacy_delete(legal_user):
-    """POST /privacy/delete анонимизирует аккаунт и отзывает токены (старый токен даёт 401)."""
+    """POST /privacy/delete creates a protected review request without erasure."""
     rate_limit_store.clear()
     email = f"delete_{uuid.uuid4().hex[:8]}@example.com"
-    r = client.post("/auth/email/register", json={
-        "email": email,
-        "password": legal_user["password"],
-        "name": legal_user["name"],
-    })
-    assert r.status_code in (200, 400)
+    r = register_verified_test_user(client, email=email, password=legal_user["password"], name=legal_user["name"])
+    assert r.status_code == 200
     r = client.post("/auth/email/login", json={"email": email, "password": legal_user["password"]})
     assert r.status_code == 200
     old_token = r.json()["access_token"]
     headers = {"Authorization": f"Bearer {old_token}"}
 
-    r = client.post("/privacy/delete", headers=headers)
+    r = client.post("/privacy/delete", json={"current_password": legal_user["password"]}, headers=headers)
     assert r.status_code == 200
-    assert r.json().get("ok") is True
+    assert r.json().get("status") == "pending_review"
 
-    # Старый токен должен дать 401 на защищённом эндпоинте (token_version revoke)
+    # The request does not erase the account or revoke its existing session.
     r_me = client.get("/me", headers=headers)
-    assert r_me.status_code == 401
+    assert r_me.status_code == 200
 
 
 def test_chat_hash_determinism():

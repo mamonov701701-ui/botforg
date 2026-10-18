@@ -9,7 +9,7 @@ export interface UserBrief {
   id: number;
   public_id: number;
   name: string | null;
-  email: string;
+  username: string | null;
   avatar: string | null;
 }
 
@@ -17,6 +17,7 @@ export interface UserSearchResult {
   id: number;
   public_id: number;
   name: string | null;
+  username: string | null;
   avatar: string | null;
   is_friend: boolean;
   friendship_status: string | null;

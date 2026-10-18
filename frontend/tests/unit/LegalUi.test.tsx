@@ -284,6 +284,22 @@ describe('AccountLegalPage', () => {
         },
       ],
       accepted: [],
+      consent_history: [
+        {
+          doc_type: 'privacy_policy',
+          doc_version: '2.0',
+          accepted_at: '2026-07-02T12:00:00Z',
+          revision_id: 1,
+          confirmation_result: 'acknowledged',
+        },
+        {
+          doc_type: 'advertising_consent',
+          doc_version: '1.0',
+          accepted_at: '2026-07-01T12:00:00Z',
+          revision_id: 8,
+          confirmation_result: 'withdrawn',
+        },
+      ],
       purchase_snapshots: [],
     });
   });
@@ -301,7 +317,15 @@ describe('AccountLegalPage', () => {
     expect(screen.queryByText('privacy_policy')).not.toBeInTheDocument();
     expect(screen.queryByText('published')).not.toBeInTheDocument();
     expect(screen.queryByText('privacy-policy')).not.toBeInTheDocument();
-    expect(screen.getByText('Политика конфиденциальности')).toBeInTheDocument();
+    expect(screen.getByTestId('account-legal-active-list')).toHaveTextContent(
+      'Политика конфиденциальности'
+    );
+    expect(screen.getByTestId('account-legal-consent-history')).toBeInTheDocument();
+    expect(screen.getByText(/Ознакомление подтверждено/)).toBeInTheDocument();
+    expect(screen.getByText(/Отозвано/)).toBeInTheDocument();
+    expect(
+      screen.getAllByRole('link', { name: 'Прочитать редакцию' })[0].getAttribute('href')
+    ).toBe('/dashboard/account/legal/privacy-policy/v/2.0');
     expect(screen.getByTestId('account-legal-tab-archive')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('account-legal-tab-archive'));
@@ -315,6 +339,7 @@ describe('AccountLegalPage', () => {
       current_documents: [],
       archived_documents: [],
       accepted: [],
+      consent_history: [],
       purchase_snapshots: [],
     });
     render(

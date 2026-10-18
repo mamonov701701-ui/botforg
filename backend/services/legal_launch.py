@@ -16,7 +16,7 @@ from backend.models.legal import (
     LegalRevisionStatus,
 )
 from backend.models.tariff import AdminAuditLog
-from backend.services.legal_documents import LegalDocumentError
+from backend.services.legal_documents import LegalDocumentError, get_published_by_type
 from backend.settings import settings
 
 
@@ -83,15 +83,7 @@ def ensure_checklist_seeded(db: Session) -> None:
 def required_docs_published(db: Session) -> tuple[bool, list[str]]:
     missing: list[str] = []
     for doc_type in sorted(REQUIRED_PUBLISHED_DOC_TYPES):
-        row = (
-            db.query(LegalDocumentRevision.id)
-            .filter(
-                LegalDocumentRevision.doc_type == doc_type,
-                LegalDocumentRevision.status == LegalRevisionStatus.PUBLISHED.value,
-            )
-            .first()
-        )
-        if row is None:
+        if get_published_by_type(db, doc_type) is None:
             missing.append(doc_type)
     return (len(missing) == 0), missing
 

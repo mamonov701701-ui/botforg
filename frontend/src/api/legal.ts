@@ -45,6 +45,14 @@ export interface LegalConsentAccepted {
   source: string | null;
 }
 
+export interface LegalConsentHistoryItem {
+  doc_type: string;
+  doc_version: string;
+  accepted_at: string;
+  revision_id: number | null;
+  confirmation_result: string | null;
+}
+
 export interface LegalPurchaseSnapshotDoc {
   revision_id: number;
   doc_type: string;
@@ -72,6 +80,7 @@ export interface LegalAccountOverview {
   current_documents: LegalRevisionListItem[];
   archived_documents?: LegalRevisionListItem[];
   accepted: LegalConsentAccepted[];
+  consent_history: LegalConsentHistoryItem[];
   purchase_snapshots: LegalPurchaseSnapshot[];
 }
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Lock, X, Eye, EyeOff } from 'lucide-react';
+import { Lock, X } from 'lucide-react';
 import { changePassword } from '../../../api/userSecurity';
+import PasswordField from '../../../components/PasswordField';
 
 interface ChangePasswordModalProps {
   onClose: () => void;
@@ -11,9 +12,6 @@ export default function ChangePasswordModal({ onClose, onSuccess }: ChangePasswo
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -97,130 +95,79 @@ export default function ChangePasswordModal({ onClose, onSuccess }: ChangePasswo
           {/* Текущий пароль */}
           <div style={{ marginBottom: '20px' }}>
             <label
+              htmlFor="legacy-current-password"
               style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}
             >
               Текущий пароль
             </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showCurrent ? 'text' : 'password'}
-                value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  paddingRight: '40px',
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  color: 'var(--text)',
-                  fontSize: '14px',
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowCurrent(!showCurrent)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {showCurrent ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
+            <PasswordField
+              id="legacy-current-password"
+              label="Текущий пароль"
+              value={currentPassword}
+              onChange={e => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+              style={{
+                padding: 12,
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                color: 'var(--text)',
+                fontSize: 14,
+              }}
+            />
           </div>
 
           {/* Новый пароль */}
           <div style={{ marginBottom: '20px' }}>
             <label
+              htmlFor="legacy-new-password"
               style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}
             >
               Новый пароль
             </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showNew ? 'text' : 'password'}
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  paddingRight: '40px',
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  color: 'var(--text)',
-                  fontSize: '14px',
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowNew(!showNew)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
+            <PasswordField
+              id="legacy-new-password"
+              label="Новый пароль"
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+              style={{
+                padding: 12,
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                color: 'var(--text)',
+                fontSize: 14,
+              }}
+            />
           </div>
 
           {/* Подтверждение нового пароля */}
           <div style={{ marginBottom: '24px' }}>
             <label
+              htmlFor="legacy-confirm-password"
               style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: 600 }}
             >
               Подтвердите новый пароль
             </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showConfirm ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                required
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  paddingRight: '40px',
-                  background: 'var(--card)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
-                  color: 'var(--text)',
-                  fontSize: '14px',
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirm(!showConfirm)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-muted)',
-                }}
-              >
-                {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
+            <PasswordField
+              id="legacy-confirm-password"
+              label="Подтвердите новый пароль"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+              style={{
+                padding: 12,
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                color: 'var(--text)',
+                fontSize: 14,
+              }}
+            />
           </div>
 
           {error && (

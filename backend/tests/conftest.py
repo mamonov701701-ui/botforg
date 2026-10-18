@@ -191,39 +191,34 @@ def client():
     # Clear rate limit store
     rate_limit_store.clear()
     
-    # Patch rate limiter to do nothing
-    with patch("backend.auth.email_routes.check_rate_limit", lambda req, action: None):
-        with TestClient(app) as test_client:
-            yield test_client
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def register_and_get_token(client: TestClient) -> str:
-    """Register a new user and return a Bearer token string."""
+    """Create a legacy-compatible test user and return a Bearer token string.
+
+    Registration itself has dedicated Stage 8 tests requiring published legal
+    revisions and an email verification action.
+    """
     unique = uuid.uuid4().hex
     email = f"test_{unique}@example.com"
     password = "SecretPass123!"  # Strong password
-    
-    # Register
-    register_payload = {
-        "email": email,
-        "name": "Tester",
-        "password": password,
-    }
-    res_register = client.post("/auth/email/register", json=register_payload)
-    # Registration may return 200 or fail if user exists (in shared test DB)
-    if res_register.status_code != 200:
-        # User might already exist, try to login
-        pass
-    
-    # Login to get token
-    login_payload = {
-        "email": email,
-        "password": password,
-    }
-    res_login = client.post("/auth/email/login", json=login_payload)
-    assert res_login.status_code == 200, f"Login failed: {res_login.text}"
-    token = res_login.json()["access_token"]
-    return f"Bearer {token}"
+    from backend.models.user import User
+    from backend.security import get_password_hash
+    from backend.services.demo_content import create_demo_content_for_user
+    from backend.services.account_security import create_session
+    from backend.core.security import create_jwt_token
+    from datetime import datetime
+    with TestingSessionLocal() as db:
+        user = User(email=email, name="Tester", hashed_password=get_password_hash(password), email_verified_at=datetime.utcnow())
+        db.add(user)
+        db.commit()
+        create_demo_content_for_user(db, user.id)
+        session = create_session(db, user, "pytest")
+        db.commit()
+        token = create_jwt_token(user.id, user.token_version, session_id=session.id)
+        return f"Bearer {token}"
 
 
 def create_test_bot(client: TestClient, auth_header: str) -> int:

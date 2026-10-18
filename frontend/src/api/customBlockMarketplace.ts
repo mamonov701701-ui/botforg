@@ -34,7 +34,7 @@ export type CustomBlockMarketplaceListing = {
   user_guide: Record<string, unknown>;
   rating_average: number | null;
   rating_count: number;
-  author: { id: number; name?: string };
+  author: { id: number; name?: string; username?: string | null };
   access: {
     is_owner: boolean;
     can_self_install: boolean;

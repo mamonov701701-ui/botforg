@@ -407,6 +407,7 @@ def _post_max(bot_id: int, secret: str, chat_id: str, text: str | None) -> Any:
         json={
             "type": "message_created",
             "message": {
+                "message_id": f"mid.{uuid.uuid4().hex}",
                 "text": text or "",
                 "chat_id": chat_id,
                 "user_id": chat_id,
@@ -476,6 +477,7 @@ def test_max_channel_runtime_input_action_message(action_kind: str) -> None:
     ):
         r1 = _post_max(bot_id, secret, chat_id, "ignored_first")
         assert r1.status_code == 200, r1.text
+        assert r1.json() == {"ok": True}
         r2 = _post_max(bot_id, secret, chat_id, "Alice")
         assert r2.status_code == 200, r2.text
 

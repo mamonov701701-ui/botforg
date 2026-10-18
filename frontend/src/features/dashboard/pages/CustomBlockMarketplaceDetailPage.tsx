@@ -122,7 +122,8 @@ export default function CustomBlockMarketplaceDetailPage() {
           </p>
           <p className="mt-3 text-[var(--text-muted)]">{item.description}</p>
           <p className="mt-3 text-sm text-[var(--text-muted)]">
-            Автор: {item.author.name || `Пользователь #${item.author.id}`} · Категория:{' '}
+            Автор: {item.author.name || `Пользователь #${item.author.id}`}
+            {item.author.username ? ` · @${item.author.username}` : ''} · Категория:{' '}
             {marketplaceCategoryLabel(item.category)} · Точная версия: v{item.version}
           </p>
           <div className="mt-5 border-y border-[var(--border)] py-4">

@@ -20,6 +20,8 @@ import NotFound from './pages/NotFound';
 import Login from './pages/Login';
 import AuthGate from './features/auth/AuthGate';
 import VerifyEmail from './features/auth/VerifyEmail';
+import VerificationPending from './features/auth/VerificationPending';
+import TwoFactorLogin from './features/auth/TwoFactorLogin';
 import ResetPassword from './features/auth/ResetPassword';
 import AuthModal from './features/auth/AuthModal';
 import ToastContainer from './features/editorV2/ToastContainer';
@@ -152,6 +154,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="legal/:slug/v/:version" element={<LegalVersionRoute />} />
           <Route path="legal/:slug/archive" element={<LegalArchiveRoute />} />
           <Route path="auth/verify" element={<VerifyEmail />} />
+          <Route path="auth/verify-pending" element={<VerificationPending />} />
+          <Route path="auth/two-factor" element={<TwoFactorLogin />} />
           <Route path="auth/reset" element={<ResetPassword />} />
           {/* Быстрый вход в редактор:
               /editor  → подбирает/создаёт бота и сценарий и редиректит в /editor/:botId
@@ -235,6 +239,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="bf-team" element={<BFTeamPage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="account/legal" element={<AccountLegalPage />} />
+            <Route path="account/legal/:slug" element={<LegalDocumentRoute />} />
+            <Route path="account/legal/:slug/v/:version" element={<LegalVersionRoute />} />
+            <Route path="account/legal/:slug/archive" element={<LegalArchiveRoute />} />
             <Route path="help/crm" element={<CrmKnowledgeGuidePage />} />
 
             <Route path="bots/:botId" element={<BotWorkspaceLayout />}>

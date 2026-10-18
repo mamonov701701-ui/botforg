@@ -10,7 +10,7 @@ JWT_EXPIRATION_DAYS = 7
 COOKIE_NAME = "session"
 
 
-def create_jwt_token(user_id: int, token_version: int = 0) -> str:
+def create_jwt_token(user_id: int, token_version: int = 0, *, session_id: str | None = None) -> str:
     """Create JWT token for user session. tv = token_version для отзыва при /privacy/delete."""
     expire = datetime.utcnow() + timedelta(days=JWT_EXPIRATION_DAYS)
     payload = {
@@ -18,7 +18,10 @@ def create_jwt_token(user_id: int, token_version: int = 0) -> str:
         "tv": token_version,
         "exp": expire,
         "iat": datetime.utcnow(),
+        "scope": "access",
     }
+    if session_id:
+        payload["sid"] = session_id
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
@@ -26,11 +29,23 @@ def verify_jwt_token(token: str) -> tuple[int | None, int]:
     """Verify JWT and return (user_id, tv). tv=0 для старых токенов без claim."""
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("scope", "access") != "access":
+            return None, 0
         user_id = int(payload.get("sub"))
         tv = payload.get("tv", 0)
         return user_id, tv
     except (JWTError, ValueError, TypeError):
         return None, 0
+
+
+def read_access_payload(token: str) -> dict | None:
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("scope", "access") != "access":
+            return None
+        return payload
+    except JWTError:
+        return None
 
 
 def set_auth_cookie(response: Response, token: str):

@@ -21,6 +21,7 @@ from backend.schemas.legal import (
     LegalAccountOverviewOut,
     LegalConsentAcceptIn,
     LegalConsentAcceptedOut,
+    LegalConsentHistoryOut,
     LegalPurchaseSnapshotDocOut,
     LegalPurchaseSnapshotOut,
     LegalRevisionListItemOut,
@@ -137,7 +138,7 @@ async def consent_status(
     rows = (
         db.query(Consent)
         .filter(Consent.user_id == current_user.id)
-        .order_by(Consent.accepted_at.desc())
+        .order_by(Consent.accepted_at.desc(), Consent.id.desc())
         .all()
     )
     seen = set()
@@ -145,6 +146,8 @@ async def consent_status(
     for r in rows:
         if r.doc_type not in seen:
             seen.add(r.doc_type)
+            if r.confirmation_result == "withdrawn":
+                continue
             result.append(
                 {
                     "doc_type": r.doc_type,
@@ -318,7 +321,7 @@ async def legal_account_overview(
 ):
     """
     ЛК: действующие и архивные документы, legal snapshot покупок.
-    Consent history остаётся в БД /consent/status; в overview — для совместимости.
+    История согласий возвращается только владельцу аккаунта.
     Без IP, user-agent и внутренних служебных полей.
     """
     current_documents = [_list_item(r) for r in list_public_documents(db)]
@@ -327,15 +330,27 @@ async def legal_account_overview(
     rows = (
         db.query(Consent)
         .filter(Consent.user_id == current_user.id)
-        .order_by(Consent.accepted_at.desc())
+        .order_by(Consent.accepted_at.desc(), Consent.id.desc())
         .all()
     )
     seen: set[str] = set()
     accepted: list[LegalConsentAcceptedOut] = []
+    consent_history = [
+        LegalConsentHistoryOut(
+            doc_type=r.doc_type,
+            doc_version=r.doc_version,
+            accepted_at=r.accepted_at,
+            revision_id=r.revision_id,
+            confirmation_result=r.confirmation_result,
+        )
+        for r in rows
+    ]
     for r in rows:
         if r.doc_type in seen:
             continue
         seen.add(r.doc_type)
+        if r.confirmation_result == "withdrawn":
+            continue
         accepted.append(
             LegalConsentAcceptedOut(
                 doc_type=r.doc_type,
@@ -408,5 +423,6 @@ async def legal_account_overview(
         current_documents=current_documents,
         archived_documents=archived_documents,
         accepted=accepted,
+        consent_history=consent_history,
         purchase_snapshots=purchase_snapshots,
     )

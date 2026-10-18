@@ -11,7 +11,7 @@ from backend.settings import settings
 
 # Используем pbkdf2_sha256 как основной, но поддерживаем bcrypt для совместимости
 pwd_context = CryptContext(
-    schemes=["pbkdf2_sha256"], deprecated="auto", pbkdf2_sha256__default_rounds=29000
+    schemes=["pbkdf2_sha256"], deprecated="auto", pbkdf2_sha256__default_rounds=310000
 )
 
 
@@ -37,8 +37,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         else:
             return pwd_context.verify(plain_password, hashed_password)
 
-    except Exception as e:
-        print(f"Password verification error: {e}")
+    except Exception:
         return False
 
 
